@@ -161,7 +161,7 @@ st.title("Performance Index (Start 100) – nach Kosten / vor Kosten / Benchmark
 
 # Paths anpassen
 MAPPING_PATH = r"Mapping_Honorarsatz.xlsx"
-DATA_FOLDER = r"Daten\"
+DATA_FOLDER = r"Daten"
 
 exclude_substrings = [
     "Stiftung"
@@ -254,4 +254,5 @@ with st.expander("Details / Debug"):
     st.write("Gefundene Dateien:", len(files))
     st.write("Kosten p.a. (dezimal):", fee_dec)
     st.dataframe(df.head(10))
+
 
