@@ -151,6 +151,63 @@ def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
         out[portfolio] = df.sort_index()
 
     return out
+# ---------------------------------------------------------------------------
+# LOGIN AUTHENTICATION
+# ---------------------------------------------------------------------------
+
+def check_login():
+    """
+    Login-Authentifizierung mit Streamlit Secrets.
+    Gibt True zurück wenn der Benutzer eingeloggt ist.
+    """
+    import streamlit as st
+    
+    # Secrets laden (Benutzername und Passwörter)
+    USERS = st.secrets["passwords"]
+    
+    # Session State initialisieren
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+    
+    # Login-Funktion
+    def verify_password():
+        username = st.session_state.get("username_input", "")
+        password = st.session_state.get("password_input", "")
+        
+        if username in USERS and USERS[username] == password:
+            st.session_state.logged_in = True
+            st.session_state.username = username
+            return True
+        return False
+    
+    # Login-Interface
+    if not st.session_state.logged_in:
+        st.title("Ausschüttungs-VV Rechner | Fürst Fugger Privatbank")
+        st.write("Bitte melden Sie sich an, um fortzufahren.")
+        
+        st.text_input("Benutzername", key="username_input")
+        st.text_input("Passwort", type="password", key="password_input")
+        
+        if st.button("Einloggen"):
+            if verify_password():
+                st.success("Erfolgreich eingeloggt!")
+                st.rerun()
+            else:
+                st.error("❌ Falscher Benutzername oder Passwort")
+        
+        return False
+    else:
+        # Logout-Button in der Sidebar
+        with st.sidebar:
+            st.write(f"👤 Angemeldet als: **{st.session_state.username}**")
+            if st.button("Ausloggen"):
+                st.session_state.logged_in = False
+                st.session_state.username = ""
+                st.rerun()
+        
+        return True
+
 
 
 # -----------------------------
@@ -254,5 +311,6 @@ with st.expander("Details / Debug"):
     st.write("Gefundene Dateien:", len(files))
     st.write("Kosten p.a. (dezimal):", fee_dec)
     st.dataframe(df.head(10))
+
 
 
