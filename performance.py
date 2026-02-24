@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 
 
 # -----------------------------
-# Helpers: Index-Berechnung
+# Helpers: Index / Gebühren / Drawdown
 # -----------------------------
 def annual_fee_to_daily_drag(fee_pa_decimal: float) -> float:
     return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
@@ -39,14 +39,118 @@ def drawdown_from_index(idx: np.ndarray) -> np.ndarray:
 
 
 def to_decimal_interval(series_float: pd.Series) -> np.ndarray:
+    """
+    Robust: Wenn Werte eher wie Prozentpunkte aussehen (z.B. 0.30 für 0,30%),
+    dann teilen wir durch 100. Wenn sie schon dezimal sind (0.003), lassen wir sie.
+    """
     x = series_float.to_numpy(dtype=float)
     ax = np.nan_to_num(np.abs(x), nan=0.0)
 
-    # Heuristik: wenn Werte eher Prozentpunkte sind (0.30 für 0.30%), dann /100
+    # Heuristik: typische Tagesrenditen liegen i.d.R. |d| < 0.2 (20%) dezimal.
+    # Wenn max(|d|) > 1, ist es fast sicher in Prozentpunkten.
+    # Wenn median(|d|) > 0.2, ebenfalls sehr wahrscheinlich Prozentpunkte.
     if ax.max() > 1.0 or np.median(ax) > 0.2:
         x = x / 100.0
-
     return x
+
+
+# -----------------------------
+# Helpers: Performance-Tabelle (rollierend)
+# -----------------------------
+def _asof_value(series: pd.Series, target_ts: pd.Timestamp):
+    """
+    Wert der Serie zum Stichtag (as-of, also letzter verfügbarer <= target_ts).
+    Gibt None zurück, wenn target_ts vor Start liegt.
+    """
+    s = series.dropna()
+    if s.empty:
+        return None
+    if target_ts < s.index.min():
+        return None
+    # asof liefert letzten Wert <= target_ts
+    return float(s.asof(target_ts))
+
+
+def period_return(series_idx: pd.Series, start_ts: pd.Timestamp, end_ts: pd.Timestamp):
+    """
+    Rendite (Index) zwischen start_ts und end_ts: idx(end)/idx(start)-1 (as-of).
+    """
+    v_end = _asof_value(series_idx, end_ts)
+    v_start = _asof_value(series_idx, start_ts)
+    if v_end is None or v_start is None or v_start == 0:
+        return None
+    return (v_end / v_start) - 1.0
+
+
+def build_rolling_table(
+    idx_before_1: pd.Series,
+    idx_after_1: pd.Series,
+    label_1: str,
+    idx_before_2: pd.Series | None = None,
+    idx_after_2: pd.Series | None = None,
+    label_2: str | None = None,
+    since_label: str | None = None
+) -> pd.DataFrame:
+    """
+    Baut eine Tabelle wie im Screenshot:
+    YTD, 1/3/5/10 Jahre, seit Startdatum.
+    Spalten je Portfolio: "Performance vor Kosten", "Performance nach Kosten"
+    """
+
+    end_ts = idx_after_1.dropna().index.max()
+    if pd.isna(end_ts):
+        return pd.DataFrame()
+
+    year_start = pd.Timestamp(end_ts.year, 1, 1)
+
+    # Für "seit ..." nehmen wir den ersten echten Indexpunkt (nicht den künstlichen Starttag)
+    first_ts = idx_after_1.dropna().index.min()
+
+    periods = [
+        ("ytd", year_start),
+        ("1 Jahre", end_ts - pd.DateOffset(years=1)),
+        ("3 Jahre", end_ts - pd.DateOffset(years=3)),
+        ("5 Jahre", end_ts - pd.DateOffset(years=5)),
+        ("10 Jahre", end_ts - pd.DateOffset(years=10)),
+        (since_label or f"Wertentwicklung seit: {first_ts.strftime('%d.%m.%Y')}", first_ts),
+    ]
+
+    rows = []
+    for pname, start_ts in periods:
+        r = {"Wertentwicklung rollierend": pname}
+
+        r[(label_1, "Performance vor Kosten")] = period_return(idx_before_1, start_ts, end_ts)
+        r[(label_1, "Performance nach Kosten")] = period_return(idx_after_1, start_ts, end_ts)
+
+        if idx_before_2 is not None and idx_after_2 is not None and label_2:
+            r[(label_2, "Performance vor Kosten")] = period_return(idx_before_2, start_ts, end_ts)
+            r[(label_2, "Performance nach Kosten")] = period_return(idx_after_2, start_ts, end_ts)
+
+        rows.append(r)
+
+    df = pd.DataFrame(rows)
+
+    # MultiIndex-Spalten anordnen
+    # Erste Spalte bleibt normal, Rest MultiIndex
+    base_cols = ["Wertentwicklung rollierend"]
+    multi_cols = [c for c in df.columns if c not in base_cols]
+    # sortiere MultiIndex nach Portfolio-Reihenfolge
+    df = df[base_cols + multi_cols]
+
+    # Formatiere in Prozentstrings wie Screenshot (oder "-" wenn None)
+    def fmt(x):
+        if x is None or (isinstance(x, float) and (np.isnan(x) or np.isinf(x))):
+            return "-"
+        return f"{x * 100:.3f}%".replace(".", ",")
+
+    # Neue DF nur für Anzeige (Strings)
+    df_show = df.copy()
+    for c in multi_cols:
+        df_show[c] = df_show[c].apply(fmt)
+
+    # MultiIndex-Spalten für Streamlit-Dataframe: pandas MultiIndex ok
+    # Wir lassen "Wertentwicklung rollierend" als normale Spalte.
+    return df_show
 
 
 # -----------------------------
@@ -61,10 +165,7 @@ def load_mapping(mapping_path: str) -> pd.DataFrame:
 def load_all_csvs(data_folder: str, date_tag: str, exclude_substrings: list[str]) -> list[str]:
     pattern = os.path.join(data_folder, f"*_{date_tag}_*.CSV")
     files = glob.glob(pattern)
-    files = [
-        p for p in files
-        if not any(sub in os.path.basename(p) for sub in exclude_substrings)
-    ]
+    files = [p for p in files if not any(sub in os.path.basename(p) for sub in exclude_substrings)]
     return files
 
 
@@ -84,44 +185,63 @@ def parse_dates_col(vv: pd.DataFrame) -> pd.Series:
     return pd.to_datetime(vv["Datum"], format="%d.%m.%Y", errors="raise")
 
 
+def extract_benchmark_name(vv: pd.DataFrame) -> str:
+    """
+    Versucht einen Benchmark-Namen aus der CSV zu ziehen.
+    Falls nichts gefunden: "Benchmark"
+    """
+    candidates = ["Benchmark Name", "Benchmark", "Benchmarkname", "Benchmark Name ", "Benchmark-Bezeichnung"]
+    for c in candidates:
+        if c in vv.columns:
+            val = vv.loc[0, c]
+            if pd.notna(val) and str(val).strip():
+                return str(val).strip()
+    # Alternativ: manchmal steht es in einer anderen Kopfzeile / Freitext (nicht zuverlässig)
+    return "Benchmark"
+
+
 @st.cache_data(show_spinner=True)
 def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
     """
-    dict[portfolio] = DataFrame(index=Datum, cols=["ret_port", "ret_bm", "fee_default"])
-    ret_* als Dezimal-Intervallrenditen (täglich)
+    Rückgabe:
+      dict[portfolio] = DataFrame(index=Datum, cols=["ret_port", "ret_bm", "fee_default"])
+      Zusätzlich: df.attrs["benchmark_name"]
     """
     out = {}
 
     for path in files:
         vv = read_one_csv(path)
+
         portfolio = vv.loc[0, "Portfolio Name"]
+        bench_name = extract_benchmark_name(vv)
+
+        # Datum
         dates = parse_dates_col(vv)
 
+        # Portfolio-Intervallrendite
         vv["Performance [%] (Intervall)"] = (
-            vv["Performance [%] (Intervall)"]
-            .astype(str).str.replace(",", ".").astype(float)
+            vv["Performance [%] (Intervall)"].astype(str).str.replace(",", ".").astype(float)
         )
         ret_port = to_decimal_interval(vv.loc[1:, "Performance [%] (Intervall)"])
 
+        # Benchmark-Intervallrendite (falls vorhanden)
         ret_bm = None
         if "Benchmark Performance [%] (Intervall)" in vv.columns:
             vv["Benchmark Performance [%] (Intervall)"] = (
-                vv["Benchmark Performance [%] (Intervall)"]
-                .astype(str).str.replace(",", ".").astype(float)
+                vv["Benchmark Performance [%] (Intervall)"].astype(str).str.replace(",", ".").astype(float)
             )
             ret_bm = to_decimal_interval(vv.loc[1:, "Benchmark Performance [%] (Intervall)"])
 
+        # Default Fee aus Mapping
         try:
-            fee_default = float(
-                mapping.loc[mapping["Inhaber"] == portfolio, "Honorarsatz Standard"].values[0]
-            )
+            fee_default = float(mapping.loc[mapping["Inhaber"] == portfolio, "Honorarsatz Standard"].values[0])
         except Exception:
             fee_default = 0.0
 
+        # Align lengths: dates enthält alle Zeilen inkl. Zeile 0, ret_* ist ab Zeile 1 -> daher dates[1:]
         idx = dates.iloc[1:].reset_index(drop=True)
         df = pd.DataFrame(index=idx)
         df.index.name = "Datum"
-
         df["ret_port"] = ret_port
 
         if ret_bm is not None and len(ret_bm) == len(df):
@@ -131,7 +251,10 @@ def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
 
         df["fee_default"] = fee_default
 
-        out[portfolio] = df.sort_index()
+        df = df.sort_index()
+        df.attrs["benchmark_name"] = bench_name
+
+        out[portfolio] = df
 
     return out
 
@@ -144,8 +267,8 @@ st.title("Performance Index (Start 100) – nach Kosten / vor Kosten / Benchmark
 
 MAPPING_PATH = r"Mapping_Honorarsatz.xlsx"
 DATA_FOLDER = r"Daten"
-exclude_substrings = ["Stiftung"]
 
+exclude_substrings = ["Stiftung"]
 heute_tag = dt.date.today().strftime("%y%m%d")
 
 with st.sidebar:
@@ -157,12 +280,12 @@ with st.sidebar:
     files = load_all_csvs(DATA_FOLDER, date_tag, exclude_substrings)
 
     if len(files) == 0:
-        st.error(f"Keine Dateien gefunden für Tag {date_tag}")
+        st.error(f"Keine Dateien gefunden für Tag {date_tag}. Pattern: *_{date_tag}_*.CSV")
         st.stop()
 
     data = build_portfolio_timeseries(files, mapping)
-    portfolios = sorted(list(data.keys()))
 
+    portfolios = sorted(list(data.keys()))
     portfolio_sel = st.selectbox("Portfolio auswählen", portfolios)
 
     show_compare = st.checkbox("Vergleichsportfolio anzeigen", value=False)
@@ -173,11 +296,11 @@ with st.sidebar:
     show_vorkosten = st.checkbox("Vor Kosten anzeigen", value=True)
     show_benchmark = st.checkbox("Benchmark anzeigen", value=True)
     show_drawdown = st.checkbox("Drawdown (nach Kosten) anzeigen", value=False)
+    show_table = st.checkbox("Tabelle: Wertentwicklung rollierend anzeigen", value=True)
 
-    # --- Kosten Portfolio 1
+    # Kosten Portfolio 1
     fee_default_dec_1 = float(data[portfolio_sel]["fee_default"].iloc[0]) if len(data[portfolio_sel]) else 0.0
     fee_default_pct_1 = fee_default_dec_1 * 100.0
-
     fee_pct_1 = st.number_input(
         f"Kosten p.a. (%) – {portfolio_sel}",
         min_value=0.0,
@@ -188,12 +311,12 @@ with st.sidebar:
     )
     fee_dec_1 = fee_pct_1 / 100.0
 
-    # --- Kosten Portfolio 2 (nur wenn Vergleich)
+    # Kosten Portfolio 2 (nur wenn Vergleich)
     fee_dec_2 = None
+    fee_pct_2 = None
     if show_compare and portfolio_sel2:
         fee_default_dec_2 = float(data[portfolio_sel2]["fee_default"].iloc[0]) if len(data[portfolio_sel2]) else 0.0
         fee_default_pct_2 = fee_default_dec_2 * 100.0
-
         fee_pct_2 = st.number_input(
             f"Kosten p.a. (%) – {portfolio_sel2}",
             min_value=0.0,
@@ -206,37 +329,35 @@ with st.sidebar:
 
 
 # -----------------------------
-# Daten vorbereiten
+# Daten vorbereiten / Zeitraum
 # -----------------------------
 df1 = data[portfolio_sel].copy()
 
 min_d, max_d = df1.index.min().date(), df1.index.max().date()
 col1, col2 = st.columns(2)
-
 with col1:
     start_date = st.date_input("Start", value=min_d, min_value=min_d, max_value=max_d)
 with col2:
     end_date = st.date_input("Ende", value=max_d, min_value=min_d, max_value=max_d)
 
 if start_date > end_date:
-    st.error("Startdatum darf nicht nach Enddatum liegen.")
+    st.error("Startdatum darf nicht nach dem Enddatum liegen.")
     st.stop()
 
 df1 = df1.loc[(df1.index.date >= start_date) & (df1.index.date <= end_date)].copy()
 
 df2 = None
+df2_raw = None
+
 if show_compare and portfolio_sel2:
     df2_raw = data[portfolio_sel2].copy()
     df2_raw = df2_raw.loc[(df2_raw.index.date >= start_date) & (df2_raw.index.date <= end_date)].copy()
 
-    # gemeinsamer Datumsindex
+    # gemeinsamer Datumsindex (nur Tage, die beide haben)
     joined = (
         df1[["ret_port", "ret_bm"]]
         .rename(columns={"ret_port": "ret_port_1", "ret_bm": "ret_bm_1"})
-        .join(
-            df2_raw[["ret_port"]].rename(columns={"ret_port": "ret_port_2"}),
-            how="inner"
-        )
+        .join(df2_raw[["ret_port", "ret_bm"]].rename(columns={"ret_port": "ret_port_2", "ret_bm": "ret_bm_2"}), how="inner")
     )
 
     if joined.empty:
@@ -244,11 +365,11 @@ if show_compare and portfolio_sel2:
         st.stop()
 
     df1 = joined[["ret_port_1", "ret_bm_1"]].rename(columns={"ret_port_1": "ret_port", "ret_bm_1": "ret_bm"})
-    df2 = joined[["ret_port_2"]].rename(columns={"ret_port_2": "ret_port"})
+    df2 = joined[["ret_port_2", "ret_bm_2"]].rename(columns={"ret_port_2": "ret_port", "ret_bm_2": "ret_bm"})
 
 
 # -----------------------------
-# Indexberechnung (mit je eigenem Kostensatz)
+# Indexberechnung (je Portfolio eigener Kostensatz)
 # -----------------------------
 ret1 = df1["ret_port"].to_numpy(dtype=float)
 idx_after_1 = make_index_after_fee(ret1, fee_dec_1, startwert=100.0)
@@ -256,18 +377,27 @@ idx_before_1 = make_index_from_returns(ret1, startwert=100.0)
 
 idx_after_2 = None
 idx_before_2 = None
-
 if df2 is not None:
-    # fee_dec_2 ist gesetzt, wenn df2 existiert
     ret2 = df2["ret_port"].to_numpy(dtype=float)
     idx_after_2 = make_index_after_fee(ret2, float(fee_dec_2), startwert=100.0)
     idx_before_2 = make_index_from_returns(ret2, startwert=100.0)
 
+# Datum-Achse: Index hat +1 Punkt (Startwert), deshalb Datum um einen Startpunkt ergänzen
 x_dates = [df1.index.min() - pd.Timedelta(days=1)] + list(df1.index)
+
+# Index-Serien (für Tabelle / as-of)
+s_before_1 = pd.Series(idx_before_1, index=pd.to_datetime(x_dates))
+s_after_1 = pd.Series(idx_after_1, index=pd.to_datetime(x_dates))
+
+s_before_2 = None
+s_after_2 = None
+if idx_before_2 is not None and idx_after_2 is not None:
+    s_before_2 = pd.Series(idx_before_2, index=pd.to_datetime(x_dates))
+    s_after_2 = pd.Series(idx_after_2, index=pd.to_datetime(x_dates))
 
 
 # -----------------------------
-# Index Chart
+# Chart: Index (100)
 # -----------------------------
 fig = go.Figure()
 
@@ -279,7 +409,7 @@ fig.add_trace(go.Scatter(
 if idx_after_2 is not None:
     fig.add_trace(go.Scatter(
         x=x_dates, y=idx_after_2, mode="lines",
-        name=f"{portfolio_sel2} – nach Kosten ({(fee_dec_2*100):.2f}%)"
+        name=f"{portfolio_sel2} – nach Kosten ({(fee_pct_2 or 0.0):.2f}%)"
     ))
 
 if show_vorkosten:
@@ -293,23 +423,38 @@ if show_vorkosten:
             name=f"{portfolio_sel2} – vor Kosten"
         ))
 
+# Benchmark: je Strategie eigener Name + optional auch Benchmark vom Vergleich
 if show_benchmark and df1["ret_bm"].notna().any():
-    ret_bm = df1["ret_bm"].fillna(0.0).to_numpy(dtype=float)
-    idx_bm = make_index_from_returns(ret_bm, startwert=100.0)
-    fig.add_trace(go.Scatter(x=x_dates, y=idx_bm, mode="lines", name="Benchmark"))
+    bench_name_1 = data[portfolio_sel].attrs.get("benchmark_name", "Benchmark")
+    ret_bm_1 = df1["ret_bm"].fillna(0.0).to_numpy(dtype=float)
+    idx_bm_1 = make_index_from_returns(ret_bm_1, startwert=100.0)
+    fig.add_trace(go.Scatter(
+        x=x_dates, y=idx_bm_1, mode="lines",
+        name=f"Benchmark {portfolio_sel}: {bench_name_1}"
+    ))
+
+    if df2 is not None and df2["ret_bm"].notna().any():
+        bench_name_2 = data[portfolio_sel2].attrs.get("benchmark_name", "Benchmark")
+        ret_bm_2 = df2["ret_bm"].fillna(0.0).to_numpy(dtype=float)
+        idx_bm_2 = make_index_from_returns(ret_bm_2, startwert=100.0)
+        fig.add_trace(go.Scatter(
+            x=x_dates, y=idx_bm_2, mode="lines",
+            name=f"Benchmark {portfolio_sel2}: {bench_name_2}"
+        ))
 
 fig.update_layout(
     height=550,
     xaxis_title="Datum",
     yaxis_title="Index (Start 100)",
-    hovermode="x unified"
+    legend_title_text="Reihen",
+    hovermode="x unified",
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 
 # -----------------------------
-# Drawdown Chart (optional) - NACH Kosten je Portfolio
+# Drawdown Chart (optional) - nach Kosten je Portfolio
 # -----------------------------
 if show_drawdown:
     fig_dd = go.Figure()
@@ -331,10 +476,29 @@ if show_drawdown:
         height=350,
         xaxis_title="Datum",
         yaxis_title="Drawdown (dezimal, z.B. -0.12 = -12%)",
-        hovermode="x unified"
+        hovermode="x unified",
+    )
+    st.plotly_chart(fig_dd, use_container_width=True)
+
+
+# -----------------------------
+# Tabelle: Wertentwicklung rollierend (optional)
+# -----------------------------
+if show_table:
+    since_label = f"Wertentwicklung seit: {df1.index.min().strftime('%d.%m.%Y')}"
+
+    df_roll = build_rolling_table(
+        idx_before_1=s_before_1,
+        idx_after_1=s_after_1,
+        label_1=portfolio_sel,
+        idx_before_2=s_before_2,
+        idx_after_2=s_after_2,
+        label_2=portfolio_sel2 if (show_compare and portfolio_sel2) else None,
+        since_label=since_label
     )
 
-    st.plotly_chart(fig_dd, use_container_width=True)
+    st.subheader("Wertentwicklung rollierend")
+    st.dataframe(df_roll, use_container_width=True)
 
 
 # -----------------------------
@@ -346,6 +510,9 @@ with st.expander("Details / Debug"):
     st.write(f"Kosten {portfolio_sel} (dezimal):", fee_dec_1)
     if df2 is not None:
         st.write(f"Kosten {portfolio_sel2} (dezimal):", fee_dec_2)
+    st.write("Benchmark-Name 1:", data[portfolio_sel].attrs.get("benchmark_name", "Benchmark"))
+    if df2 is not None:
+        st.write("Benchmark-Name 2:", data[portfolio_sel2].attrs.get("benchmark_name", "Benchmark"))
     st.write("Rows Portfolio 1:", len(df1))
     if df2 is not None:
         st.write("Rows Portfolio 2:", len(df2))
