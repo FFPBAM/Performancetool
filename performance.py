@@ -293,10 +293,12 @@ idx_before = make_index_from_returns(ret_port, startwert=100.0)
 x_dates = [df.index.min() - pd.Timedelta(days=1)] + list(df.index)
 
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=x_dates, y=idx_after, mode="lines", name="Portfolio – nach Kosten"))
+fig.add_trace(go.Scatter(x=x_dates, y=idx_after, mode="lines", name=f"{portfolio_sel} – nach Kosten"))
+fig.add_trace(go.Scatter(x=x_dates, y=idx_after, mode="lines", name=f"{portfolio_sel2} – nach Kosten"))
 
 if show_vorkosten:
-    fig.add_trace(go.Scatter(x=x_dates, y=idx_before, mode="lines", name="Portfolio – vor Kosten"))
+    fig.add_trace(go.Scatter(x=x_dates, y=idx_before, mode="lines", name=f"{portfolio_sel} – vor Kosten"))
+    fig.add_trace(go.Scatter(x=x_dates, y=idx_before, mode="lines", name=f"{portfolio_sel2} – vor Kosten")
 
 if show_benchmark and df["ret_bm"].notna().any():
     ret_bm = df["ret_bm"].fillna(0.0).to_numpy(dtype=float)
