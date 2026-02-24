@@ -2,7 +2,6 @@
 import os
 import glob
 import datetime as dt
-from datetime import timedelta
 
 import numpy as np
 import pandas as pd
@@ -43,6 +42,7 @@ def to_decimal_interval(series_float: pd.Series) -> np.ndarray:
     x = series_float.to_numpy(dtype=float)
     ax = np.nan_to_num(np.abs(x), nan=0.0)
 
+    # Heuristik: wenn Werte eher Prozentpunkte sind (0.30 für 0.30%), dann /100
     if ax.max() > 1.0 or np.median(ax) > 0.2:
         x = x / 100.0
 
@@ -86,7 +86,10 @@ def parse_dates_col(vv: pd.DataFrame) -> pd.Series:
 
 @st.cache_data(show_spinner=True)
 def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
-
+    """
+    dict[portfolio] = DataFrame(index=Datum, cols=["ret_port", "ret_bm", "fee_default"])
+    ret_* als Dezimal-Intervallrenditen (täglich)
+    """
     out = {}
 
     for path in files:
@@ -98,7 +101,6 @@ def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
             vv["Performance [%] (Intervall)"]
             .astype(str).str.replace(",", ".").astype(float)
         )
-
         ret_port = to_decimal_interval(vv.loc[1:, "Performance [%] (Intervall)"])
 
         ret_bm = None
@@ -147,7 +149,6 @@ exclude_substrings = ["Stiftung"]
 heute_tag = dt.date.today().strftime("%y%m%d")
 
 with st.sidebar:
-
     st.header("Einstellungen")
 
     date_tag = st.text_input("Date-Tag (yyMMdd)", value=heute_tag)
@@ -160,13 +161,11 @@ with st.sidebar:
         st.stop()
 
     data = build_portfolio_timeseries(files, mapping)
-
     portfolios = sorted(list(data.keys()))
 
     portfolio_sel = st.selectbox("Portfolio auswählen", portfolios)
 
     show_compare = st.checkbox("Vergleichsportfolio anzeigen", value=False)
-
     portfolio_sel2 = None
     if show_compare:
         portfolio_sel2 = st.selectbox("Vergleichsportfolio auswählen", portfolios)
@@ -175,18 +174,35 @@ with st.sidebar:
     show_benchmark = st.checkbox("Benchmark anzeigen", value=True)
     show_drawdown = st.checkbox("Drawdown (nach Kosten) anzeigen", value=False)
 
-    fee_default_dec = float(data[portfolio_sel]["fee_default"].iloc[0])
-    fee_default_pct = fee_default_dec * 100.0
+    # --- Kosten Portfolio 1
+    fee_default_dec_1 = float(data[portfolio_sel]["fee_default"].iloc[0]) if len(data[portfolio_sel]) else 0.0
+    fee_default_pct_1 = fee_default_dec_1 * 100.0
 
-    fee_pct = st.number_input(
-        "Kosten p.a. (%)",
+    fee_pct_1 = st.number_input(
+        f"Kosten p.a. (%) – {portfolio_sel}",
         min_value=0.0,
         max_value=20.0,
-        value=float(round(fee_default_pct, 4)),
+        value=float(round(fee_default_pct_1, 4)),
         step=0.05,
+        help="Eingabe in Prozent p.a. (z.B. 1,55). Intern wird /100 gerechnet."
     )
+    fee_dec_1 = fee_pct_1 / 100.0
 
-    fee_dec = fee_pct / 100.0
+    # --- Kosten Portfolio 2 (nur wenn Vergleich)
+    fee_dec_2 = None
+    if show_compare and portfolio_sel2:
+        fee_default_dec_2 = float(data[portfolio_sel2]["fee_default"].iloc[0]) if len(data[portfolio_sel2]) else 0.0
+        fee_default_pct_2 = fee_default_dec_2 * 100.0
+
+        fee_pct_2 = st.number_input(
+            f"Kosten p.a. (%) – {portfolio_sel2}",
+            min_value=0.0,
+            max_value=20.0,
+            value=float(round(fee_default_pct_2, 4)),
+            step=0.05,
+            help="Eingabe in Prozent p.a. (z.B. 1,55). Intern wird /100 gerechnet."
+        )
+        fee_dec_2 = fee_pct_2 / 100.0
 
 
 # -----------------------------
@@ -195,12 +211,10 @@ with st.sidebar:
 df1 = data[portfolio_sel].copy()
 
 min_d, max_d = df1.index.min().date(), df1.index.max().date()
-
 col1, col2 = st.columns(2)
 
 with col1:
     start_date = st.date_input("Start", value=min_d, min_value=min_d, max_value=max_d)
-
 with col2:
     end_date = st.date_input("Ende", value=max_d, min_value=min_d, max_value=max_d)
 
@@ -208,15 +222,14 @@ if start_date > end_date:
     st.error("Startdatum darf nicht nach Enddatum liegen.")
     st.stop()
 
-df1 = df1.loc[(df1.index.date >= start_date) & (df1.index.date <= end_date)]
+df1 = df1.loc[(df1.index.date >= start_date) & (df1.index.date <= end_date)].copy()
 
 df2 = None
-
 if show_compare and portfolio_sel2:
-
     df2_raw = data[portfolio_sel2].copy()
-    df2_raw = df2_raw.loc[(df2_raw.index.date >= start_date) & (df2_raw.index.date <= end_date)]
+    df2_raw = df2_raw.loc[(df2_raw.index.date >= start_date) & (df2_raw.index.date <= end_date)].copy()
 
+    # gemeinsamer Datumsindex
     joined = (
         df1[["ret_port", "ret_bm"]]
         .rename(columns={"ret_port": "ret_port_1", "ret_bm": "ret_bm_1"})
@@ -226,29 +239,29 @@ if show_compare and portfolio_sel2:
         )
     )
 
-    df1 = joined[["ret_port_1", "ret_bm_1"]].rename(
-        columns={"ret_port_1": "ret_port", "ret_bm_1": "ret_bm"}
-    )
+    if joined.empty:
+        st.error("Kein gemeinsamer Datumsbereich zwischen Portfolio und Vergleichsportfolio im gewählten Zeitraum.")
+        st.stop()
 
-    df2 = joined[["ret_port_2"]].rename(
-        columns={"ret_port_2": "ret_port"}
-    )
+    df1 = joined[["ret_port_1", "ret_bm_1"]].rename(columns={"ret_port_1": "ret_port", "ret_bm_1": "ret_bm"})
+    df2 = joined[["ret_port_2"]].rename(columns={"ret_port_2": "ret_port"})
 
 
 # -----------------------------
-# Indexberechnung
+# Indexberechnung (mit je eigenem Kostensatz)
 # -----------------------------
 ret1 = df1["ret_port"].to_numpy(dtype=float)
-idx_after_1 = make_index_after_fee(ret1, fee_dec)
-idx_before_1 = make_index_from_returns(ret1)
+idx_after_1 = make_index_after_fee(ret1, fee_dec_1, startwert=100.0)
+idx_before_1 = make_index_from_returns(ret1, startwert=100.0)
 
 idx_after_2 = None
 idx_before_2 = None
 
 if df2 is not None:
+    # fee_dec_2 ist gesetzt, wenn df2 existiert
     ret2 = df2["ret_port"].to_numpy(dtype=float)
-    idx_after_2 = make_index_after_fee(ret2, fee_dec)
-    idx_before_2 = make_index_from_returns(ret2)
+    idx_after_2 = make_index_after_fee(ret2, float(fee_dec_2), startwert=100.0)
+    idx_before_2 = make_index_from_returns(ret2, startwert=100.0)
 
 x_dates = [df1.index.min() - pd.Timedelta(days=1)] + list(df1.index)
 
@@ -258,30 +271,32 @@ x_dates = [df1.index.min() - pd.Timedelta(days=1)] + list(df1.index)
 # -----------------------------
 fig = go.Figure()
 
-fig.add_trace(go.Scatter(x=x_dates, y=idx_after_1,
-                         mode="lines",
-                         name=f"{portfolio_sel} – nach Kosten"))
+fig.add_trace(go.Scatter(
+    x=x_dates, y=idx_after_1, mode="lines",
+    name=f"{portfolio_sel} – nach Kosten ({fee_pct_1:.2f}%)"
+))
 
 if idx_after_2 is not None:
-    fig.add_trace(go.Scatter(x=x_dates, y=idx_after_2,
-                             mode="lines",
-                             name=f"{portfolio_sel2} – nach Kosten"))
+    fig.add_trace(go.Scatter(
+        x=x_dates, y=idx_after_2, mode="lines",
+        name=f"{portfolio_sel2} – nach Kosten ({(fee_dec_2*100):.2f}%)"
+    ))
 
 if show_vorkosten:
-    fig.add_trace(go.Scatter(x=x_dates, y=idx_before_1,
-                             mode="lines",
-                             name=f"{portfolio_sel} – vor Kosten"))
+    fig.add_trace(go.Scatter(
+        x=x_dates, y=idx_before_1, mode="lines",
+        name=f"{portfolio_sel} – vor Kosten"
+    ))
     if idx_before_2 is not None:
-        fig.add_trace(go.Scatter(x=x_dates, y=idx_before_2,
-                                 mode="lines",
-                                 name=f"{portfolio_sel2} – vor Kosten"))
+        fig.add_trace(go.Scatter(
+            x=x_dates, y=idx_before_2, mode="lines",
+            name=f"{portfolio_sel2} – vor Kosten"
+        ))
 
 if show_benchmark and df1["ret_bm"].notna().any():
     ret_bm = df1["ret_bm"].fillna(0.0).to_numpy(dtype=float)
-    idx_bm = make_index_from_returns(ret_bm)
-    fig.add_trace(go.Scatter(x=x_dates, y=idx_bm,
-                             mode="lines",
-                             name="Benchmark"))
+    idx_bm = make_index_from_returns(ret_bm, startwert=100.0)
+    fig.add_trace(go.Scatter(x=x_dates, y=idx_bm, mode="lines", name="Benchmark"))
 
 fig.update_layout(
     height=550,
@@ -294,27 +309,28 @@ st.plotly_chart(fig, use_container_width=True)
 
 
 # -----------------------------
-# Drawdown Chart (optional)
+# Drawdown Chart (optional) - NACH Kosten je Portfolio
 # -----------------------------
 if show_drawdown:
-
     fig_dd = go.Figure()
 
     dd1 = drawdown_from_index(idx_after_1)
-    fig_dd.add_trace(go.Scatter(x=x_dates, y=dd1,
-                                mode="lines",
-                                name=f"{portfolio_sel} – Drawdown"))
+    fig_dd.add_trace(go.Scatter(
+        x=x_dates, y=dd1, mode="lines",
+        name=f"{portfolio_sel} – Drawdown (nach Kosten)"
+    ))
 
     if idx_after_2 is not None:
         dd2 = drawdown_from_index(idx_after_2)
-        fig_dd.add_trace(go.Scatter(x=x_dates, y=dd2,
-                                    mode="lines",
-                                    name=f"{portfolio_sel2} – Drawdown"))
+        fig_dd.add_trace(go.Scatter(
+            x=x_dates, y=dd2, mode="lines",
+            name=f"{portfolio_sel2} – Drawdown (nach Kosten)"
+        ))
 
     fig_dd.update_layout(
         height=350,
         xaxis_title="Datum",
-        yaxis_title="Drawdown",
+        yaxis_title="Drawdown (dezimal, z.B. -0.12 = -12%)",
         hovermode="x unified"
     )
 
@@ -326,9 +342,11 @@ if show_drawdown:
 # -----------------------------
 with st.expander("Details / Debug"):
     st.write("Gefundene Dateien:", len(files))
-    st.write("Kosten p.a. (dezimal):", fee_dec)
     st.write("Zeitraum:", start_date, "bis", end_date)
+    st.write(f"Kosten {portfolio_sel} (dezimal):", fee_dec_1)
+    if df2 is not None:
+        st.write(f"Kosten {portfolio_sel2} (dezimal):", fee_dec_2)
     st.write("Rows Portfolio 1:", len(df1))
     if df2 is not None:
         st.write("Rows Portfolio 2:", len(df2))
-    st.dataframe(df1.head())
+    st.dataframe(df1.head(10))
