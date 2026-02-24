@@ -9,6 +9,60 @@ import streamlit as st
 import plotly.graph_objects as go
 
 
+# ---------------------------------------------------------------------------
+# LOGIN AUTHENTICATION
+# ---------------------------------------------------------------------------
+def check_login() -> bool:
+    """
+    Login-Authentifizierung mit Streamlit Secrets.
+    Erwartet in .streamlit/secrets.toml:
+    [passwords]
+    user1 = "pass1"
+    user2 = "pass2"
+    """
+    USERS = st.secrets["passwords"]
+
+    # Session State initialisieren
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+
+    def verify_password() -> bool:
+        username = st.session_state.get("username_input", "").strip()
+        password = st.session_state.get("password_input", "")
+        if username in USERS and USERS[username] == password:
+            st.session_state.logged_in = True
+            st.session_state.username = username
+            return True
+        return False
+
+    if not st.session_state.logged_in:
+        st.title("Ausschüttungs-VV Rechner | Fürst Fugger Privatbank")
+        st.write("Bitte melden Sie sich an, um fortzufahren.")
+
+        st.text_input("Benutzername", key="username_input")
+        st.text_input("Passwort", type="password", key="password_input")
+
+        if st.button("Einloggen"):
+            if verify_password():
+                st.success("Erfolgreich eingeloggt!")
+                st.rerun()
+            else:
+                st.error("❌ Falscher Benutzername oder Passwort")
+
+        return False
+
+    # Logout-Button in der Sidebar
+    with st.sidebar:
+        st.write(f"👤 Angemeldet als: **{st.session_state.username}**")
+        if st.button("Ausloggen"):
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.rerun()
+
+    return True
+
+
 # -----------------------------
 # Helpers: Index / Gebühren / Drawdown
 # -----------------------------
@@ -46,9 +100,6 @@ def to_decimal_interval(series_float: pd.Series) -> np.ndarray:
     x = series_float.to_numpy(dtype=float)
     ax = np.nan_to_num(np.abs(x), nan=0.0)
 
-    # Heuristik: typische Tagesrenditen liegen i.d.R. |d| < 0.2 (20%) dezimal.
-    # Wenn max(|d|) > 1, ist es fast sicher in Prozentpunkten.
-    # Wenn median(|d|) > 0.2, ebenfalls sehr wahrscheinlich Prozentpunkte.
     if ax.max() > 1.0 or np.median(ax) > 0.2:
         x = x / 100.0
     return x
@@ -58,23 +109,15 @@ def to_decimal_interval(series_float: pd.Series) -> np.ndarray:
 # Helpers: Performance-Tabelle (rollierend)
 # -----------------------------
 def _asof_value(series: pd.Series, target_ts: pd.Timestamp):
-    """
-    Wert der Serie zum Stichtag (as-of, also letzter verfügbarer <= target_ts).
-    Gibt None zurück, wenn target_ts vor Start liegt.
-    """
     s = series.dropna()
     if s.empty:
         return None
     if target_ts < s.index.min():
         return None
-    # asof liefert letzten Wert <= target_ts
     return float(s.asof(target_ts))
 
 
 def period_return(series_idx: pd.Series, start_ts: pd.Timestamp, end_ts: pd.Timestamp):
-    """
-    Rendite (Index) zwischen start_ts und end_ts: idx(end)/idx(start)-1 (as-of).
-    """
     v_end = _asof_value(series_idx, end_ts)
     v_start = _asof_value(series_idx, start_ts)
     if v_end is None or v_start is None or v_start == 0:
@@ -91,19 +134,11 @@ def build_rolling_table(
     label_2: str | None = None,
     since_label: str | None = None
 ) -> pd.DataFrame:
-    """
-    Baut eine Tabelle wie im Screenshot:
-    YTD, 1/3/5/10 Jahre, seit Startdatum.
-    Spalten je Portfolio: "Performance vor Kosten", "Performance nach Kosten"
-    """
-
     end_ts = idx_after_1.dropna().index.max()
     if pd.isna(end_ts):
         return pd.DataFrame()
 
     year_start = pd.Timestamp(end_ts.year, 1, 1)
-
-    # Für "seit ..." nehmen wir den ersten echten Indexpunkt (nicht den künstlichen Starttag)
     first_ts = idx_after_1.dropna().index.min()
 
     periods = [
@@ -129,27 +164,19 @@ def build_rolling_table(
         rows.append(r)
 
     df = pd.DataFrame(rows)
-
-    # MultiIndex-Spalten anordnen
-    # Erste Spalte bleibt normal, Rest MultiIndex
     base_cols = ["Wertentwicklung rollierend"]
     multi_cols = [c for c in df.columns if c not in base_cols]
-    # sortiere MultiIndex nach Portfolio-Reihenfolge
     df = df[base_cols + multi_cols]
 
-    # Formatiere in Prozentstrings wie Screenshot (oder "-" wenn None)
     def fmt(x):
         if x is None or (isinstance(x, float) and (np.isnan(x) or np.isinf(x))):
             return "-"
         return f"{x * 100:.3f}%".replace(".", ",")
 
-    # Neue DF nur für Anzeige (Strings)
     df_show = df.copy()
     for c in multi_cols:
         df_show[c] = df_show[c].apply(fmt)
 
-    # MultiIndex-Spalten für Streamlit-Dataframe: pandas MultiIndex ok
-    # Wir lassen "Wertentwicklung rollierend" als normale Spalte.
     return df_show
 
 
@@ -186,27 +213,17 @@ def parse_dates_col(vv: pd.DataFrame) -> pd.Series:
 
 
 def extract_benchmark_name(vv: pd.DataFrame) -> str:
-    """
-    Versucht einen Benchmark-Namen aus der CSV zu ziehen.
-    Falls nichts gefunden: "Benchmark"
-    """
     candidates = ["Benchmark Name", "Benchmark", "Benchmarkname", "Benchmark Name ", "Benchmark-Bezeichnung"]
     for c in candidates:
         if c in vv.columns:
             val = vv.loc[0, c]
             if pd.notna(val) and str(val).strip():
                 return str(val).strip()
-    # Alternativ: manchmal steht es in einer anderen Kopfzeile / Freitext (nicht zuverlässig)
     return "Benchmark"
 
 
 @st.cache_data(show_spinner=True)
 def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
-    """
-    Rückgabe:
-      dict[portfolio] = DataFrame(index=Datum, cols=["ret_port", "ret_bm", "fee_default"])
-      Zusätzlich: df.attrs["benchmark_name"]
-    """
     out = {}
 
     for path in files:
@@ -215,16 +232,13 @@ def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
         portfolio = vv.loc[0, "Portfolio Name"]
         bench_name = extract_benchmark_name(vv)
 
-        # Datum
         dates = parse_dates_col(vv)
 
-        # Portfolio-Intervallrendite
         vv["Performance [%] (Intervall)"] = (
             vv["Performance [%] (Intervall)"].astype(str).str.replace(",", ".").astype(float)
         )
         ret_port = to_decimal_interval(vv.loc[1:, "Performance [%] (Intervall)"])
 
-        # Benchmark-Intervallrendite (falls vorhanden)
         ret_bm = None
         if "Benchmark Performance [%] (Intervall)" in vv.columns:
             vv["Benchmark Performance [%] (Intervall)"] = (
@@ -232,13 +246,11 @@ def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
             )
             ret_bm = to_decimal_interval(vv.loc[1:, "Benchmark Performance [%] (Intervall)"])
 
-        # Default Fee aus Mapping
         try:
             fee_default = float(mapping.loc[mapping["Inhaber"] == portfolio, "Honorarsatz Standard"].values[0])
         except Exception:
             fee_default = 0.0
 
-        # Align lengths: dates enthält alle Zeilen inkl. Zeile 0, ret_* ist ab Zeile 1 -> daher dates[1:]
         idx = dates.iloc[1:].reset_index(drop=True)
         df = pd.DataFrame(index=idx)
         df.index.name = "Datum"
@@ -250,7 +262,6 @@ def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
             df["ret_bm"] = np.nan
 
         df["fee_default"] = fee_default
-
         df = df.sort_index()
         df.attrs["benchmark_name"] = bench_name
 
@@ -263,6 +274,11 @@ def build_portfolio_timeseries(files: list[str], mapping: pd.DataFrame) -> dict:
 # Streamlit UI
 # -----------------------------
 st.set_page_config(page_title="Performance Index (100)", layout="wide")
+
+# ✅ Login MUSS vor der restlichen App-Logik passieren
+if not check_login():
+    st.stop()
+
 st.title("Performance Index (Start 100) – nach Kosten / vor Kosten / Benchmark")
 
 MAPPING_PATH = r"Mapping_Honorarsatz.xlsx"
@@ -347,17 +363,17 @@ if start_date > end_date:
 df1 = df1.loc[(df1.index.date >= start_date) & (df1.index.date <= end_date)].copy()
 
 df2 = None
-df2_raw = None
-
 if show_compare and portfolio_sel2:
     df2_raw = data[portfolio_sel2].copy()
     df2_raw = df2_raw.loc[(df2_raw.index.date >= start_date) & (df2_raw.index.date <= end_date)].copy()
 
-    # gemeinsamer Datumsindex (nur Tage, die beide haben)
     joined = (
         df1[["ret_port", "ret_bm"]]
         .rename(columns={"ret_port": "ret_port_1", "ret_bm": "ret_bm_1"})
-        .join(df2_raw[["ret_port", "ret_bm"]].rename(columns={"ret_port": "ret_port_2", "ret_bm": "ret_bm_2"}), how="inner")
+        .join(
+            df2_raw[["ret_port", "ret_bm"]].rename(columns={"ret_port": "ret_port_2", "ret_bm": "ret_bm_2"}),
+            how="inner"
+        )
     )
 
     if joined.empty:
@@ -382,10 +398,8 @@ if df2 is not None:
     idx_after_2 = make_index_after_fee(ret2, float(fee_dec_2), startwert=100.0)
     idx_before_2 = make_index_from_returns(ret2, startwert=100.0)
 
-# Datum-Achse: Index hat +1 Punkt (Startwert), deshalb Datum um einen Startpunkt ergänzen
 x_dates = [df1.index.min() - pd.Timedelta(days=1)] + list(df1.index)
 
-# Index-Serien (für Tabelle / as-of)
 s_before_1 = pd.Series(idx_before_1, index=pd.to_datetime(x_dates))
 s_after_1 = pd.Series(idx_after_1, index=pd.to_datetime(x_dates))
 
@@ -413,34 +427,21 @@ if idx_after_2 is not None:
     ))
 
 if show_vorkosten:
-    fig.add_trace(go.Scatter(
-        x=x_dates, y=idx_before_1, mode="lines",
-        name=f"{portfolio_sel} – vor Kosten"
-    ))
+    fig.add_trace(go.Scatter(x=x_dates, y=idx_before_1, mode="lines", name=f"{portfolio_sel} – vor Kosten"))
     if idx_before_2 is not None:
-        fig.add_trace(go.Scatter(
-            x=x_dates, y=idx_before_2, mode="lines",
-            name=f"{portfolio_sel2} – vor Kosten"
-        ))
+        fig.add_trace(go.Scatter(x=x_dates, y=idx_before_2, mode="lines", name=f"{portfolio_sel2} – vor Kosten"))
 
-# Benchmark: je Strategie eigener Name + optional auch Benchmark vom Vergleich
 if show_benchmark and df1["ret_bm"].notna().any():
     bench_name_1 = data[portfolio_sel].attrs.get("benchmark_name", "Benchmark")
     ret_bm_1 = df1["ret_bm"].fillna(0.0).to_numpy(dtype=float)
     idx_bm_1 = make_index_from_returns(ret_bm_1, startwert=100.0)
-    fig.add_trace(go.Scatter(
-        x=x_dates, y=idx_bm_1, mode="lines",
-        name=f"Benchmark {portfolio_sel}: {bench_name_1}"
-    ))
+    fig.add_trace(go.Scatter(x=x_dates, y=idx_bm_1, mode="lines", name=f"Benchmark {portfolio_sel}: {bench_name_1}"))
 
     if df2 is not None and df2["ret_bm"].notna().any():
         bench_name_2 = data[portfolio_sel2].attrs.get("benchmark_name", "Benchmark")
         ret_bm_2 = df2["ret_bm"].fillna(0.0).to_numpy(dtype=float)
         idx_bm_2 = make_index_from_returns(ret_bm_2, startwert=100.0)
-        fig.add_trace(go.Scatter(
-            x=x_dates, y=idx_bm_2, mode="lines",
-            name=f"Benchmark {portfolio_sel2}: {bench_name_2}"
-        ))
+        fig.add_trace(go.Scatter(x=x_dates, y=idx_bm_2, mode="lines", name=f"Benchmark {portfolio_sel2}: {bench_name_2}"))
 
 fig.update_layout(
     height=550,
@@ -454,23 +455,17 @@ st.plotly_chart(fig, use_container_width=True)
 
 
 # -----------------------------
-# Drawdown Chart (optional) - nach Kosten je Portfolio
+# Drawdown Chart (optional)
 # -----------------------------
 if show_drawdown:
     fig_dd = go.Figure()
 
     dd1 = drawdown_from_index(idx_after_1)
-    fig_dd.add_trace(go.Scatter(
-        x=x_dates, y=dd1, mode="lines",
-        name=f"{portfolio_sel} – Drawdown (nach Kosten)"
-    ))
+    fig_dd.add_trace(go.Scatter(x=x_dates, y=dd1, mode="lines", name=f"{portfolio_sel} – Drawdown (nach Kosten)"))
 
     if idx_after_2 is not None:
         dd2 = drawdown_from_index(idx_after_2)
-        fig_dd.add_trace(go.Scatter(
-            x=x_dates, y=dd2, mode="lines",
-            name=f"{portfolio_sel2} – Drawdown (nach Kosten)"
-        ))
+        fig_dd.add_trace(go.Scatter(x=x_dates, y=dd2, mode="lines", name=f"{portfolio_sel2} – Drawdown (nach Kosten)"))
 
     fig_dd.update_layout(
         height=350,
