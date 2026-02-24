@@ -37,7 +37,7 @@ def check_login() -> bool:
         return False
 
     if not st.session_state.logged_in:
-        st.title("Ausschüttungs-VV Rechner | Fürst Fugger Privatbank")
+        st.title("Performance VV Rechner | Fürst Fugger Privatbank")
         st.write("Bitte melden Sie sich an, um fortzufahren.")
 
         st.text_input("Benutzername", key="username_input")
