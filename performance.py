@@ -298,7 +298,7 @@ fig.add_trace(go.Scatter(x=x_dates, y=idx_after, mode="lines", name=f"{portfolio
 
 if show_vorkosten:
     fig.add_trace(go.Scatter(x=x_dates, y=idx_before, mode="lines", name=f"{portfolio_sel} – vor Kosten"))
-    fig.add_trace(go.Scatter(x=x_dates, y=idx_before, mode="lines", name=f"{portfolio_sel2} – vor Kosten")
+    fig.add_trace(go.Scatter(x=x_dates, y=idx_before, mode="lines", name=f"{portfolio_sel2} – vor Kosten"))
 
 if show_benchmark and df["ret_bm"].notna().any():
     ret_bm = df["ret_bm"].fillna(0.0).to_numpy(dtype=float)
