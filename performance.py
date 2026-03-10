@@ -313,7 +313,7 @@ def build_bar_chart(
 
     all_vals = []
     for col in [col_port1] + ([f"{label_2} (nach Kosten)"] if label_2 else []):
-        src = bar_df1 if col == col_port1 else (bar_df2 or pd.DataFrame())
+        src = bar_df1 if col == col_port1 else (bar_df2 if bar_df2 is not None else pd.DataFrame())
         if col in src.columns:
             all_vals += src[col].dropna().tolist()
     if "ret_bm_raw" in bar_df1.columns:
@@ -676,61 +676,47 @@ if show_bar:
                 "Von", value=start_date, min_value=min_d, max_value=max_d, key="bar_von"
             )
             custom_end_bar = st.date_input(
-                "Bis", value=end_date,   min_value=min_d, max_value=max_d, key="bar_bis"
+                "Bis", value=end_date, min_value=min_d, max_value=max_d, key="bar_bis"
             )
 
-    with bar_right:
-        # Balken-Daten berechnen – Portfolio 1 (nutzt df1 nach dem Join)
-        bar_df1 = compute_bar_data(
-            df1, fee_dec=fee_dec_1, mode=bar_mode, label=portfolio_sel,
+    titel_map = {
+        "Kalenderjahre":     "PERFORMANCE P.A. (NACH KOSTEN) IM BENCHMARKVERGLEICH",
+        "Quartale":          "PERFORMANCE QUARTALE (NACH KOSTEN) IM BENCHMARKVERGLEICH",
+        "Benutzerdefiniert": "PERFORMANCE (NACH KOSTEN) IM BENCHMARKVERGLEICH – BENUTZERDEFINIERT",
+    }
+
+    def _render_bar(df_src, fee, label, bench_name, container):
+        bar_df = compute_bar_data(
+            df_src, fee_dec=fee, mode=bar_mode, label=label,
             custom_start=custom_start_bar, custom_end=custom_end_bar,
         )
+        if bar_df.empty:
+            container.info(f"Keine Daten für {label}.")
+            return
+        bar_fig = build_bar_chart(
+            bar_df1=bar_df,
+            label_1=label,
+            bench_name_1=bench_name,
+            title=f"{titel_map[bar_mode]} – {label}",
+        )
+        container.plotly_chart(bar_fig, use_container_width=True)
+        with container.expander("🔢 Tabelle anzeigen"):
+            col_p = f"{label} (nach Kosten)"
+            disp = bar_df[["label", col_p, "ret_bm_raw"]].copy()
+            disp[col_p]        = disp[col_p].map(lambda x: f"{x:+.2f}%")
+            disp["ret_bm_raw"] = disp["ret_bm_raw"].map(
+                lambda x: f"{x:+.2f}%" if pd.notna(x) else "–")
+            disp.columns = ["Zeitraum", f"{label} nach Kosten", bench_name]
+            container.dataframe(disp, use_container_width=True, hide_index=True)
 
-        # Balken-Daten berechnen – Portfolio 2 (wenn Vergleich aktiv)
-        bar_df2 = None
-        if df2 is not None and fee_dec_2 is not None:
-            bar_df2 = compute_bar_data(
-                df2, fee_dec=fee_dec_2, mode=bar_mode, label=portfolio_sel2,
-                custom_start=custom_start_bar, custom_end=custom_end_bar,
-            )
+    with bar_right:
+        # ── Chart Portfolio 1 ──
+        _render_bar(df1, fee_dec_1, portfolio_sel, bench_name_1, st.container())
 
-        if bar_df1.empty:
-            st.info("Keine Daten für diesen Zeitraum.")
-        else:
-            titel_map = {
-                "Kalenderjahre":     "PERFORMANCE P.A. (NACH KOSTEN) IM BENCHMARKVERGLEICH",
-                "Quartale":          "PERFORMANCE QUARTALE (NACH KOSTEN) IM BENCHMARKVERGLEICH",
-                "Benutzerdefiniert": "PERFORMANCE (NACH KOSTEN) IM BENCHMARKVERGLEICH – BENUTZERDEFINIERT",
-            }
-            bar_fig = build_bar_chart(
-                bar_df1=bar_df1,
-                label_1=portfolio_sel,
-                bench_name_1=bench_name_1,
-                bar_df2=bar_df2,
-                label_2=portfolio_sel2 if (show_compare and portfolio_sel2) else None,
-                bench_name_2=bench_name_2,
-                title=titel_map[bar_mode],
-            )
-            st.plotly_chart(bar_fig, use_container_width=True)
-
-            with st.expander("🔢 Tabelle anzeigen"):
-                col_port1 = f"{portfolio_sel} (nach Kosten)"
-                disp = bar_df1[["label", col_port1, "ret_bm_raw"]].copy()
-                disp[col_port1]    = disp[col_port1].map(lambda x: f"{x:+.2f}%")
-                disp["ret_bm_raw"] = disp["ret_bm_raw"].map(
-                    lambda x: f"{x:+.2f}%" if pd.notna(x) else "–")
-                disp.columns = ["Zeitraum", f"{portfolio_sel} nach Kosten", bench_name_1]
-
-                if bar_df2 is not None and not bar_df2.empty:
-                    col_port2 = f"{portfolio_sel2} (nach Kosten)"
-                    disp2 = bar_df2[[col_port2, "ret_bm_raw"]].copy()
-                    disp2[col_port2]    = disp2[col_port2].map(lambda x: f"{x:+.2f}%")
-                    disp2["ret_bm_raw"] = disp2["ret_bm_raw"].map(
-                        lambda x: f"{x:+.2f}%" if pd.notna(x) else "–")
-                    disp2.columns = [f"{portfolio_sel2} nach Kosten", bench_name_2 or "Benchmark 2"]
-                    disp = pd.concat([disp, disp2], axis=1)
-
-                st.dataframe(disp, use_container_width=True, hide_index=True)
+        # ── Chart Portfolio 2 (nur wenn Vergleich aktiv) ──
+        if df2 is not None and fee_dec_2 is not None and portfolio_sel2:
+            st.markdown("---")
+            _render_bar(df2, fee_dec_2, portfolio_sel2, bench_name_2 or "Benchmark", st.container())
 
 
 # ── Debug ──────────────────────────────────────────────────────────────────
