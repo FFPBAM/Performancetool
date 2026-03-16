@@ -90,13 +90,10 @@ def fmt_date_de(d) -> str:
 
 
 def fmt_pct_de(v: float, decimals: int = 2) -> str:
-    """Formatiert einen Dezimalwert als Prozentzahl mit Komma."""
     return f"{v * 100:.{decimals}f}%".replace(".", ",")
 
 
 def fmt_eur_de(v: float) -> str:
-    """Formatiert Euro-Beträge mit Tausenderpunkt und Komma."""
-    # z.B. 523456.78 -> "523.456,78 €"
     formatted = f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"{formatted} €"
 
@@ -161,27 +158,23 @@ def to_decimal_interval(series_float: pd.Series) -> np.ndarray:
 # Helpers: Kennzahlen
 # ---------------------------------------------------------------------------
 def calc_cagr(idx_after: np.ndarray, n_days: int) -> float | None:
-    """CAGR = (Endwert / Startwert)^(365/Tage) - 1"""
     if n_days <= 0 or idx_after[0] == 0:
         return None
     return (idx_after[-1] / idx_after[0]) ** (365.0 / n_days) - 1.0
 
 
 def calc_vola(daily_returns_after_fee: np.ndarray) -> float | None:
-    """Annualisierte Volatilität = Std(Tagesrenditen) × √365"""
     if len(daily_returns_after_fee) < 2:
         return None
     return float(np.std(daily_returns_after_fee, ddof=1) * np.sqrt(365))
 
 
 def calc_daily_returns_after_fee(d_returns_decimal: np.ndarray, fee_pa_decimal: float) -> np.ndarray:
-    """Tagesrenditen nach Kosten."""
     e = annual_fee_to_daily_drag(fee_pa_decimal)
     return d_returns_decimal - e
 
 
 def calc_max_drawdown(idx_after: np.ndarray, dates_list):
-    """Gibt (max_dd_value, max_dd_date) zurück. max_dd_value ist negativ."""
     dd = drawdown_from_index(idx_after)
     min_idx = np.argmin(dd)
     return float(dd[min_idx]), dates_list[min_idx]
@@ -395,21 +388,27 @@ def show_benchmark_composition(display_name, benchmark_text,
 # ---------------------------------------------------------------------------
 # Kennzahlen-Anzeige (Streamlit)
 # ---------------------------------------------------------------------------
-def display_metrics(label, cagr, vola, endwert, use_volume):
+def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum):
     """Zeigt Kennzahlen für ein Portfolio als st.metric-Zeile an."""
-    cols = st.columns(4 if use_volume else 3)
+    n_cols = 3 + (1 if use_volume else 0)
+    cols = st.columns(n_cols)
     with cols[0]:
+        st.metric(
+            label=f"Auflagedatum im PM – {label}",
+            value=fmt_date_de(auflagedatum)
+        )
+    with cols[1]:
         st.metric(
             label=f"⌀ Rendite p.a. (CAGR) – {label}",
             value=fmt_pct_de(cagr) if cagr is not None else "–"
         )
-    with cols[1]:
+    with cols[2]:
         st.metric(
             label=f"Volatilität p.a. – {label}",
             value=fmt_pct_de(vola) if vola is not None else "–"
         )
     if use_volume and endwert is not None:
-        with cols[2]:
+        with cols[3]:
             st.metric(
                 label=f"Endwert nach Kosten – {label}",
                 value=fmt_eur_de(endwert)
@@ -417,7 +416,6 @@ def display_metrics(label, cagr, vola, endwert, use_volume):
 
 
 def display_drawdown_metrics(label, max_dd_val, max_dd_date):
-    """Zeigt Max-Drawdown Kennzahl an."""
     st.markdown(
         f"**Max. Drawdown {label}:** {fmt_pct_de(max_dd_val)} am {fmt_date_de(max_dd_date)}"
     )
@@ -584,7 +582,6 @@ def generate_pdf(
     logo_aspect = _get_logo_aspect(logo_path)
     story = []
 
-    # ── Logo (Seite 1) ──
     if logo_path and os.path.exists(logo_path):
         logo_w = 50 * mm
         logo_h = logo_w * logo_aspect
@@ -595,7 +592,6 @@ def generate_pdf(
     story.append(HRFlowable(width="100%", thickness=1, color=HexColor(FFPB_DARK)))
     story.append(Spacer(1, 3 * mm))
 
-    # ── Meta-Infos ──
     meta_lines = [f"<b>Portfolio:</b> {label_1}"]
     if label_2:
         meta_lines.append(f"<b>Vergleichsportfolio:</b> {label_2}")
@@ -614,6 +610,8 @@ def generate_pdf(
     story.append(Paragraph("Kennzahlen", style_subtitle))
     for m in metrics_data:
         line_parts = [f"<b>{m['label']}:</b>"]
+        if m.get("auflagedatum") is not None:
+            line_parts.append(f"Auflagedatum im PM: {fmt_date_de(m['auflagedatum'])}")
         if m.get("cagr") is not None:
             line_parts.append(f"⌀ Rendite p.a. (CAGR): {fmt_pct_de(m['cagr'])}")
         if m.get("vola") is not None:
@@ -637,14 +635,12 @@ def generate_pdf(
     if label_2 and bench_text_2 and str(bench_text_2).strip().lower() not in ("", "nan", "haben keine benchmark"):
         story.append(Paragraph(f"<b>Zusammensetzung Benchmark {label_2}:</b> {bench_text_2}", style_small))
 
-    # ── Drawdown ──
     if show_drawdown and dd_traces:
         story.append(Spacer(1, 4 * mm))
         story.append(Paragraph("Drawdown (nach Kosten)", style_subtitle))
         dd_buf = _mpl_drawdown_chart(x_dates, dd_traces, "Drawdown (nach Kosten)")
         story.append(RLImage(dd_buf, width=170 * mm, height=60 * mm))
 
-    # ── Rollierende Tabelle ──
     if show_table and df_roll is not None and not df_roll.empty:
         story.append(PageBreak())
 
@@ -682,7 +678,6 @@ def generate_pdf(
         ]))
         story.append(t)
 
-    # ── Balken-Charts ──
     if show_bar and bar_data_list:
         story.append(PageBreak())
 
@@ -704,7 +699,6 @@ def generate_pdf(
             if bar_bench_text and str(bar_bench_text).strip().lower() not in ("", "nan", "haben keine benchmark"):
                 story.append(Paragraph(f"<b>Zusammensetzung Benchmark {bar_label}:</b> {bar_bench_text}", style_small))
 
-    # ── Footer ──
     story.append(Spacer(1, 10 * mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#CCCCCC")))
     story.append(Paragraph(
@@ -828,7 +822,6 @@ with st.sidebar:
 
     data = build_portfolio_timeseries(files, mapping)
 
-    # ── Name-Mapping ───────────────────────────────────────────────────────
     col_display = name_mapping.columns[0]
     col_csv_key = name_mapping.columns[1]
     col_bench   = name_mapping.columns[3]
@@ -862,7 +855,6 @@ with st.sidebar:
     show_table     = st.checkbox("Tabelle: Wertentwicklung rollierend",   value=True)
     show_bar       = st.checkbox("Balken-Chart: Performance blockweise",  value=True)
 
-    # ── Anlagevolumen ──────────────────────────────────────────────────────
     st.markdown("---")
     st.subheader("Anlagevolumen")
     anlagevolumen = st.number_input(
@@ -875,7 +867,6 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ── Kosten ─────────────────────────────────────────────────────────────
     fee_default_dec_1 = float(data[portfolio_sel]["fee_default"].iloc[0]) if len(data[portfolio_sel]) else 0.0
     fee_pct_1 = st.number_input(
         f"Kosten p.a. (%) – {display_sel_1}",
@@ -902,9 +893,25 @@ label_1 = display_sel_1
 label_2 = display_sel_2 if (show_compare and display_sel_2) else None
 
 
-# ── Zeitraum ──────────────────────────────────────────────────────────────
-df1 = data[portfolio_sel].copy()
-min_d, max_d = df1.index.min().date(), df1.index.max().date()
+# ── Auflagedatum aus Rohdaten (vor jeglichem Zeitraum-Filter) ─────────────
+auflagedatum_1 = data[portfolio_sel].index.min().date()
+auflagedatum_2 = data[portfolio_sel2].index.min().date() if (show_compare and portfolio_sel2) else None
+
+
+# ── Zeitraum: dynamisch ans gewählte Portfolio anpassen ───────────────────
+# Min/Max aus Portfolio 1
+raw_min_1 = data[portfolio_sel].index.min().date()
+raw_max_1 = data[portfolio_sel].index.max().date()
+
+if show_compare and portfolio_sel2:
+    # Bei Vergleich: gemeinsamer Zeitraum als Grenzen
+    raw_min_2 = data[portfolio_sel2].index.min().date()
+    raw_max_2 = data[portfolio_sel2].index.max().date()
+    min_d = max(raw_min_1, raw_min_2)   # spätester Start
+    max_d = min(raw_max_1, raw_max_2)   # frühestes Ende
+else:
+    min_d = raw_min_1
+    max_d = raw_max_1
 
 st.markdown("#### Zeitraum auswählen")
 col1, col2 = st.columns(2)
@@ -923,6 +930,7 @@ if start_date > end_date:
     st.error("Startdatum darf nicht nach dem Enddatum liegen.")
     st.stop()
 
+df1 = data[portfolio_sel].copy()
 df1 = df1.loc[(df1.index.date >= start_date) & (df1.index.date <= end_date)].copy()
 
 df2 = None
@@ -961,7 +969,6 @@ if df2 is not None:
 
 x_dates = [df1.index.min() - pd.Timedelta(days=1)] + list(df1.index)
 
-# Für rollierende Tabelle immer Basis 100
 ret1_t = df1["ret_port"].to_numpy(dtype=float)
 s_before_1_tbl = pd.Series(make_index_from_returns(ret1_t, 100.0), index=pd.to_datetime(x_dates))
 s_after_1_tbl  = pd.Series(make_index_after_fee(ret1_t, fee_dec_1, 100.0), index=pd.to_datetime(x_dates))
@@ -985,8 +992,6 @@ cagr_1  = calc_cagr(idx_after_1, n_days_1)
 vola_1  = calc_vola(daily_ret_af_1)
 endwert_1 = float(idx_after_1[-1]) if use_volume else None
 
-# Drawdown-Kennzahlen (immer berechnen, nur anzeigen wenn aktiviert)
-# Für Drawdown Basis 100 verwenden (relativ)
 idx_af_1_100 = make_index_after_fee(ret1, fee_dec_1, startwert=100.0)
 max_dd_val_1, max_dd_date_1 = calc_max_drawdown(idx_af_1_100, x_dates)
 
@@ -1001,9 +1006,9 @@ if df2 is not None:
     idx_af_2_100 = make_index_after_fee(ret2, float(fee_dec_2), startwert=100.0)
     max_dd_val_2, max_dd_date_2 = calc_max_drawdown(idx_af_2_100, x_dates)
 
-# Metrics-Daten für PDF sammeln
 metrics_data = [{
     "label": label_1,
+    "auflagedatum": auflagedatum_1,
     "cagr": cagr_1,
     "vola": vola_1,
     "endwert": endwert_1,
@@ -1013,6 +1018,7 @@ metrics_data = [{
 if df2 is not None and label_2:
     metrics_data.append({
         "label": label_2,
+        "auflagedatum": auflagedatum_2,
         "cagr": cagr_2,
         "vola": vola_2,
         "endwert": endwert_2,
@@ -1023,9 +1029,9 @@ if df2 is not None and label_2:
 
 # ── Kennzahlen über dem Linien-Chart ──────────────────────────────────────
 st.subheader("📊 Kennzahlen (nach Kosten)")
-display_metrics(label_1, cagr_1, vola_1, endwert_1, use_volume)
+display_metrics(label_1, cagr_1, vola_1, endwert_1, use_volume, auflagedatum_1)
 if df2 is not None and label_2:
-    display_metrics(label_2, cagr_2, vola_2, endwert_2, use_volume)
+    display_metrics(label_2, cagr_2, vola_2, endwert_2, use_volume, auflagedatum_2)
 
 
 # ── Chart: Index / Volumen ─────────────────────────────────────────────────
@@ -1081,7 +1087,6 @@ if show_benchmark:
 
 # ── Drawdown ───────────────────────────────────────────────────────────────
 if show_drawdown:
-    # ── Max Drawdown Kennzahlen über dem Chart ──
     st.markdown("---")
     display_drawdown_metrics(label_1, max_dd_val_1, max_dd_date_1)
     if df2 is not None and label_2:
@@ -1184,7 +1189,6 @@ if show_bar:
 # ── PDF Download Button ───────────────────────────────────────────────────
 st.markdown("---")
 
-# Sammle Line-Traces für PDF
 pdf_line_traces = []
 pdf_line_traces.append((f"{label_1} – nach Kosten ({fee_pct_1:.2f}%)", idx_after_1))
 if idx_after_2 is not None:
@@ -1202,14 +1206,12 @@ if show_benchmark and df1["ret_bm"].notna().any():
         idx_bm_2_pdf = make_index_from_returns(ret_bm_2_pdf, startwert=startwert)
         pdf_line_traces.append((f"Benchmark {label_2}: {bench_name_2}", idx_bm_2_pdf))
 
-# Drawdown Traces
 pdf_dd_traces = []
 if show_drawdown:
     pdf_dd_traces.append((f"{label_1} – Drawdown", drawdown_from_index(idx_af_1_100)))
     if df2 is not None:
         pdf_dd_traces.append((f"{label_2} – Drawdown", drawdown_from_index(idx_af_2_100)))
 
-# Logo-Pfad
 logo_path = LOGO_FILENAME if os.path.exists(LOGO_FILENAME) else None
 
 if st.button("📄 PDF Report erstellen"):
@@ -1245,6 +1247,9 @@ with st.expander("Details / Debug"):
     st.write("Gefundene Dateien:", len(files))
     st.write("Auto-Tag:", auto_tag)
     st.write("Zeitraum:", fmt_date_de(start_date), "bis", fmt_date_de(end_date))
+    st.write(f"Auflagedatum {label_1}:", fmt_date_de(auflagedatum_1))
+    if auflagedatum_2:
+        st.write(f"Auflagedatum {label_2}:", fmt_date_de(auflagedatum_2))
     st.write(f"Kosten {label_1} (dezimal):", fee_dec_1)
     if df2 is not None:
         st.write(f"Kosten {label_2} (dezimal):", fee_dec_2)
