@@ -500,7 +500,7 @@ if not check_login():
 st.title("Performancevergleich – Fürst Fugger Privatbank")
 
 MAPPING_PATH      = r"Mapping_Honorarsatz.xlsx"
-NAME_MAPPING_PATH = r"Mapping_Namen.xlsx"
+NAME_MAPPING_PATH = r"Mapping_Namen2.xlsx"
 DATA_FOLDER       = r"Daten"
 exclude_substrings = ["Stiftung"]
 heute_tag = dt.date.today().strftime("%y%m%d")
