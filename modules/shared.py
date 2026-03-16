@@ -93,7 +93,9 @@ def fmt_eur_de(v: float) -> str:
 def detect_newest_date_tag(data_folder: str, exclude_substrings: list[str] | None = None) -> str:
     if exclude_substrings is None:
         exclude_substrings = EXCLUDE_SUBSTRINGS
-    all_csvs = glob.glob(os.path.join(data_folder, "*.CSV"))
+    # Case-insensitive: .CSV und .csv
+    all_csvs = glob.glob(os.path.join(data_folder, "*.CSV")) + glob.glob(os.path.join(data_folder, "*.csv"))
+    all_csvs = list(set(all_csvs))
     tags = set()
     pattern = re.compile(r"_(\d{6})_")
     for f in all_csvs:

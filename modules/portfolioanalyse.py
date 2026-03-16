@@ -47,12 +47,16 @@ RING_COLORS = [
 @st.cache_data(show_spinner=True)
 def load_pf_csvs(data_folder: str, date_tag: str) -> list[str]:
     """Findet alle Portfolioanalyse-CSVs für den gegebenen Date-Tag."""
-    pattern = os.path.join(data_folder, f"*_Portfolioanalyse_{date_tag}_*.CSV")
-    files = glob.glob(pattern)
-    # Auch Variante ohne "Portfolioanalyse" im Namen prüfen
-    if not files:
-        pattern2 = os.path.join(data_folder, f"*_{date_tag}_*.CSV")
-        files = glob.glob(pattern2)
+    files = []
+    # Suche case-insensitive: .CSV und .csv
+    for ext in ["*.CSV", "*.csv"]:
+        all_files = glob.glob(os.path.join(data_folder, ext))
+        for f in all_files:
+            basename = os.path.basename(f)
+            if date_tag in basename:
+                files.append(f)
+    # Deduplizieren
+    files = list(set(files))
     return files
 
 
@@ -321,6 +325,16 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     pf_files = load_pf_csvs(DATA_FOLDER_PF, date_tag_pf)
     if not pf_files:
         st.warning(f"Keine Portfolioanalyse-Dateien für Tag {date_tag_pf} in {DATA_FOLDER_PF}/ gefunden.")
+        # Debug-Info
+        with st.expander("🔍 Debug: Dateien im Ordner"):
+            import glob as g
+            all_in_folder = g.glob(os.path.join(DATA_FOLDER_PF, "*"))
+            if all_in_folder:
+                st.write("Dateien gefunden:", [os.path.basename(f) for f in all_in_folder])
+            else:
+                st.write(f"Ordner '{DATA_FOLDER_PF}/' ist leer oder existiert nicht.")
+                st.write(f"Aktuelles Verzeichnis: {os.getcwd()}")
+                st.write(f"Ordner existiert: {os.path.exists(DATA_FOLDER_PF)}")
         return
 
     pf_data = build_pf_data(pf_files)
