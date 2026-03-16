@@ -425,34 +425,80 @@ def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar
     n_cols = 4 + (1 if use_volume else 0)
     cols = st.columns(n_cols)
     with cols[0]:
-        st.metric(label=f"Auflagedatum im PM", value=fmt_date_de(auflagedatum))
+        st.metric(
+            label=f"Auflagedatum im PM",
+            value=fmt_date_de(auflagedatum),
+            help="Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement."
+        )
     with cols[1]:
-        st.metric(label=f"⌀ Rendite p.a. (nach Kosten)", value=fmt_pct_de(cagr) if cagr is not None else "–")
+        st.metric(
+            label=f"⌀ Rendite p.a. (nach Kosten)",
+            value=fmt_pct_de(cagr) if cagr is not None else "–",
+            help="Annualisierte Rendite nach Abzug aller Kosten (CAGR). Berechnung: (Endwert / Startwert)^(365 / Tage) − 1."
+        )
     with cols[2]:
-        st.metric(label=f"Volatilität p.a. (nach Kosten)", value=fmt_pct_de(vola) if vola is not None else "–")
+        st.metric(
+            label=f"Volatilität p.a. (nach Kosten)",
+            value=fmt_pct_de(vola) if vola is not None else "–",
+            help="Annualisierte Schwankungsbreite der täglichen Renditen nach Kosten. Berechnung: Standardabweichung der Tagesrenditen × √365."
+        )
     with cols[3]:
-        st.metric(label=f"Calmar Ratio (nach Kosten)", value=f"{calmar:.2f}".replace(".", ",") if calmar is not None else "–")
+        st.metric(
+            label=f"Calmar Ratio (nach Kosten)",
+            value=f"{calmar:.2f}".replace(".", ",") if calmar is not None else "–",
+            help="Verhältnis von annualisierter Rendite (CAGR) zum maximalen Drawdown. Je höher der Wert, desto besser die risikoadjustierte Rendite."
+        )
     if use_volume and endwert is not None:
         with cols[4]:
-            st.metric(label=f"Endwert (nach Kosten)", value=fmt_eur_de(endwert))
+            st.metric(
+                label=f"Endwert (nach Kosten)",
+                value=fmt_eur_de(endwert),
+                help="Aktueller Wert des eingegebenen Anlagevolumens nach Abzug aller Kosten über den gewählten Zeitraum."
+            )
 
 
 def display_drawdown_metrics(label, max_dd_val, max_dd_date, max_dd_eur, use_volume,
                              recovery_days, recovery_date, max_dd_dur, dd_dur_start, dd_dur_end):
-    parts = [f"**{label} (nach Kosten):**"]
-    parts.append(f"Max. Drawdown: {fmt_pct_de(max_dd_val)} am {fmt_date_de(max_dd_date)}")
-    if use_volume and max_dd_eur is not None:
-        parts.append(f"({fmt_eur_de(max_dd_eur)})")
-    st.markdown(" | ".join(parts))
+    st.markdown(f"**{label} (nach Kosten)**")
 
-    parts2 = []
+    # Zeile 1: Max DD, Recovery
+    dd_value = fmt_pct_de(max_dd_val)
+    if use_volume and max_dd_eur is not None:
+        dd_value += f" ({fmt_eur_de(max_dd_eur)})"
+
     if recovery_days is not None:
-        parts2.append(f"Recovery: {recovery_days} Tage (erholt am {fmt_date_de(recovery_date)})")
+        recovery_val = f"{recovery_days} Tage"
+        recovery_help_extra = f" Erholt am {fmt_date_de(recovery_date)}."
     else:
-        parts2.append("Recovery: noch nicht erholt")
-    if max_dd_dur > 0:
-        parts2.append(f"Längste Drawdown-Phase: {max_dd_dur} Tage ({fmt_date_de(dd_dur_start)} – {fmt_date_de(dd_dur_end)})")
-    st.markdown(" | ".join(parts2))
+        recovery_val = "noch nicht erholt"
+        recovery_help_extra = ""
+
+    n_cols = 4
+    cols = st.columns(n_cols)
+    with cols[0]:
+        st.metric(
+            label="Max. Drawdown (nach Kosten)",
+            value=dd_value,
+            help=f"Größter Verlust vom Höchststand bis zum Tiefpunkt im gewählten Zeitraum. Tiefpunkt am {fmt_date_de(max_dd_date)}."
+        )
+    with cols[1]:
+        st.metric(
+            label="Recovery",
+            value=recovery_val,
+            help=f"Anzahl Tage vom Drawdown-Tief bis zur vollständigen Erholung auf das vorherige Hoch.{recovery_help_extra}"
+        )
+    with cols[2]:
+        st.metric(
+            label="Längste Drawdown-Phase",
+            value=f"{max_dd_dur} Tage" if max_dd_dur > 0 else "–",
+            help=f"Längster zusammenhängender Zeitraum unterhalb eines vorherigen Höchststands. Zeitraum: {fmt_date_de(dd_dur_start)} – {fmt_date_de(dd_dur_end)}." if max_dd_dur > 0 else "Kein Drawdown im gewählten Zeitraum."
+        )
+    with cols[3]:
+        st.metric(
+            label="Drawdown-Tief am",
+            value=fmt_date_de(max_dd_date),
+            help="Datum, an dem der maximale Drawdown seinen Tiefpunkt erreicht hat."
+        )
 
 
 # ---------------------------------------------------------------------------
