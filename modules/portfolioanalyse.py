@@ -382,15 +382,12 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag."
     )
 
-    # ── Render für 1 oder 2 Portfolios ──
+    # ── Render für 1 oder 2 Portfolios (untereinander, volle Breite) ──
+    _render_single_portfolio(pf_sel_1, df_pf_1, auswertungsdatum_1, anlagevolumen, use_volume, show_ytd)
+
     if show_compare_pf and df_pf_2 is not None:
-        col_left, col_right = st.columns(2)
-        with col_left:
-            _render_single_portfolio(pf_sel_1, df_pf_1, auswertungsdatum_1, anlagevolumen, use_volume, show_ytd)
-        with col_right:
-            _render_single_portfolio(pf_sel_2, df_pf_2, auswertungsdatum_2, anlagevolumen, use_volume, show_ytd)
-    else:
-        _render_single_portfolio(pf_sel_1, df_pf_1, auswertungsdatum_1, anlagevolumen, use_volume, show_ytd)
+        st.markdown("---")
+        _render_single_portfolio(pf_sel_2, df_pf_2, auswertungsdatum_2, anlagevolumen, use_volume, show_ytd)
 
     # ── PDF Export ──
     st.markdown("---")
