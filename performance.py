@@ -2,6 +2,7 @@
 import os
 import glob
 import datetime as dt
+import locale
 
 import numpy as np
 import pandas as pd
@@ -58,9 +59,30 @@ def check_login() -> bool:
     return True
 
 
-# -----------------------------
+# ---------------------------------------------------------------------------
+# Helpers: Deutsches Datumsformat
+# ---------------------------------------------------------------------------
+def fmt_date_de(d) -> str:
+    """Formatiert ein date/Timestamp-Objekt als dd.mm.yyyy."""
+    if isinstance(d, pd.Timestamp):
+        return d.strftime("%d.%m.%Y")
+    if isinstance(d, dt.date):
+        return d.strftime("%d.%m.%Y")
+    return str(d)
+
+
+def parse_date_de(s: str) -> dt.date | None:
+    """Parst einen String im Format dd.mm.yyyy zu einem date-Objekt."""
+    s = s.strip()
+    try:
+        return dt.datetime.strptime(s, "%d.%m.%Y").date()
+    except ValueError:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Helpers: Index / Gebühren / Drawdown
-# -----------------------------
+# ---------------------------------------------------------------------------
 def annual_fee_to_daily_drag(fee_pa_decimal: float) -> float:
     return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
 
@@ -82,6 +104,11 @@ def make_index_after_fee(d_returns_decimal: np.ndarray, fee_pa_decimal: float, s
     return idx
 
 
+def index_to_volume(idx: np.ndarray, volume: float) -> np.ndarray:
+    """Rechnet Index (Basis 100) in Euro-Beträge um: volume * (idx / 100)."""
+    return volume * (idx / 100.0)
+
+
 def drawdown_from_index(idx: np.ndarray) -> np.ndarray:
     peak = np.maximum.accumulate(idx)
     return (idx / peak) - 1.0
@@ -95,9 +122,9 @@ def to_decimal_interval(series_float: pd.Series) -> np.ndarray:
     return x
 
 
-# -----------------------------
+# ---------------------------------------------------------------------------
 # Helpers: Performance-Tabelle (rollierend)
-# -----------------------------
+# ---------------------------------------------------------------------------
 def _asof_value(series: pd.Series, target_ts: pd.Timestamp):
     s = series.dropna()
     if s.empty:
@@ -137,7 +164,7 @@ def build_rolling_table(
         ("3 Jahre", end_ts - pd.DateOffset(years=3)),
         ("5 Jahre", end_ts - pd.DateOffset(years=5)),
         ("10 Jahre", end_ts - pd.DateOffset(years=10)),
-        (since_label or f"Wertentwicklung seit: {first_ts.strftime('%d.%m.%Y')}", first_ts),
+        (since_label or f"Wertentwicklung seit: {fmt_date_de(first_ts)}", first_ts),
     ]
 
     rows = []
@@ -167,9 +194,9 @@ def build_rolling_table(
     return df_show
 
 
-# -----------------------------
+# ---------------------------------------------------------------------------
 # Helpers: Balken-Chart (blockweise Performance)
-# -----------------------------
+# ---------------------------------------------------------------------------
 def calc_period_return(returns: np.ndarray) -> float:
     return float(np.prod(1.0 + returns) - 1.0)
 
@@ -187,9 +214,6 @@ def compute_bar_data(
     custom_start: dt.date = None,
     custom_end: dt.date = None,
 ) -> pd.DataFrame:
-    """
-    Gibt DataFrame: label_period | ret_after (%) | ret_bm (%)
-    """
     rows = []
 
     def _add_row(period_label: str, sub: pd.DataFrame):
@@ -219,7 +243,7 @@ def compute_bar_data(
         if custom_start is None or custom_end is None:
             return pd.DataFrame()
         mask = (df.index.date >= custom_start) & (df.index.date <= custom_end)
-        lbl = f"{custom_start.strftime('%d.%m.%Y')} – {custom_end.strftime('%d.%m.%Y')}"
+        lbl = f"{fmt_date_de(custom_start)} – {fmt_date_de(custom_end)}"
         _add_row(lbl, df[mask])
 
     return pd.DataFrame(rows)
@@ -234,21 +258,16 @@ def build_bar_chart(
     bench_name_2: str | None = None,
     title: str = "",
 ) -> go.Figure:
-    """
-    Gruppierter Balken-Chart für 1 oder 2 Portfolios + Benchmark.
-    Farben: Portfolio 1 = Gold, Portfolio 2 = Dunkelblau, Benchmark = Hellblau.
-    """
-    COLOR_PORT1 = "#B8973A"   # Gold
-    COLOR_PORT2 = "#2C5F8A"   # Dunkelblau
-    COLOR_BM1   = "#A8CBE8"   # Hellblau
-    COLOR_BM2   = "#7FB5D5"   # etwas dunkleres Blau für BM2
+    COLOR_PORT1 = "#B8973A"
+    COLOR_PORT2 = "#2C5F8A"
+    COLOR_BM1   = "#A8CBE8"
+    COLOR_BM2   = "#7FB5D5"
     BG          = "#1B3A5C"
 
     fig = go.Figure()
 
     col_port1 = f"{label_1} (nach Kosten)"
 
-    # ── Portfolio 1 ──────────────────────────────────
     if col_port1 in bar_df1.columns:
         vals1 = bar_df1[col_port1].tolist()
         fig.add_trace(go.Bar(
@@ -262,7 +281,6 @@ def build_bar_chart(
             cliponaxis=False,
         ))
 
-    # ── Benchmark Portfolio 1 ────────────────────────
     if "ret_bm_raw" in bar_df1.columns and bar_df1["ret_bm_raw"].notna().any():
         bm_vals1 = bar_df1["ret_bm_raw"].tolist()
         fig.add_trace(go.Bar(
@@ -276,7 +294,6 @@ def build_bar_chart(
             cliponaxis=False,
         ))
 
-    # ── Portfolio 2 (Vergleich) ──────────────────────
     if bar_df2 is not None and label_2 is not None:
         col_port2 = f"{label_2} (nach Kosten)"
         if col_port2 in bar_df2.columns:
@@ -292,7 +309,6 @@ def build_bar_chart(
                 cliponaxis=False,
             ))
 
-        # ── Benchmark Portfolio 2 ────────────────────
         if (bench_name_2 and bench_name_2 != bench_name_1
                 and "ret_bm_raw" in bar_df2.columns
                 and bar_df2["ret_bm_raw"].notna().any()):
@@ -308,7 +324,6 @@ def build_bar_chart(
                 cliponaxis=False,
             ))
 
-    # ── Layout ───────────────────────────────────────
     fig.add_hline(y=0, line_color="white", line_width=1)
 
     all_vals = []
@@ -364,12 +379,40 @@ def build_bar_chart(
     return fig
 
 
-# -----------------------------
+# ---------------------------------------------------------------------------
+# Benchmark-Zusammensetzung anzeigen
+# ---------------------------------------------------------------------------
+def show_benchmark_composition(
+    display_name: str,
+    benchmark_text: str | None,
+    display_name_2: str | None = None,
+    benchmark_text_2: str | None = None,
+):
+    """Zeigt die Benchmark-Zusammensetzung unter einem Chart an."""
+    if benchmark_text and str(benchmark_text).strip() and str(benchmark_text).strip().lower() not in ("", "nan", "haben keine benchmark"):
+        st.caption(f"**Zusammensetzung Benchmark {display_name}:** {benchmark_text}")
+    if display_name_2 and benchmark_text_2 and str(benchmark_text_2).strip() and str(benchmark_text_2).strip().lower() not in ("", "nan", "haben keine benchmark"):
+        st.caption(f"**Zusammensetzung Benchmark {display_name_2}:** {benchmark_text_2}")
+
+
+# ---------------------------------------------------------------------------
 # Data loading
-# -----------------------------
+# ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_mapping(mapping_path: str) -> pd.DataFrame:
     return pd.read_excel(mapping_path).round(6)
+
+
+@st.cache_data(show_spinner=False)
+def load_name_mapping(path: str) -> pd.DataFrame:
+    """
+    Lädt Mapping_Namen.xlsx mit Spalten:
+    - Spalte A: 'Strategie auswählen' (Anzeigename)
+    - Spalte B: 'Honorarsatz Mapping' (CSV-Schlüssel = Portfolio Name)
+    - Spalte D: 'Benchmark' (Benchmark-Zusammensetzung als Text)
+    """
+    df = pd.read_excel(path)
+    return df
 
 
 @st.cache_data(show_spinner=True)
@@ -456,8 +499,9 @@ if not check_login():
 
 st.title("Performancevergleich – Fürst Fugger Privatbank")
 
-MAPPING_PATH = r"Mapping_Honorarsatz.xlsx"
-DATA_FOLDER  = r"Daten"
+MAPPING_PATH      = r"Mapping_Honorarsatz.xlsx"
+NAME_MAPPING_PATH = r"Mapping_Namen.xlsx"
+DATA_FOLDER       = r"Daten"
 exclude_substrings = ["Stiftung"]
 heute_tag = dt.date.today().strftime("%y%m%d")
 
@@ -467,22 +511,55 @@ with st.sidebar:
 
     date_tag = st.text_input("Date-Tag (yyMMdd)", value=heute_tag)
 
-    mapping = load_mapping(MAPPING_PATH)
-    files   = load_all_csvs(DATA_FOLDER, date_tag, exclude_substrings)
+    mapping      = load_mapping(MAPPING_PATH)
+    name_mapping = load_name_mapping(NAME_MAPPING_PATH)
+    files        = load_all_csvs(DATA_FOLDER, date_tag, exclude_substrings)
 
     if len(files) == 0:
         st.error(f"Keine Dateien gefunden für Tag {date_tag}. Pattern: *_{date_tag}_*.CSV")
         st.stop()
 
     data = build_portfolio_timeseries(files, mapping)
-    portfolios = sorted(list(data.keys()))
 
-    portfolio_sel = st.selectbox("Portfolio auswählen", portfolios)
+    # ── Name-Mapping aufbauen ──────────────────────────────────────────────
+    # Spalte A = Anzeigename, Spalte B = CSV-Schlüssel (Portfolio Name)
+    col_display = name_mapping.columns[0]   # "Strategie auswählen"
+    col_csv_key = name_mapping.columns[1]   # "Honorarsatz Mapping"
+    col_bench   = name_mapping.columns[3]   # "Benchmark" (Spalte D)
+
+    # Nur Zeilen behalten, deren CSV-Schlüssel auch in den geladenen Daten vorhanden sind
+    available_csv_names = set(data.keys())
+    name_mapping_filtered = name_mapping[
+        name_mapping[col_csv_key].isin(available_csv_names)
+    ].copy()
+
+    # Reihenfolge aus der Excel beibehalten
+    display_names_ordered = name_mapping_filtered[col_display].tolist()
+
+    # Lookup-Dicts: Anzeigename <-> CSV-Schlüssel, Anzeigename -> Benchmark-Text
+    display_to_csv = dict(zip(
+        name_mapping_filtered[col_display],
+        name_mapping_filtered[col_csv_key]
+    ))
+    display_to_benchmark = dict(zip(
+        name_mapping_filtered[col_display],
+        name_mapping_filtered[col_bench]
+    ))
+
+    if len(display_names_ordered) == 0:
+        st.error("Keine Portfolios aus Mapping_Namen.xlsx konnten den geladenen CSV-Daten zugeordnet werden.")
+        st.stop()
+
+    # ── Portfolio-Auswahl (Anzeigenamen, Reihenfolge aus Excel) ────────────
+    display_sel_1 = st.selectbox("Portfolio auswählen", display_names_ordered)
+    portfolio_sel = display_to_csv[display_sel_1]
 
     show_compare  = st.checkbox("Vergleichsportfolio anzeigen", value=False)
     portfolio_sel2 = None
+    display_sel_2  = None
     if show_compare:
-        portfolio_sel2 = st.selectbox("Vergleichsportfolio auswählen", portfolios)
+        display_sel_2 = st.selectbox("Vergleichsportfolio auswählen", display_names_ordered)
+        portfolio_sel2 = display_to_csv[display_sel_2]
 
     show_vorkosten = st.checkbox("Vor Kosten anzeigen",                   value=True)
     show_benchmark = st.checkbox("Benchmark anzeigen",                    value=True)
@@ -490,10 +567,26 @@ with st.sidebar:
     show_table     = st.checkbox("Tabelle: Wertentwicklung rollierend",   value=True)
     show_bar       = st.checkbox("Balken-Chart: Performance blockweise",  value=True)
 
-    # Kosten Portfolio 1
+    # ── Anlagevolumen (optional) ───────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Anlagevolumen")
+    anlagevolumen = st.number_input(
+        "Anlagevolumen in € (optional)",
+        min_value=0.0,
+        max_value=1_000_000_000.0,
+        value=0.0,
+        step=10_000.0,
+        format="%.2f",
+        help="Wenn ein Volumen > 0 eingegeben wird, zeigt der Chart die Wertentwicklung in Euro an. Sonst Index ab 100."
+    )
+    use_volume = anlagevolumen > 0
+
+    st.markdown("---")
+
+    # ── Kosten Portfolio 1 ─────────────────────────────────────────────────
     fee_default_dec_1 = float(data[portfolio_sel]["fee_default"].iloc[0]) if len(data[portfolio_sel]) else 0.0
     fee_pct_1 = st.number_input(
-        f"Kosten p.a. (%) – {portfolio_sel}",
+        f"Kosten p.a. (%) – {display_sel_1}",
         min_value=0.0, max_value=20.0,
         value=float(round(fee_default_dec_1 * 100, 4)),
         step=0.05,
@@ -501,13 +594,13 @@ with st.sidebar:
     )
     fee_dec_1 = fee_pct_1 / 100.0
 
-    # Kosten Portfolio 2 (nur wenn Vergleich aktiv)
+    # ── Kosten Portfolio 2 (nur wenn Vergleich aktiv) ──────────────────────
     fee_dec_2 = None
     fee_pct_2 = None
     if show_compare and portfolio_sel2:
         fee_default_dec_2 = float(data[portfolio_sel2]["fee_default"].iloc[0]) if len(data[portfolio_sel2]) else 0.0
         fee_pct_2 = st.number_input(
-            f"Kosten p.a. (%) – {portfolio_sel2}",
+            f"Kosten p.a. (%) – {display_sel_2}",
             min_value=0.0, max_value=20.0,
             value=float(round(fee_default_dec_2 * 100, 4)),
             step=0.05,
@@ -516,15 +609,43 @@ with st.sidebar:
         fee_dec_2 = fee_pct_2 / 100.0
 
 
-# ── Daten vorbereiten / Zeitraum ───────────────────────────────────────────
+# ── Anzeigenamen für Charts / Tabellen ─────────────────────────────────────
+label_1 = display_sel_1
+label_2 = display_sel_2 if (show_compare and display_sel_2) else None
+
+
+# ── Daten vorbereiten / Zeitraum (deutsches Datumsformat) ──────────────────
 df1 = data[portfolio_sel].copy()
 min_d, max_d = df1.index.min().date(), df1.index.max().date()
 
+st.markdown("#### Zeitraum auswählen")
 col1, col2 = st.columns(2)
 with col1:
-    start_date = st.date_input("Start", value=min_d, min_value=min_d, max_value=max_d)
+    start_input = st.text_input(
+        "Start (dd.mm.yyyy)",
+        value=fmt_date_de(min_d),
+        key="start_date_input"
+    )
 with col2:
-    end_date = st.date_input("Ende",  value=max_d, min_value=min_d, max_value=max_d)
+    end_input = st.text_input(
+        "Ende (dd.mm.yyyy)",
+        value=fmt_date_de(max_d),
+        key="end_date_input"
+    )
+
+start_date = parse_date_de(start_input)
+end_date   = parse_date_de(end_input)
+
+if start_date is None:
+    st.error(f"Ungültiges Startdatum: '{start_input}'. Bitte im Format dd.mm.yyyy eingeben.")
+    st.stop()
+if end_date is None:
+    st.error(f"Ungültiges Enddatum: '{end_input}'. Bitte im Format dd.mm.yyyy eingeben.")
+    st.stop()
+
+# Auf verfügbaren Bereich klemmen
+start_date = max(start_date, min_d)
+end_date   = min(end_date, max_d)
 
 if start_date > end_date:
     st.error("Startdatum darf nicht nach dem Enddatum liegen.")
@@ -554,87 +675,124 @@ if show_compare and portfolio_sel2:
 
 
 # ── Indexberechnung ────────────────────────────────────────────────────────
-ret1       = df1["ret_port"].to_numpy(dtype=float)
-idx_after_1  = make_index_after_fee(ret1, fee_dec_1, startwert=100.0)
-idx_before_1 = make_index_from_returns(ret1, startwert=100.0)
+startwert = anlagevolumen if use_volume else 100.0
+
+ret1         = df1["ret_port"].to_numpy(dtype=float)
+idx_after_1  = make_index_after_fee(ret1, fee_dec_1, startwert=startwert)
+idx_before_1 = make_index_from_returns(ret1, startwert=startwert)
 
 idx_after_2  = None
 idx_before_2 = None
 if df2 is not None:
-    ret2       = df2["ret_port"].to_numpy(dtype=float)
-    idx_after_2  = make_index_after_fee(ret2, float(fee_dec_2), startwert=100.0)
-    idx_before_2 = make_index_from_returns(ret2, startwert=100.0)
+    ret2         = df2["ret_port"].to_numpy(dtype=float)
+    idx_after_2  = make_index_after_fee(ret2, float(fee_dec_2), startwert=startwert)
+    idx_before_2 = make_index_from_returns(ret2, startwert=startwert)
 
 x_dates = [df1.index.min() - pd.Timedelta(days=1)] + list(df1.index)
 
-s_before_1 = pd.Series(idx_before_1, index=pd.to_datetime(x_dates))
-s_after_1  = pd.Series(idx_after_1,  index=pd.to_datetime(x_dates))
-s_before_2 = pd.Series(idx_before_2, index=pd.to_datetime(x_dates)) if idx_before_2 is not None else None
-s_after_2  = pd.Series(idx_after_2,  index=pd.to_datetime(x_dates)) if idx_after_2  is not None else None
+# Für rollierende Tabelle immer Index-Basis 100 (unabhängig vom Volumen)
+ret1_for_table = df1["ret_port"].to_numpy(dtype=float)
+s_before_1_tbl = pd.Series(make_index_from_returns(ret1_for_table, 100.0), index=pd.to_datetime(x_dates))
+s_after_1_tbl  = pd.Series(make_index_after_fee(ret1_for_table, fee_dec_1, 100.0), index=pd.to_datetime(x_dates))
+s_before_2_tbl = None
+s_after_2_tbl  = None
+if df2 is not None:
+    ret2_for_table = df2["ret_port"].to_numpy(dtype=float)
+    s_before_2_tbl = pd.Series(make_index_from_returns(ret2_for_table, 100.0), index=pd.to_datetime(x_dates))
+    s_after_2_tbl  = pd.Series(make_index_after_fee(ret2_for_table, float(fee_dec_2), 100.0), index=pd.to_datetime(x_dates))
 
 bench_name_1 = data[portfolio_sel].attrs.get("benchmark_name", "Benchmark")
 bench_name_2 = data[portfolio_sel2].attrs.get("benchmark_name", "Benchmark") if (show_compare and portfolio_sel2) else None
 
+# Benchmark-Texte aus Mapping
+bench_text_1 = display_to_benchmark.get(display_sel_1, "")
+bench_text_2 = display_to_benchmark.get(display_sel_2, "") if display_sel_2 else ""
 
-# ── Chart: Index (100) ─────────────────────────────────────────────────────
-st.subheader("📈 Performance-Index (Start = 100)")
+
+# ── Chart: Index / Volumen ─────────────────────────────────────────────────
+if use_volume:
+    st.subheader(f"📈 Wertentwicklung in Euro (Anlagevolumen: {anlagevolumen:,.2f} €)")
+    y_label = "Wert in €"
+else:
+    st.subheader("📈 Performance-Index (Start = 100)")
+    y_label = "Index (Start 100)"
 
 fig = go.Figure()
 
 fig.add_trace(go.Scatter(
     x=x_dates, y=idx_after_1, mode="lines",
-    name=f"{portfolio_sel} – nach Kosten ({fee_pct_1:.2f}%)"
+    name=f"{label_1} – nach Kosten ({fee_pct_1:.2f}%)"
 ))
 
 if idx_after_2 is not None:
     fig.add_trace(go.Scatter(
         x=x_dates, y=idx_after_2, mode="lines",
-        name=f"{portfolio_sel2} – nach Kosten ({(fee_pct_2 or 0.0):.2f}%)"
+        name=f"{label_2} – nach Kosten ({(fee_pct_2 or 0.0):.2f}%)"
     ))
 
 if show_vorkosten:
     fig.add_trace(go.Scatter(x=x_dates, y=idx_before_1, mode="lines",
-                             name=f"{portfolio_sel} – vor Kosten"))
+                             name=f"{label_1} – vor Kosten"))
     if idx_before_2 is not None:
         fig.add_trace(go.Scatter(x=x_dates, y=idx_before_2, mode="lines",
-                                 name=f"{portfolio_sel2} – vor Kosten"))
+                                 name=f"{label_2} – vor Kosten"))
 
 if show_benchmark and df1["ret_bm"].notna().any():
     ret_bm_1 = df1["ret_bm"].fillna(0.0).to_numpy(dtype=float)
-    idx_bm_1 = make_index_from_returns(ret_bm_1, startwert=100.0)
+    idx_bm_1 = make_index_from_returns(ret_bm_1, startwert=startwert)
     fig.add_trace(go.Scatter(x=x_dates, y=idx_bm_1, mode="lines",
-                             name=f"Benchmark {portfolio_sel}: {bench_name_1}"))
+                             name=f"Benchmark {label_1}: {bench_name_1}"))
 
     if df2 is not None and df2["ret_bm"].notna().any():
         ret_bm_2 = df2["ret_bm"].fillna(0.0).to_numpy(dtype=float)
-        idx_bm_2 = make_index_from_returns(ret_bm_2, startwert=100.0)
+        idx_bm_2 = make_index_from_returns(ret_bm_2, startwert=startwert)
         fig.add_trace(go.Scatter(x=x_dates, y=idx_bm_2, mode="lines",
-                                 name=f"Benchmark {portfolio_sel2}: {bench_name_2}"))
+                                 name=f"Benchmark {label_2}: {bench_name_2}"))
 
+# Deutsches Datumsformat auf der X-Achse
 fig.update_layout(
     height=550,
     xaxis_title="Datum",
-    yaxis_title="Index (Start 100)",
+    xaxis=dict(
+        tickformat="%d.%m.%Y",
+    ),
+    yaxis_title=y_label,
+    yaxis=dict(
+        tickformat=",.2f" if use_volume else None,
+    ),
     legend_title_text="Reihen",
     hovermode="x unified",
 )
 st.plotly_chart(fig, use_container_width=True)
 
+# ── Benchmark-Zusammensetzung unter dem Linien-Chart ───────────────────────
+if show_benchmark:
+    show_benchmark_composition(
+        display_name=label_1,
+        benchmark_text=bench_text_1,
+        display_name_2=label_2,
+        benchmark_text_2=bench_text_2,
+    )
+
 
 # ── Drawdown Chart ─────────────────────────────────────────────────────────
 if show_drawdown:
     fig_dd = go.Figure()
-    dd1 = drawdown_from_index(idx_after_1)
+    # Drawdown immer auf Basis des Index (nicht Volumen), da es relativ ist
+    dd_idx_1 = make_index_after_fee(ret1, fee_dec_1, startwert=100.0)
+    dd1 = drawdown_from_index(dd_idx_1)
     fig_dd.add_trace(go.Scatter(x=x_dates, y=dd1, mode="lines",
-                                name=f"{portfolio_sel} – Drawdown (nach Kosten)"))
-    if idx_after_2 is not None:
-        dd2 = drawdown_from_index(idx_after_2)
+                                name=f"{label_1} – Drawdown (nach Kosten)"))
+    if df2 is not None and idx_after_2 is not None:
+        dd_idx_2 = make_index_after_fee(ret2, float(fee_dec_2), startwert=100.0)
+        dd2 = drawdown_from_index(dd_idx_2)
         fig_dd.add_trace(go.Scatter(x=x_dates, y=dd2, mode="lines",
-                                    name=f"{portfolio_sel2} – Drawdown (nach Kosten)"))
+                                    name=f"{label_2} – Drawdown (nach Kosten)"))
     fig_dd.update_layout(
         height=350,
         xaxis_title="Datum",
-        yaxis_title="Drawdown (dezimal, z.B. -0.12 = -12%)",
+        xaxis=dict(tickformat="%d.%m.%Y"),
+        yaxis_title="Drawdown (dezimal, z.B. -0,12 = -12%)",
         hovermode="x unified",
     )
     st.plotly_chart(fig_dd, use_container_width=True)
@@ -642,14 +800,14 @@ if show_drawdown:
 
 # ── Tabelle: Wertentwicklung rollierend ────────────────────────────────────
 if show_table:
-    since_label = f"Wertentwicklung seit: {df1.index.min().strftime('%d.%m.%Y')}"
+    since_label = f"Wertentwicklung seit: {fmt_date_de(df1.index.min())}"
     df_roll = build_rolling_table(
-        idx_before_1=s_before_1,
-        idx_after_1=s_after_1,
-        label_1=portfolio_sel,
-        idx_before_2=s_before_2,
-        idx_after_2=s_after_2,
-        label_2=portfolio_sel2 if (show_compare and portfolio_sel2) else None,
+        idx_before_1=s_before_1_tbl,
+        idx_after_1=s_after_1_tbl,
+        label_1=label_1,
+        idx_before_2=s_before_2_tbl,
+        idx_after_2=s_after_2_tbl,
+        label_2=label_2,
         since_label=since_label
     )
     st.subheader("📋 Wertentwicklung rollierend")
@@ -672,12 +830,16 @@ if show_bar:
         custom_start_bar = None
         custom_end_bar   = None
         if bar_mode == "Benutzerdefiniert":
-            custom_start_bar = st.date_input(
-                "Von", value=start_date, min_value=min_d, max_value=max_d, key="bar_von"
+            custom_start_input = st.text_input(
+                "Von (dd.mm.yyyy)", value=fmt_date_de(start_date), key="bar_von"
             )
-            custom_end_bar = st.date_input(
-                "Bis", value=end_date, min_value=min_d, max_value=max_d, key="bar_bis"
+            custom_end_input = st.text_input(
+                "Bis (dd.mm.yyyy)", value=fmt_date_de(end_date), key="bar_bis"
             )
+            custom_start_bar = parse_date_de(custom_start_input)
+            custom_end_bar   = parse_date_de(custom_end_input)
+            if custom_start_bar is None or custom_end_bar is None:
+                st.error("Bitte gültige Daten im Format dd.mm.yyyy eingeben.")
 
     titel_map = {
         "Kalenderjahre":     "PERFORMANCE P.A. (NACH KOSTEN) IM BENCHMARKVERGLEICH",
@@ -711,24 +873,41 @@ if show_bar:
 
     with bar_right:
         # ── Chart Portfolio 1 ──
-        _render_bar(df1, fee_dec_1, portfolio_sel, bench_name_1, st.container())
+        _render_bar(df1, fee_dec_1, label_1, bench_name_1, st.container())
+
+        # ── Benchmark-Zusammensetzung unter Balken-Chart Portfolio 1 ──
+        if show_benchmark:
+            show_benchmark_composition(
+                display_name=label_1,
+                benchmark_text=bench_text_1,
+            )
 
         # ── Chart Portfolio 2 (nur wenn Vergleich aktiv) ──
         if df2 is not None and fee_dec_2 is not None and portfolio_sel2:
             st.markdown("---")
-            _render_bar(df2, fee_dec_2, portfolio_sel2, bench_name_2 or "Benchmark", st.container())
+            _render_bar(df2, fee_dec_2, label_2, bench_name_2 or "Benchmark", st.container())
+
+            # ── Benchmark-Zusammensetzung unter Balken-Chart Portfolio 2 ──
+            if show_benchmark:
+                show_benchmark_composition(
+                    display_name=label_2,
+                    benchmark_text=bench_text_2,
+                )
 
 
 # ── Debug ──────────────────────────────────────────────────────────────────
 with st.expander("Details / Debug"):
     st.write("Gefundene Dateien:", len(files))
-    st.write("Zeitraum:", start_date, "bis", end_date)
-    st.write(f"Kosten {portfolio_sel} (dezimal):", fee_dec_1)
+    st.write("Zeitraum:", fmt_date_de(start_date), "bis", fmt_date_de(end_date))
+    st.write(f"Kosten {label_1} (dezimal):", fee_dec_1)
     if df2 is not None:
-        st.write(f"Kosten {portfolio_sel2} (dezimal):", fee_dec_2)
+        st.write(f"Kosten {label_2} (dezimal):", fee_dec_2)
     st.write("Benchmark-Name 1:", bench_name_1)
+    st.write("Benchmark-Text 1:", bench_text_1)
     if df2 is not None:
         st.write("Benchmark-Name 2:", bench_name_2)
+        st.write("Benchmark-Text 2:", bench_text_2)
+    st.write(f"Anlagevolumen: {anlagevolumen:,.2f} €" if use_volume else "Anlagevolumen: nicht gesetzt (Index 100)")
     st.write("Rows Portfolio 1:", len(df1))
     if df2 is not None:
         st.write("Rows Portfolio 2:", len(df2))
