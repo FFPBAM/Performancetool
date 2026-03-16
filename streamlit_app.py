@@ -440,11 +440,18 @@ with tab_perf:
         stbl=st.checkbox("Tabelle rollierend",value=True,key="p_tbl"); sbar=st.checkbox("Balken-Chart",value=True,key="p_bar")
         st.markdown("---")
         fd1=float(data[ps1]["fee_default"].iloc[0]) if len(data[ps1]) else 0.0
-        fp1=st.number_input(f"Kosten % – {ds1}",0.0,20.0,float(round(fd1*100,4)),0.05,key="p_fee1"); fdec1=fp1/100
+        # Dynamischer Key: wenn Portfolio wechselt, wird der Default neu geladen
+        fee_key_1 = f"p_fee1_{ps1}"
+        if fee_key_1 not in st.session_state:
+            st.session_state[fee_key_1] = float(round(fd1*100, 4))
+        fp1=st.number_input(f"Kosten % – {ds1}",0.0,20.0,step=0.05,key=fee_key_1); fdec1=fp1/100
         fdec2=fp2=None
         if sc and ps2:
             fd2=float(data[ps2]["fee_default"].iloc[0]) if len(data[ps2]) else 0.0
-            fp2=st.number_input(f"Kosten % – {ds2}",0.0,20.0,float(round(fd2*100,4)),0.05,key="p_fee2"); fdec2=fp2/100
+            fee_key_2 = f"p_fee2_{ps2}"
+            if fee_key_2 not in st.session_state:
+                st.session_state[fee_key_2] = float(round(fd2*100, 4))
+            fp2=st.number_input(f"Kosten % – {ds2}",0.0,20.0,step=0.05,key=fee_key_2); fdec2=fp2/100
 
     l1=ds1; l2=ds2 if sc and ds2 else None
     ad1=data[ps1].index.min().date(); ad2=data[ps2].index.min().date() if sc and ps2 else None
