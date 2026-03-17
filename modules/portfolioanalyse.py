@@ -319,11 +319,14 @@ def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.F
 # ---------------------------------------------------------------------------
 # Top 5 Holdings Säulendiagramm (Plotly)
 # ---------------------------------------------------------------------------
+TOP5_COLORS = ["#1B3A5C", "#6A9BC3", "#B8973A", "#C4B78C", "#A8CBE8"]
+
+
 def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
     fig = go.Figure(data=[go.Bar(
         x=top5["Wertpapier"],
         y=top5["Gewicht"] * 100,
-        marker_color=FFPB_GOLD,
+        marker_color=TOP5_COLORS[:len(top5)],
         text=[f"{v*100:.1f}%" for v in top5["Gewicht"]],
         textposition="outside",
         textfont=dict(size=11),
@@ -455,13 +458,6 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     if use_volume:
         with kcols[3]: st.metric("Liquidität in €", fmt_eur_de(liq * anlagevolumen))
 
-    # ── Top 5 Holdings (Säulendiagramm, immer sichtbar) ──
-    st.markdown("---")
-    top5 = get_top_holdings(df, n=5)
-    if not top5.empty:
-        fig_top5 = build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)")
-        st.plotly_chart(fig_top5, use_container_width=True)
-
     # ── Ring-Diagramme (3 nebeneinander, volle Breite) ──
     st.markdown("---")
     rc1, rc2, rc3 = st.columns(3)
@@ -475,8 +471,16 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
         alloc_s = build_allocation(df, "Segment")
         if not alloc_s.empty: st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True)
 
-    # ── Einzeltitel-Tabelle (gruppiert nach Gattung) ──
+    # ── Einzeltitel-Bereich ──
     st.markdown("---")
+
+    # ── Top 5 Holdings (Säulendiagramm, immer sichtbar) ──
+    top5 = get_top_holdings(df, n=5)
+    if not top5.empty:
+        fig_top5 = build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)")
+        st.plotly_chart(fig_top5, use_container_width=True)
+
+    # ── Einzeltitel-Tabelle (gruppiert nach Gattung) ──
     st.markdown("**Einzeltitel-Übersicht**")
     grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
     for gattung_name, gattung_weight, disp_df in grouped:
