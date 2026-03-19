@@ -209,22 +209,24 @@ def show_benchmark_composition(dn, bt, dn2=None, bt2=None):
     if dn2 and bt2 and str(bt2).strip() and str(bt2).strip().lower() not in ("","nan","haben keine benchmark"):
         st.caption(f"**Zusammensetzung Benchmark {dn2}:** {bt2}")
 
-def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar):
+def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar, mwst_suffix=""):
+    nk = f"nach Kosten{mwst_suffix}"
     n=4+(1 if use_volume else 0); cols=st.columns(n)
     with cols[0]: st.metric("Auflagedatum im PM",fmt_date_de(auflagedatum),help="Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement.")
-    with cols[1]: st.metric("⌀ Rendite p.a. (nach Kosten)",fmt_pct_de(cagr) if cagr else "–",help="Annualisierte Rendite nach Kosten (CAGR): (Endwert/Startwert)^(365/Tage) − 1.")
-    with cols[2]: st.metric("Volatilität p.a. (nach Kosten)",fmt_pct_de(vola) if vola else "–",help="Annualisierte Schwankungsbreite: Standardabweichung der Tagesrenditen × √365.")
-    with cols[3]: st.metric("Calmar Ratio (nach Kosten)",f"{calmar:.2f}".replace(".",",") if calmar else "–",help="CAGR / |Max Drawdown|. Je höher, desto besser die risikoadjustierte Rendite.")
+    with cols[1]: st.metric(f"⌀ Rendite p.a. ({nk})",fmt_pct_de(cagr) if cagr else "–",help="Annualisierte Rendite nach Kosten (CAGR): (Endwert/Startwert)^(365/Tage) − 1.")
+    with cols[2]: st.metric(f"Volatilität p.a. ({nk})",fmt_pct_de(vola) if vola else "–",help="Annualisierte Schwankungsbreite: Standardabweichung der Tagesrenditen × √365.")
+    with cols[3]: st.metric(f"Calmar Ratio ({nk})",f"{calmar:.2f}".replace(".",",") if calmar else "–",help="CAGR / |Max Drawdown|. Je höher, desto besser die risikoadjustierte Rendite.")
     if use_volume and endwert:
-        with cols[4]: st.metric("Endwert (nach Kosten)",fmt_eur_de(endwert),help="Aktueller Wert des Anlagevolumens nach Abzug aller Kosten.")
+        with cols[4]: st.metric(f"Endwert ({nk})",fmt_eur_de(endwert),help="Aktueller Wert des Anlagevolumens nach Abzug aller Kosten.")
 
-def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds, dde):
-    st.markdown(f"**{label} (nach Kosten)**")
+def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds, dde, mwst_suffix=""):
+    nk = f"nach Kosten{mwst_suffix}"
+    st.markdown(f"**{label} ({nk})**")
     ddv=fmt_pct_de(mddv)
     if uv and mdde is not None: ddv+=f" ({fmt_eur_de(mdde)})"
     rv=f"{rd} Tage" if rd else "noch nicht erholt"; rh=f" Erholt am {fmt_date_de(rdate)}." if rd else ""
     cols=st.columns(4)
-    with cols[0]: st.metric("Max. Drawdown (nach Kosten)",ddv,help=f"Größter Verlust vom Höchststand. Tiefpunkt am {fmt_date_de(mddd)}.")
+    with cols[0]: st.metric(f"Max. Drawdown ({nk})",ddv,help=f"Größter Verlust vom Höchststand. Tiefpunkt am {fmt_date_de(mddd)}.")
     with cols[1]: st.metric("Recovery",rv,help=f"Tage vom Tief bis zur Erholung.{rh}")
     with cols[2]: st.metric("Längste Drawdown-Phase",f"{mddur} Tage" if mddur>0 else "–",help=f"Längster Zeitraum unter Peak: {fmt_date_de(dds)} – {fmt_date_de(dde)}." if mddur>0 else "Kein Drawdown.")
     with cols[3]: st.metric("Drawdown-Tief am",fmt_date_de(mddd),help="Datum des tiefsten Drawdown-Punkts.")
@@ -281,7 +283,8 @@ def _mpl_bar_chart(bar_df, label, bench_name, title):
 
 def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, bench_text_1, bench_text_2,
     fee_pct_1, fee_pct_2, anlagevolumen, use_volume, start_date, end_date, x_dates, line_traces, y_label,
-    show_drawdown, dd_traces, show_table, df_roll, show_bar, bar_data_list, metrics_data):
+    show_drawdown, dd_traces, show_table, df_roll, show_bar, bar_data_list, metrics_data, mwst_suffix=""):
+    nk = f"nach Kosten{mwst_suffix}"
     buf=io.BytesIO()
     doc=SimpleDocTemplate(buf,pagesize=A4,topMargin=15*mm,bottomMargin=15*mm,leftMargin=15*mm,rightMargin=15*mm)
     styles=getSampleStyleSheet()
@@ -297,12 +300,12 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
     ml=[f"<b>Portfolio:</b> {label_1}"]
     if label_2: ml.append(f"<b>Vergleich:</b> {label_2}")
     ml.append(f"<b>Zeitraum:</b> {fmt_date_de(start_date)} – {fmt_date_de(end_date)}")
-    ml.append(f"<b>Kosten {label_1}:</b> {fee_pct_1:.2f}% p.a.")
-    if label_2 and fee_pct_2 is not None: ml.append(f"<b>Kosten {label_2}:</b> {fee_pct_2:.2f}% p.a.")
+    ml.append(f"<b>Kosten {label_1}:</b> {fee_pct_1:.2f}% p.a.{mwst_suffix}")
+    if label_2 and fee_pct_2 is not None: ml.append(f"<b>Kosten {label_2}:</b> {fee_pct_2:.2f}% p.a.{mwst_suffix}")
     if use_volume: ml.append(f"<b>Anlagevolumen:</b> {fmt_eur_de(anlagevolumen)}")
     for l in ml: story.append(Paragraph(l,st_n))
     story.append(Spacer(1,4*mm))
-    story.append(Paragraph("Kennzahlen (nach Kosten)",st_s))
+    story.append(Paragraph(f"Kennzahlen ({nk})",st_s))
     for m in metrics_data:
         p=[f"<b>{m['label']}:</b>"]
         if m.get("auflagedatum"): p.append(f"Auflage: {fmt_date_de(m['auflagedatum'])}")
@@ -444,14 +447,29 @@ with tab_perf:
         fee_key_1 = f"p_fee1_{ps1}"
         if fee_key_1 not in st.session_state:
             st.session_state[fee_key_1] = float(round(fd1*100, 4))
-        fp1=st.number_input(f"Kosten % – {ds1}",0.0,20.0,step=0.05,key=fee_key_1); fdec1=fp1/100
+        fp1=st.number_input(f"Kosten % – {ds1}",0.0,20.0,step=0.05,key=fee_key_1)
         fdec2=fp2=None
         if sc and ps2:
             fd2=float(data[ps2]["fee_default"].iloc[0]) if len(data[ps2]) else 0.0
             fee_key_2 = f"p_fee2_{ps2}"
             if fee_key_2 not in st.session_state:
                 st.session_state[fee_key_2] = float(round(fd2*100, 4))
-            fp2=st.number_input(f"Kosten % – {ds2}",0.0,20.0,step=0.05,key=fee_key_2); fdec2=fp2/100
+            fp2=st.number_input(f"Kosten % – {ds2}",0.0,20.0,step=0.05,key=fee_key_2)
+
+        # MwSt-Option
+        st.markdown("---")
+        brutto_mwst = st.checkbox("Bruttohonorar (inkl. 19% MwSt.)", value=False, key="p_mwst",
+            help="Wenn aktiviert, wird auf das eingegebene Nettohonorar 19% MwSt. aufgeschlagen.")
+        mwst_faktor = 1.19 if brutto_mwst else 1.0
+        mwst_suffix = " (inkl. 19% MwSt.)" if brutto_mwst else " (exkl. MwSt.)"
+
+        fdec1 = (fp1 * mwst_faktor) / 100.0
+        if brutto_mwst:
+            st.caption(f"Effektive Kosten {ds1}: {fp1 * mwst_faktor:.4f}% p.a. (inkl. MwSt.)")
+        if fp2 is not None:
+            fdec2 = (fp2 * mwst_faktor) / 100.0
+            if brutto_mwst:
+                st.caption(f"Effektive Kosten {ds2}: {fp2 * mwst_faktor:.4f}% p.a. (inkl. MwSt.)")
 
     l1=ds1; l2=ds2 if sc and ds2 else None
     ad1=data[ps1].index.min().date(); ad2=data[ps2].index.min().date() if sc and ps2 else None
@@ -512,15 +530,18 @@ with tab_perf:
             "max_dd_val":mddv2 if sdd else None,"max_dd_date":mddd2 if sdd else None,"max_dd_eur":mdde2 if sdd else None,
             "recovery_days":rd2 if sdd else None,"recovery_date":rdt2 if sdd else None,"max_dd_dur":dur2 if sdd else None})
 
-    st.subheader("📊 Kennzahlen (nach Kosten)")
-    display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1)
-    if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2)
+    nk_label = f"nach Kosten{mwst_suffix}"
+    st.subheader(f"📊 Kennzahlen ({nk_label})")
+    display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,mwst_suffix)
+    if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,mwst_suffix)
 
+    eff_fee_1 = fp1 * mwst_faktor  # effektive Kosten in %
+    eff_fee_2 = (fp2 * mwst_faktor) if fp2 is not None else 0.0
     if use_volume: st.subheader(f"📈 Wertentwicklung in Euro ({fmt_eur_de(anlagevolumen)})"); yl="Wert in €"
     else: st.subheader("📈 Performance-Index (Start = 100)"); yl="Index (Start 100)"
     fig=go.Figure()
-    fig.add_trace(go.Scatter(x=xd,y=ia1,mode="lines",name=f"{l1} – nach Kosten ({fp1:.2f}%)"))
-    if ia2 is not None: fig.add_trace(go.Scatter(x=xd,y=ia2,mode="lines",name=f"{l2} – nach Kosten ({(fp2 or 0):.2f}%)"))
+    fig.add_trace(go.Scatter(x=xd,y=ia1,mode="lines",name=f"{l1} – {nk_label} ({eff_fee_1:.2f}%)"))
+    if ia2 is not None: fig.add_trace(go.Scatter(x=xd,y=ia2,mode="lines",name=f"{l2} – {nk_label} ({eff_fee_2:.2f}%)"))
     if sv:
         fig.add_trace(go.Scatter(x=xd,y=ib1,mode="lines",name=f"{l1} – vor Kosten"))
         if ib2 is not None: fig.add_trace(go.Scatter(x=xd,y=ib2,mode="lines",name=f"{l2} – vor Kosten"))
@@ -537,8 +558,8 @@ with tab_perf:
 
     if sdd:
         st.markdown("---")
-        display_drawdown_metrics(l1,mddv1,mddd1,mdde1,use_volume,rd1,rdt1,dur1,ds1_,de1_)
-        if df2 is not None and l2: display_drawdown_metrics(l2,mddv2,mddd2,mdde2,use_volume,rd2,rdt2,dur2,ds2_,de2_)
+        display_drawdown_metrics(l1,mddv1,mddd1,mdde1,use_volume,rd1,rdt1,dur1,ds1_,de1_,mwst_suffix)
+        if df2 is not None and l2: display_drawdown_metrics(l2,mddv2,mddd2,mdde2,use_volume,rd2,rdt2,dur2,ds2_,de2_,mwst_suffix)
         fdd=go.Figure()
         if use_volume:
             fdd.add_trace(go.Scatter(x=xd,y=drawdown_euro_from_index(ia1),mode="lines",name=f"{l1} – DD € (nK)"))
@@ -585,8 +606,8 @@ with tab_perf:
 
     # PDF Performance
     st.markdown("---")
-    plt_=[(f"{l1} – nK ({fp1:.2f}%)",ia1)]
-    if ia2 is not None: plt_.append((f"{l2} – nK ({(fp2 or 0):.2f}%)",ia2))
+    plt_=[(f"{l1} – {nk_label} ({eff_fee_1:.2f}%)",ia1)]
+    if ia2 is not None: plt_.append((f"{l2} – {nk_label} ({eff_fee_2:.2f}%)",ia2))
     if sv: plt_.append((f"{l1} – vK",ib1));
     if sv and ib2 is not None: plt_.append((f"{l2} – vK",ib2))
     if sb and df1["ret_bm"].notna().any():
@@ -602,7 +623,7 @@ with tab_perf:
             else: pdd.append((f"{l2} DD",drawdown_from_index(ia2_100)))
     lp=get_logo_path()
     if st.button("📄 PDF Performance",key="perf_pdf"):
-        with st.spinner("PDF..."): pb=generate_perf_pdf(lp,l1,l2,bn1,bn2,bt1,bt2,fp1,fp2,anlagevolumen,use_volume,sd,ed,xd,plt_,yl,sdd,pdd,stbl,dfr,sbar,bdl,md)
+        with st.spinner("PDF..."): pb=generate_perf_pdf(lp,l1,l2,bn1,bn2,bt1,bt2,eff_fee_1,eff_fee_2 if fp2 is not None else None,anlagevolumen,use_volume,sd,ed,xd,plt_,yl,sdd,pdd,stbl,dfr,sbar,bdl,md,mwst_suffix)
         st.download_button("⬇️ PDF",pb,f"Performance_{l1}_{fmt_date_de(sd)}-{fmt_date_de(ed)}.pdf","application/pdf",key="perf_dl")
 
 
