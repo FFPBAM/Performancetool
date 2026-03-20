@@ -61,7 +61,9 @@ def load_zieldaten(folder):
                      delimiter=";", decimal=",", thousands=".", dtype=str)
     for col in df.columns:
         if df[col].dtype == object:
-            df[col] = df[col].astype(str).str.strip().replace("nan", np.nan)
+            df[col] = df[col].astype(str).str.strip()
+            # Leere Werte, "-" und "nan" zu echtem NaN
+            df[col] = df[col].replace(["nan", "-", "–", ""], np.nan)
     if "Kupon" in df.columns:
         df["Kupon_num"] = pd.to_numeric(df["Kupon"].astype(str).str.replace("%","").str.replace(",",".").str.strip(), errors="coerce") / 100.0
     else:
