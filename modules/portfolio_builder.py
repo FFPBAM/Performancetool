@@ -29,7 +29,7 @@ from modules.portfolioanalyse import (
 # Constants
 # ---------------------------------------------------------------------------
 MAX_TITEL = 50
-CASH_PCT = 0.05  # 5% Cash fix
+CASH_PCT = 0.05
 TOP5_COLORS = ["#1B3A5C", "#6A9BC3", "#B8973A", "#C4B78C", "#A8CBE8"]
 
 SCHNELLZUGRIFFE = {
@@ -49,13 +49,11 @@ SCHNELLZUGRIFFE = {
 # Data Loading
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=True)
-def load_zieldaten(folder: str) -> pd.DataFrame:
-    """Lädt die neueste Zieldaten-CSV."""
+def load_zieldaten(folder):
     all_files = glob.glob(os.path.join(folder, "*.CSV")) + glob.glob(os.path.join(folder, "*.csv"))
     if not all_files:
         return pd.DataFrame()
 
-    # Neueste nach Zeitstempel im Namen
     tag_pattern = re.compile(r"_(\d{6})_(\d{4})")
     def _sort_key(f):
         m = tag_pattern.search(os.path.basename(f))
@@ -65,13 +63,14 @@ def load_zieldaten(folder: str) -> pd.DataFrame:
     df = pd.read_csv(all_files[0], comment="#", encoding="ISO-8859-1",
                      delimiter=";", decimal=",", thousands=".", dtype=str)
 
-    # String-Spalten bereinigen (trim whitespace, zu string)
-    for col in ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region",
-                "Masterlistenzuordnung", "Zugelassen zum Vertrieb in der Beratung", "Anlagehorizont"]:
-        if col in df.columns:
+    # Alle String-Spalten bereinigen
+    for col in df.columns:
+        if df[col].dtype == object:
             df[col] = df[col].astype(str).str.strip()
+            # "nan" Strings zu echtem NaN
+            df[col] = df[col].replace("nan", np.nan)
 
-    # Parsen
+    # Numerische Spalten parsen
     if "Kupon" in df.columns:
         df["Kupon_num"] = df["Kupon"].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
         df["Kupon_num"] = pd.to_numeric(df["Kupon_num"], errors="coerce") / 100.0
@@ -79,9 +78,7 @@ def load_zieldaten(folder: str) -> pd.DataFrame:
         df["Kupon_num"] = np.nan
 
     if "Duration" in df.columns:
-        df["Duration_num"] = pd.to_numeric(
-            df["Duration"].astype(str).str.replace(",", "."), errors="coerce"
-        )
+        df["Duration_num"] = pd.to_numeric(df["Duration"].astype(str).str.replace(",", "."), errors="coerce")
     else:
         df["Duration_num"] = np.nan
 
@@ -97,24 +94,18 @@ def load_zieldaten(folder: str) -> pd.DataFrame:
 
 
 def _init_session_state():
-    """Initialisiert Session-State für den Builder."""
     if "builder_portfolio" not in st.session_state:
         st.session_state.builder_portfolio = {}  # {WKN: gewicht_dezimal}
-    if "builder_initialized" not in st.session_state:
-        st.session_state.builder_initialized = True
-
 
 def _reset_portfolio():
     st.session_state.builder_portfolio = {}
 
 
 # ---------------------------------------------------------------------------
-# Filter-Logik
+# Filter
 # ---------------------------------------------------------------------------
-def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
-    """Wendet Filter auf das Universum an."""
+def apply_filters(df, filters):
     result = df.copy()
-
     if filters.get("Assetklasse"):
         result = result[result["Assetklasse"].isin(filters["Assetklasse"])]
     if filters.get("Region"):
@@ -125,26 +116,19 @@ def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
         result = result[result["Masterlistenzuordnung"].isin(filters["Masterlistenzuordnung"])]
     if filters.get("kupon_min") is not None:
         result = result[result["Kupon_num"] >= filters["kupon_min"]]
-    if filters.get("kupon_max") is not None:
-        result = result[result["Kupon_num"] <= filters["kupon_max"]]
     if filters.get("duration_min") is not None:
         result = result[result["Duration_num"] >= filters["duration_min"]]
     if filters.get("duration_max") is not None:
         result = result[result["Duration_num"] <= filters["duration_max"]]
     if filters.get("mrw_max") is not None:
         result = result[result["MRW_num"] <= filters["mrw_max"]]
-
     return result
 
 
 # ---------------------------------------------------------------------------
-# Portfolio-Analyse (Strukturanalyse)
+# Analyse-DataFrame bauen
 # ---------------------------------------------------------------------------
-def build_builder_analysis_df(selected_wkns: dict, universe: pd.DataFrame) -> pd.DataFrame:
-    """
-    Baut einen DataFrame für die Analyse.
-    selected_wkns: {WKN: gewicht_dezimal}
-    """
+def build_builder_analysis_df(selected_wkns, universe):
     rows = []
     for wkn, weight in selected_wkns.items():
         match = universe[universe["WKN"] == wkn]
@@ -165,47 +149,57 @@ def build_builder_analysis_df(selected_wkns: dict, universe: pd.DataFrame) -> pd
             "Marktrisikowert": float(row["MRW_num"]) if "MRW_num" in row.index and pd.notna(row["MRW_num"]) else np.nan,
         }
         rows.append(entry)
-
     if not rows:
         return pd.DataFrame()
-
     return pd.DataFrame(rows)
 
 
-def calc_weighted_duration(df: pd.DataFrame):
-    """Gewichtete Duration des Portfolios (nur Anleihen). Returns float or None."""
+def calc_weighted_duration(df):
     bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
     if bonds.empty or bonds["Duration_num"].isna().all():
         return None
-    w = bonds["Gewicht"].fillna(0)
-    d = bonds["Duration_num"].fillna(0)
-    if w.sum() == 0:
-        return None
-    return float((w * d).sum() / w.sum())
+    w = bonds["Gewicht"].fillna(0); d = bonds["Duration_num"].fillna(0)
+    return float((w * d).sum() / w.sum()) if w.sum() > 0 else None
 
 
-def calc_weighted_kupon(df: pd.DataFrame):
-    """Gewichteter Durchschnittskupon (nur Anleihen). Returns float or None."""
+def calc_weighted_kupon(df):
     bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
     if bonds.empty or bonds["Kupon"].isna().all():
         return None
-    w = bonds["Gewicht"].fillna(0)
-    k = bonds["Kupon"].fillna(0)
-    if w.sum() == 0:
-        return None
-    return float((w * k).sum() / w.sum())
+    w = bonds["Gewicht"].fillna(0); k = bonds["Kupon"].fillna(0)
+    return float((w * k).sum() / w.sum()) if w.sum() > 0 else None
+
+
+# ---------------------------------------------------------------------------
+# WKN-Matching Helper
+# ---------------------------------------------------------------------------
+def _normalize_wkn(val):
+    """Normalisiert WKN: Strip, Uppercase, None-safe."""
+    if val is None or pd.isna(val):
+        return ""
+    return str(val).strip().upper()
+
+
+def _build_wkn_lookup(universe):
+    """Baut ein Lookup {normalisierte_WKN: original_WKN} aus dem Universum."""
+    lookup = {}
+    if "WKN" in universe.columns:
+        for _, row in universe.iterrows():
+            orig = str(row["WKN"]).strip()
+            normed = orig.upper()
+            if normed and normed != "NAN":
+                lookup[normed] = orig
+    return lookup
 
 
 # ---------------------------------------------------------------------------
 # Streamlit Rendering
 # ---------------------------------------------------------------------------
-def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
-    """Hauptfunktion: Rendert den Portfolio-Builder Tab."""
+def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     _init_session_state()
     use_volume = anlagevolumen > 0
 
-    # Hinweis
-    st.caption("⚠️ Das zusammengestellte Portfolio wird nur in der aktuellen Sitzung gespeichert. Bei Logout oder Seitenwechsel geht es verloren.")
+    st.caption("⚠️ Das Portfolio wird nur in der aktuellen Sitzung gespeichert. Bei Logout geht es verloren. Bitte vorher als CSV exportieren.")
 
     # ── Daten laden ──
     universe = load_zieldaten(ZIELDATEN_FOLDER)
@@ -213,17 +207,60 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
         st.warning(f"Keine Zieldaten in {ZIELDATEN_FOLDER}/ gefunden.")
         return
 
-    st.success(f"📂 Anlageuniversum: {len(universe)} Titel geladen")
+    # WKN-Lookup für robustes Matching
+    wkn_lookup = _build_wkn_lookup(universe)
 
-    # ── Schnellzugriffe ──
-    st.markdown("### ⚡ Schnellzugriffe")
+    st.success(f"📂 Anlageuniversum: **{len(universe)} Titel** geladen")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 1: SUCHE (immer aktiv, unabhängig von Filtern)
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown("### 🔎 Titel suchen & hinzufügen")
+
+    # Multiselect über das GESAMTE Universum (nicht gefiltert!)
+    universe_sorted = universe.sort_values("Name")
+    all_option_labels = (
+        universe_sorted["Name"].fillna("") + "  (" +
+        universe_sorted["WKN"].fillna("") + " | " +
+        universe_sorted["ISIN"].fillna("") + ")"
+    ).tolist()
+    all_option_wkns = universe_sorted["WKN"].tolist()
+    all_label_to_wkn = dict(zip(all_option_labels, all_option_wkns))
+
+    # Bereits ausgewählte als Default
+    current_wkns = set(st.session_state.builder_portfolio.keys())
+    current_labels = [lbl for lbl, wkn in all_label_to_wkn.items() if wkn in current_wkns]
+
+    selected_labels = st.multiselect(
+        "Name, WKN oder ISIN eingeben – Suche funktioniert immer, auch ohne Filter",
+        options=all_option_labels,
+        default=current_labels,
+        key="builder_multiselect",
+        help=f"Maximal {MAX_TITEL} Titel. Tippen Sie um zu suchen. Die Suche durchsucht das gesamte Universum."
+    )
+
+    # Auswahl verarbeiten
+    selected_wkns_new = {all_label_to_wkn[lbl] for lbl in selected_labels if lbl in all_label_to_wkn}
+    for wkn in current_wkns - selected_wkns_new:
+        st.session_state.builder_portfolio.pop(wkn, None)
+    for wkn in selected_wkns_new - current_wkns:
+        if len(st.session_state.builder_portfolio) >= MAX_TITEL:
+            st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
+            break
+        st.session_state.builder_portfolio[wkn] = 0.0
+
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 2: SCHNELLZUGRIFFE & MUSTERPORTFOLIO
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("### ⚡ Schnellzugriffe & Vorlagen")
+
     sz_cols = st.columns(5)
     sz_names = list(SCHNELLZUGRIFFE.keys())
     for i, name in enumerate(sz_names):
         with sz_cols[i % 5]:
             if st.button(name, key=f"sz_{i}", use_container_width=True):
                 preset = SCHNELLZUGRIFFE[name]
-                # Filter-Werte in Session-State schreiben
                 st.session_state["f_asset"] = preset.get("Assetklasse", [])
                 st.session_state["f_region"] = preset.get("Region", [])
                 st.session_state["f_segment"] = []
@@ -234,10 +271,7 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
                 st.session_state["f_ml"] = []
                 st.rerun()
 
-    # Musterportfolio laden
-    st.markdown("---")
-
-    # Musterportfolio-Daten laden (vor den Columns, damit im globalen Scope)
+    # Musterportfolio
     auto_tag_pf = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
     pf_files = load_pf_csvs(DATA_FOLDER_PF, auto_tag_pf)
     pf_data = build_pf_data(pf_files) if pf_files else {}
@@ -249,146 +283,93 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     mp_names = ["-- Kein Musterportfolio --"] + filtered_mp[col_display].tolist()
     mp_to_csv = dict(zip(filtered_mp[col_display], filtered_mp[col_csv_key]))
 
-    mp_col1, mp_col2 = st.columns([2, 1])
-    with mp_col1:
-        mp_sel = st.selectbox("📦 Musterportfolio als Startpunkt laden", mp_names, key="builder_mp")
+    mp_sel = st.selectbox("📦 Musterportfolio als Startpunkt laden", mp_names, key="builder_mp")
+    if st.button("📥 Musterportfolio laden", key="load_mp"):
+        if mp_sel != "-- Kein Musterportfolio --":
+            csv_name = mp_to_csv.get(mp_sel)
+            if csv_name and csv_name in pf_data:
+                mp_df = pf_data[csv_name]
+                new_portfolio = {}
+                not_found = []
 
-    with mp_col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        load_clicked = st.button("📥 Musterportfolio laden", key="load_mp", use_container_width=True)
+                for _, row in mp_df.iterrows():
+                    titel_name = str(row["Wertpapier"]).strip() if "Wertpapier" in mp_df.columns else "?"
+                    gewicht = float(row["Gewicht"]) if "Gewicht" in mp_df.columns and pd.notna(row["Gewicht"]) else 0.0
 
-    if load_clicked and mp_sel != "-- Kein Musterportfolio --":
-        csv_name = mp_to_csv.get(mp_sel)
-        if csv_name and csv_name in pf_data:
-            mp_df = pf_data[csv_name]
-            new_portfolio = {}
-            not_found = []
+                    matched_wkn = None
 
-            # WKN-Set aus dem Universum (bereinigt)
-            universe_wkns = set(universe["WKN"].dropna().unique()) if "WKN" in universe.columns else set()
+                    # Match über WKN (normalisiert)
+                    if "WKN" in mp_df.columns:
+                        wkn_raw = _normalize_wkn(row["WKN"])
+                        if wkn_raw in wkn_lookup:
+                            matched_wkn = wkn_lookup[wkn_raw]
 
-            for _, row in mp_df.iterrows():
-                titel_name = str(row["Wertpapier"]).strip() if "Wertpapier" in mp_df.columns else "?"
-                gewicht = float(row["Gewicht"]) if "Gewicht" in mp_df.columns and pd.notna(row["Gewicht"]) else 0.0
+                    # Fallback: Match über Name
+                    if matched_wkn is None and "Name" in universe.columns:
+                        name_match = universe[universe["Name"].str.upper() == titel_name.upper()]
+                        if not name_match.empty:
+                            matched_wkn = str(name_match.iloc[0]["WKN"]).strip()
 
-                matched_wkn = None
+                    if matched_wkn:
+                        new_portfolio[matched_wkn] = gewicht
+                    else:
+                        not_found.append(titel_name)
 
-                # Versuch 1: Match über WKN
-                if "WKN" in mp_df.columns:
-                    wkn = str(row["WKN"]).strip()
-                    if wkn and wkn != "nan" and wkn in universe_wkns:
-                        matched_wkn = wkn
+                st.session_state.builder_portfolio = new_portfolio
 
-                # Versuch 2: Match über Name
-                if matched_wkn is None and "Wertpapier" in mp_df.columns and "Name" in universe.columns:
-                    name_match = universe[universe["Name"].str.strip() == titel_name]
-                    if not name_match.empty:
-                        matched_wkn = str(name_match.iloc[0]["WKN"]).strip()
+                if new_portfolio:
+                    st.success(f"✅ {len(new_portfolio)} von {len(mp_df)} Titeln aus **{mp_sel}** geladen")
+                if not_found:
+                    st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum: {', '.join(not_found[:5])}{'...' if len(not_found) > 5 else ''}")
+                if not new_portfolio:
+                    st.error("❌ Kein Titel konnte zugeordnet werden.")
+                st.rerun()
+        else:
+            st.info("Bitte ein Musterportfolio auswählen.")
 
-                if matched_wkn:
-                    new_portfolio[matched_wkn] = gewicht
-                else:
-                    not_found.append(titel_name)
-
-            st.session_state.builder_portfolio = new_portfolio
-
-            if new_portfolio:
-                st.success(f"✅ {len(new_portfolio)} Titel aus {mp_sel} geladen")
-            if not_found:
-                st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum gefunden: {', '.join(not_found[:5])}{'...' if len(not_found) > 5 else ''}")
-            if not new_portfolio:
-                st.error("❌ Kein einziger Titel konnte zugeordnet werden. Prüfen Sie die Daten.")
-
-            st.rerun()
-
-    # ── Filter ──
-    st.markdown("### 🔍 Titel filtern & auswählen")
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 3: FILTER (optional, zum Einschränken der Übersichtstabelle)
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("### 🔍 Universum filtern (optional)")
 
     f_col1, f_col2, f_col3, f_col4 = st.columns(4)
     with f_col1:
-        all_asset = sorted(universe["Assetklasse"].dropna().unique().tolist())
-        f_asset = st.multiselect("Assetklasse", all_asset, key="f_asset")
-
+        f_asset = st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset")
     with f_col2:
-        all_region = sorted(universe["Region"].dropna().unique().tolist())
-        f_region = st.multiselect("Region", all_region, key="f_region")
-
+        f_region = st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region")
     with f_col3:
-        all_segment = sorted(universe["Segment"].dropna().unique().tolist())
-        f_segment = st.multiselect("Segment", all_segment, key="f_segment")
-
+        f_segment = st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment")
     with f_col4:
-        all_ml = sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist())
-        f_ml = st.multiselect("Masterlistenzuordnung", all_ml, key="f_ml")
+        f_ml = st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml")
 
-    # Erweiterte Filter
     with st.expander("📐 Erweiterte Filter"):
-        ef_col1, ef_col2, ef_col3, ef_col4 = st.columns(4)
-        with ef_col1:
-            f_kupon_min = st.number_input("Kupon min (%)", 0.0, 20.0, step=0.5, key="f_kmin")
-        with ef_col2:
-            f_dur_min = st.number_input("Duration min (Jahre)", 0.0, 30.0, step=0.5, key="f_dmin")
-        with ef_col3:
-            f_dur_max = st.number_input("Duration max (Jahre)", 0.0, 30.0, step=0.5, key="f_dmax")
-        with ef_col4:
-            f_mrw_max = st.number_input("Marktrisikowert max", 1, 7, step=1, key="f_mrw")
+        ef1, ef2, ef3, ef4 = st.columns(4)
+        with ef1: f_kmin = st.number_input("Kupon min (%)", 0.0, 20.0, step=0.5, key="f_kmin")
+        with ef2: f_dmin = st.number_input("Duration min (J)", 0.0, 30.0, step=0.5, key="f_dmin")
+        with ef3: f_dmax = st.number_input("Duration max (J)", 0.0, 30.0, step=0.5, key="f_dmax")
+        with ef4: f_mrw = st.number_input("Risiko max", 1, 7, step=1, key="f_mrw")
 
-    # Filter zusammenbauen
     filters = {}
     if f_asset: filters["Assetklasse"] = f_asset
     if f_region: filters["Region"] = f_region
     if f_segment: filters["Segment"] = f_segment
     if f_ml: filters["Masterlistenzuordnung"] = f_ml
-    if f_kupon_min > 0: filters["kupon_min"] = f_kupon_min / 100.0
-    if f_dur_min > 0: filters["duration_min"] = f_dur_min
-    if f_dur_max < 30: filters["duration_max"] = f_dur_max
-    if f_mrw_max < 7: filters["mrw_max"] = f_mrw_max
+    if f_kmin > 0: filters["kupon_min"] = f_kmin / 100.0
+    if f_dmin > 0: filters["duration_min"] = f_dmin
+    if f_dmax < 30: filters["duration_max"] = f_dmax
+    if f_mrw < 7: filters["mrw_max"] = f_mrw
 
     filtered = apply_filters(universe, filters)
-    st.caption(f"📋 {len(filtered)} Titel nach Filterung")
 
-    # ── Titel hinzufügen via Multiselect (schnell) ──
-    # Optionen für Multiselect: "Name (WKN | ISIN)" → WKN als Wert
-    filtered_sorted = filtered.sort_values("Name")
-    option_labels = (
-        filtered_sorted["Name"] + "  (" + filtered_sorted["WKN"].fillna("") + " | " + filtered_sorted["ISIN"].fillna("") + ")"
-    ).tolist()
-    option_wkns = filtered_sorted["WKN"].tolist()
-    label_to_wkn = dict(zip(option_labels, option_wkns))
+    with st.expander(f"📋 Gefilterte Titel anzeigen ({len(filtered)} von {len(universe)})"):
+        show_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region", "Kupon", "Duration", "Marktrisikowert"]
+        avail = [c for c in show_cols if c in filtered.columns]
+        st.dataframe(filtered[avail].head(200), use_container_width=True, hide_index=True)
 
-    # Bereits ausgewählte als Default
-    current_wkns = set(st.session_state.builder_portfolio.keys())
-    current_labels = [lbl for lbl, wkn in label_to_wkn.items() if wkn in current_wkns]
-
-    selected_labels = st.multiselect(
-        "🔎 Titel suchen & hinzufügen (Name, WKN oder ISIN tippen)",
-        options=option_labels,
-        default=current_labels,
-        key="builder_multiselect",
-        help=f"Maximal {MAX_TITEL} Titel. Tippen Sie um zu suchen."
-    )
-
-    # Auswahl verarbeiten
-    selected_wkns_new = {label_to_wkn[lbl] for lbl in selected_labels if lbl in label_to_wkn}
-
-    # Entfernte Titel
-    for wkn in current_wkns - selected_wkns_new:
-        st.session_state.builder_portfolio.pop(wkn, None)
-    # Neue Titel
-    for wkn in selected_wkns_new - current_wkns:
-        if len(st.session_state.builder_portfolio) >= MAX_TITEL:
-            st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
-            break
-        st.session_state.builder_portfolio[wkn] = 0.0
-
-    # ── Gefilterte Tabelle (read-only, zur Übersicht) ──
-    with st.expander(f"📋 Gefilterte Titel anzeigen ({len(filtered)})"):
-        display_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region",
-                        "Kupon", "Duration", "Marktrisikowert"]
-        avail_cols = [c for c in display_cols if c in filtered.columns]
-        st.dataframe(filtered[avail_cols].head(200), use_container_width=True, hide_index=True)
-
-    # ── Mein Portfolio ──
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 4: MEIN PORTFOLIO
+    # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 📊 Mein Portfolio")
 
@@ -396,26 +377,25 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     n_titel = len(portfolio)
 
     if n_titel == 0:
-        st.info("Noch keine Titel ausgewählt. Nutze die Filter oben oder lade ein Musterportfolio.")
+        st.info("Noch keine Titel ausgewählt. Nutzen Sie die Suche oben, einen Schnellzugriff oder laden Sie ein Musterportfolio.")
         return
 
     st.caption(f"**{n_titel} Titel** ausgewählt (max. {MAX_TITEL})")
 
-    # Buttons
-    btn_col1, btn_col2, btn_col3 = st.columns(3)
-    with btn_col1:
+    btn1, btn2, btn3 = st.columns(3)
+    with btn1:
         if st.button("⚖️ Gleichgewichten", key="equalize", use_container_width=True):
-            weight_per_title = (1.0 - CASH_PCT) / n_titel
+            w = (1.0 - CASH_PCT) / n_titel
             for wkn in portfolio:
-                portfolio[wkn] = weight_per_title
+                portfolio[wkn] = w
             st.session_state.builder_portfolio = portfolio
             st.rerun()
-    with btn_col2:
+    with btn2:
         if st.button("🔄 Portfolio zurücksetzen", key="reset_pf", use_container_width=True):
             _reset_portfolio()
             st.rerun()
-    with btn_col3:
-        pass  # CSV-Export kommt unten
+    with btn3:
+        pass
 
     # Gewicht-Editor
     pf_rows = []
@@ -433,7 +413,11 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
         })
 
     if not pf_rows:
-        st.info("Keine gültigen Titel im Portfolio.")
+        st.warning("Keine gültigen Titel im Portfolio. Möglicherweise stimmen die WKNs nicht überein.")
+        # Debug
+        with st.expander("🔍 Debug: Portfolio-WKNs"):
+            st.write("WKNs im Portfolio:", list(portfolio.keys())[:10])
+            st.write("WKNs im Universum (Beispiel):", universe["WKN"].head(10).tolist())
         return
 
     pf_df = pd.DataFrame(pf_rows)
@@ -441,159 +425,117 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     edited_pf = st.data_editor(
         pf_df,
         column_config={
-            "Gewicht (%)": st.column_config.NumberColumn(
-                "Gewicht (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.2f"
-            ),
+            "Gewicht (%)": st.column_config.NumberColumn("Gewicht (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.2f"),
         },
         disabled=["Name", "WKN", "ISIN", "Assetklasse"],
-        hide_index=True,
-        use_container_width=True,
-        key="builder_pf_editor"
+        hide_index=True, use_container_width=True, key="builder_pf_editor"
     )
 
-    # Gewichte zurückschreiben
     if edited_pf is not None:
         for _, row in edited_pf.iterrows():
             wkn = row["WKN"]
-            new_weight = row["Gewicht (%)"] / 100.0
             if wkn in st.session_state.builder_portfolio:
-                st.session_state.builder_portfolio[wkn] = new_weight
+                st.session_state.builder_portfolio[wkn] = row["Gewicht (%)"] / 100.0
 
-    # Summen
     total_weight = sum(st.session_state.builder_portfolio.values())
     cash_weight = max(0.0, 1.0 - total_weight)
 
-    sum_col1, sum_col2, sum_col3 = st.columns(3)
-    with sum_col1:
-        st.metric("Investiert", fmt_pct_de(total_weight))
-    with sum_col2:
-        st.metric("💰 Liquidität", fmt_pct_de(cash_weight))
-    with sum_col3:
-        color = "🟢" if abs(total_weight + cash_weight - 1.0) < 0.001 else "🔴"
-        st.metric("Summe", f"{color} {fmt_pct_de(total_weight + cash_weight)}")
+    sc1, sc2, sc3 = st.columns(3)
+    with sc1: st.metric("Investiert", fmt_pct_de(total_weight))
+    with sc2: st.metric("💰 Liquidität", fmt_pct_de(cash_weight))
+    with sc3:
+        ok = abs(total_weight + cash_weight - 1.0) < 0.001
+        st.metric("Summe", f"{'🟢' if ok else '🔴'} {fmt_pct_de(total_weight + cash_weight)}")
 
     if total_weight > (1.0 - CASH_PCT + 0.001):
-        st.warning(f"⚠️ Investitionsgrad übersteigt {fmt_pct_de(1.0 - CASH_PCT)}. Bitte Gewichte anpassen (Cash-Minimum: {fmt_pct_de(CASH_PCT)}).")
+        st.warning(f"⚠️ Investitionsgrad übersteigt {fmt_pct_de(1.0 - CASH_PCT)}. Cash-Minimum: {fmt_pct_de(CASH_PCT)}.")
 
-    # ── CSV Export ──
+    # CSV Export
     st.markdown("---")
-    csv_col1, csv_col2 = st.columns(2)
-    with csv_col1:
-        if st.button("⬇️ Portfolio als CSV exportieren", key="csv_export", use_container_width=True):
-            export_df = edited_pf.copy() if edited_pf is not None else pf_df.copy()
-            # Cash-Zeile hinzufügen
-            cash_row = pd.DataFrame([{
-                "Name": "Liquidität", "WKN": "", "ISIN": "",
-                "Assetklasse": "Cash", "Gewicht (%)": round(cash_weight * 100, 2)
-            }])
-            export_df = pd.concat([export_df, cash_row], ignore_index=True)
-            csv_data = export_df.to_csv(index=False, sep=";", decimal=",")
-            st.download_button(
-                "⬇️ Download CSV", csv_data,
-                f"Portfolio_Builder_{dt.date.today().strftime('%Y%m%d')}.csv",
-                "text/csv", key="csv_dl"
-            )
+    if st.button("⬇️ Portfolio als CSV exportieren", key="csv_export", use_container_width=True):
+        exp = edited_pf.copy() if edited_pf is not None else pf_df.copy()
+        cash_row = pd.DataFrame([{"Name": "Liquidität", "WKN": "", "ISIN": "", "Assetklasse": "Cash", "Gewicht (%)": round(cash_weight * 100, 2)}])
+        exp = pd.concat([exp, cash_row], ignore_index=True)
+        st.download_button("⬇️ CSV herunterladen", exp.to_csv(index=False, sep=";", decimal=","),
+            f"Portfolio_Builder_{dt.date.today().strftime('%Y%m%d')}.csv", "text/csv", key="csv_dl")
 
-    # ── Strukturanalyse ──
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 5: STRUKTURANALYSE
+    # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 📊 Strukturanalyse")
 
     analysis_df = build_builder_analysis_df(st.session_state.builder_portfolio, universe)
     if analysis_df.empty:
-        st.info("Keine Daten für Analyse vorhanden.")
+        st.info("Bitte erst Gewichte vergeben (Gleichgewichten).")
         return
 
-    # Kennzahlen
-    liq = cash_weight
     w_duration = calc_weighted_duration(analysis_df)
     w_kupon = calc_weighted_kupon(analysis_df)
 
     kc = st.columns(5 if use_volume else 4)
-    with kc[0]:
-        st.metric("Anzahl Titel", n_titel)
-    with kc[1]:
-        st.metric("Investitionsgrad", fmt_pct_de(total_weight),
-                  help="Anteil in Wertpapiere investiert.")
-    with kc[2]:
-        st.metric("Liquidität", fmt_pct_de(liq),
-                  help="Nicht investierter Anteil.")
+    with kc[0]: st.metric("Anzahl Titel", n_titel)
+    with kc[1]: st.metric("Investitionsgrad", fmt_pct_de(total_weight), help="In Wertpapiere investiert.")
+    with kc[2]: st.metric("Liquidität", fmt_pct_de(cash_weight), help="Nicht investierter Anteil.")
     with kc[3]:
         if w_duration is not None:
-            st.metric("⌀ Duration (gew.)", f"{w_duration:.2f}".replace(".", ","),
-                      help="Gewichtete durchschnittliche Duration aller Anleihen im Portfolio.")
+            st.metric("⌀ Duration (gew.)", f"{w_duration:.2f}".replace(".", ","), help="Gewichtete Duration aller Anleihen.")
         elif w_kupon is not None:
-            st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kupon),
-                      help="Gewichteter Durchschnittskupon aller Anleihen.")
+            st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kupon), help="Gewichteter Durchschnittskupon.")
         else:
-            st.metric("Ø Risiko", f"{analysis_df['Marktrisikowert'].mean():.1f}".replace(".", ",") if analysis_df['Marktrisikowert'].notna().any() else "–",
-                      help="Durchschnittlicher Marktrisikowert.")
+            avg_mrw = analysis_df["Marktrisikowert"].mean()
+            st.metric("Ø Risiko", f"{avg_mrw:.1f}".replace(".", ",") if pd.notna(avg_mrw) else "–", help="Durchschnittlicher Marktrisikowert.")
     if use_volume:
-        with kc[4]:
-            st.metric("Investiert (€)", fmt_eur_de(total_weight * anlagevolumen))
+        with kc[4]: st.metric("Investiert (€)", fmt_eur_de(total_weight * anlagevolumen))
 
-    # Zusätzliche Kennzahlen für Anleihen
+    # Anleihen-Detail
     has_bonds = analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False).any()
     if has_bonds:
         st.markdown("---")
         st.markdown("**🏦 Anleihen-Detail**")
         bond_rows = analysis_df[analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)]
-        bond_weight = bond_rows["Gewicht"].sum()
-        bond_count = len(bond_rows)
-
-        n_bcols = 2 + (1 if w_duration is not None else 0) + (1 if w_kupon is not None else 0)
-        bc = st.columns(max(n_bcols, 2))
-        col_idx = 0
-        with bc[col_idx]:
-            st.metric("Anzahl Anleihen", bond_count)
-            col_idx += 1
-        with bc[col_idx]:
-            st.metric("Gewicht Anleihen", fmt_pct_de(bond_weight),
-                      help="Gesamtgewicht aller Anleihen im Portfolio.")
-            col_idx += 1
+        n_bc = 2 + (1 if w_duration is not None else 0) + (1 if w_kupon is not None else 0)
+        bc = st.columns(max(n_bc, 2))
+        ci = 0
+        with bc[ci]: st.metric("Anzahl Anleihen", len(bond_rows)); ci += 1
+        with bc[ci]: st.metric("Gewicht Anleihen", fmt_pct_de(bond_rows["Gewicht"].sum())); ci += 1
         if w_duration is not None:
-            with bc[min(col_idx, len(bc)-1)]:
-                st.metric("⌀ Duration (gew.)", f"{w_duration:.2f}".replace(".", ","),
-                          help="Gewichtete Duration der Anleihen. Gibt Zinssensitivität an.")
-                col_idx += 1
+            with bc[min(ci, len(bc)-1)]: st.metric("⌀ Duration (gew.)", f"{w_duration:.2f}".replace(".", ","), help="Gewichtete Duration. Zinssensitivität."); ci += 1
         if w_kupon is not None:
-            with bc[min(col_idx, len(bc)-1)]:
-                st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kupon),
-                          help="Gewichteter Durchschnittskupon aller Anleihen.")
+            with bc[min(ci, len(bc)-1)]: st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kupon), help="Gewichteter Durchschnittskupon.")
 
     # Ring-Diagramme
     st.markdown("---")
     rc1, rc2, rc3 = st.columns(3)
     with rc1:
-        alloc_g = build_allocation(analysis_df, "Gattung")
-        if not alloc_g.empty:
-            st.plotly_chart(build_ring_chart(alloc_g, "Gattung", "Allokation nach Gattung"), use_container_width=True)
+        ag = build_allocation(analysis_df, "Gattung")
+        if not ag.empty: st.plotly_chart(build_ring_chart(ag, "Gattung", "Allokation nach Gattung"), use_container_width=True)
     with rc2:
-        alloc_r = build_allocation(analysis_df, "Region")
-        if not alloc_r.empty:
-            st.plotly_chart(build_ring_chart(alloc_r, "Region", "Allokation nach Region"), use_container_width=True)
+        ar = build_allocation(analysis_df, "Region")
+        if not ar.empty: st.plotly_chart(build_ring_chart(ar, "Region", "Allokation nach Region"), use_container_width=True)
     with rc3:
-        alloc_s = build_allocation(analysis_df, "Segment")
-        if not alloc_s.empty:
-            st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True)
+        aseg = build_allocation(analysis_df, "Segment")
+        if not aseg.empty: st.plotly_chart(build_ring_chart(aseg, "Segment", "Allokation nach Segment"), use_container_width=True)
 
-    # Top 5 Holdings
+    # Top 5
     st.markdown("---")
     top5 = get_top_holdings(analysis_df, n=5)
     if not top5.empty:
-        fig_t5 = build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)")
-        st.plotly_chart(fig_t5, use_container_width=True)
+        st.plotly_chart(build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)"), use_container_width=True)
 
     # Gruppierte Tabelle
     st.markdown("**Einzeltitel-Übersicht**")
     grouped = build_grouped_title_table(analysis_df, anlagevolumen if use_volume else 0.0, show_ytd=False)
-    for gattung_name, gattung_weight, disp_df in grouped:
-        if gattung_name.startswith("💰"):
-            st.markdown(f"**{gattung_name}** ({fmt_pct_de(gattung_weight)})")
+    for gname, gw, disp in grouped:
+        if gname.startswith("💰"):
+            st.markdown(f"**{gname}** ({fmt_pct_de(gw)})")
         else:
-            st.markdown(f"**📋 {gattung_name}** – {fmt_pct_de(gattung_weight)}")
-        st.dataframe(disp_df, use_container_width=True, hide_index=True)
+            st.markdown(f"**📋 {gname}** – {fmt_pct_de(gw)}")
+        st.dataframe(disp, use_container_width=True, hide_index=True)
 
-    # ── Vergleich mit Musterportfolio ──
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 6: VERGLEICH MIT MUSTERPORTFOLIO
+    # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🔄 Vergleich mit Musterportfolio")
     if pf_data:
@@ -604,37 +546,22 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
             vgl_csv = mp_to_csv.get(vgl_sel)
             if vgl_csv and vgl_csv in pf_data:
                 vgl_df = pf_data[vgl_csv]
-                st.markdown(f"---")
-                st.subheader(f"📊 Vergleich: Mein Portfolio vs. {vgl_sel}")
-
-                # Mein Portfolio
-                st.markdown(f"**Mein Portfolio** ({n_titel} Titel)")
-                # Bereits oben angezeigt – hier nur Kurzinfo
-
-                # Musterportfolio
                 st.markdown(f"**{vgl_sel}**")
-                vgl_liq = 1.0 - vgl_df["Gewicht"].sum()
+                vgl_liq = max(0, 1.0 - vgl_df["Gewicht"].sum())
                 vc = st.columns(3)
-                with vc[0]:
-                    st.metric("Anzahl Titel", len(vgl_df))
-                with vc[1]:
-                    st.metric("Investitionsgrad", fmt_pct_de(vgl_df["Gewicht"].sum()))
-                with vc[2]:
-                    st.metric("Liquidität", fmt_pct_de(max(0, vgl_liq)))
+                with vc[0]: st.metric("Anzahl Titel", len(vgl_df))
+                with vc[1]: st.metric("Investitionsgrad", fmt_pct_de(vgl_df["Gewicht"].sum()))
+                with vc[2]: st.metric("Liquidität", fmt_pct_de(vgl_liq))
 
-                # Ring-Vergleich
                 vrc1, vrc2, vrc3 = st.columns(3)
                 with vrc1:
-                    va_g = build_allocation(vgl_df, "Gattung")
-                    if not va_g.empty:
-                        st.plotly_chart(build_ring_chart(va_g, "Gattung", f"Gattung – {vgl_sel}"), use_container_width=True)
+                    vag = build_allocation(vgl_df, "Gattung")
+                    if not vag.empty: st.plotly_chart(build_ring_chart(vag, "Gattung", f"Gattung – {vgl_sel}"), use_container_width=True)
                 with vrc2:
-                    va_r = build_allocation(vgl_df, "Region")
-                    if not va_r.empty:
-                        st.plotly_chart(build_ring_chart(va_r, "Region", f"Region – {vgl_sel}"), use_container_width=True)
+                    var = build_allocation(vgl_df, "Region")
+                    if not var.empty: st.plotly_chart(build_ring_chart(var, "Region", f"Region – {vgl_sel}"), use_container_width=True)
                 with vrc3:
-                    va_s = build_allocation(vgl_df, "Segment")
-                    if not va_s.empty:
-                        st.plotly_chart(build_ring_chart(va_s, "Segment", f"Segment – {vgl_sel}"), use_container_width=True)
+                    vas = build_allocation(vgl_df, "Segment")
+                    if not vas.empty: st.plotly_chart(build_ring_chart(vas, "Segment", f"Segment – {vgl_sel}"), use_container_width=True)
     else:
-        st.info("Keine Musterportfolios verfügbar für Vergleich.")
+        st.info("Keine Musterportfolios verfügbar.")
