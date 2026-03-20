@@ -166,8 +166,8 @@ def build_builder_analysis_df(selected_isins: dict, universe: pd.DataFrame) -> p
     return pd.DataFrame(rows)
 
 
-def calc_weighted_duration(df: pd.DataFrame) -> float | None:
-    """Gewichtete Duration des Portfolios (nur Anleihen)."""
+def calc_weighted_duration(df: pd.DataFrame):
+    """Gewichtete Duration des Portfolios (nur Anleihen). Returns float or None."""
     bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
     if bonds.empty or bonds["Duration_num"].isna().all():
         return None
@@ -178,8 +178,8 @@ def calc_weighted_duration(df: pd.DataFrame) -> float | None:
     return float((w * d).sum() / w.sum())
 
 
-def calc_weighted_kupon(df: pd.DataFrame) -> float | None:
-    """Gewichteter Durchschnittskupon (nur Anleihen)."""
+def calc_weighted_kupon(df: pd.DataFrame):
+    """Gewichteter Durchschnittskupon (nur Anleihen). Returns float or None."""
     bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
     if bonds.empty or bonds["Kupon"].isna().all():
         return None
