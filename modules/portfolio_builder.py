@@ -430,11 +430,8 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     with kc[1]: st.metric("Investitionsgrad", fmt_pct_de(total_weight))
     with kc[2]: st.metric("Liquidität", fmt_pct_de(cash_weight))
     with kc[3]:
-        if w_dur is not None: st.metric("⌀ Duration (gew.)", f"{w_dur:.2f}".replace(".",","), help="Gewichtete Duration aller Anleihen.")
-        elif w_kup is not None: st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kup))
-        else:
-            avg_mrw = analysis_df["Marktrisikowert"].mean()
-            st.metric("Ø Risiko", f"{avg_mrw:.1f}".replace(".",",") if pd.notna(avg_mrw) else "–")
+        avg_mrw = analysis_df["Marktrisikowert"].mean()
+        st.metric("Ø Risiko", f"{avg_mrw:.1f}".replace(".",",") if pd.notna(avg_mrw) else "–", help="Durchschnittlicher Marktrisikowert.")
     if use_volume:
         with kc[4]: st.metric("Investiert (€)", fmt_eur_de(total_weight * anlagevolumen))
 
