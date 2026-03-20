@@ -213,46 +213,8 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     st.success(f"📂 Anlageuniversum: **{len(universe)} Titel** geladen")
 
     # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 1: SUCHE (immer aktiv, unabhängig von Filtern)
+    # BEREICH 1: SCHNELLZUGRIFFE & MUSTERPORTFOLIO (zuerst, damit Portfolio geladen wird)
     # ══════════════════════════════════════════════════════════════════════
-    st.markdown("### 🔎 Titel suchen & hinzufügen")
-
-    # Multiselect über das GESAMTE Universum (nicht gefiltert!)
-    universe_sorted = universe.sort_values("Name")
-    all_option_labels = (
-        universe_sorted["Name"].fillna("") + "  (" +
-        universe_sorted["WKN"].fillna("") + " | " +
-        universe_sorted["ISIN"].fillna("") + ")"
-    ).tolist()
-    all_option_wkns = universe_sorted["WKN"].tolist()
-    all_label_to_wkn = dict(zip(all_option_labels, all_option_wkns))
-
-    # Bereits ausgewählte als Default
-    current_wkns = set(st.session_state.builder_portfolio.keys())
-    current_labels = [lbl for lbl, wkn in all_label_to_wkn.items() if wkn in current_wkns]
-
-    selected_labels = st.multiselect(
-        "Name, WKN oder ISIN eingeben – Suche funktioniert immer, auch ohne Filter",
-        options=all_option_labels,
-        default=current_labels,
-        key="builder_multiselect",
-        help=f"Maximal {MAX_TITEL} Titel. Tippen Sie um zu suchen. Die Suche durchsucht das gesamte Universum."
-    )
-
-    # Auswahl verarbeiten
-    selected_wkns_new = {all_label_to_wkn[lbl] for lbl in selected_labels if lbl in all_label_to_wkn}
-    for wkn in current_wkns - selected_wkns_new:
-        st.session_state.builder_portfolio.pop(wkn, None)
-    for wkn in selected_wkns_new - current_wkns:
-        if len(st.session_state.builder_portfolio) >= MAX_TITEL:
-            st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
-            break
-        st.session_state.builder_portfolio[wkn] = 0.0
-
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 2: SCHNELLZUGRIFFE & MUSTERPORTFOLIO
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
     st.markdown("### ⚡ Schnellzugriffe & Vorlagen")
 
     sz_cols = st.columns(5)
@@ -291,33 +253,20 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 mp_df = pf_data[csv_name]
                 new_portfolio = {}
                 not_found = []
-                debug_info = []
-
-                # Debug: Spalten der PF-Datei
-                debug_info.append(f"PF-Spalten: {list(mp_df.columns)}")
-                debug_info.append(f"PF-Zeilen: {len(mp_df)}")
-                debug_info.append(f"Universum-WKNs (Beispiel): {list(wkn_lookup.keys())[:5]}")
 
                 for _, row in mp_df.iterrows():
                     titel_name = str(row["Wertpapier"]).strip() if "Wertpapier" in mp_df.columns else "?"
                     gewicht = float(row["Gewicht"]) if "Gewicht" in mp_df.columns and pd.notna(row["Gewicht"]) else 0.0
 
                     matched_wkn = None
-
-                    # Match über WKN (normalisiert)
                     if "WKN" in mp_df.columns:
                         wkn_raw = _normalize_wkn(row["WKN"])
                         if wkn_raw in wkn_lookup:
                             matched_wkn = wkn_lookup[wkn_raw]
-                        else:
-                            debug_info.append(f"  ❌ WKN '{wkn_raw}' (raw: '{row['WKN']}') nicht in Universum")
-
-                    # Fallback: Match über Wertpapier-Name → Universe-Name
                     if matched_wkn is None and "Name" in universe.columns:
                         name_match = universe[universe["Name"].str.upper() == titel_name.upper()]
                         if not name_match.empty:
                             matched_wkn = str(name_match.iloc[0]["WKN"]).strip()
-                            debug_info.append(f"  ✅ Name-Match: '{titel_name}' → WKN {matched_wkn}")
 
                     if matched_wkn:
                         new_portfolio[matched_wkn] = gewicht
@@ -325,27 +274,60 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                         not_found.append(titel_name)
 
                 st.session_state.builder_portfolio = new_portfolio
+                # Multiselect-Key löschen damit er beim Rerun neu mit den richtigen Defaults rendert
+                if "builder_multiselect" in st.session_state:
+                    del st.session_state["builder_multiselect"]
 
                 if new_portfolio:
                     st.success(f"✅ {len(new_portfolio)} von {len(mp_df)} Titeln aus **{mp_sel}** geladen")
                 if not_found:
-                    st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum: {', '.join(not_found[:10])}{'...' if len(not_found) > 10 else ''}")
-                if not new_portfolio:
-                    st.error("❌ Kein Titel konnte zugeordnet werden.")
+                    st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum: {', '.join(not_found[:10])}")
+                st.rerun()
 
-                # Debug immer zeigen bei Problemen
-                if not_found or not new_portfolio:
-                    with st.expander("🔍 Debug: Matching-Details"):
-                        for d in debug_info[:30]:
-                            st.text(d)
-                        if "WKN" in mp_df.columns:
-                            st.write("PF-WKNs (erste 10):", mp_df["WKN"].head(10).tolist())
-                            st.write("PF-WKNs repr (erste 5):", [repr(x) for x in mp_df["WKN"].head(5).tolist()])
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 2: SUCHE (Multiselect über gesamtes Universum)
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("### 🔎 Titel suchen & hinzufügen")
 
-                if new_portfolio:
-                    st.rerun()
-        else:
-            st.info("Bitte ein Musterportfolio auswählen.")
+    # Optionen bauen
+    universe_sorted = universe.sort_values("Name")
+    all_option_labels = (
+        universe_sorted["Name"].fillna("") + "  (" +
+        universe_sorted["WKN"].fillna("") + " | " +
+        universe_sorted["ISIN"].fillna("") + ")"
+    ).tolist()
+    all_option_wkns = universe_sorted["WKN"].tolist()
+    all_label_to_wkn = dict(zip(all_option_labels, all_option_wkns))
+    all_wkn_to_label = dict(zip(all_option_wkns, all_option_labels))
+
+    # Bereits im Portfolio → als Default im Multiselect
+    current_wkns = set(st.session_state.builder_portfolio.keys())
+    current_labels = [all_wkn_to_label[wkn] for wkn in current_wkns if wkn in all_wkn_to_label]
+
+    selected_labels = st.multiselect(
+        "Name, WKN oder ISIN eingeben – durchsucht das gesamte Universum",
+        options=all_option_labels,
+        default=current_labels,
+        key="builder_multiselect",
+        help=f"Maximal {MAX_TITEL} Titel. Tippen Sie um zu suchen."
+    )
+
+    # Auswahl-Änderungen verarbeiten
+    selected_wkns_new = {all_label_to_wkn[lbl] for lbl in selected_labels if lbl in all_label_to_wkn}
+
+    # Nur Titel entfernen die der User aktiv abgewählt hat (die im Multiselect sichtbar waren)
+    # Nicht alle Portfolio-Einträge löschen die nicht im Multiselect sind!
+    visible_wkns = set(all_label_to_wkn.values())
+    for wkn in list(current_wkns):
+        if wkn in visible_wkns and wkn not in selected_wkns_new:
+            st.session_state.builder_portfolio.pop(wkn, None)
+
+    for wkn in selected_wkns_new - current_wkns:
+        if len(st.session_state.builder_portfolio) >= MAX_TITEL:
+            st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
+            break
+        st.session_state.builder_portfolio[wkn] = 0.0
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 3: FILTER (optional, zum Einschränken der Übersichtstabelle)
