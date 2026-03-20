@@ -247,18 +247,44 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🔎 Titel suchen & hinzufügen")
-    st.caption("Tippen Sie einen Namen, WKN oder ISIN ein und wählen Sie Titel aus. "
-               "Die Auswahl wird zum Portfolio hinzugefügt.")
 
-    universe_sorted = universe.sort_values("Name")
+    # Aktive Filter aus Session-State lesen (gesetzt durch Schnellzugriffe oder manuelle Filter)
+    active_filters = {}
+    f_asset_active = st.session_state.get("f_asset", [])
+    f_region_active = st.session_state.get("f_region", [])
+    f_segment_active = st.session_state.get("f_segment", [])
+    f_ml_active = st.session_state.get("f_ml", [])
+    f_kmin_active = st.session_state.get("f_kmin", 0.0)
+    f_dmin_active = st.session_state.get("f_dmin", 0.0)
+    f_dmax_active = st.session_state.get("f_dmax", 30.0)
+    f_mrw_active = st.session_state.get("f_mrw", 7)
+
+    if f_asset_active: active_filters["Assetklasse"] = f_asset_active
+    if f_region_active: active_filters["Region"] = f_region_active
+    if f_segment_active: active_filters["Segment"] = f_segment_active
+    if f_ml_active: active_filters["Masterlistenzuordnung"] = f_ml_active
+    if f_kmin_active > 0: active_filters["kupon_min"] = f_kmin_active / 100.0
+    if f_dmin_active > 0: active_filters["duration_min"] = f_dmin_active
+    if f_dmax_active < 30: active_filters["duration_max"] = f_dmax_active
+    if f_mrw_active < 7: active_filters["mrw_max"] = f_mrw_active
+
+    # Suchoptionen: gefiltertes Universum wenn Filter aktiv, sonst alles
+    if active_filters:
+        search_universe = apply_filters(universe, active_filters)
+        st.caption(f"🔍 Suche eingeschränkt auf **{len(search_universe)} Titel** (Filter aktiv)")
+    else:
+        search_universe = universe
+        st.caption("Tippen Sie einen Namen, WKN oder ISIN ein. Die Suche durchsucht das gesamte Universum.")
+
+    search_sorted = search_universe.sort_values("Name")
     search_options = (
-        universe_sorted["Name"].fillna("") + "  (" +
-        universe_sorted["WKN"].fillna("") + ")"
+        search_sorted["Name"].fillna("") + "  (" +
+        search_sorted["WKN"].fillna("") + ")"
     ).tolist()
-    search_wkns = universe_sorted["WKN"].tolist()
+    search_wkns = search_sorted["WKN"].tolist()
     label_to_wkn = dict(zip(search_options, search_wkns))
 
-    # Multiselect NUR zum Hinzufügen – kein Default, kein Sync mit Portfolio
+    # Multiselect NUR zum Hinzufügen
     new_titles = st.multiselect(
         "Titel zum Portfolio hinzufügen",
         options=search_options,
@@ -272,7 +298,6 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             wkn = label_to_wkn.get(lbl)
             if wkn:
                 _add_to_portfolio(wkn, 0.0)
-        # Button zum Bestätigen und Leeren
         if st.button("✅ Titel übernehmen", key="confirm_add", use_container_width=True):
             st.rerun()
 
