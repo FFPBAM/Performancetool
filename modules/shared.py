@@ -92,7 +92,7 @@ def fmt_eur_de(v: float) -> str:
 # ---------------------------------------------------------------------------
 # Auto-detect newest date tag
 # ---------------------------------------------------------------------------
-def detect_newest_date_tag(data_folder: str, exclude_substrings: list[str] | None = None) -> str:
+def detect_newest_date_tag(data_folder: str, exclude_substrings: list = None) -> str:
     if exclude_substrings is None:
         exclude_substrings = EXCLUDE_SUBSTRINGS
     # Case-insensitive: .CSV und .csv
@@ -152,7 +152,7 @@ def csv_name_to_display(csv_name: str, name_mapping: pd.DataFrame) -> str:
 # ---------------------------------------------------------------------------
 # Logo Helper
 # ---------------------------------------------------------------------------
-def get_logo_aspect(logo_path: str | None = None) -> float:
+def get_logo_aspect(logo_path: str = None) -> float:
     if logo_path is None:
         logo_path = LOGO_FILENAME
     if logo_path and os.path.exists(logo_path):
@@ -161,5 +161,5 @@ def get_logo_aspect(logo_path: str | None = None) -> float:
         return h / w
     return 0.3
 
-def get_logo_path() -> str | None:
+def get_logo_path() -> str:
     return LOGO_FILENAME if os.path.exists(LOGO_FILENAME) else None
