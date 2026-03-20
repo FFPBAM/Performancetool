@@ -425,15 +425,13 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     w_dur = calc_weighted_duration(analysis_df)
     w_kup = calc_weighted_kupon(analysis_df)
 
-    kc = st.columns(5 if use_volume else 4)
+    n_kc = 4 if use_volume else 3
+    kc = st.columns(n_kc)
     with kc[0]: st.metric("Anzahl Titel", n_titel)
     with kc[1]: st.metric("Investitionsgrad", fmt_pct_de(total_weight))
     with kc[2]: st.metric("Liquidität", fmt_pct_de(cash_weight))
-    with kc[3]:
-        avg_mrw = analysis_df["Marktrisikowert"].mean()
-        st.metric("Ø Risiko", f"{avg_mrw:.1f}".replace(".",",") if pd.notna(avg_mrw) else "–", help="Durchschnittlicher Marktrisikowert.")
     if use_volume:
-        with kc[4]: st.metric("Investiert (€)", fmt_eur_de(total_weight * anlagevolumen))
+        with kc[3]: st.metric("Investiert (€)", fmt_eur_de(total_weight * anlagevolumen))
 
     # Anleihen-Detail
     has_bonds = analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False).any()
