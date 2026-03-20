@@ -291,6 +291,12 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 mp_df = pf_data[csv_name]
                 new_portfolio = {}
                 not_found = []
+                debug_info = []
+
+                # Debug: Spalten der PF-Datei
+                debug_info.append(f"PF-Spalten: {list(mp_df.columns)}")
+                debug_info.append(f"PF-Zeilen: {len(mp_df)}")
+                debug_info.append(f"Universum-WKNs (Beispiel): {list(wkn_lookup.keys())[:5]}")
 
                 for _, row in mp_df.iterrows():
                     titel_name = str(row["Wertpapier"]).strip() if "Wertpapier" in mp_df.columns else "?"
@@ -303,12 +309,15 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                         wkn_raw = _normalize_wkn(row["WKN"])
                         if wkn_raw in wkn_lookup:
                             matched_wkn = wkn_lookup[wkn_raw]
+                        else:
+                            debug_info.append(f"  ❌ WKN '{wkn_raw}' (raw: '{row['WKN']}') nicht in Universum")
 
-                    # Fallback: Match über Name
+                    # Fallback: Match über Wertpapier-Name → Universe-Name
                     if matched_wkn is None and "Name" in universe.columns:
                         name_match = universe[universe["Name"].str.upper() == titel_name.upper()]
                         if not name_match.empty:
                             matched_wkn = str(name_match.iloc[0]["WKN"]).strip()
+                            debug_info.append(f"  ✅ Name-Match: '{titel_name}' → WKN {matched_wkn}")
 
                     if matched_wkn:
                         new_portfolio[matched_wkn] = gewicht
@@ -320,10 +329,21 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 if new_portfolio:
                     st.success(f"✅ {len(new_portfolio)} von {len(mp_df)} Titeln aus **{mp_sel}** geladen")
                 if not_found:
-                    st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum: {', '.join(not_found[:5])}{'...' if len(not_found) > 5 else ''}")
+                    st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum: {', '.join(not_found[:10])}{'...' if len(not_found) > 10 else ''}")
                 if not new_portfolio:
                     st.error("❌ Kein Titel konnte zugeordnet werden.")
-                st.rerun()
+
+                # Debug immer zeigen bei Problemen
+                if not_found or not new_portfolio:
+                    with st.expander("🔍 Debug: Matching-Details"):
+                        for d in debug_info[:30]:
+                            st.text(d)
+                        if "WKN" in mp_df.columns:
+                            st.write("PF-WKNs (erste 10):", mp_df["WKN"].head(10).tolist())
+                            st.write("PF-WKNs repr (erste 5):", [repr(x) for x in mp_df["WKN"].head(5).tolist()])
+
+                if new_portfolio:
+                    st.rerun()
         else:
             st.info("Bitte ein Musterportfolio auswählen.")
 
