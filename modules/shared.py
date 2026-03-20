@@ -27,6 +27,7 @@ NAME_MAPPING_PATH = "Mapping_Namen.xlsx"
 DATA_FOLDER       = "Daten"
 DATA_FOLDER_PF    = "Daten_PF"
 DURATION_FOLDER   = "Duration"
+ZIELDATEN_FOLDER  = "Zieldaten"
 EXCLUDE_SUBSTRINGS = ["Stiftung"]
 
 
