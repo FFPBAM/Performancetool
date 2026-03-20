@@ -65,6 +65,12 @@ def load_zieldaten(folder: str) -> pd.DataFrame:
     df = pd.read_csv(all_files[0], comment="#", encoding="ISO-8859-1",
                      delimiter=";", decimal=",", thousands=".", dtype=str)
 
+    # String-Spalten bereinigen (trim whitespace, zu string)
+    for col in ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region",
+                "Masterlistenzuordnung", "Zugelassen zum Vertrieb in der Beratung", "Anlagehorizont"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+
     # Parsen
     if "Kupon" in df.columns:
         df["Kupon_num"] = df["Kupon"].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
@@ -93,7 +99,7 @@ def load_zieldaten(folder: str) -> pd.DataFrame:
 def _init_session_state():
     """Initialisiert Session-State für den Builder."""
     if "builder_portfolio" not in st.session_state:
-        st.session_state.builder_portfolio = {}  # {ISIN: gewicht_dezimal}
+        st.session_state.builder_portfolio = {}  # {WKN: gewicht_dezimal}
     if "builder_initialized" not in st.session_state:
         st.session_state.builder_initialized = True
 
@@ -134,21 +140,21 @@ def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Portfolio-Analyse (Strukturanalyse)
 # ---------------------------------------------------------------------------
-def build_builder_analysis_df(selected_isins: dict, universe: pd.DataFrame) -> pd.DataFrame:
+def build_builder_analysis_df(selected_wkns: dict, universe: pd.DataFrame) -> pd.DataFrame:
     """
-    Baut einen DataFrame für die Analyse, ähnlich dem Format aus der Portfolioanalyse.
-    selected_isins: {ISIN: gewicht_dezimal}
+    Baut einen DataFrame für die Analyse.
+    selected_wkns: {WKN: gewicht_dezimal}
     """
     rows = []
-    for isin, weight in selected_isins.items():
-        match = universe[universe["ISIN"] == isin]
+    for wkn, weight in selected_wkns.items():
+        match = universe[universe["WKN"] == wkn]
         if match.empty:
             continue
         row = match.iloc[0]
         entry = {
             "Wertpapier": str(row["Name"]) if "Name" in row.index and pd.notna(row["Name"]) else "",
-            "WKN": str(row["WKN"]) if "WKN" in row.index and pd.notna(row["WKN"]) else "",
-            "ISIN": isin,
+            "WKN": wkn,
+            "ISIN": str(row["ISIN"]) if "ISIN" in row.index and pd.notna(row["ISIN"]) else "",
             "Gewicht": weight,
             "Segment": str(row["Segment"]) if "Segment" in row.index and pd.notna(row["Segment"]) else "",
             "Region": str(row["Region"]) if "Region" in row.index and pd.notna(row["Region"]) else "",
@@ -230,43 +236,75 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
 
     # Musterportfolio laden
     st.markdown("---")
+
+    # Musterportfolio-Daten laden (vor den Columns, damit im globalen Scope)
+    auto_tag_pf = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
+    pf_files = load_pf_csvs(DATA_FOLDER_PF, auto_tag_pf)
+    pf_data = build_pf_data(pf_files) if pf_files else {}
+
+    col_display = name_mapping.columns[0]
+    col_csv_key = name_mapping.columns[1]
+    available_mp = set(pf_data.keys())
+    filtered_mp = name_mapping[name_mapping[col_csv_key].isin(available_mp)]
+    mp_names = ["-- Kein Musterportfolio --"] + filtered_mp[col_display].tolist()
+    mp_to_csv = dict(zip(filtered_mp[col_display], filtered_mp[col_csv_key]))
+
     mp_col1, mp_col2 = st.columns([2, 1])
     with mp_col1:
-        # Musterportfolios aus Daten_PF laden
-        auto_tag_pf = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
-        pf_files = load_pf_csvs(DATA_FOLDER_PF, auto_tag_pf)
-        pf_data = build_pf_data(pf_files) if pf_files else {}
-
-        col_display = name_mapping.columns[0]
-        col_csv_key = name_mapping.columns[1]
-        available_mp = set(pf_data.keys())
-        filtered_mp = name_mapping[name_mapping[col_csv_key].isin(available_mp)]
-        mp_names = ["-- Kein Musterportfolio --"] + filtered_mp[col_display].tolist()
-        mp_to_csv = dict(zip(filtered_mp[col_display], filtered_mp[col_csv_key]))
-
         mp_sel = st.selectbox("📦 Musterportfolio als Startpunkt laden", mp_names, key="builder_mp")
 
     with mp_col2:
-        if st.button("📥 Musterportfolio laden", key="load_mp") and mp_sel != "-- Kein Musterportfolio --":
-            csv_name = mp_to_csv.get(mp_sel)
-            if csv_name and csv_name in pf_data:
-                mp_df = pf_data[csv_name]
-                new_portfolio = {}
-                for _, row in mp_df.iterrows():
-                    if "WKN" in mp_df.columns and "WKN" in universe.columns:
-                        wkn = str(row.get("WKN", "")).strip()
-                        match = universe[universe["WKN"] == wkn]
-                        if not match.empty:
-                            isin = match.iloc[0]["ISIN"]
-                            new_portfolio[isin] = float(row["Gewicht"]) if pd.notna(row.get("Gewicht")) else 0.0
-                st.session_state.builder_portfolio = new_portfolio
+        st.markdown("<br>", unsafe_allow_html=True)
+        load_clicked = st.button("📥 Musterportfolio laden", key="load_mp", use_container_width=True)
+
+    if load_clicked and mp_sel != "-- Kein Musterportfolio --":
+        csv_name = mp_to_csv.get(mp_sel)
+        if csv_name and csv_name in pf_data:
+            mp_df = pf_data[csv_name]
+            new_portfolio = {}
+            not_found = []
+
+            # WKN-Set aus dem Universum (bereinigt)
+            universe_wkns = set(universe["WKN"].dropna().unique()) if "WKN" in universe.columns else set()
+
+            for _, row in mp_df.iterrows():
+                titel_name = str(row["Wertpapier"]).strip() if "Wertpapier" in mp_df.columns else "?"
+                gewicht = float(row["Gewicht"]) if "Gewicht" in mp_df.columns and pd.notna(row["Gewicht"]) else 0.0
+
+                matched_wkn = None
+
+                # Versuch 1: Match über WKN
+                if "WKN" in mp_df.columns:
+                    wkn = str(row["WKN"]).strip()
+                    if wkn and wkn != "nan" and wkn in universe_wkns:
+                        matched_wkn = wkn
+
+                # Versuch 2: Match über Name
+                if matched_wkn is None and "Wertpapier" in mp_df.columns and "Name" in universe.columns:
+                    name_match = universe[universe["Name"].str.strip() == titel_name]
+                    if not name_match.empty:
+                        matched_wkn = str(name_match.iloc[0]["WKN"]).strip()
+
+                if matched_wkn:
+                    new_portfolio[matched_wkn] = gewicht
+                else:
+                    not_found.append(titel_name)
+
+            st.session_state.builder_portfolio = new_portfolio
+
+            if new_portfolio:
                 st.success(f"✅ {len(new_portfolio)} Titel aus {mp_sel} geladen")
-                st.rerun()
+            if not_found:
+                st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum gefunden: {', '.join(not_found[:5])}{'...' if len(not_found) > 5 else ''}")
+            if not new_portfolio:
+                st.error("❌ Kein einziger Titel konnte zugeordnet werden. Prüfen Sie die Daten.")
+
+            st.rerun()
 
     # ── Filter ──
     st.markdown("### 🔍 Titel filtern & auswählen")
 
-    f_col1, f_col2, f_col3 = st.columns(3)
+    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
     with f_col1:
         all_asset = sorted(universe["Assetklasse"].dropna().unique().tolist())
         f_asset = st.multiselect("Assetklasse", all_asset, key="f_asset")
@@ -279,6 +317,10 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
         all_segment = sorted(universe["Segment"].dropna().unique().tolist())
         f_segment = st.multiselect("Segment", all_segment, key="f_segment")
 
+    with f_col4:
+        all_ml = sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist())
+        f_ml = st.multiselect("Masterlistenzuordnung", all_ml, key="f_ml")
+
     # Erweiterte Filter
     with st.expander("📐 Erweiterte Filter"):
         ef_col1, ef_col2, ef_col3, ef_col4 = st.columns(4)
@@ -290,8 +332,6 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
             f_dur_max = st.number_input("Duration max (Jahre)", 0.0, 30.0, step=0.5, key="f_dmax")
         with ef_col4:
             f_mrw_max = st.number_input("Marktrisikowert max", 1, 7, step=1, key="f_mrw")
-            all_ml = sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist())
-            f_ml = st.multiselect("Masterlistenzuordnung", all_ml, key="f_ml")
 
     # Filter zusammenbauen
     filters = {}
@@ -308,17 +348,17 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     st.caption(f"📋 {len(filtered)} Titel nach Filterung")
 
     # ── Titel hinzufügen via Multiselect (schnell) ──
-    # Optionen für Multiselect: "Name (WKN | ISIN)" → ISIN als Wert
+    # Optionen für Multiselect: "Name (WKN | ISIN)" → WKN als Wert
     filtered_sorted = filtered.sort_values("Name")
     option_labels = (
         filtered_sorted["Name"] + "  (" + filtered_sorted["WKN"].fillna("") + " | " + filtered_sorted["ISIN"].fillna("") + ")"
     ).tolist()
-    option_isins = filtered_sorted["ISIN"].tolist()
-    label_to_isin = dict(zip(option_labels, option_isins))
+    option_wkns = filtered_sorted["WKN"].tolist()
+    label_to_wkn = dict(zip(option_labels, option_wkns))
 
     # Bereits ausgewählte als Default
-    current_isins = set(st.session_state.builder_portfolio.keys())
-    current_labels = [lbl for lbl, isin in label_to_isin.items() if isin in current_isins]
+    current_wkns = set(st.session_state.builder_portfolio.keys())
+    current_labels = [lbl for lbl, wkn in label_to_wkn.items() if wkn in current_wkns]
 
     selected_labels = st.multiselect(
         "🔎 Titel suchen & hinzufügen (Name, WKN oder ISIN tippen)",
@@ -329,17 +369,17 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     )
 
     # Auswahl verarbeiten
-    selected_isins_new = {label_to_isin[lbl] for lbl in selected_labels if lbl in label_to_isin}
+    selected_wkns_new = {label_to_wkn[lbl] for lbl in selected_labels if lbl in label_to_wkn}
 
     # Entfernte Titel
-    for isin in current_isins - selected_isins_new:
-        st.session_state.builder_portfolio.pop(isin, None)
+    for wkn in current_wkns - selected_wkns_new:
+        st.session_state.builder_portfolio.pop(wkn, None)
     # Neue Titel
-    for isin in selected_isins_new - current_isins:
+    for wkn in selected_wkns_new - current_wkns:
         if len(st.session_state.builder_portfolio) >= MAX_TITEL:
             st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
             break
-        st.session_state.builder_portfolio[isin] = 0.0
+        st.session_state.builder_portfolio[wkn] = 0.0
 
     # ── Gefilterte Tabelle (read-only, zur Übersicht) ──
     with st.expander(f"📋 Gefilterte Titel anzeigen ({len(filtered)})"):
@@ -366,8 +406,8 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     with btn_col1:
         if st.button("⚖️ Gleichgewichten", key="equalize", use_container_width=True):
             weight_per_title = (1.0 - CASH_PCT) / n_titel
-            for isin in portfolio:
-                portfolio[isin] = weight_per_title
+            for wkn in portfolio:
+                portfolio[wkn] = weight_per_title
             st.session_state.builder_portfolio = portfolio
             st.rerun()
     with btn_col2:
@@ -379,16 +419,16 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
 
     # Gewicht-Editor
     pf_rows = []
-    for isin, weight in portfolio.items():
-        match = universe[universe["ISIN"] == isin]
+    for wkn, weight in portfolio.items():
+        match = universe[universe["WKN"] == wkn]
         if match.empty:
             continue
         row = match.iloc[0]
         pf_rows.append({
-            "Name": row.get("Name", ""),
-            "WKN": row.get("WKN", ""),
-            "ISIN": isin,
-            "Assetklasse": row.get("Assetklasse", ""),
+            "Name": str(row["Name"]) if "Name" in row.index and pd.notna(row["Name"]) else "",
+            "WKN": wkn,
+            "ISIN": str(row["ISIN"]) if "ISIN" in row.index and pd.notna(row["ISIN"]) else "",
+            "Assetklasse": str(row["Assetklasse"]) if "Assetklasse" in row.index and pd.notna(row["Assetklasse"]) else "",
             "Gewicht (%)": round(weight * 100, 2),
         })
 
@@ -414,10 +454,10 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     # Gewichte zurückschreiben
     if edited_pf is not None:
         for _, row in edited_pf.iterrows():
-            isin = row["ISIN"]
+            wkn = row["WKN"]
             new_weight = row["Gewicht (%)"] / 100.0
-            if isin in st.session_state.builder_portfolio:
-                st.session_state.builder_portfolio[isin] = new_weight
+            if wkn in st.session_state.builder_portfolio:
+                st.session_state.builder_portfolio[wkn] = new_weight
 
     # Summen
     total_weight = sum(st.session_state.builder_portfolio.values())
