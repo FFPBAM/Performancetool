@@ -1,5 +1,5 @@
-# modules/portfolio_builder.py
-"""Portfolio Builder: Individuelles Portfolio zusammenstellen."""
+# modules/portfolioanalyse.py
+"""Portfolioanalyse: Bestands- und Allokationsübersicht."""
 
 import os
 import re
@@ -11,557 +11,637 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
+    Table, TableStyle, PageBreak, HRFlowable,
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.colors import HexColor, white
 
 from modules.shared import (
     FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
-    ZIELDATEN_FOLDER, DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
+    DATA_FOLDER_PF, DURATION_FOLDER, EXCLUDE_SUBSTRINGS,
     fmt_date_de, fmt_pct_de, fmt_eur_de,
-    detect_newest_date_tag,
-)
-from modules.portfolioanalyse import (
-    build_allocation, build_ring_chart, get_bond_summary,
-    build_grouped_title_table, build_top5_bar_chart, get_top_holdings,
-    load_pf_csvs, build_pf_data, RING_COLORS,
+    detect_newest_date_tag, get_logo_aspect, get_logo_path,
+    csv_name_to_display,
 )
 
 
 # ---------------------------------------------------------------------------
-# Constants
+# Ring-Chart Farben
 # ---------------------------------------------------------------------------
-MAX_TITEL = 50
-CASH_PCT = 0.05
-TOP5_COLORS = ["#1B3A5C", "#6A9BC3", "#B8973A", "#C4B78C", "#A8CBE8"]
-
-SCHNELLZUGRIFFE = {
-    "Rein Aktien":       {"Assetklasse": ["Aktien"]},
-    "Rein Renten":       {"Assetklasse": ["Renten"]},
-    "Multi-Asset":       {"Assetklasse": ["Aktien", "Renten"]},
-    "High Yield (Kupon >3%)": {"Assetklasse": ["Renten"], "kupon_min": 0.03},
-    "Kurze Duration (<3J)":   {"Assetklasse": ["Renten"], "duration_max": 3.0},
-    "Lange Duration (>5J)":   {"Assetklasse": ["Renten"], "duration_min": 5.0},
-    "Europa-Fokus":      {"Region": ["Deutschland", "Europa ohne Deutschland"]},
-    "Nordamerika-Fokus": {"Region": ["Nordamerika"]},
-    "Niedriges Risiko (≤3)":  {"mrw_max": 3},
-}
+RING_COLORS = [
+    "#B8973A", "#2C5F8A", "#A8CBE8", "#7FB5D5", "#1B3A5C",
+    "#E8A838", "#5BA0D0", "#C4C4C4", "#3A7CA5", "#D4A84B",
+    "#8FBDD3", "#4A6E8C", "#F0C070", "#6A9BC3", "#2A4A6C",
+]
+SONSTIGE_THRESHOLD = 0.03  # Kategorien unter 3% → "Sonstige"
 
 
 # ---------------------------------------------------------------------------
 # Data Loading
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=True)
-def load_zieldaten(folder):
-    all_files = glob.glob(os.path.join(folder, "*.CSV")) + glob.glob(os.path.join(folder, "*.csv"))
-    if not all_files:
-        return pd.DataFrame()
+def load_pf_csvs(data_folder: str, date_tag: str) -> list:
+    files = []
+    for ext in ["*.CSV", "*.csv"]:
+        all_files = glob.glob(os.path.join(data_folder, ext))
+        for f in all_files:
+            if date_tag in os.path.basename(f):
+                files.append(f)
+    return list(set(files))
 
+
+def read_pf_csv(path: str) -> pd.DataFrame:
+    return pd.read_csv(
+        path, comment="#", encoding="ISO-8859-1",
+        delimiter=";", decimal=",", thousands=".", dtype=str
+    )
+
+
+def parse_pf_data(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # Alle String-Spalten bereinigen (trim, nan-safe)
+    for col in ["Wertpapier", "WKN", "ISIN", "Segment", "Region", "Gattung", "Portfolio Name"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+            df[col] = df[col].replace("nan", np.nan)
+
+    for col in ["Gewicht", "Performancebeitrag", "WP-Performance", "Kupon"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
+            df[col] = pd.to_numeric(df[col], errors="coerce") / 100.0
+    if "Auswertungsdatum" in df.columns:
+        df["Auswertungsdatum"] = pd.to_datetime(df["Auswertungsdatum"], format="%d.%m.%Y", errors="coerce")
+    if "Fälligkeit" in df.columns:
+        df["Fälligkeit_parsed"] = pd.to_datetime(df["Fälligkeit"], format="%d.%m.%Y", errors="coerce")
+    return df
+
+
+@st.cache_data(show_spinner=True)
+def build_pf_data(files: list[str]) -> dict:
+    out = {}
+    for path in files:
+        df = read_pf_csv(path)
+        if "Portfolio Name" not in df.columns or df.empty:
+            continue
+        portfolio_name = df["Portfolio Name"].iloc[0].strip()
+        df = parse_pf_data(df)
+        out[portfolio_name] = df
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Duration Loading
+# ---------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def load_duration_data(duration_folder: str, name_mapping: pd.DataFrame) -> dict:
+    """
+    Lädt die neueste Duration-Datei und gibt ein Dict zurück:
+    {csv_portfolio_name: {"duration": float, "rendite": float}}
+    Zuordnung über Spalte C (Duration-Name) im Mapping.
+    """
+    # Neueste Datei finden
+    all_files = glob.glob(os.path.join(duration_folder, "*.CSV")) + \
+                glob.glob(os.path.join(duration_folder, "*.csv"))
+    if not all_files:
+        return {}
+
+    # Nach Zeitstempel im Namen sortieren (neueste zuerst)
     tag_pattern = re.compile(r"_(\d{6})_(\d{4})")
     def _sort_key(f):
         m = tag_pattern.search(os.path.basename(f))
         return m.group(1) + m.group(2) if m else "000000_0000"
     all_files.sort(key=_sort_key, reverse=True)
+    newest = all_files[0]
 
-    df = pd.read_csv(all_files[0], comment="#", encoding="ISO-8859-1",
-                     delimiter=";", decimal=",", thousands=".", dtype=str)
+    # CSV lesen
+    try:
+        df = pd.read_csv(newest, comment="#", encoding="ISO-8859-1",
+                         delimiter=";", decimal=",", thousands=".", dtype=str)
+    except Exception:
+        # Auch Tab-getrennt oder Excel probieren
+        try:
+            df = pd.read_csv(newest, comment="#", encoding="UTF-8",
+                             delimiter="\t", decimal=",", thousands=".", dtype=str)
+        except Exception:
+            return {}
 
-    # Alle String-Spalten bereinigen
-    for col in df.columns:
-        if df[col].dtype == object:
-            df[col] = df[col].astype(str).str.strip()
-            # "nan" Strings zu echtem NaN
-            df[col] = df[col].replace("nan", np.nan)
+    if "Wertpapier" not in df.columns or "Duration" not in df.columns:
+        return {}
 
-    # Numerische Spalten parsen
-    if "Kupon" in df.columns:
-        df["Kupon_num"] = df["Kupon"].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
-        df["Kupon_num"] = pd.to_numeric(df["Kupon_num"], errors="coerce") / 100.0
-    else:
-        df["Kupon_num"] = np.nan
+    # Rendite parsen
+    if "Rendite" in df.columns:
+        df["Rendite"] = df["Rendite"].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
+        df["Rendite"] = pd.to_numeric(df["Rendite"], errors="coerce") / 100.0
+    df["Duration"] = pd.to_numeric(df["Duration"].astype(str).str.replace(",", "."), errors="coerce")
 
-    if "Duration" in df.columns:
-        df["Duration_num"] = pd.to_numeric(df["Duration"].astype(str).str.replace(",", "."), errors="coerce")
-    else:
-        df["Duration_num"] = np.nan
+    # Mapping: Spalte C (Duration-Name) → Spalte B (CSV-Key)
+    col_csv_key = name_mapping.columns[1]   # "Honorarsatz Mapping"
+    col_duration = name_mapping.columns[2]  # "Duration" (Spalte C)
+    duration_to_csv = dict(zip(name_mapping[col_duration], name_mapping[col_csv_key]))
 
-    if "Marktrisikowert" in df.columns:
-        df["MRW_num"] = pd.to_numeric(df["Marktrisikowert"], errors="coerce")
-    else:
-        df["MRW_num"] = np.nan
-
-    if "Fälligkeit" in df.columns:
-        df["Fälligkeit_parsed"] = pd.to_datetime(df["Fälligkeit"], format="%d.%m.%Y", errors="coerce")
-
-    return df
-
-
-def _init_session_state():
-    if "builder_portfolio" not in st.session_state:
-        st.session_state.builder_portfolio = {}  # {WKN: gewicht_dezimal}
-
-def _reset_portfolio():
-    st.session_state.builder_portfolio = {}
-
-
-# ---------------------------------------------------------------------------
-# Filter
-# ---------------------------------------------------------------------------
-def apply_filters(df, filters):
-    result = df.copy()
-    if filters.get("Assetklasse"):
-        result = result[result["Assetklasse"].isin(filters["Assetklasse"])]
-    if filters.get("Region"):
-        result = result[result["Region"].isin(filters["Region"])]
-    if filters.get("Segment"):
-        result = result[result["Segment"].isin(filters["Segment"])]
-    if filters.get("Masterlistenzuordnung"):
-        result = result[result["Masterlistenzuordnung"].isin(filters["Masterlistenzuordnung"])]
-    if filters.get("kupon_min") is not None:
-        result = result[result["Kupon_num"] >= filters["kupon_min"]]
-    if filters.get("duration_min") is not None:
-        result = result[result["Duration_num"] >= filters["duration_min"]]
-    if filters.get("duration_max") is not None:
-        result = result[result["Duration_num"] <= filters["duration_max"]]
-    if filters.get("mrw_max") is not None:
-        result = result[result["MRW_num"] <= filters["mrw_max"]]
+    result = {}
+    for _, row in df.iterrows():
+        dur_name = str(row["Wertpapier"]).strip()
+        csv_name = duration_to_csv.get(dur_name)
+        if csv_name:
+            entry = {"duration": row["Duration"] if pd.notna(row["Duration"]) else None}
+            if "Rendite" in df.columns:
+                entry["rendite"] = row["Rendite"] if pd.notna(row["Rendite"]) else None
+            else:
+                entry["rendite"] = None
+            result[csv_name] = entry
     return result
 
 
 # ---------------------------------------------------------------------------
-# Analyse-DataFrame bauen
+# Berechnungen
 # ---------------------------------------------------------------------------
-def build_builder_analysis_df(selected_wkns, universe):
-    rows = []
-    for wkn, weight in selected_wkns.items():
-        match = universe[universe["WKN"] == wkn]
-        if match.empty:
-            continue
-        row = match.iloc[0]
-        entry = {
-            "Wertpapier": str(row["Name"]) if "Name" in row.index and pd.notna(row["Name"]) else "",
-            "WKN": wkn,
-            "ISIN": str(row["ISIN"]) if "ISIN" in row.index and pd.notna(row["ISIN"]) else "",
-            "Gewicht": weight,
-            "Segment": str(row["Segment"]) if "Segment" in row.index and pd.notna(row["Segment"]) else "",
-            "Region": str(row["Region"]) if "Region" in row.index and pd.notna(row["Region"]) else "",
-            "Gattung": str(row["Assetklasse"]) if "Assetklasse" in row.index and pd.notna(row["Assetklasse"]) else "",
-            "Kupon": float(row["Kupon_num"]) if "Kupon_num" in row.index and pd.notna(row["Kupon_num"]) else np.nan,
-            "Duration_num": float(row["Duration_num"]) if "Duration_num" in row.index and pd.notna(row["Duration_num"]) else np.nan,
-            "Fälligkeit_parsed": row["Fälligkeit_parsed"] if "Fälligkeit_parsed" in row.index and pd.notna(row["Fälligkeit_parsed"]) else pd.NaT,
-            "Marktrisikowert": float(row["MRW_num"]) if "MRW_num" in row.index and pd.notna(row["MRW_num"]) else np.nan,
-        }
-        rows.append(entry)
-    if not rows:
+def calc_liquidity(df: pd.DataFrame) -> float:
+    total_weight = df["Gewicht"].sum()
+    return max(0.0, 1.0 - total_weight)
+
+
+def build_allocation(df: pd.DataFrame, group_col: str, sonstige_threshold: float = SONSTIGE_THRESHOLD) -> pd.DataFrame:
+    """Aggregiert Gewichte nach Gruppierung + Liquidität. Kleine Kategorien → Sonstige."""
+    if group_col not in df.columns:
         return pd.DataFrame()
-    return pd.DataFrame(rows)
+    agg = df.groupby(group_col)["Gewicht"].sum().reset_index()
+    agg.columns = [group_col, "Gewicht"]
+    agg = agg.sort_values("Gewicht", ascending=False).reset_index(drop=True)
+
+    # Kleine Positionen zusammenfassen
+    big = agg[agg["Gewicht"] >= sonstige_threshold]
+    small = agg[agg["Gewicht"] < sonstige_threshold]
+    if len(small) > 1:
+        sonstige_weight = small["Gewicht"].sum()
+        sonstige_row = pd.DataFrame([{group_col: "Sonstige", "Gewicht": sonstige_weight}])
+        agg = pd.concat([big, sonstige_row], ignore_index=True)
+    elif len(small) == 1:
+        agg = pd.concat([big, small], ignore_index=True)
+    else:
+        agg = big.reset_index(drop=True)
+
+    # Liquidität
+    liq = calc_liquidity(df)
+    if liq > 0.0001:
+        agg = pd.concat([agg, pd.DataFrame([{group_col: "Liquidität", "Gewicht": liq}])], ignore_index=True)
+
+    return agg
 
 
-def calc_weighted_duration(df):
+def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show_ytd: bool = False):
+    """
+    Baut Tabellen-Daten gruppiert nach Gattung auf.
+    Returns: list of (gattung_name, display_dataframe)
+    """
+    if "Gattung" not in df.columns:
+        return []
+
+    base_cols = ["Wertpapier", "WKN", "Gewicht", "Segment", "Region"]
+    has_kupon = "Kupon" in df.columns and df["Kupon"].notna().any() and (df["Kupon"] != 0).any()
+    has_faelligkeit = "Fälligkeit_parsed" in df.columns and df["Fälligkeit_parsed"].notna().any()
+    has_perf = show_ytd and "WP-Performance" in df.columns and df["WP-Performance"].notna().any()
+    has_beitrag = show_ytd and "Performancebeitrag" in df.columns and df["Performancebeitrag"].notna().any()
+    use_volume = anlagevolumen > 0
+
+    groups = []
+    gattung_order = df.groupby("Gattung")["Gewicht"].sum().sort_values(ascending=False).index.tolist()
+
+    for gattung in gattung_order:
+        sub = df[df["Gattung"] == gattung].copy()
+        sub = sub.sort_values("Gewicht", ascending=False)
+
+        available = [c for c in base_cols if c in sub.columns]
+        result = sub[available].copy()
+
+        # Anleihen-spezifische Spalten nur bei Renten
+        is_bond = "rente" in gattung.lower() or "anleihe" in gattung.lower() or "bond" in gattung.lower()
+        if is_bond and has_kupon:
+            result["Kupon"] = sub["Kupon"]
+        if is_bond and has_faelligkeit:
+            result["Fälligkeit"] = sub["Fälligkeit_parsed"].apply(lambda x: fmt_date_de(x) if pd.notna(x) else "–")
+        if has_perf:
+            result["WP-Perf. (YTD)"] = sub["WP-Performance"]
+        if has_beitrag:
+            result["Beitrag (YTD)"] = sub["Performancebeitrag"]
+        if use_volume:
+            result["Investiert (€)"] = sub["Gewicht"] * anlagevolumen
+
+        # Formatieren
+        disp = result.copy()
+        if "Gewicht" in disp.columns:
+            disp["Gewicht"] = disp["Gewicht"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
+        if "Kupon" in disp.columns:
+            disp["Kupon"] = disp["Kupon"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) and x != 0 else "–")
+        if "WP-Perf. (YTD)" in disp.columns:
+            disp["WP-Perf. (YTD)"] = disp["WP-Perf. (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
+        if "Beitrag (YTD)" in disp.columns:
+            disp["Beitrag (YTD)"] = disp["Beitrag (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
+        if "Investiert (€)" in disp.columns:
+            disp["Investiert (€)"] = disp["Investiert (€)"].apply(lambda x: fmt_eur_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
+
+        # Gattung-Gewicht für Header
+        gattung_weight = sub["Gewicht"].sum()
+        groups.append((gattung, gattung_weight, disp))
+
+    # Liquidität
+    liq = calc_liquidity(df)
+    if liq > 0.0001:
+        liq_data = {"Wertpapier": "Liquidität", "Gewicht": fmt_pct_de(liq)}
+        if use_volume:
+            liq_data["Investiert (€)"] = fmt_eur_de(liq * anlagevolumen)
+        groups.append(("💰 Liquidität", liq, pd.DataFrame([liq_data])))
+
+    return groups
+
+
+def get_top_holdings(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
+    """Top N Positionen nach Gewicht."""
+    return df.nlargest(n, "Gewicht")[["Wertpapier", "WKN", "Gewicht", "Gattung"]].copy()
+
+
+def get_top_flop(df: pd.DataFrame, col: str, n: int = 5):
+    valid = df[df[col].notna() & (df[col] != 0)].copy()
+    if valid.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    top = valid.nlargest(n, col)[["Wertpapier", "WKN", "Gewicht", col]].copy()
+    flop = valid.nsmallest(n, col)[["Wertpapier", "WKN", "Gewicht", col]].copy()
+    return top, flop
+
+
+def get_bond_summary(df: pd.DataFrame) -> dict:
     bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
-    if bonds.empty or bonds["Duration_num"].isna().all():
+    if bonds.empty:
         return None
-    w = bonds["Gewicht"].fillna(0); d = bonds["Duration_num"].fillna(0)
-    return float((w * d).sum() / w.sum()) if w.sum() > 0 else None
-
-
-def calc_weighted_kupon(df):
-    bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
-    if bonds.empty or bonds["Kupon"].isna().all():
-        return None
-    w = bonds["Gewicht"].fillna(0); k = bonds["Kupon"].fillna(0)
-    return float((w * k).sum() / w.sum()) if w.sum() > 0 else None
+    summary = {"count": len(bonds)}
+    if "Kupon" in bonds.columns and bonds["Kupon"].notna().any():
+        w = bonds["Gewicht"].fillna(0); k = bonds["Kupon"].fillna(0)
+        summary["avg_kupon"] = float((w * k).sum() / w.sum()) if w.sum() > 0 else None
+    else:
+        summary["avg_kupon"] = None
+    if "Fälligkeit_parsed" in bonds.columns and bonds["Fälligkeit_parsed"].notna().any():
+        faell = bonds[bonds["Fälligkeit_parsed"].notna()].copy()
+        faell["Jahr"] = faell["Fälligkeit_parsed"].dt.year
+        summary["faelligkeit"] = faell.groupby("Jahr")["Gewicht"].sum().reset_index()
+        summary["faelligkeit"].columns = ["Jahr", "Gewicht"]
+    else:
+        summary["faelligkeit"] = None
+    summary["total_weight"] = float(bonds["Gewicht"].sum())
+    return summary
 
 
 # ---------------------------------------------------------------------------
-# WKN-Matching Helper
+# Ring-Diagramm (Plotly) – verbessert
 # ---------------------------------------------------------------------------
-def _normalize_wkn(val):
-    """Normalisiert WKN: Strip, Uppercase, None-safe."""
-    if val is None or pd.isna(val):
-        return ""
-    return str(val).strip().upper()
+def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.Figure:
+    fig = go.Figure(data=[go.Pie(
+        labels=alloc_df[group_col],
+        values=alloc_df["Gewicht"],
+        hole=0.5,
+        marker=dict(colors=RING_COLORS[:len(alloc_df)]),
+        textinfo="percent",
+        textposition="inside",
+        textfont=dict(size=11, color="white"),
+        hovertemplate="<b>%{label}</b><br>Gewicht: %{percent}<extra></extra>",
+        sort=False,
+    )])
+    fig.update_layout(
+        title=dict(text=f"<b>{title}</b>", font=dict(size=13), x=0.5, xanchor="center"),
+        height=450,
+        showlegend=True,
+        legend=dict(font=dict(size=9), orientation="v", y=0.5, x=1.05),
+        margin=dict(t=50, b=20, l=20, r=120),
+    )
+    return fig
 
 
-def _build_wkn_lookup(universe):
-    """Baut ein Lookup {normalisierte_WKN: original_WKN} aus dem Universum."""
-    lookup = {}
-    if "WKN" in universe.columns:
-        for _, row in universe.iterrows():
-            orig = str(row["WKN"]).strip()
-            normed = orig.upper()
-            if normed and normed != "NAN":
-                lookup[normed] = orig
-    return lookup
+# ---------------------------------------------------------------------------
+# Top 5 Holdings Säulendiagramm (Plotly)
+# ---------------------------------------------------------------------------
+TOP5_COLORS = ["#1B3A5C", "#6A9BC3", "#B8973A", "#C4B78C", "#A8CBE8"]
+
+
+def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
+    fig = go.Figure(data=[go.Bar(
+        x=top5["Wertpapier"],
+        y=top5["Gewicht"] * 100,
+        marker_color=TOP5_COLORS[:len(top5)],
+        text=[f"{v*100:.1f}%" for v in top5["Gewicht"]],
+        textposition="outside",
+        textfont=dict(size=11),
+    )])
+    fig.update_layout(
+        title=dict(text=f"<b>{title}</b>", font=dict(size=13)),
+        height=350,
+        xaxis=dict(tickfont=dict(size=10), tickangle=-25),
+        yaxis=dict(title="Gewicht (%)", ticksuffix="%"),
+        margin=dict(t=50, b=80, l=50, r=20),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Ring-Diagramm für PDF (matplotlib)
+# ---------------------------------------------------------------------------
+def _mpl_ring_chart(alloc_df, group_col, title):
+    fig, ax = plt.subplots(figsize=(6, 5))
+    labels = alloc_df[group_col].tolist()
+    sizes = alloc_df["Gewicht"].tolist()
+    colors = RING_COLORS[:len(alloc_df)]
+    wedges, texts, autotexts = ax.pie(
+        sizes, labels=None, autopct="%1.1f%%", startangle=90, colors=colors,
+        pctdistance=0.8, wedgeprops=dict(width=0.4, edgecolor="white", linewidth=1.5))
+    for t in autotexts: t.set_fontsize(8)
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=15)
+    ax.legend(labels, loc="center left", bbox_to_anchor=(1, 0.5), fontsize=7)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig); buf.seek(0)
+    return buf
 
 
 # ---------------------------------------------------------------------------
 # Streamlit Rendering
 # ---------------------------------------------------------------------------
-def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
-    _init_session_state()
+def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
     use_volume = anlagevolumen > 0
 
-    st.caption("⚠️ Das Portfolio wird nur in der aktuellen Sitzung gespeichert. Bei Logout geht es verloren. Bitte vorher als CSV exportieren.")
-
     # ── Daten laden ──
-    universe = load_zieldaten(ZIELDATEN_FOLDER)
-    if universe.empty:
-        st.warning(f"Keine Zieldaten in {ZIELDATEN_FOLDER}/ gefunden.")
-        return
-
-    # WKN-Lookup für robustes Matching
-    wkn_lookup = _build_wkn_lookup(universe)
-
-    st.success(f"📂 Anlageuniversum: **{len(universe)} Titel** geladen")
-
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 1: SUCHE (immer aktiv, unabhängig von Filtern)
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("### 🔎 Titel suchen & hinzufügen")
-
-    # Multiselect über das GESAMTE Universum (nicht gefiltert!)
-    universe_sorted = universe.sort_values("Name")
-    all_option_labels = (
-        universe_sorted["Name"].fillna("") + "  (" +
-        universe_sorted["WKN"].fillna("") + " | " +
-        universe_sorted["ISIN"].fillna("") + ")"
-    ).tolist()
-    all_option_wkns = universe_sorted["WKN"].tolist()
-    all_label_to_wkn = dict(zip(all_option_labels, all_option_wkns))
-
-    # Bereits ausgewählte als Default
-    current_wkns = set(st.session_state.builder_portfolio.keys())
-    current_labels = [lbl for lbl, wkn in all_label_to_wkn.items() if wkn in current_wkns]
-
-    selected_labels = st.multiselect(
-        "Name, WKN oder ISIN eingeben – Suche funktioniert immer, auch ohne Filter",
-        options=all_option_labels,
-        default=current_labels,
-        key="builder_multiselect",
-        help=f"Maximal {MAX_TITEL} Titel. Tippen Sie um zu suchen. Die Suche durchsucht das gesamte Universum."
-    )
-
-    # Auswahl verarbeiten
-    selected_wkns_new = {all_label_to_wkn[lbl] for lbl in selected_labels if lbl in all_label_to_wkn}
-    for wkn in current_wkns - selected_wkns_new:
-        st.session_state.builder_portfolio.pop(wkn, None)
-    for wkn in selected_wkns_new - current_wkns:
-        if len(st.session_state.builder_portfolio) >= MAX_TITEL:
-            st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
-            break
-        st.session_state.builder_portfolio[wkn] = 0.0
-
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 2: SCHNELLZUGRIFFE & MUSTERPORTFOLIO
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
-    st.markdown("### ⚡ Schnellzugriffe & Vorlagen")
-
-    sz_cols = st.columns(5)
-    sz_names = list(SCHNELLZUGRIFFE.keys())
-    for i, name in enumerate(sz_names):
-        with sz_cols[i % 5]:
-            if st.button(name, key=f"sz_{i}", use_container_width=True):
-                preset = SCHNELLZUGRIFFE[name]
-                st.session_state["f_asset"] = preset.get("Assetklasse", [])
-                st.session_state["f_region"] = preset.get("Region", [])
-                st.session_state["f_segment"] = []
-                st.session_state["f_kmin"] = float(preset.get("kupon_min", 0) * 100) if preset.get("kupon_min") else 0.0
-                st.session_state["f_dmin"] = float(preset.get("duration_min", 0.0))
-                st.session_state["f_dmax"] = float(preset.get("duration_max", 30.0))
-                st.session_state["f_mrw"] = int(preset.get("mrw_max", 7))
-                st.session_state["f_ml"] = []
-                st.rerun()
-
-    # Musterportfolio
     auto_tag_pf = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
-    pf_files = load_pf_csvs(DATA_FOLDER_PF, auto_tag_pf)
-    pf_data = build_pf_data(pf_files) if pf_files else {}
-
-    col_display = name_mapping.columns[0]
-    col_csv_key = name_mapping.columns[1]
-    available_mp = set(pf_data.keys())
-    filtered_mp = name_mapping[name_mapping[col_csv_key].isin(available_mp)]
-    mp_names = ["-- Kein Musterportfolio --"] + filtered_mp[col_display].tolist()
-    mp_to_csv = dict(zip(filtered_mp[col_display], filtered_mp[col_csv_key]))
-
-    mp_sel = st.selectbox("📦 Musterportfolio als Startpunkt laden", mp_names, key="builder_mp")
-    if st.button("📥 Musterportfolio laden", key="load_mp"):
-        if mp_sel != "-- Kein Musterportfolio --":
-            csv_name = mp_to_csv.get(mp_sel)
-            if csv_name and csv_name in pf_data:
-                mp_df = pf_data[csv_name]
-                new_portfolio = {}
-                not_found = []
-
-                for _, row in mp_df.iterrows():
-                    titel_name = str(row["Wertpapier"]).strip() if "Wertpapier" in mp_df.columns else "?"
-                    gewicht = float(row["Gewicht"]) if "Gewicht" in mp_df.columns and pd.notna(row["Gewicht"]) else 0.0
-
-                    matched_wkn = None
-
-                    # Match über WKN (normalisiert)
-                    if "WKN" in mp_df.columns:
-                        wkn_raw = _normalize_wkn(row["WKN"])
-                        if wkn_raw in wkn_lookup:
-                            matched_wkn = wkn_lookup[wkn_raw]
-
-                    # Fallback: Match über Name
-                    if matched_wkn is None and "Name" in universe.columns:
-                        name_match = universe[universe["Name"].str.upper() == titel_name.upper()]
-                        if not name_match.empty:
-                            matched_wkn = str(name_match.iloc[0]["WKN"]).strip()
-
-                    if matched_wkn:
-                        new_portfolio[matched_wkn] = gewicht
-                    else:
-                        not_found.append(titel_name)
-
-                st.session_state.builder_portfolio = new_portfolio
-
-                if new_portfolio:
-                    st.success(f"✅ {len(new_portfolio)} von {len(mp_df)} Titeln aus **{mp_sel}** geladen")
-                if not_found:
-                    st.warning(f"⚠️ {len(not_found)} Titel nicht im Universum: {', '.join(not_found[:5])}{'...' if len(not_found) > 5 else ''}")
-                if not new_portfolio:
-                    st.error("❌ Kein Titel konnte zugeordnet werden.")
-                st.rerun()
-        else:
-            st.info("Bitte ein Musterportfolio auswählen.")
-
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 3: FILTER (optional, zum Einschränken der Übersichtstabelle)
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
-    st.markdown("### 🔍 Universum filtern (optional)")
-
-    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
-    with f_col1:
-        f_asset = st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset")
-    with f_col2:
-        f_region = st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region")
-    with f_col3:
-        f_segment = st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment")
-    with f_col4:
-        f_ml = st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml")
-
-    with st.expander("📐 Erweiterte Filter"):
-        ef1, ef2, ef3, ef4 = st.columns(4)
-        with ef1: f_kmin = st.number_input("Kupon min (%)", 0.0, 20.0, step=0.5, key="f_kmin")
-        with ef2: f_dmin = st.number_input("Duration min (J)", 0.0, 30.0, step=0.5, key="f_dmin")
-        with ef3: f_dmax = st.number_input("Duration max (J)", 0.0, 30.0, step=0.5, key="f_dmax")
-        with ef4: f_mrw = st.number_input("Risiko max", 1, 7, step=1, key="f_mrw")
-
-    filters = {}
-    if f_asset: filters["Assetklasse"] = f_asset
-    if f_region: filters["Region"] = f_region
-    if f_segment: filters["Segment"] = f_segment
-    if f_ml: filters["Masterlistenzuordnung"] = f_ml
-    if f_kmin > 0: filters["kupon_min"] = f_kmin / 100.0
-    if f_dmin > 0: filters["duration_min"] = f_dmin
-    if f_dmax < 30: filters["duration_max"] = f_dmax
-    if f_mrw < 7: filters["mrw_max"] = f_mrw
-
-    filtered = apply_filters(universe, filters)
-
-    with st.expander(f"📋 Gefilterte Titel anzeigen ({len(filtered)} von {len(universe)})"):
-        show_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region", "Kupon", "Duration", "Marktrisikowert"]
-        avail = [c for c in show_cols if c in filtered.columns]
-        st.dataframe(filtered[avail].head(200), use_container_width=True, hide_index=True)
-
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 4: MEIN PORTFOLIO
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
-    st.markdown("### 📊 Mein Portfolio")
-
-    portfolio = st.session_state.builder_portfolio
-    n_titel = len(portfolio)
-
-    if n_titel == 0:
-        st.info("Noch keine Titel ausgewählt. Nutzen Sie die Suche oben, einen Schnellzugriff oder laden Sie ein Musterportfolio.")
-        return
-
-    st.caption(f"**{n_titel} Titel** ausgewählt (max. {MAX_TITEL})")
-
-    btn1, btn2, btn3 = st.columns(3)
-    with btn1:
-        if st.button("⚖️ Gleichgewichten", key="equalize", use_container_width=True):
-            w = (1.0 - CASH_PCT) / n_titel
-            for wkn in portfolio:
-                portfolio[wkn] = w
-            st.session_state.builder_portfolio = portfolio
-            st.rerun()
-    with btn2:
-        if st.button("🔄 Portfolio zurücksetzen", key="reset_pf", use_container_width=True):
-            _reset_portfolio()
-            st.rerun()
-    with btn3:
-        pass
-
-    # Gewicht-Editor
-    pf_rows = []
-    for wkn, weight in portfolio.items():
-        match = universe[universe["WKN"] == wkn]
-        if match.empty:
-            continue
-        row = match.iloc[0]
-        pf_rows.append({
-            "Name": str(row["Name"]) if "Name" in row.index and pd.notna(row["Name"]) else "",
-            "WKN": wkn,
-            "ISIN": str(row["ISIN"]) if "ISIN" in row.index and pd.notna(row["ISIN"]) else "",
-            "Assetklasse": str(row["Assetklasse"]) if "Assetklasse" in row.index and pd.notna(row["Assetklasse"]) else "",
-            "Gewicht (%)": round(weight * 100, 2),
-        })
-
-    if not pf_rows:
-        st.warning("Keine gültigen Titel im Portfolio. Möglicherweise stimmen die WKNs nicht überein.")
-        # Debug
-        with st.expander("🔍 Debug: Portfolio-WKNs"):
-            st.write("WKNs im Portfolio:", list(portfolio.keys())[:10])
-            st.write("WKNs im Universum (Beispiel):", universe["WKN"].head(10).tolist())
-        return
-
-    pf_df = pd.DataFrame(pf_rows)
-
-    edited_pf = st.data_editor(
-        pf_df,
-        column_config={
-            "Gewicht (%)": st.column_config.NumberColumn("Gewicht (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.2f"),
-        },
-        disabled=["Name", "WKN", "ISIN", "Assetklasse"],
-        hide_index=True, use_container_width=True, key="builder_pf_editor"
-    )
-
-    if edited_pf is not None:
-        for _, row in edited_pf.iterrows():
-            wkn = row["WKN"]
-            if wkn in st.session_state.builder_portfolio:
-                st.session_state.builder_portfolio[wkn] = row["Gewicht (%)"] / 100.0
-
-    total_weight = sum(st.session_state.builder_portfolio.values())
-    cash_weight = max(0.0, 1.0 - total_weight)
-
-    sc1, sc2, sc3 = st.columns(3)
-    with sc1: st.metric("Investiert", fmt_pct_de(total_weight))
-    with sc2: st.metric("💰 Liquidität", fmt_pct_de(cash_weight))
-    with sc3:
-        ok = abs(total_weight + cash_weight - 1.0) < 0.001
-        st.metric("Summe", f"{'🟢' if ok else '🔴'} {fmt_pct_de(total_weight + cash_weight)}")
-
-    if total_weight > (1.0 - CASH_PCT + 0.001):
-        st.warning(f"⚠️ Investitionsgrad übersteigt {fmt_pct_de(1.0 - CASH_PCT)}. Cash-Minimum: {fmt_pct_de(CASH_PCT)}.")
-
-    # CSV Export
-    st.markdown("---")
-    if st.button("⬇️ Portfolio als CSV exportieren", key="csv_export", use_container_width=True):
-        exp = edited_pf.copy() if edited_pf is not None else pf_df.copy()
-        cash_row = pd.DataFrame([{"Name": "Liquidität", "WKN": "", "ISIN": "", "Assetklasse": "Cash", "Gewicht (%)": round(cash_weight * 100, 2)}])
-        exp = pd.concat([exp, cash_row], ignore_index=True)
-        st.download_button("⬇️ CSV herunterladen", exp.to_csv(index=False, sep=";", decimal=","),
-            f"Portfolio_Builder_{dt.date.today().strftime('%Y%m%d')}.csv", "text/csv", key="csv_dl")
-
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 5: STRUKTURANALYSE
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
-    st.markdown("### 📊 Strukturanalyse")
-
-    analysis_df = build_builder_analysis_df(st.session_state.builder_portfolio, universe)
-    if analysis_df.empty:
-        st.info("Bitte erst Gewichte vergeben (Gleichgewichten).")
-        return
-
-    w_duration = calc_weighted_duration(analysis_df)
-    w_kupon = calc_weighted_kupon(analysis_df)
-
-    kc = st.columns(5 if use_volume else 4)
-    with kc[0]: st.metric("Anzahl Titel", n_titel)
-    with kc[1]: st.metric("Investitionsgrad", fmt_pct_de(total_weight), help="In Wertpapiere investiert.")
-    with kc[2]: st.metric("Liquidität", fmt_pct_de(cash_weight), help="Nicht investierter Anteil.")
-    with kc[3]:
-        if w_duration is not None:
-            st.metric("⌀ Duration (gew.)", f"{w_duration:.2f}".replace(".", ","), help="Gewichtete Duration aller Anleihen.")
-        elif w_kupon is not None:
-            st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kupon), help="Gewichteter Durchschnittskupon.")
-        else:
-            avg_mrw = analysis_df["Marktrisikowert"].mean()
-            st.metric("Ø Risiko", f"{avg_mrw:.1f}".replace(".", ",") if pd.notna(avg_mrw) else "–", help="Durchschnittlicher Marktrisikowert.")
-    if use_volume:
-        with kc[4]: st.metric("Investiert (€)", fmt_eur_de(total_weight * anlagevolumen))
-
-    # Anleihen-Detail
-    has_bonds = analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False).any()
-    if has_bonds:
+    with st.sidebar:
         st.markdown("---")
-        st.markdown("**🏦 Anleihen-Detail**")
-        bond_rows = analysis_df[analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)]
-        n_bc = 2 + (1 if w_duration is not None else 0) + (1 if w_kupon is not None else 0)
-        bc = st.columns(max(n_bc, 2))
-        ci = 0
-        with bc[ci]: st.metric("Anzahl Anleihen", len(bond_rows)); ci += 1
-        with bc[ci]: st.metric("Gewicht Anleihen", fmt_pct_de(bond_rows["Gewicht"].sum())); ci += 1
-        if w_duration is not None:
-            with bc[min(ci, len(bc)-1)]: st.metric("⌀ Duration (gew.)", f"{w_duration:.2f}".replace(".", ","), help="Gewichtete Duration. Zinssensitivität."); ci += 1
-        if w_kupon is not None:
-            with bc[min(ci, len(bc)-1)]: st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kupon), help="Gewichteter Durchschnittskupon.")
+        st.subheader("📊 Portfolioanalyse")
+        date_tag_pf = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
+            help="Automatisch neuester Tag aus Daten_PF/.", key="pf_date_tag")
+        show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd")
 
-    # Ring-Diagramme
+    pf_files = load_pf_csvs(DATA_FOLDER_PF, date_tag_pf)
+    if not pf_files:
+        st.warning(f"Keine Portfolioanalyse-Dateien für Tag {date_tag_pf} in {DATA_FOLDER_PF}/ gefunden.")
+        with st.expander("🔍 Debug"):
+            import glob as g
+            af = g.glob(os.path.join(DATA_FOLDER_PF, "*"))
+            st.write("Dateien:", [os.path.basename(f) for f in af] if af else "Ordner leer/nicht vorhanden")
+        return
+
+    pf_data = build_pf_data(pf_files)
+    if not pf_data:
+        st.warning("Keine Portfolioanalyse-Daten geladen."); return
+
+    # Duration-Daten laden
+    duration_data = load_duration_data(DURATION_FOLDER, name_mapping)
+
+    # Name-Mapping
+    available_pf_names = set(pf_data.keys())
+    col_display = name_mapping.columns[0]; col_csv_key = name_mapping.columns[1]
+    filtered = name_mapping[name_mapping[col_csv_key].isin(available_pf_names)].copy()
+    if filtered.empty:
+        display_names_pf = sorted(list(available_pf_names))
+        display_to_csv_pf = {n: n for n in display_names_pf}
+    else:
+        display_names_pf = filtered[col_display].tolist()
+        display_to_csv_pf = dict(zip(filtered[col_display], filtered[col_csv_key]))
+
+    # Portfolio-Auswahl
+    pf_sel_1 = st.selectbox("Portfolio auswählen", display_names_pf, key="pf_sel_1")
+    csv_name_1 = display_to_csv_pf[pf_sel_1]; df_pf_1 = pf_data[csv_name_1]
+    dur_1 = duration_data.get(csv_name_1)
+
+    show_compare_pf = st.checkbox("Vergleichsportfolio anzeigen", value=False, key="pf_compare")
+    pf_sel_2 = csv_name_2 = df_pf_2 = dur_2 = None
+    if show_compare_pf:
+        pf_sel_2 = st.selectbox("Vergleichsportfolio auswählen", display_names_pf, key="pf_sel_2")
+        csv_name_2 = display_to_csv_pf[pf_sel_2]; df_pf_2 = pf_data[csv_name_2]
+        dur_2 = duration_data.get(csv_name_2)
+
+    # Auswertungsdatum
+    ad1 = df_pf_1["Auswertungsdatum"].iloc[0] if "Auswertungsdatum" in df_pf_1.columns and df_pf_1["Auswertungsdatum"].notna().any() else None
+    ad2 = None
+    if df_pf_2 is not None and "Auswertungsdatum" in df_pf_2.columns and df_pf_2["Auswertungsdatum"].notna().any():
+        ad2 = df_pf_2["Auswertungsdatum"].iloc[0]
+
+    st.info(f"📅 **Momentaufnahme per {fmt_date_de(ad1) if ad1 else date_tag_pf}** – "
+            f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag.")
+
+    # Render
+    _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1)
+    if show_compare_pf and df_pf_2 is not None:
+        st.markdown("---")
+        _render_single_portfolio(pf_sel_2, df_pf_2, ad2, anlagevolumen, use_volume, show_ytd, dur_2)
+
+    # PDF
+    st.markdown("---")
+    if st.button("📄 PDF Portfolioanalyse erstellen", key="pf_pdf_btn"):
+        portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
+        if show_compare_pf and df_pf_2 is not None:
+            portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
+        with st.spinner("PDF wird erstellt..."):
+            pdf_bytes = generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd)
+        st.download_button("⬇️ PDF herunterladen", pdf_bytes,
+            f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pdf",
+            "application/pdf", key="pf_pdf_dl")
+        st.success("PDF erfolgreich erstellt!")
+
+
+def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info):
+    st.subheader(f"📊 {label}")
+
+    # ── Kennzahlen ──
+    liq = calc_liquidity(df); n_titel = len(df); total_weight = df["Gewicht"].sum()
+    kcols = st.columns(4 if use_volume else 3)
+    with kcols[0]: st.metric("Anzahl Titel", n_titel)
+    with kcols[1]: st.metric("Investitionsgrad", fmt_pct_de(total_weight),
+        help="Anteil des Portfolios, der in Wertpapiere investiert ist.")
+    with kcols[2]: st.metric("Liquidität", fmt_pct_de(liq),
+        help="Nicht investierter Anteil (100% − Investitionsgrad).")
+    if use_volume:
+        with kcols[3]: st.metric("Liquidität in €", fmt_eur_de(liq * anlagevolumen))
+
+    # ── Ring-Diagramme (3 nebeneinander, volle Breite) ──
     st.markdown("---")
     rc1, rc2, rc3 = st.columns(3)
     with rc1:
-        ag = build_allocation(analysis_df, "Gattung")
-        if not ag.empty: st.plotly_chart(build_ring_chart(ag, "Gattung", "Allokation nach Gattung"), use_container_width=True)
+        alloc_g = build_allocation(df, "Gattung")
+        if not alloc_g.empty: st.plotly_chart(build_ring_chart(alloc_g, "Gattung", "Allokation nach Gattung"), use_container_width=True)
     with rc2:
-        ar = build_allocation(analysis_df, "Region")
-        if not ar.empty: st.plotly_chart(build_ring_chart(ar, "Region", "Allokation nach Region"), use_container_width=True)
+        alloc_r = build_allocation(df, "Region")
+        if not alloc_r.empty: st.plotly_chart(build_ring_chart(alloc_r, "Region", "Allokation nach Region"), use_container_width=True)
     with rc3:
-        aseg = build_allocation(analysis_df, "Segment")
-        if not aseg.empty: st.plotly_chart(build_ring_chart(aseg, "Segment", "Allokation nach Segment"), use_container_width=True)
+        alloc_s = build_allocation(df, "Segment")
+        if not alloc_s.empty: st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True)
 
-    # Top 5
+    # ── Einzeltitel-Bereich ──
     st.markdown("---")
-    top5 = get_top_holdings(analysis_df, n=5)
+
+    # ── Top 5 Holdings (Säulendiagramm, immer sichtbar) ──
+    top5 = get_top_holdings(df, n=5)
     if not top5.empty:
-        st.plotly_chart(build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)"), use_container_width=True)
+        fig_top5 = build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)")
+        st.plotly_chart(fig_top5, use_container_width=True)
 
-    # Gruppierte Tabelle
+    # ── Einzeltitel-Tabelle (gruppiert nach Gattung) ──
     st.markdown("**Einzeltitel-Übersicht**")
-    grouped = build_grouped_title_table(analysis_df, anlagevolumen if use_volume else 0.0, show_ytd=False)
-    for gname, gw, disp in grouped:
-        if gname.startswith("💰"):
-            st.markdown(f"**{gname}** ({fmt_pct_de(gw)})")
+    grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
+    for gattung_name, gattung_weight, disp_df in grouped:
+        if gattung_name.startswith("💰"):
+            st.markdown(f"**{gattung_name}** ({fmt_pct_de(gattung_weight)})")
         else:
-            st.markdown(f"**📋 {gname}** – {fmt_pct_de(gw)}")
-        st.dataframe(disp, use_container_width=True, hide_index=True)
+            st.markdown(f"**📋 {gattung_name}** – {fmt_pct_de(gattung_weight)}")
+        st.dataframe(disp_df, use_container_width=True, hide_index=True)
 
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 6: VERGLEICH MIT MUSTERPORTFOLIO
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
-    st.markdown("### 🔄 Vergleich mit Musterportfolio")
-    if pf_data:
-        vgl_names = ["-- Kein Vergleich --"] + filtered_mp[col_display].tolist()
-        vgl_sel = st.selectbox("Musterportfolio zum Vergleich", vgl_names, key="builder_vgl")
+    # ── Top/Flop Performancebeitrag (nur wenn YTD aktiv) ──
+    if show_ytd and "Performancebeitrag" in df.columns and df["Performancebeitrag"].notna().any():
+        st.markdown("---")
+        tc, fc = st.columns(2)
+        top, flop = get_top_flop(df, "Performancebeitrag", n=5)
+        with tc:
+            st.markdown("**🏆 Top 5 Performancebeitrag (YTD)**")
+            if not top.empty:
+                td = top.copy(); td["Gewicht"] = td["Gewicht"].apply(fmt_pct_de)
+                td["Performancebeitrag"] = td["Performancebeitrag"].apply(fmt_pct_de)
+                st.dataframe(td, use_container_width=True, hide_index=True)
+        with fc:
+            st.markdown("**📉 Flop 5 Performancebeitrag (YTD)**")
+            if not flop.empty:
+                fd = flop.copy(); fd["Gewicht"] = fd["Gewicht"].apply(fmt_pct_de)
+                fd["Performancebeitrag"] = fd["Performancebeitrag"].apply(fmt_pct_de)
+                st.dataframe(fd, use_container_width=True, hide_index=True)
 
-        if vgl_sel != "-- Kein Vergleich --":
-            vgl_csv = mp_to_csv.get(vgl_sel)
-            if vgl_csv and vgl_csv in pf_data:
-                vgl_df = pf_data[vgl_csv]
-                st.markdown(f"**{vgl_sel}**")
-                vgl_liq = max(0, 1.0 - vgl_df["Gewicht"].sum())
-                vc = st.columns(3)
-                with vc[0]: st.metric("Anzahl Titel", len(vgl_df))
-                with vc[1]: st.metric("Investitionsgrad", fmt_pct_de(vgl_df["Gewicht"].sum()))
-                with vc[2]: st.metric("Liquidität", fmt_pct_de(vgl_liq))
+    # ── Anleihen-Detail + Duration ──
+    bond_summary = get_bond_summary(df)
+    if bond_summary is not None:
+        st.markdown("---")
+        st.markdown("**🏦 Anleihen-Detail**")
 
-                vrc1, vrc2, vrc3 = st.columns(3)
-                with vrc1:
-                    vag = build_allocation(vgl_df, "Gattung")
-                    if not vag.empty: st.plotly_chart(build_ring_chart(vag, "Gattung", f"Gattung – {vgl_sel}"), use_container_width=True)
-                with vrc2:
-                    var = build_allocation(vgl_df, "Region")
-                    if not var.empty: st.plotly_chart(build_ring_chart(var, "Region", f"Region – {vgl_sel}"), use_container_width=True)
-                with vrc3:
-                    vas = build_allocation(vgl_df, "Segment")
-                    if not vas.empty: st.plotly_chart(build_ring_chart(vas, "Segment", f"Segment – {vgl_sel}"), use_container_width=True)
-    else:
-        st.info("Keine Musterportfolios verfügbar.")
+        # Anzahl Kennzahlen-Spalten dynamisch
+        has_duration = duration_info is not None and duration_info.get("duration") is not None
+        has_rendite = duration_info is not None and duration_info.get("rendite") is not None
+        n_bond_cols = 3 + (1 if has_duration else 0) + (1 if has_rendite else 0)
+
+        bcols = st.columns(n_bond_cols)
+        col_idx = 0
+        with bcols[col_idx]: st.metric("Anzahl Anleihen", bond_summary["count"]); col_idx += 1
+        with bcols[col_idx]:
+            st.metric("Gewicht Anleihen", fmt_pct_de(bond_summary["total_weight"]),
+                help="Gesamtgewicht aller Anleihen im Portfolio."); col_idx += 1
+        with bcols[col_idx]:
+            if bond_summary["avg_kupon"] is not None:
+                st.metric("⌀ Kupon (gewichtet)", fmt_pct_de(bond_summary["avg_kupon"]),
+                    help="Gewichteter Durchschnittskupon aller Anleihen im Portfolio.")
+            else:
+                st.metric("⌀ Kupon", "–")
+            col_idx += 1
+        if has_duration:
+            with bcols[col_idx]:
+                st.metric("Duration (Portfolio)", f"{duration_info['duration']:.2f}".replace(".", ","),
+                    help="Die Duration misst die Zinssensitivität des Anleihenportfolios. "
+                         "Sie gibt an, um wie viel Prozent der Portfoliowert fällt, "
+                         "wenn das Zinsniveau um 1 Prozentpunkt steigt. "
+                         "Einheit: Jahre (modifizierte Duration).")
+                col_idx += 1
+        if has_rendite:
+            with bcols[col_idx]:
+                st.metric("Rendite (Portfolio)", fmt_pct_de(duration_info["rendite"]),
+                    help="Die Portfoliorendite (Yield to Maturity) gibt die erwartete jährliche "
+                         "Rendite an, wenn alle Anleihen bis zur Fälligkeit gehalten werden.")
+
+        if bond_summary["faelligkeit"] is not None and not bond_summary["faelligkeit"].empty:
+            st.markdown("**Fälligkeitsstruktur**")
+            faell = bond_summary["faelligkeit"]
+            fig_f = go.Figure(data=[go.Bar(
+                x=faell["Jahr"].astype(str), y=faell["Gewicht"],
+                marker_color=FFPB_GOLD,
+                text=[fmt_pct_de(v) for v in faell["Gewicht"]], textposition="outside")])
+            fig_f.update_layout(height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
+                yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
+            st.plotly_chart(fig_f, use_container_width=True)
+
+
+# ---------------------------------------------------------------------------
+# PDF Export
+# ---------------------------------------------------------------------------
+def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+        topMargin=15*mm, bottomMargin=15*mm, leftMargin=15*mm, rightMargin=15*mm)
+    styles = getSampleStyleSheet()
+    st_t = ParagraphStyle("PFT", parent=styles["Title"], textColor=HexColor(FFPB_DARK), fontSize=16, spaceAfter=6)
+    st_s = ParagraphStyle("PFS", parent=styles["Heading2"], textColor=HexColor(FFPB_DARK), fontSize=12, spaceAfter=4, spaceBefore=10)
+    st_n = ParagraphStyle("PFN", parent=styles["Normal"], textColor=HexColor("#333333"), fontSize=9, leading=12)
+    st_sm = ParagraphStyle("PFSM", parent=styles["Normal"], textColor=HexColor("#666666"), fontSize=7.5, leading=10)
+    st_g = ParagraphStyle("PFG", parent=styles["Heading3"], textColor=HexColor(FFPB_GOLD), fontSize=10, spaceAfter=2, spaceBefore=6)
+
+    logo_path = get_logo_path(); la = get_logo_aspect(logo_path)
+    story = []
+
+    if logo_path:
+        lw = 50*mm; story.append(RLImage(logo_path, width=lw, height=lw*la)); story.append(Spacer(1, 4*mm))
+    story.append(Paragraph("Portfolioanalyse", st_t))
+    story.append(HRFlowable(width="100%", thickness=1, color=HexColor(FFPB_DARK)))
+    story.append(Spacer(1, 3*mm))
+
+    for item in portfolios:
+        label, df, auswertungsdatum = item[0], item[1], item[2]
+        dur_info = item[3] if len(item) > 3 else None
+
+        story.append(Paragraph(f"<b>{label}</b>", st_s))
+        if auswertungsdatum:
+            story.append(Paragraph(f"Momentaufnahme per {fmt_date_de(auswertungsdatum)}", st_n))
+        story.append(Spacer(1, 2*mm))
+
+        liq = calc_liquidity(df); tw = df["Gewicht"].sum()
+        meta = [f"Titel: {len(df)}", f"Investitionsgrad: {fmt_pct_de(tw)}", f"Liquidität: {fmt_pct_de(liq)}"]
+        if use_volume: meta += [f"Volumen: {fmt_eur_de(anlagevolumen)}", f"Liq. €: {fmt_eur_de(liq*anlagevolumen)}"]
+        if dur_info and dur_info.get("duration"):
+            meta.append(f"Duration: {dur_info['duration']:.2f}".replace(".", ","))
+        if dur_info and dur_info.get("rendite"):
+            meta.append(f"Rendite: {fmt_pct_de(dur_info['rendite'])}")
+        story.append(Paragraph(" | ".join(meta), st_n))
+        story.append(Spacer(1, 4*mm))
+
+        # Ring-Diagramme
+        for gc, ct in [("Gattung", "Allokation nach Gattung"), ("Region", "nach Region"), ("Segment", "nach Segment")]:
+            alloc = build_allocation(df, gc)
+            if not alloc.empty:
+                story.append(RLImage(_mpl_ring_chart(alloc, gc, ct), width=120*mm, height=100*mm))
+                story.append(Spacer(1, 3*mm))
+
+        story.append(PageBreak())
+
+        # Einzeltitel gruppiert
+        if logo_path:
+            lws = 35*mm; story.append(RLImage(logo_path, width=lws, height=lws*la)); story.append(Spacer(1, 3*mm))
+        story.append(Paragraph(f"Einzeltitel – {label}", st_s))
+
+        grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
+        for gname, gw, disp in grouped:
+            story.append(Paragraph(f"<b>{gname}</b> – {fmt_pct_de(gw)}", st_g))
+            header = list(disp.columns)
+            tdata = [header] + disp.fillna("–").values.tolist()
+            nc = len(header); cw = (170*mm) / nc
+            t = Table(tdata, colWidths=[cw]*nc, repeatRows=1)
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), HexColor(FFPB_DARK)), ("TEXTCOLOR", (0,0), (-1,0), white),
+                ("FONTSIZE", (0,0), (-1,-1), 6), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("ALIGN", (2,0), (-1,-1), "RIGHT"), ("ALIGN", (0,0), (1,-1), "LEFT"),
+                ("GRID", (0,0), (-1,-1), 0.5, HexColor("#CCCCCC")),
+                ("ROWBACKGROUNDS", (0,1), (-1,-1), [white, HexColor("#F5F5F5")]),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING", (0,0), (-1,-1), 2), ("BOTTOMPADDING", (0,0), (-1,-1), 2)]))
+            story.append(t); story.append(Spacer(1, 2*mm))
+
+        story.append(PageBreak())
+
+    story.append(Spacer(1, 10*mm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#CCCCCC")))
+    story.append(Paragraph(f"Erstellt am {fmt_date_de(dt.date.today())} | Fürst Fugger Privatbank", st_sm))
+    doc.build(story); buf.seek(0)
+    return buf.getvalue()
