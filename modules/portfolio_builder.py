@@ -268,14 +268,12 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     )
 
     if new_titles:
-        added_count = 0
         for lbl in new_titles:
             wkn = label_to_wkn.get(lbl)
-            if wkn and _add_to_portfolio(wkn, 0.0):
-                added_count += 1
-        if added_count > 0:
-            # Multiselect leeren nach dem Hinzufügen
-            st.session_state["builder_add_titles"] = []
+            if wkn:
+                _add_to_portfolio(wkn, 0.0)
+        # Button zum Bestätigen und Leeren
+        if st.button("✅ Titel übernehmen", key="confirm_add", use_container_width=True):
             st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════
