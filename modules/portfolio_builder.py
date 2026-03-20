@@ -307,50 +307,46 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     filtered = apply_filters(universe, filters)
     st.caption(f"📋 {len(filtered)} Titel nach Filterung")
 
-    # ── Suche + Auswahl ──
-    search = st.text_input("🔎 Suche (Name, WKN oder ISIN)", key="builder_search")
-    if search:
-        s = search.strip().lower()
-        filtered = filtered[
-            filtered["Name"].str.lower().str.contains(s, na=False) |
-            filtered["WKN"].str.lower().str.contains(s, na=False) |
-            filtered["ISIN"].str.lower().str.contains(s, na=False)
-        ]
+    # ── Titel hinzufügen via Multiselect (schnell) ──
+    # Optionen für Multiselect: "Name (WKN | ISIN)" → ISIN als Wert
+    filtered_sorted = filtered.sort_values("Name")
+    option_labels = (
+        filtered_sorted["Name"] + "  (" + filtered_sorted["WKN"].fillna("") + " | " + filtered_sorted["ISIN"].fillna("") + ")"
+    ).tolist()
+    option_isins = filtered_sorted["ISIN"].tolist()
+    label_to_isin = dict(zip(option_labels, option_isins))
 
-    # Anzeige der gefilterten Titel
-    if not filtered.empty:
+    # Bereits ausgewählte als Default
+    current_isins = set(st.session_state.builder_portfolio.keys())
+    current_labels = [lbl for lbl, isin in label_to_isin.items() if isin in current_isins]
+
+    selected_labels = st.multiselect(
+        "🔎 Titel suchen & hinzufügen (Name, WKN oder ISIN tippen)",
+        options=option_labels,
+        default=current_labels,
+        key="builder_multiselect",
+        help=f"Maximal {MAX_TITEL} Titel. Tippen Sie um zu suchen."
+    )
+
+    # Auswahl verarbeiten
+    selected_isins_new = {label_to_isin[lbl] for lbl in selected_labels if lbl in label_to_isin}
+
+    # Entfernte Titel
+    for isin in current_isins - selected_isins_new:
+        st.session_state.builder_portfolio.pop(isin, None)
+    # Neue Titel
+    for isin in selected_isins_new - current_isins:
+        if len(st.session_state.builder_portfolio) >= MAX_TITEL:
+            st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
+            break
+        st.session_state.builder_portfolio[isin] = 0.0
+
+    # ── Gefilterte Tabelle (read-only, zur Übersicht) ──
+    with st.expander(f"📋 Gefilterte Titel anzeigen ({len(filtered)})"):
         display_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region",
                         "Kupon", "Duration", "Marktrisikowert"]
         avail_cols = [c for c in display_cols if c in filtered.columns]
-        show_df = filtered[avail_cols].head(100).copy()
-
-        # Bereits ausgewählte markieren
-        current_isins = set(st.session_state.builder_portfolio.keys())
-        show_df.insert(0, "Auswahl", show_df["ISIN"].isin(current_isins))
-
-        edited = st.data_editor(
-            show_df,
-            column_config={"Auswahl": st.column_config.CheckboxColumn("✅", default=False)},
-            disabled=[c for c in avail_cols],
-            hide_index=True,
-            use_container_width=True,
-            key="builder_universe_editor"
-        )
-
-        # Auswahl verarbeiten
-        if edited is not None:
-            selected_isins_new = set(edited[edited["Auswahl"] == True]["ISIN"].tolist())
-            deselected = current_isins - selected_isins_new
-            added = selected_isins_new - current_isins
-
-            for isin in deselected:
-                if isin in show_df["ISIN"].values:  # Nur de-selecten was sichtbar ist
-                    st.session_state.builder_portfolio.pop(isin, None)
-            for isin in added:
-                if len(st.session_state.builder_portfolio) >= MAX_TITEL:
-                    st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
-                    break
-                st.session_state.builder_portfolio[isin] = 0.0  # Gewicht wird beim Gleichgewichten gesetzt
+        st.dataframe(filtered[avail_cols].head(200), use_container_width=True, hide_index=True)
 
     # ── Mein Portfolio ──
     st.markdown("---")
