@@ -213,11 +213,20 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     st.markdown("### ⚡ Schnellzugriffe")
     sz_cols = st.columns(5)
     sz_names = list(SCHNELLZUGRIFFE.keys())
-    selected_preset = None
     for i, name in enumerate(sz_names):
         with sz_cols[i % 5]:
             if st.button(name, key=f"sz_{i}", use_container_width=True):
-                selected_preset = name
+                preset = SCHNELLZUGRIFFE[name]
+                # Filter-Werte in Session-State schreiben
+                st.session_state["f_asset"] = preset.get("Assetklasse", [])
+                st.session_state["f_region"] = preset.get("Region", [])
+                st.session_state["f_segment"] = []
+                st.session_state["f_kmin"] = float(preset.get("kupon_min", 0) * 100) if preset.get("kupon_min") else 0.0
+                st.session_state["f_dmin"] = float(preset.get("duration_min", 0.0))
+                st.session_state["f_dmax"] = float(preset.get("duration_max", 30.0))
+                st.session_state["f_mrw"] = int(preset.get("mrw_max", 7))
+                st.session_state["f_ml"] = []
+                st.rerun()
 
     # Musterportfolio laden
     st.markdown("---")
@@ -244,7 +253,6 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
                 mp_df = pf_data[csv_name]
                 new_portfolio = {}
                 for _, row in mp_df.iterrows():
-                    # Match über WKN zum Universum → ISIN holen
                     if "WKN" in mp_df.columns and "WKN" in universe.columns:
                         wkn = str(row.get("WKN", "")).strip()
                         match = universe[universe["WKN"] == wkn]
@@ -258,45 +266,32 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
     # ── Filter ──
     st.markdown("### 🔍 Titel filtern & auswählen")
 
-    # Preset anwenden
-    preset_filters = SCHNELLZUGRIFFE.get(selected_preset, {}) if selected_preset else {}
-
     f_col1, f_col2, f_col3 = st.columns(3)
     with f_col1:
         all_asset = sorted(universe["Assetklasse"].dropna().unique().tolist())
-        default_asset = preset_filters.get("Assetklasse", [])
-        f_asset = st.multiselect("Assetklasse", all_asset, default=default_asset, key="f_asset")
+        f_asset = st.multiselect("Assetklasse", all_asset, key="f_asset")
 
     with f_col2:
         all_region = sorted(universe["Region"].dropna().unique().tolist())
-        default_region = preset_filters.get("Region", [])
-        f_region = st.multiselect("Region", all_region, default=default_region, key="f_region")
+        f_region = st.multiselect("Region", all_region, key="f_region")
 
     with f_col3:
         all_segment = sorted(universe["Segment"].dropna().unique().tolist())
-        f_segment = st.multiselect("Segment", all_segment, default=[], key="f_segment")
+        f_segment = st.multiselect("Segment", all_segment, key="f_segment")
 
     # Erweiterte Filter
     with st.expander("📐 Erweiterte Filter"):
         ef_col1, ef_col2, ef_col3, ef_col4 = st.columns(4)
         with ef_col1:
-            f_kupon_min = st.number_input("Kupon min (%)", 0.0, 20.0,
-                value=float(preset_filters.get("kupon_min", 0) * 100) if preset_filters.get("kupon_min") else 0.0,
-                step=0.5, key="f_kmin")
+            f_kupon_min = st.number_input("Kupon min (%)", 0.0, 20.0, step=0.5, key="f_kmin")
         with ef_col2:
-            f_dur_min = st.number_input("Duration min (Jahre)", 0.0, 30.0,
-                value=float(preset_filters.get("duration_min", 0.0)),
-                step=0.5, key="f_dmin")
+            f_dur_min = st.number_input("Duration min (Jahre)", 0.0, 30.0, step=0.5, key="f_dmin")
         with ef_col3:
-            f_dur_max = st.number_input("Duration max (Jahre)", 0.0, 30.0,
-                value=float(preset_filters.get("duration_max", 30.0)),
-                step=0.5, key="f_dmax")
+            f_dur_max = st.number_input("Duration max (Jahre)", 0.0, 30.0, step=0.5, key="f_dmax")
         with ef_col4:
-            f_mrw_max = st.number_input("Marktrisikowert max", 1, 7,
-                value=int(preset_filters.get("mrw_max", 7)),
-                step=1, key="f_mrw")
+            f_mrw_max = st.number_input("Marktrisikowert max", 1, 7, step=1, key="f_mrw")
             all_ml = sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist())
-            f_ml = st.multiselect("Masterlistenzuordnung", all_ml, default=[], key="f_ml")
+            f_ml = st.multiselect("Masterlistenzuordnung", all_ml, key="f_ml")
 
     # Filter zusammenbauen
     filters = {}
