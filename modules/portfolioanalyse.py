@@ -47,7 +47,7 @@ SONSTIGE_THRESHOLD = 0.03  # Kategorien unter 3% → "Sonstige"
 # Data Loading
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=True)
-def load_pf_csvs(data_folder: str, date_tag: str) -> list[str]:
+def load_pf_csvs(data_folder: str, date_tag: str) -> list:
     files = []
     for ext in ["*.CSV", "*.csv"]:
         all_files = glob.glob(os.path.join(data_folder, ext))
@@ -78,7 +78,7 @@ def parse_pf_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=True)
-def build_pf_data(files: list[str]) -> dict[str, pd.DataFrame]:
+def build_pf_data(files: list[str]) -> dict:
     out = {}
     for path in files:
         df = read_pf_csv(path)
@@ -94,7 +94,7 @@ def build_pf_data(files: list[str]) -> dict[str, pd.DataFrame]:
 # Duration Loading
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def load_duration_data(duration_folder: str, name_mapping: pd.DataFrame) -> dict[str, dict]:
+def load_duration_data(duration_folder: str, name_mapping: pd.DataFrame) -> dict:
     """
     Lädt die neueste Duration-Datei und gibt ein Dict zurück:
     {csv_portfolio_name: {"duration": float, "rendite": float}}
@@ -270,7 +270,7 @@ def get_top_flop(df: pd.DataFrame, col: str, n: int = 5):
     return top, flop
 
 
-def get_bond_summary(df: pd.DataFrame) -> dict | None:
+def get_bond_summary(df: pd.DataFrame) -> dict:
     bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
     if bonds.empty:
         return None
