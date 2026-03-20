@@ -99,6 +99,10 @@ def _init_session_state():
 
 def _reset_portfolio():
     st.session_state.builder_portfolio = {}
+    st.session_state.pop("builder_loaded_mp", None)
+    st.session_state.pop("builder_loaded_mp_date", None)
+    if "builder_multiselect" in st.session_state:
+        del st.session_state["builder_multiselect"]
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +281,9 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 # Multiselect-Key löschen damit er beim Rerun neu mit den richtigen Defaults rendert
                 if "builder_multiselect" in st.session_state:
                     del st.session_state["builder_multiselect"]
+                # Merken welches Musterportfolio geladen wurde
+                st.session_state.builder_loaded_mp = mp_sel
+                st.session_state.builder_loaded_mp_date = auto_tag_pf
 
                 if new_portfolio:
                     st.success(f"✅ {len(new_portfolio)} von {len(mp_df)} Titeln aus **{mp_sel}** geladen")
@@ -313,21 +320,23 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
         help=f"Maximal {MAX_TITEL} Titel. Tippen Sie um zu suchen."
     )
 
-    # Auswahl-Änderungen verarbeiten
+    # Auswahl-Änderungen verarbeiten – NUR neue hinzufügen / abgewählte entfernen
+    # Bestehende Gewichte werden NICHT angetastet
     selected_wkns_new = {all_label_to_wkn[lbl] for lbl in selected_labels if lbl in all_label_to_wkn}
-
-    # Nur Titel entfernen die der User aktiv abgewählt hat (die im Multiselect sichtbar waren)
-    # Nicht alle Portfolio-Einträge löschen die nicht im Multiselect sind!
     visible_wkns = set(all_label_to_wkn.values())
+
+    # Entfernen: nur was der User aktiv abgewählt hat
     for wkn in list(current_wkns):
         if wkn in visible_wkns and wkn not in selected_wkns_new:
             st.session_state.builder_portfolio.pop(wkn, None)
 
-    for wkn in selected_wkns_new - current_wkns:
-        if len(st.session_state.builder_portfolio) >= MAX_TITEL:
-            st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
-            break
-        st.session_state.builder_portfolio[wkn] = 0.0
+    # Hinzufügen: nur neue Titel, mit Gewicht 0.0 (bestehende Gewichte bleiben)
+    for wkn in selected_wkns_new:
+        if wkn not in st.session_state.builder_portfolio:
+            if len(st.session_state.builder_portfolio) >= MAX_TITEL:
+                st.error(f"⛔ Maximum von {MAX_TITEL} Titeln erreicht!")
+                break
+            st.session_state.builder_portfolio[wkn] = 0.0
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 3: FILTER (optional, zum Einschränken der Übersichtstabelle)
@@ -374,6 +383,11 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 📊 Mein Portfolio")
+
+    # Hinweis welches Musterportfolio geladen wurde
+    if st.session_state.get("builder_loaded_mp"):
+        tag = st.session_state.get("builder_loaded_mp_date", "")
+        st.caption(f"📦 Basis: **{st.session_state.builder_loaded_mp}** (Portfolioanalyse-Stand: {tag})")
 
     portfolio = st.session_state.builder_portfolio
     n_titel = len(portfolio)
