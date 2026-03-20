@@ -281,7 +281,8 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     search_sorted = search_universe.sort_values("Name")
     search_options = (
         search_sorted["Name"].fillna("") + "  (" +
-        search_sorted["WKN"].fillna("") + ")"
+        search_sorted["WKN"].fillna("") + " | " +
+        search_sorted["ISIN"].fillna("") + ")"
     ).tolist()
     search_wkns = search_sorted["WKN"].tolist()
     label_to_wkn = dict(zip(search_options, search_wkns))
