@@ -146,17 +146,17 @@ def build_builder_analysis_df(selected_isins: dict, universe: pd.DataFrame) -> p
             continue
         row = match.iloc[0]
         entry = {
-            "Wertpapier": row.get("Name", ""),
-            "WKN": row.get("WKN", ""),
+            "Wertpapier": str(row["Name"]) if "Name" in row.index and pd.notna(row["Name"]) else "",
+            "WKN": str(row["WKN"]) if "WKN" in row.index and pd.notna(row["WKN"]) else "",
             "ISIN": isin,
             "Gewicht": weight,
-            "Segment": row.get("Segment", ""),
-            "Region": row.get("Region", ""),
-            "Gattung": row.get("Assetklasse", ""),  # Assetklasse → Gattung für Kompatibilität
-            "Kupon": row.get("Kupon_num", np.nan),
-            "Duration_num": row.get("Duration_num", np.nan),
-            "Fälligkeit_parsed": row.get("Fälligkeit_parsed", pd.NaT),
-            "Marktrisikowert": row.get("MRW_num", np.nan),
+            "Segment": str(row["Segment"]) if "Segment" in row.index and pd.notna(row["Segment"]) else "",
+            "Region": str(row["Region"]) if "Region" in row.index and pd.notna(row["Region"]) else "",
+            "Gattung": str(row["Assetklasse"]) if "Assetklasse" in row.index and pd.notna(row["Assetklasse"]) else "",
+            "Kupon": float(row["Kupon_num"]) if "Kupon_num" in row.index and pd.notna(row["Kupon_num"]) else np.nan,
+            "Duration_num": float(row["Duration_num"]) if "Duration_num" in row.index and pd.notna(row["Duration_num"]) else np.nan,
+            "Fälligkeit_parsed": row["Fälligkeit_parsed"] if "Fälligkeit_parsed" in row.index and pd.notna(row["Fälligkeit_parsed"]) else pd.NaT,
+            "Marktrisikowert": float(row["MRW_num"]) if "MRW_num" in row.index and pd.notna(row["MRW_num"]) else np.nan,
         }
         rows.append(entry)
 
@@ -493,22 +493,32 @@ def render_portfolio_builder(name_mapping: pd.DataFrame, anlagevolumen: float = 
 
     # Zusätzliche Kennzahlen für Anleihen
     has_bonds = analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False).any()
-    if has_bonds and (w_duration is not None or w_kupon is not None):
-        bc = st.columns(3)
+    if has_bonds:
+        st.markdown("---")
+        st.markdown("**🏦 Anleihen-Detail**")
+        bond_rows = analysis_df[analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)]
+        bond_weight = bond_rows["Gewicht"].sum()
+        bond_count = len(bond_rows)
+
+        n_bcols = 2 + (1 if w_duration is not None else 0) + (1 if w_kupon is not None else 0)
+        bc = st.columns(max(n_bcols, 2))
         col_idx = 0
+        with bc[col_idx]:
+            st.metric("Anzahl Anleihen", bond_count)
+            col_idx += 1
+        with bc[col_idx]:
+            st.metric("Gewicht Anleihen", fmt_pct_de(bond_weight),
+                      help="Gesamtgewicht aller Anleihen im Portfolio.")
+            col_idx += 1
         if w_duration is not None:
-            with bc[col_idx]:
+            with bc[min(col_idx, len(bc)-1)]:
                 st.metric("⌀ Duration (gew.)", f"{w_duration:.2f}".replace(".", ","),
                           help="Gewichtete Duration der Anleihen. Gibt Zinssensitivität an.")
-            col_idx += 1
+                col_idx += 1
         if w_kupon is not None:
-            with bc[col_idx]:
+            with bc[min(col_idx, len(bc)-1)]:
                 st.metric("⌀ Kupon (gew.)", fmt_pct_de(w_kupon),
                           help="Gewichteter Durchschnittskupon aller Anleihen.")
-            col_idx += 1
-        bond_weight = analysis_df[analysis_df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)]["Gewicht"].sum()
-        with bc[min(col_idx, 2)]:
-            st.metric("Gewicht Anleihen", fmt_pct_de(bond_weight))
 
     # Ring-Diagramme
     st.markdown("---")
