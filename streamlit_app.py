@@ -36,6 +36,7 @@ from modules.shared import (
     build_name_lookups, get_logo_aspect, get_logo_path,
 )
 from modules.portfolioanalyse import render_portfolioanalyse
+from modules.portfolio_builder import render_portfolio_builder
 
 
 # ==========================================================================
@@ -417,7 +418,7 @@ with st.sidebar:
     use_volume = anlagevolumen > 0
 
 # ── TABS ──
-tab_perf, tab_pf = st.tabs(["📈 Performance", "📊 Portfolioanalyse"])
+tab_perf, tab_pf, tab_builder = st.tabs(["📈 Performance", "📊 Portfolioanalyse", "📋 Portfolio zusammenstellen"])
 
 
 # ===========================================================================
@@ -632,3 +633,9 @@ with tab_perf:
 # ===========================================================================
 with tab_pf:
     render_portfolioanalyse(name_mapping, anlagevolumen)
+
+# ===========================================================================
+# TAB 3: PORTFOLIO BUILDER
+# ===========================================================================
+with tab_builder:
+    render_portfolio_builder(name_mapping, anlagevolumen)
