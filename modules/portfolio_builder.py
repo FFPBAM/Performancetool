@@ -469,9 +469,37 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
         with bc[ci]: st.metric("Anzahl Anleihen", len(bond_rows)); ci += 1
         with bc[ci]: st.metric("Gewicht Anleihen", fmt_pct_de(bond_rows["Gewicht"].sum())); ci += 1
         if w_dur:
-            with bc[min(ci,len(bc)-1)]: st.metric("⌀ Duration", f"{w_dur:.2f}".replace(".",",")); ci += 1
+            with bc[min(ci,len(bc)-1)]:
+                st.metric("⌀ Duration (gewichtet)", f"{w_dur:.2f}".replace(".",","),
+                    help="Gewichtete durchschnittliche Duration aller Anleihen im Portfolio. "
+                         "Berechnung: Summe(Gewicht × Duration) / Summe(Gewichte der Anleihen). "
+                         "Die Duration misst die Zinssensitivität – sie gibt an, um wie viel Prozent "
+                         "der Portfoliowert fällt, wenn das Zinsniveau um 1 Prozentpunkt steigt.")
+                ci += 1
         if w_kup:
-            with bc[min(ci,len(bc)-1)]: st.metric("⌀ Kupon", fmt_pct_de(w_kup))
+            with bc[min(ci,len(bc)-1)]:
+                st.metric("⌀ Kupon (gewichtet)", fmt_pct_de(w_kup),
+                    help="Gewichteter Durchschnittskupon aller Anleihen im Portfolio.")
+
+        # Fälligkeitsstruktur
+        if "Fälligkeit_parsed" in bond_rows.columns and bond_rows["Fälligkeit_parsed"].notna().any():
+            faell = bond_rows[bond_rows["Fälligkeit_parsed"].notna()].copy()
+            faell["Jahr"] = faell["Fälligkeit_parsed"].dt.year
+            faell_agg = faell.groupby("Jahr")["Gewicht"].sum().reset_index()
+            faell_agg.columns = ["Jahr", "Gewicht"]
+            if not faell_agg.empty:
+                st.markdown("**Fälligkeitsstruktur**")
+                fig_f = go.Figure(data=[go.Bar(
+                    x=faell_agg["Jahr"].astype(str),
+                    y=faell_agg["Gewicht"],
+                    marker_color=FFPB_GOLD,
+                    text=[fmt_pct_de(v) for v in faell_agg["Gewicht"]],
+                    textposition="outside",
+                )])
+                fig_f.update_layout(
+                    height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
+                    yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
+                st.plotly_chart(fig_f, use_container_width=True)
 
     # Ring-Diagramme
     st.markdown("---")
