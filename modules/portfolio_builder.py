@@ -374,12 +374,26 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
         if match.empty:
             continue
         row = match.iloc[0]
-        pf_rows.append({
+        assetklasse = str(row["Assetklasse"]) if "Assetklasse" in row.index and pd.notna(row["Assetklasse"]) else ""
+        is_bond = "rente" in assetklasse.lower() or "anleihe" in assetklasse.lower()
+
+        entry = {
             "Name": str(row["Name"]) if "Name" in row.index and pd.notna(row["Name"]) else "",
             "WKN": wkn,
-            "Assetklasse": str(row["Assetklasse"]) if "Assetklasse" in row.index and pd.notna(row["Assetklasse"]) else "",
+            "Assetklasse": assetklasse,
             "Gewicht (%)": round(weight * 100, 2),
-        })
+        }
+
+        # Kupon, Duration, Fälligkeit für alle Titel (bei Aktien bleiben sie leer)
+        kupon = float(row["Kupon_num"]) if "Kupon_num" in row.index and pd.notna(row["Kupon_num"]) else None
+        dur = float(row["Duration_num"]) if "Duration_num" in row.index and pd.notna(row["Duration_num"]) else None
+        faell = row["Fälligkeit_parsed"] if "Fälligkeit_parsed" in row.index and pd.notna(row["Fälligkeit_parsed"]) else None
+
+        entry["Kupon"] = fmt_pct_de(kupon) if kupon is not None else "–"
+        entry["Duration"] = f"{dur:.2f}".replace(".", ",") if dur is not None else "–"
+        entry["Fälligkeit"] = fmt_date_de(faell) if faell is not None else "–"
+
+        pf_rows.append(entry)
 
     if not pf_rows:
         st.warning("Keine gültigen Titel gefunden.")
@@ -396,7 +410,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             "🗑️": st.column_config.CheckboxColumn("🗑️", help="Anhaken zum Entfernen", default=False),
             "Gewicht (%)": st.column_config.NumberColumn("Gewicht (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.2f"),
         },
-        disabled=["Name", "WKN", "Assetklasse"],
+        disabled=["Name", "WKN", "Assetklasse", "Kupon", "Duration", "Fälligkeit"],
         hide_index=True, use_container_width=True, key="builder_pf_editor"
     )
 
