@@ -40,7 +40,7 @@ SCHNELLZUGRIFFE = {
     "Lange Duration (>5J)":   {"Assetklasse": ["Renten"], "duration_min": 5.0},
     "Europa-Fokus":      {"Region": ["Deutschland", "Europa ohne Deutschland"]},
     "Nordamerika-Fokus": {"Region": ["Nordamerika"]},
-    "Niedriges Risiko (≤3)":  {"mrw_max": 3},
+    "Niedriges Risiko (Marktrisikowert ≤3)":  {"mrw_max": 3},
 }
 
 
@@ -194,7 +194,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     _init_session_state()
     use_volume = anlagevolumen > 0
 
-    st.caption("⚠️ Das Portfolio wird nur in der aktuellen Sitzung gespeichert. Bitte vorher als CSV exportieren.")
+    st.caption("⚠️ Ihr Portfolio wird nur in der aktuellen Sitzung gespeichert. Bitte vor dem Ausloggen als CSV exportieren.")
 
     universe, zielmarkt_date = load_zieldaten(ZIELDATEN_FOLDER)
     if universe.empty:
@@ -218,7 +218,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 1: MUSTERPORTFOLIO & SCHNELLZUGRIFFE
     # ══════════════════════════════════════════════════════════════════════
-    st.markdown("### ⚡ Schnellzugriffe & Vorlagen")
+    st.markdown("### ⚡ Schnellzugriffe")
 
     sz_cols = st.columns(5)
     for i, name in enumerate(SCHNELLZUGRIFFE.keys()):
@@ -247,8 +247,8 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     mp_names = ["-- Kein Musterportfolio --"] + filtered_mp[col_display_nm].tolist()
     mp_to_csv = dict(zip(filtered_mp[col_display_nm], filtered_mp[col_csv_key_nm]))
 
-    mp_sel = st.selectbox("📦 Musterportfolio als Startpunkt laden", mp_names, key="builder_mp")
-    if st.button("📥 Musterportfolio laden", key="load_mp"):
+    mp_sel = st.selectbox("📦 Musterportfolio als Startportfolio laden", mp_names, key="builder_mp")
+    if st.button("📥 Startportfolio übernehmen", key="load_mp"):
         if mp_sel != "-- Kein Musterportfolio --":
             csv_name = mp_to_csv.get(mp_sel)
             if csv_name and csv_name in pf_data:
@@ -284,18 +284,18 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # BEREICH 2: FILTER (über der Suche, standardmäßig offen)
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
-    with st.expander("🔍 Filter & Universum durchsuchen", expanded=True):
+    with st.expander("🔍 Anlageuniversum filtern", expanded=True):
         f1, f2, f3, f4 = st.columns(4)
-        with f1: st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset")
-        with f2: st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region")
-        with f3: st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment")
-        with f4: st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml")
+        with f1: st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset", placeholder="z.B. Aktien, Renten...")
+        with f2: st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region", placeholder="z.B. Nordamerika, Europa...")
+        with f3: st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment", placeholder="z.B. Technologie, Pharma...")
+        with f4: st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml", placeholder="z.B. Vermögensverwaltung+Beratung")
 
         ef1, ef2, ef3, ef4 = st.columns(4)
-        with ef1: st.number_input("Kupon min (%)", 0.0, 20.0, step=0.5, key="f_kmin")
-        with ef2: st.number_input("Duration min (J)", 0.0, 30.0, step=0.5, key="f_dmin")
-        with ef3: st.number_input("Duration max (J)", 0.0, 30.0, step=0.5, key="f_dmax")
-        with ef4: st.number_input("Risiko max", 1, 7, step=1, key="f_mrw")
+        with ef1: st.number_input("Kupon min (%)", 0.0, 20.0, value=0.0, step=0.5, key="f_kmin")
+        with ef2: st.number_input("Duration min (J)", 0.0, 30.0, value=0.0, step=0.5, key="f_dmin")
+        with ef3: st.number_input("Duration max (J)", 0.0, 30.0, value=30.0, step=0.5, key="f_dmax")
+        with ef4: st.number_input("Risiko max", 1, 7, value=7, step=1, key="f_mrw")
 
         # Gefilterte Übersichtstabelle
         filters = {}
@@ -325,7 +325,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 3: TITEL HINZUFÜGEN (Multiselect – nur zum Hinzufügen!)
     # ══════════════════════════════════════════════════════════════════════
-    st.markdown("### 🔎 Titel suchen & hinzufügen")
+    st.markdown("### 🔎 Titel suchen & zum Portfolio hinzufügen")
 
     # Aktive Filter auf Suchoptionen anwenden
     active_filters = {}
@@ -349,10 +349,10 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     if active_filters:
         search_universe = apply_filters(universe, active_filters)
-        st.caption(f"🔍 Suche eingeschränkt auf **{len(search_universe)} Titel** (Filter aktiv)")
+        st.caption(f"🔍 Suche eingeschränkt auf **{len(search_universe)} Titel** – Filter oben sind aktiv")
     else:
         search_universe = universe
-        st.caption("Suche durchsucht das gesamte Universum. Filter oben setzen um einzuschränken.")
+        st.caption("Durchsucht das gesamte Anlageuniversum. Über die Filter oben können Sie einschränken.")
 
     search_sorted = search_universe.sort_values("Name")
     search_options = (
@@ -364,10 +364,11 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     label_to_wkn = dict(zip(search_options, search_wkns))
 
     new_titles = st.multiselect(
-        "Titel zum Portfolio hinzufügen",
+        "Titel suchen und hinzufügen",
         options=search_options,
         default=[],
         key="builder_add_titles",
+        placeholder="z.B. Microsoft, A14Y6F oder US02079K3059...",
         help=f"Maximal {MAX_TITEL} Titel. Ausgewählte werden zum Portfolio hinzugefügt."
     )
 
@@ -376,14 +377,14 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             wkn = label_to_wkn.get(lbl)
             if wkn:
                 _add_to_portfolio(wkn, 0.0)
-        if st.button("✅ Titel übernehmen", key="confirm_add", use_container_width=True):
+        if st.button("✅ Ausgewählte Titel ins Portfolio übernehmen", key="confirm_add", use_container_width=True):
             st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 4: MEIN PORTFOLIO
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
-    st.markdown("### 📊 Mein Portfolio")
+    st.markdown("### 📊 Ihr Portfolio")
 
     if st.session_state.get("builder_loaded_mp"):
         st.caption(f"📦 Basis: **{st.session_state.builder_loaded_mp}** (Stand: {st.session_state.get('builder_loaded_mp_date', '')})")
@@ -392,7 +393,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     n_titel = len(portfolio)
 
     if n_titel == 0:
-        st.info("Noch keine Titel ausgewählt. Nutzen Sie die Suche oben, einen Schnellzugriff oder laden Sie ein Musterportfolio.")
+        st.info("Noch keine Titel im Portfolio. Nutzen Sie die Suche, einen Schnellzugriff oder laden Sie ein Musterportfolio als Startpunkt.")
         return
 
     st.caption(f"**{n_titel} Titel** (max. {MAX_TITEL})")
@@ -404,11 +405,11 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             "💰 Cash-Anteil (%)", min_value=0.0, max_value=50.0,
             value=float(st.session_state.get("builder_cash_pct", CASH_PCT * 100)),
             step=1.0, key="builder_cash_pct",
-            help="Cash-Anteil für Gleichgewichten. Restliche Gewichte werden auf die Titel verteilt."
+            help="Gewünschter Cash-Anteil. Beim Gleichverteilen wird der Rest gleichmäßig auf alle Titel aufgeteilt."
         )
     with eq_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button(f"⚖️ Gleichgewichten", key="equalize", use_container_width=True):
+        if st.button(f"⚖️ Gewichte gleichverteilen", key="equalize", use_container_width=True):
             cash_dec = cash_pct_input / 100.0
             w = (1.0 - cash_dec) / n_titel
             for wkn in portfolio:
@@ -416,12 +417,12 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             st.rerun()
     with reset_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🔄 Portfolio zurücksetzen", key="reset_pf", use_container_width=True):
+        if st.button("🔄 Alles zurücksetzen", key="reset_pf", use_container_width=True):
             _reset_portfolio()
             st.rerun()
 
-    st.caption("ℹ️ Die Differenz zu 100% wird automatisch als Cash (Liquidität) ausgewiesen. "
-               "Sie können Gewichte frei anpassen – der Cash-Anteil passt sich entsprechend an.")
+    st.caption("ℹ️ Die Differenz zu 100% wird automatisch als Cash-Position (Liquidität) ausgewiesen. "
+               "Passen Sie einzelne Gewichte frei an – der Cash-Anteil ergibt sich als Residual.")
 
     # Portfolio-Tabelle mit Gewichten und ❌-Button pro Zeile
     pf_rows = []
@@ -497,11 +498,11 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
         st.metric("Summe", f"{'🟢' if ok else '🔴'} {fmt_pct_de(total_weight + cash_weight)}")
 
     if total_weight > 1.0:
-        st.error(f"⛔ Investitionsgrad übersteigt 100%! Bitte Gewichte reduzieren.")
+        st.error(f"⛔ Die Summe der Gewichte übersteigt 100%. Bitte einzelne Positionen reduzieren.")
 
     # CSV Export
     st.markdown("---")
-    if st.button("⬇️ Portfolio als CSV exportieren", key="csv_export", use_container_width=True):
+    if st.button("⬇️ Portfolio als CSV speichern", key="csv_export", use_container_width=True):
         exp = edited_pf.copy() if edited_pf is not None else pf_df.copy()
         cash_row = pd.DataFrame([{"Name": "Liquidität", "WKN": "", "Assetklasse": "Cash", "Gewicht (%)": round(cash_weight * 100, 2)}])
         exp = pd.concat([exp, cash_row], ignore_index=True)
@@ -512,11 +513,11 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # BEREICH 5: STRUKTURANALYSE
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
-    st.markdown("### 📊 Strukturanalyse")
+    st.markdown("### 📊 Portfoliostruktur")
 
     analysis_df = build_builder_analysis_df(st.session_state.builder_portfolio, universe)
     if analysis_df.empty:
-        st.info("Bitte erst Gewichte vergeben (Gleichgewichten).")
+        st.info("Bitte erst Gewichte vergeben – nutzen Sie 'Gewichte gleichverteilen' oder passen Sie die Gewichte manuell an.")
         return
 
     w_dur = calc_weighted_duration(analysis_df)
@@ -603,10 +604,10 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # BEREICH 6: VERGLEICH MIT MUSTERPORTFOLIO
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
-    st.markdown("### 🔄 Vergleich mit Musterportfolio")
+    st.markdown("### 🔄 Ihr Portfolio im Vergleich")
     if pf_data:
         vgl_names = ["-- Kein Vergleich --"] + filtered_mp[col_display_nm].tolist()
-        vgl_sel = st.selectbox("Musterportfolio zum Vergleich", vgl_names, key="builder_vgl")
+        vgl_sel = st.selectbox("Vergleich mit Musterportfolio", vgl_names, key="builder_vgl")
         if vgl_sel != "-- Kein Vergleich --":
             vgl_csv = mp_to_csv.get(vgl_sel)
             if vgl_csv and vgl_csv in pf_data:
