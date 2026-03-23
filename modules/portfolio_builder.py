@@ -51,13 +51,19 @@ SCHNELLZUGRIFFE = {
 def load_zieldaten(folder):
     all_files = glob.glob(os.path.join(folder, "*.CSV")) + glob.glob(os.path.join(folder, "*.csv"))
     if not all_files:
-        return pd.DataFrame()
+        return pd.DataFrame(), ""
     tag_pattern = re.compile(r"_(\d{6})_(\d{4})")
     def _sort_key(f):
         m = tag_pattern.search(os.path.basename(f))
         return m.group(1) + m.group(2) if m else "000000_0000"
     all_files.sort(key=_sort_key, reverse=True)
-    df = pd.read_csv(all_files[0], comment="#", encoding="ISO-8859-1",
+    newest_file = all_files[0]
+
+    # Datum aus Dateiname extrahieren
+    m = tag_pattern.search(os.path.basename(newest_file))
+    file_date = m.group(1) if m else ""  # z.B. "260323"
+
+    df = pd.read_csv(newest_file, comment="#", encoding="ISO-8859-1",
                      delimiter=";", decimal=",", thousands=".", dtype=str)
     for col in df.columns:
         if df[col].dtype == object:
@@ -77,8 +83,33 @@ def load_zieldaten(folder):
     else:
         df["MRW_num"] = np.nan
     if "Fälligkeit" in df.columns:
-        df["Fälligkeit_parsed"] = pd.to_datetime(df["Fälligkeit"], format="%d.%m.%Y", errors="coerce")
-    return df
+        # Zuerst NaN-sichere Kopie, dann mehrere Formate probieren
+        faell_raw = df["Fälligkeit"].copy()
+        # Format 1: dd.mm.yyyy
+        parsed = pd.to_datetime(faell_raw, format="%d.%m.%Y", errors="coerce")
+        # Format 2: yyyy-mm-dd (falls ISO-Format)
+        mask_nat = parsed.isna() & faell_raw.notna()
+        if mask_nat.any():
+            parsed2 = pd.to_datetime(faell_raw[mask_nat], format="%Y-%m-%d", errors="coerce")
+            parsed.loc[mask_nat] = parsed2
+        # Format 3: dd/mm/yyyy
+        mask_nat = parsed.isna() & faell_raw.notna()
+        if mask_nat.any():
+            parsed3 = pd.to_datetime(faell_raw[mask_nat], format="%d/%m/%Y", errors="coerce")
+            parsed.loc[mask_nat] = parsed3
+        # Format 4: freies Parsen als Fallback
+        mask_nat = parsed.isna() & faell_raw.notna()
+        if mask_nat.any():
+            parsed4 = pd.to_datetime(faell_raw[mask_nat], errors="coerce", dayfirst=True)
+            parsed.loc[mask_nat] = parsed4
+        df["Fälligkeit_parsed"] = parsed
+    else:
+        # Spaltenname könnte leicht abweichen
+        for alt_name in ["Faelligkeit", "Fälligkeitsdatum", "Maturity", "fälligkeit"]:
+            if alt_name in df.columns:
+                df["Fälligkeit_parsed"] = pd.to_datetime(df[alt_name], errors="coerce", dayfirst=True)
+                break
+    return df, file_date
 
 
 def _init_session_state():
@@ -165,7 +196,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     st.caption("⚠️ Das Portfolio wird nur in der aktuellen Sitzung gespeichert. Bitte vorher als CSV exportieren.")
 
-    universe = load_zieldaten(ZIELDATEN_FOLDER)
+    universe, zielmarkt_date = load_zieldaten(ZIELDATEN_FOLDER)
     if universe.empty:
         st.warning(f"Keine Zieldaten in {ZIELDATEN_FOLDER}/ gefunden.")
         return
@@ -177,7 +208,12 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
         if w and w != "NAN":
             wkn_lookup[w] = str(r["WKN"]).strip()
 
-    st.success(f"📂 Anlageuniversum: **{len(universe)} Titel** geladen")
+    # Zielmarkt-Datum formatieren
+    zm_hint = ""
+    if zielmarkt_date and len(zielmarkt_date) == 6:
+        zm_hint = f"{zielmarkt_date[4:6]}.{zielmarkt_date[2:4]}.20{zielmarkt_date[0:2]}"
+
+    st.success(f"📂 Anlageuniversum: **{len(universe)} Titel** geladen (Stand: {zm_hint})")
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 1: MUSTERPORTFOLIO & SCHNELLZUGRIFFE
@@ -245,12 +281,53 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 2: TITEL HINZUFÜGEN (Multiselect – nur zum Hinzufügen!)
+    # BEREICH 2: FILTER (über der Suche, standardmäßig offen)
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
+    with st.expander("🔍 Filter & Universum durchsuchen", expanded=True):
+        f1, f2, f3, f4 = st.columns(4)
+        with f1: st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset")
+        with f2: st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region")
+        with f3: st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment")
+        with f4: st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml")
+
+        ef1, ef2, ef3, ef4 = st.columns(4)
+        with ef1: st.number_input("Kupon min (%)", 0.0, 20.0, step=0.5, key="f_kmin")
+        with ef2: st.number_input("Duration min (J)", 0.0, 30.0, step=0.5, key="f_dmin")
+        with ef3: st.number_input("Duration max (J)", 0.0, 30.0, step=0.5, key="f_dmax")
+        with ef4: st.number_input("Risiko max", 1, 7, step=1, key="f_mrw")
+
+        # Gefilterte Übersichtstabelle
+        filters = {}
+        fa = st.session_state.get("f_asset", [])
+        fr = st.session_state.get("f_region", [])
+        fs = st.session_state.get("f_segment", [])
+        fm = st.session_state.get("f_ml", [])
+        fkm = st.session_state.get("f_kmin", 0.0)
+        fdm = st.session_state.get("f_dmin", 0.0)
+        fdx = st.session_state.get("f_dmax", 30.0)
+        fmr = st.session_state.get("f_mrw", 7)
+        if fa: filters["Assetklasse"] = fa
+        if fr: filters["Region"] = fr
+        if fs: filters["Segment"] = fs
+        if fm: filters["Masterlistenzuordnung"] = fm
+        if fkm > 0: filters["kupon_min"] = fkm / 100.0
+        if fdm > 0: filters["duration_min"] = fdm
+        if fdx < 30: filters["duration_max"] = fdx
+        if fmr < 7: filters["mrw_max"] = fmr
+
+        filtered = apply_filters(universe, filters)
+        st.caption(f"📋 {len(filtered)} Titel gefunden")
+        show_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region", "Kupon", "Duration", "Fälligkeit", "Marktrisikowert"]
+        st.dataframe(filtered[[c for c in show_cols if c in filtered.columns]].head(200),
+                     use_container_width=True, hide_index=True)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # BEREICH 3: TITEL HINZUFÜGEN (Multiselect – nur zum Hinzufügen!)
+    # ══════════════════════════════════════════════════════════════════════
     st.markdown("### 🔎 Titel suchen & hinzufügen")
 
-    # Aktive Filter aus Session-State lesen (gesetzt durch Schnellzugriffe oder manuelle Filter)
+    # Aktive Filter auf Suchoptionen anwenden
     active_filters = {}
     f_asset_active = st.session_state.get("f_asset", [])
     f_region_active = st.session_state.get("f_region", [])
@@ -270,13 +347,12 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     if f_dmax_active < 30: active_filters["duration_max"] = f_dmax_active
     if f_mrw_active < 7: active_filters["mrw_max"] = f_mrw_active
 
-    # Suchoptionen: gefiltertes Universum wenn Filter aktiv, sonst alles
     if active_filters:
         search_universe = apply_filters(universe, active_filters)
         st.caption(f"🔍 Suche eingeschränkt auf **{len(search_universe)} Titel** (Filter aktiv)")
     else:
         search_universe = universe
-        st.caption("Tippen Sie einen Namen, WKN oder ISIN ein. Die Suche durchsucht das gesamte Universum.")
+        st.caption("Suche durchsucht das gesamte Universum. Filter oben setzen um einzuschränken.")
 
     search_sorted = search_universe.sort_values("Name")
     search_options = (
@@ -287,7 +363,6 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     search_wkns = search_sorted["WKN"].tolist()
     label_to_wkn = dict(zip(search_options, search_wkns))
 
-    # Multiselect NUR zum Hinzufügen
     new_titles = st.multiselect(
         "Titel zum Portfolio hinzufügen",
         options=search_options,
@@ -303,39 +378,6 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 _add_to_portfolio(wkn, 0.0)
         if st.button("✅ Titel übernehmen", key="confirm_add", use_container_width=True):
             st.rerun()
-
-    # ══════════════════════════════════════════════════════════════════════
-    # BEREICH 3: FILTER & ÜBERSICHT
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
-    with st.expander("🔍 Universum filtern & durchsuchen (optional)"):
-        f1, f2, f3, f4 = st.columns(4)
-        with f1: fa = st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset")
-        with f2: fr = st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region")
-        with f3: fs = st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment")
-        with f4: fm = st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml")
-
-        ef1, ef2, ef3, ef4 = st.columns(4)
-        with ef1: fkm = st.number_input("Kupon min (%)", 0.0, 20.0, step=0.5, key="f_kmin")
-        with ef2: fdm = st.number_input("Duration min (J)", 0.0, 30.0, step=0.5, key="f_dmin")
-        with ef3: fdx = st.number_input("Duration max (J)", 0.0, 30.0, step=0.5, key="f_dmax")
-        with ef4: fmr = st.number_input("Risiko max", 1, 7, step=1, key="f_mrw")
-
-        filters = {}
-        if fa: filters["Assetklasse"] = fa
-        if fr: filters["Region"] = fr
-        if fs: filters["Segment"] = fs
-        if fm: filters["Masterlistenzuordnung"] = fm
-        if fkm > 0: filters["kupon_min"] = fkm / 100.0
-        if fdm > 0: filters["duration_min"] = fdm
-        if fdx < 30: filters["duration_max"] = fdx
-        if fmr < 7: filters["mrw_max"] = fmr
-
-        filtered = apply_filters(universe, filters)
-        st.caption(f"📋 {len(filtered)} Titel gefunden")
-        show_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region", "Kupon", "Duration", "Marktrisikowert"]
-        st.dataframe(filtered[[c for c in show_cols if c in filtered.columns]].head(200),
-                     use_container_width=True, hide_index=True)
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 4: MEIN PORTFOLIO
