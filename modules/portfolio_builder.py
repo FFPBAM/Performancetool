@@ -500,14 +500,38 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     if total_weight > 1.0:
         st.error(f"⛔ Die Summe der Gewichte übersteigt 100%. Bitte einzelne Positionen reduzieren.")
 
-    # CSV Export
+    # Excel Export
     st.markdown("---")
-    if st.button("⬇️ Portfolio als CSV speichern", key="csv_export", use_container_width=True):
+    if st.button("⬇️ Portfolio als Excel speichern", key="csv_export", use_container_width=True):
         exp = edited_pf.copy() if edited_pf is not None else pf_df.copy()
-        cash_row = pd.DataFrame([{"Name": "Liquidität", "WKN": "", "Assetklasse": "Cash", "Gewicht (%)": round(cash_weight * 100, 2)}])
-        exp = pd.concat([exp, cash_row], ignore_index=True)
-        st.download_button("⬇️ CSV herunterladen", exp.to_csv(index=False, sep=";", decimal=","),
-            f"Portfolio_Builder_{dt.date.today().strftime('%Y%m%d')}.csv", "text/csv", key="csv_dl")
+
+        # 🗑️-Spalte entfernen
+        if "🗑️" in exp.columns:
+            exp = exp.drop(columns=["🗑️"])
+
+        # "–" durch leere Strings ersetzen für saubere Excel-Ausgabe
+        exp = exp.replace("–", "")
+
+        # Cash-Zeile
+        cash_row_data = {"Name": "Liquidität", "WKN": "", "Assetklasse": "Cash", "Gewicht (%)": round(cash_weight * 100, 2)}
+        for col in exp.columns:
+            if col not in cash_row_data:
+                cash_row_data[col] = ""
+        exp = pd.concat([exp, pd.DataFrame([cash_row_data])], ignore_index=True)
+
+        # Als Excel schreiben
+        excel_buf = io.BytesIO()
+        with pd.ExcelWriter(excel_buf, engine="openpyxl") as writer:
+            exp.to_excel(writer, index=False, sheet_name="Portfolio")
+        excel_buf.seek(0)
+
+        st.download_button(
+            "⬇️ Excel herunterladen",
+            excel_buf.getvalue(),
+            f"Portfolio_{dt.date.today().strftime('%Y%m%d')}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="xlsx_dl"
+        )
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 5: STRUKTURANALYSE
