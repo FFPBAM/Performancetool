@@ -397,18 +397,31 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     st.caption(f"**{n_titel} Titel** (max. {MAX_TITEL})")
 
-    # Buttons
-    b1, b2 = st.columns(2)
-    with b1:
-        if st.button("⚖️ Gleichgewichten (5% Cash)", key="equalize", use_container_width=True):
-            w = (1.0 - CASH_PCT) / n_titel
+    # Cash-Anteil & Buttons
+    cash_col, eq_col, reset_col = st.columns([1, 1, 1])
+    with cash_col:
+        cash_pct_input = st.number_input(
+            "💰 Cash-Anteil (%)", min_value=0.0, max_value=50.0,
+            value=float(st.session_state.get("builder_cash_pct", CASH_PCT * 100)),
+            step=1.0, key="builder_cash_pct",
+            help="Cash-Anteil für Gleichgewichten. Restliche Gewichte werden auf die Titel verteilt."
+        )
+    with eq_col:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button(f"⚖️ Gleichgewichten", key="equalize", use_container_width=True):
+            cash_dec = cash_pct_input / 100.0
+            w = (1.0 - cash_dec) / n_titel
             for wkn in portfolio:
                 portfolio[wkn] = w
             st.rerun()
-    with b2:
+    with reset_col:
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🔄 Portfolio zurücksetzen", key="reset_pf", use_container_width=True):
             _reset_portfolio()
             st.rerun()
+
+    st.caption("ℹ️ Die Differenz zu 100% wird automatisch als Cash (Liquidität) ausgewiesen. "
+               "Sie können Gewichte frei anpassen – der Cash-Anteil passt sich entsprechend an.")
 
     # Portfolio-Tabelle mit Gewichten und ❌-Button pro Zeile
     pf_rows = []
@@ -478,13 +491,13 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     s1, s2, s3 = st.columns(3)
     with s1: st.metric("Investiert", fmt_pct_de(total_weight))
-    with s2: st.metric("💰 Liquidität", fmt_pct_de(cash_weight))
+    with s2: st.metric("💰 Cash (Residual)", fmt_pct_de(cash_weight))
     with s3:
         ok = abs(total_weight + cash_weight - 1.0) < 0.001
         st.metric("Summe", f"{'🟢' if ok else '🔴'} {fmt_pct_de(total_weight + cash_weight)}")
 
-    if total_weight > (1.0 - CASH_PCT + 0.001):
-        st.warning(f"⚠️ Investitionsgrad > {fmt_pct_de(1.0 - CASH_PCT)}. Cash-Minimum: {fmt_pct_de(CASH_PCT)}.")
+    if total_weight > 1.0:
+        st.error(f"⛔ Investitionsgrad übersteigt 100%! Bitte Gewichte reduzieren.")
 
     # CSV Export
     st.markdown("---")
