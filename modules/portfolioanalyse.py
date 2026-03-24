@@ -376,12 +376,14 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
     # ── Daten laden ──
     auto_tag_pf = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
+    date_tag_pf = auto_tag_pf
     with st.sidebar:
         st.markdown("---")
         st.subheader("📊 Portfolioanalyse")
-        date_tag_pf = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
-            help="Automatisch neuester Tag aus Daten_PF/.", key="pf_date_tag")
         show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd")
+        with st.expander("⚙️ Erweiterte Einstellungen"):
+            date_tag_pf = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
+                help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="pf_date_tag")
 
     pf_files = load_pf_csvs(DATA_FOLDER_PF, date_tag_pf)
     if not pf_files:
