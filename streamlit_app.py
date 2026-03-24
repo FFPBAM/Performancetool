@@ -357,6 +357,53 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
             story.append(Spacer(1,2*mm))
             if bbt and str(bbt).strip().lower() not in ("","nan","haben keine benchmark"):
                 story.append(Paragraph(f"<b>BM {bl}:</b> {bbt}",st_sm))
+    # ── Glossar ──
+    story.append(PageBreak())
+    if logo_path and os.path.exists(logo_path):
+        lws=35*mm; story.append(RLImage(logo_path,width=lws,height=lws*la)); story.append(Spacer(1,3*mm))
+    story.append(Paragraph("Glossar – Kennzahlen",st_s))
+    story.append(Spacer(1,3*mm))
+
+    glossar = [
+        ("Auflagedatum im PM",
+         "Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement. "
+         "Ab diesem Datum liegen historische Performancedaten vor."),
+        ("CAGR (⌀ Rendite p.a.)",
+         "Compound Annual Growth Rate – die annualisierte Rendite nach Abzug aller Kosten. "
+         "Berechnung: (Endwert / Startwert)^(365 / Anzahl Tage) − 1. "
+         "Gibt die durchschnittliche jährliche Wertentwicklung über den gewählten Zeitraum an."),
+        ("Volatilität p.a.",
+         "Annualisierte Schwankungsbreite der täglichen Renditen nach Kosten. "
+         "Berechnung: Standardabweichung der Tagesrenditen × √365. "
+         "Je höher die Volatilität, desto stärker schwankt der Portfoliowert."),
+        ("Calmar Ratio",
+         "Verhältnis von annualisierter Rendite (CAGR) zum maximalen Drawdown. "
+         "Berechnung: CAGR / |Max. Drawdown|. "
+         "Je höher der Wert, desto besser die risikoadjustierte Rendite. "
+         "Ein Wert > 1 bedeutet, dass die Rendite den größten Verlust übersteigt."),
+        ("Maximaler Drawdown",
+         "Größter Verlust vom Höchststand bis zum Tiefpunkt im gewählten Zeitraum. "
+         "Angabe in Prozent (und Euro, wenn ein Anlagevolumen eingegeben wurde). "
+         "Zeigt das Worst-Case-Verlustrisiko der Strategie."),
+        ("Recovery (Erholungsdauer)",
+         "Anzahl der Tage vom Drawdown-Tief bis zur vollständigen Erholung auf das vorherige Hoch. "
+         "Gibt an, wie lange ein Anleger nach dem größten Verlust warten musste, bis der Wert wieder hergestellt war."),
+        ("Längste Drawdown-Phase",
+         "Längster zusammenhängender Zeitraum, in dem das Portfolio unterhalb eines vorherigen Höchststands lag. "
+         "Zeigt die maximale Dauer einer Verlustphase – relevant für die Geduld des Anlegers."),
+        ("Benchmark",
+         "Vergleichsmaßstab für die Portfolioperformance, bestehend aus einem oder mehreren Marktindizes. "
+         "Die Zusammensetzung wird unterhalb der Charts angegeben."),
+        ("Vor Kosten / Nach Kosten",
+         "Die Performance vor Kosten zeigt die Bruttorendite der Anlagestrategie. "
+         "Nach Kosten werden die Verwaltungsgebühren (Honorarsatz p.a.) täglich anteilig abgezogen. "
+         "Bei aktivierter MwSt.-Option wird zusätzlich 19% Mehrwertsteuer auf das Honorar berechnet."),
+    ]
+    for term, desc in glossar:
+        story.append(Paragraph(f"<b>{term}</b>", st_n))
+        story.append(Paragraph(desc, st_sm))
+        story.append(Spacer(1, 2*mm))
+
     story.append(Spacer(1,10*mm)); story.append(HRFlowable(width="100%",thickness=0.5,color=HexColor("#CCCCCC")))
     story.append(Paragraph(f"Erstellt am {fmt_date_de(dt.date.today())} | Fürst Fugger Privatbank",st_sm))
     doc.build(story); buf.seek(0); return buf.getvalue()
@@ -485,6 +532,17 @@ with tab_perf:
     c1,c2=st.columns(2)
     with c1: sd=st.date_input("Start",value=mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_sd")
     with c2: ed=st.date_input("Ende",value=maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_ed")
+
+    rc1,rc2=st.columns(2)
+    with rc1:
+        if st.button("↩️ Startdatum zurücksetzen (Auflagedatum)", key="reset_sd", use_container_width=True):
+            st.session_state["p_sd"] = mind
+            st.rerun()
+    with rc2:
+        if st.button("↩️ Enddatum zurücksetzen (aktuellster Stand)", key="reset_ed", use_container_width=True):
+            st.session_state["p_ed"] = maxd
+            st.rerun()
+
     if sd>ed: st.error("Start > Ende."); st.stop()
 
     df1=data[ps1].copy(); df1=df1.loc[(df1.index.date>=sd)&(df1.index.date<=ed)].copy(); df2=None
@@ -557,6 +615,25 @@ with tab_perf:
             fig.add_trace(go.Scatter(x=xd,y=ibm2,mode="lines",name=f"BM {l2}: {bn2}"))
     fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
         yaxis=dict(tickformat=",.2f" if use_volume else None),legend_title_text="Reihen",hovermode="x unified")
+
+    # Endwerte als Annotation am rechten Rand jeder Linie
+    for trace in fig.data:
+        y_vals = trace.y
+        if y_vals is not None and len(y_vals) > 0:
+            end_val = float(y_vals[-1])
+            if use_volume:
+                # Bei Volumen: prozentuale Veränderung anzeigen
+                pct_change = (end_val / sw - 1.0) * 100
+                label = f"{pct_change:+.2f}%".replace(".",",")
+            else:
+                # Ohne Volumen: Index-Stand anzeigen
+                label = f"{end_val:.2f}".replace(".",",")
+            fig.add_annotation(
+                x=trace.x[-1], y=end_val, text=f"<b>{label}</b>",
+                showarrow=False, xanchor="left", xshift=8,
+                font=dict(size=10, color=trace.line.color if hasattr(trace.line,'color') and trace.line.color else None),
+                bgcolor="rgba(255,255,255,0.7)", borderpad=2)
+
     st.plotly_chart(fig,use_container_width=True)
     if sb: show_benchmark_composition(l1,bt1,l2,bt2)
 
@@ -603,10 +680,10 @@ with tab_perf:
                 dp.columns=["Zeitraum",f"{lab} nK",bname]; cont.dataframe(dp,use_container_width=True,hide_index=True)
         with br:
             _rb(df1,fdec1,l1,bn1,bt1,st.container())
-            if sb: show_benchmark_composition(l1,bt1)
+            show_benchmark_composition(l1,bt1)
             if df2 is not None and fdec2 is not None and ps2:
                 st.markdown("---"); _rb(df2,fdec2,l2,bn2 or "BM",bt2 or "",st.container())
-                if sb: show_benchmark_composition(l2,bt2)
+                show_benchmark_composition(l2,bt2)
 
     # PDF Performance
     st.markdown("---")
