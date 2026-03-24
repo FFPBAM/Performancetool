@@ -614,7 +614,8 @@ with tab_perf:
             rbm2=df2["ret_bm"].fillna(0).to_numpy(float); ibm2=make_index_from_returns(rbm2,sw)
             fig.add_trace(go.Scatter(x=xd,y=ibm2,mode="lines",name=f"BM {l2}: {bn2}"))
     fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
-        yaxis=dict(tickformat=",.2f" if use_volume else None),legend_title_text="Reihen",hovermode="x unified")
+        yaxis=dict(tickformat=",.2f" if use_volume else None),legend_title_text="Strategie",
+        showlegend=len(fig.data) > 1, hovermode="x unified")
 
     # Endwerte als Annotation am rechten Rand jeder Linie
     for trace in fig.data:
