@@ -428,7 +428,10 @@ with tab_perf:
     auto_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
     with st.sidebar:
         st.markdown("---"); st.subheader("📈 Performance")
-        date_tag = st.text_input("Date-Tag (yyMMdd)", value=auto_tag, help="Neuester Tag automatisch.", key="perf_tag")
+    date_tag = auto_tag
+    with st.sidebar:
+        with st.expander("⚙️ Erweiterte Einstellungen"):
+            date_tag = st.text_input("Date-Tag (yyMMdd)", value=auto_tag, help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="perf_tag")
     files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
     if not files: st.error(f"Keine Dateien für Tag {date_tag}."); st.stop()
     data = build_portfolio_timeseries(files, mapping)
