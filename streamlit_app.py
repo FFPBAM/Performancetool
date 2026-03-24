@@ -622,38 +622,38 @@ with tab_perf:
     if use_volume: st.subheader(f"📈 Wertentwicklung in Euro ({fmt_eur_de(anlagevolumen)})"); yl="Wert in €"
     else: st.subheader("📈 Performance-Index (Start = 100)"); yl="Index (Start 100)"
     fig=go.Figure()
-    fig.add_trace(go.Scatter(x=xd,y=ia1,mode="lines",name=f"{l1} – {nk_label} ({eff_fee_1:.2f}%)"))
-    if ia2 is not None: fig.add_trace(go.Scatter(x=xd,y=ia2,mode="lines",name=f"{l2} – {nk_label} ({eff_fee_2:.2f}%)"))
+
+    def _add_line(x, y, name):
+        """Fügt Linie + Endwert-Label hinzu. Label verschwindet mit der Linie."""
+        end_val = float(y[-1])
+        if use_volume:
+            pct_change = (end_val / sw - 1.0) * 100
+            label = f"{pct_change:+.2f}%".replace(".",",")
+        else:
+            label = f"{end_val:.2f}".replace(".",",")
+        # Hauptlinie
+        fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=name, legendgroup=name))
+        # Endwert-Label (nur letzter Punkt, gleiche legendgroup → verschwindet zusammen)
+        fig.add_trace(go.Scatter(
+            x=[x[-1]], y=[end_val], mode="text", text=[f"<b>{label}</b>"],
+            textposition="middle right", textfont=dict(size=10),
+            legendgroup=name, showlegend=False, hoverinfo="skip"))
+
+    _add_line(xd, ia1, f"{l1} – {nk_label} ({eff_fee_1:.2f}%)")
+    if ia2 is not None: _add_line(xd, ia2, f"{l2} – {nk_label} ({eff_fee_2:.2f}%)")
     if sv:
-        fig.add_trace(go.Scatter(x=xd,y=ib1,mode="lines",name=f"{l1} – vor Kosten"))
-        if ib2 is not None: fig.add_trace(go.Scatter(x=xd,y=ib2,mode="lines",name=f"{l2} – vor Kosten"))
+        _add_line(xd, ib1, f"{l1} – vor Kosten")
+        if ib2 is not None: _add_line(xd, ib2, f"{l2} – vor Kosten")
     if sb and df1["ret_bm"].notna().any():
         rbm1=df1["ret_bm"].fillna(0).to_numpy(float); ibm1=make_index_from_returns(rbm1,sw)
-        fig.add_trace(go.Scatter(x=xd,y=ibm1,mode="lines",name=f"BM {l1}: {bn1}"))
+        _add_line(xd, ibm1, f"BM {l1}: {bn1}")
         if df2 is not None and df2["ret_bm"].notna().any():
             rbm2=df2["ret_bm"].fillna(0).to_numpy(float); ibm2=make_index_from_returns(rbm2,sw)
-            fig.add_trace(go.Scatter(x=xd,y=ibm2,mode="lines",name=f"BM {l2}: {bn2}"))
+            _add_line(xd, ibm2, f"BM {l2}: {bn2}")
+
     fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
         yaxis=dict(tickformat=",.2f" if use_volume else None),legend_title_text="Strategie",
         showlegend=True, hovermode="x unified")
-
-    # Endwerte als Annotation am rechten Rand jeder Linie
-    for trace in fig.data:
-        y_vals = trace.y
-        if y_vals is not None and len(y_vals) > 0:
-            end_val = float(y_vals[-1])
-            if use_volume:
-                # Bei Volumen: prozentuale Veränderung anzeigen
-                pct_change = (end_val / sw - 1.0) * 100
-                label = f"{pct_change:+.2f}%".replace(".",",")
-            else:
-                # Ohne Volumen: Index-Stand anzeigen
-                label = f"{end_val:.2f}".replace(".",",")
-            fig.add_annotation(
-                x=trace.x[-1], y=end_val, text=f"<b>{label}</b>",
-                showarrow=False, xanchor="left", xshift=8,
-                font=dict(size=10, color=trace.line.color if hasattr(trace.line,'color') and trace.line.color else None),
-                bgcolor="rgba(255,255,255,0.7)", borderpad=2)
 
     st.plotly_chart(fig,use_container_width=True)
     if sb: show_benchmark_composition(l1,bt1,l2,bt2)
