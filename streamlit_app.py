@@ -233,10 +233,24 @@ def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds,
     with cols[3]: st.metric("Drawdown-Tief am",fmt_date_de(mddd),help="Datum des tiefsten Drawdown-Punkts.")
 
 # PDF helpers for performance
-def _mpl_line_chart(x_dates, traces, y_label, title, use_volume):
+def _mpl_line_chart(x_dates, traces, y_label, title, use_volume, startwert=100.0):
     fig,ax=plt.subplots(figsize=(10,4.5)); fig.patch.set_facecolor(FFPB_DARK); ax.set_facecolor(FFPB_DARK)
     colors=[FFPB_GOLD,FFPB_BLUE2,"#E8A838","#5BA0D0",FFPB_LIGHT,"#7FB5D5","#C4C4C4","#F0C070"]
     for i,(l,y) in enumerate(traces): ax.plot(x_dates,y,label=l,color=colors[i%len(colors)],linewidth=1.3)
+
+    # Endwerte am rechten Rand jeder Linie
+    for i,(l,y) in enumerate(traces):
+        end_val = float(y[-1])
+        if use_volume:
+            pct = (end_val / startwert - 1.0) * 100
+            label = f"{pct:+.2f}%".replace(".",",")
+        else:
+            label = f"{end_val:.2f}".replace(".",",")
+        ax.annotate(label, xy=(x_dates[-1], end_val), xytext=(8, 0),
+            textcoords="offset points", fontsize=7, color=colors[i%len(colors)],
+            fontweight="bold", va="center",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor=FFPB_DARK, edgecolor=colors[i%len(colors)], alpha=0.8))
+
     ax.set_title(title,color="white",fontsize=11,fontweight="bold",loc="left")
     ax.set_ylabel(y_label,color="white",fontsize=9); ax.tick_params(colors="white",labelsize=8)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m.%Y")); ax.xaxis.set_major_locator(mdates.AutoDateLocator())
@@ -325,7 +339,8 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
     story.append(Spacer(1,5*mm))
     story.append(Paragraph("Performance-Index",st_s))
     lt=f"Wertentwicklung ({fmt_eur_de(anlagevolumen)})" if use_volume else "Performance-Index (Start = 100)"
-    story.append(RLImage(_mpl_line_chart(x_dates,line_traces,y_label,lt,use_volume),width=170*mm,height=80*mm))
+    sw_pdf = anlagevolumen if use_volume else 100.0
+    story.append(RLImage(_mpl_line_chart(x_dates,line_traces,y_label,lt,use_volume,sw_pdf),width=170*mm,height=80*mm))
     story.append(Spacer(1,2*mm))
     if bench_text_1 and str(bench_text_1).strip().lower() not in ("","nan","haben keine benchmark"):
         story.append(Paragraph(f"<b>BM {label_1}:</b> {bench_text_1}",st_sm))
