@@ -212,6 +212,7 @@ def show_benchmark_composition(dn, bt, dn2=None, bt2=None):
 
 def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar, mwst_suffix=""):
     nk = f"nach Kosten{mwst_suffix}"
+    st.markdown(f"**{label}**")
     n=4+(1 if use_volume else 0); cols=st.columns(n)
     with cols[0]: st.metric("Auflagedatum im PM",fmt_date_de(auflagedatum),help="Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement.")
     with cols[1]: st.metric(f"⌀ Rendite p.a. ({nk})",fmt_pct_de(cagr) if cagr else "–",help="Annualisierte Rendite nach Kosten (CAGR): (Endwert/Startwert)^(365/Tage) − 1.")
