@@ -539,12 +539,12 @@ with tab_perf:
 
     rc1,rc2=st.columns(2)
     with rc1:
-        if st.button("↩️ Startdatum zurücksetzen (Auflagedatum)", key="reset_sd", use_container_width=True):
+        if st.button(f"↩️ Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", use_container_width=True):
             st.session_state["_reset_sd"] = True
             del st.session_state["p_sd"]
             st.rerun()
     with rc2:
-        if st.button("↩️ Enddatum zurücksetzen (aktuellster Stand)", key="reset_ed", use_container_width=True):
+        if st.button(f"↩️ Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", use_container_width=True):
             st.session_state["_reset_ed"] = True
             del st.session_state["p_ed"]
             st.rerun()
