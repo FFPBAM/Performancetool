@@ -223,14 +223,17 @@ def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar
 def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds, dde, mwst_suffix=""):
     nk = f"nach Kosten{mwst_suffix}"
     st.markdown(f"**{label} ({nk})**")
-    ddv=fmt_pct_de(mddv)
-    if uv and mdde is not None: ddv+=f" ({fmt_eur_de(mdde)})"
     rv=f"{rd} Tage" if rd else "noch nicht erholt"; rh=f" Erholt am {fmt_date_de(rdate)}." if rd else ""
-    cols=st.columns(4)
-    with cols[0]: st.metric(f"Max. Drawdown ({nk})",ddv,help=f"Größter Verlust vom Höchststand. Tiefpunkt am {fmt_date_de(mddd)}.")
-    with cols[1]: st.metric("Recovery",rv,help=f"Tage vom Tief bis zur Erholung.{rh}")
-    with cols[2]: st.metric("Längste Drawdown-Phase",f"{mddur} Tage" if mddur>0 else "–",help=f"Längster Zeitraum unter Peak: {fmt_date_de(dds)} – {fmt_date_de(dde)}." if mddur>0 else "Kein Drawdown.")
-    with cols[3]: st.metric("Drawdown-Tief am",fmt_date_de(mddd),help="Datum des tiefsten Drawdown-Punkts.")
+    n_cols = 5 if uv and mdde is not None else 4
+    cols=st.columns(n_cols)
+    with cols[0]: st.metric(f"Max. Drawdown ({nk})",fmt_pct_de(mddv),help=f"Größter Verlust vom Höchststand. Tiefpunkt am {fmt_date_de(mddd)}.")
+    ci = 1
+    if uv and mdde is not None:
+        with cols[ci]: st.metric("Max. Drawdown (€)",fmt_eur_de(mdde),help=f"Absoluter Verlust in Euro vom Höchststand. Tiefpunkt am {fmt_date_de(mddd)}.")
+        ci += 1
+    with cols[ci]: st.metric("Recovery",rv,help=f"Tage vom Tief bis zur Erholung.{rh}")
+    with cols[ci+1]: st.metric("Längste Drawdown-Phase",f"{mddur} Tage" if mddur>0 else "–",help=f"Längster Zeitraum unter Peak: {fmt_date_de(dds)} – {fmt_date_de(dde)}." if mddur>0 else "Kein Drawdown.")
+    with cols[ci+2]: st.metric("Drawdown-Tief am",fmt_date_de(mddd),help="Datum des tiefsten Drawdown-Punkts.")
 
 # PDF helpers for performance
 def _mpl_line_chart(x_dates, traces, y_label, title, use_volume, startwert=100.0):
