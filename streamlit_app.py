@@ -529,18 +529,24 @@ with tab_perf:
     else: mind=rm1; maxd=rx1
 
     st.markdown("#### Zeitraum auswählen")
+    # Reset-Flags prüfen
+    sd_value = mind if st.session_state.pop("_reset_sd", False) else None
+    ed_value = maxd if st.session_state.pop("_reset_ed", False) else None
+
     c1,c2=st.columns(2)
-    with c1: sd=st.date_input("Start",value=mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_sd")
-    with c2: ed=st.date_input("Ende",value=maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_ed")
+    with c1: sd=st.date_input("Start",value=sd_value or mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_sd")
+    with c2: ed=st.date_input("Ende",value=ed_value or maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_ed")
 
     rc1,rc2=st.columns(2)
     with rc1:
         if st.button("↩️ Startdatum zurücksetzen (Auflagedatum)", key="reset_sd", use_container_width=True):
-            st.session_state["p_sd"] = mind
+            st.session_state["_reset_sd"] = True
+            del st.session_state["p_sd"]
             st.rerun()
     with rc2:
         if st.button("↩️ Enddatum zurücksetzen (aktuellster Stand)", key="reset_ed", use_container_width=True):
-            st.session_state["p_ed"] = maxd
+            st.session_state["_reset_ed"] = True
+            del st.session_state["p_ed"]
             st.rerun()
 
     if sd>ed: st.error("Start > Ende."); st.stop()
@@ -615,7 +621,7 @@ with tab_perf:
             fig.add_trace(go.Scatter(x=xd,y=ibm2,mode="lines",name=f"BM {l2}: {bn2}"))
     fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
         yaxis=dict(tickformat=",.2f" if use_volume else None),legend_title_text="Strategie",
-        showlegend=len(fig.data) > 1, hovermode="x unified")
+        showlegend=True, hovermode="x unified")
 
     # Endwerte als Annotation am rechten Rand jeder Linie
     for trace in fig.data:
