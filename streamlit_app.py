@@ -652,8 +652,16 @@ with tab_perf:
             _add_line(xd, ibm2, f"BM {l2}: {bn2}")
 
     fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
-        yaxis=dict(tickformat=",.2f" if use_volume else None),legend_title_text="Strategie",
-        showlegend=True, hovermode="x unified")
+        yaxis=dict(tickformat=",.0f" if use_volume else None, separatethousands=True),
+        legend=dict(title_text="Strategie", x=1.02, y=1, xanchor="left"),
+        showlegend=True, hovermode="x unified",
+        margin=dict(r=120))
+
+    # Deutsche Tausender-Formatierung auf Y-Achse bei Volumen
+    if use_volume:
+        fig.update_layout(yaxis=dict(tickformat=",.0f"))
+        # Plotly nutzt Locale – wir überschreiben mit separatethousands
+        fig.update_layout(separators=",.")
 
     st.plotly_chart(fig,use_container_width=True)
     if sb: show_benchmark_composition(l1,bt1,l2,bt2)
