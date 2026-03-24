@@ -529,24 +529,22 @@ with tab_perf:
     else: mind=rm1; maxd=rx1
 
     st.markdown("#### Zeitraum auswählen")
-    # Reset-Flags prüfen
-    sd_value = mind if st.session_state.pop("_reset_sd", False) else None
-    ed_value = maxd if st.session_state.pop("_reset_ed", False) else None
+    # Reset-Logik: Counter ändert den Widget-Key, sodass das Widget frisch mit Default rendert
+    if "p_sd_reset" not in st.session_state: st.session_state.p_sd_reset = 0
+    if "p_ed_reset" not in st.session_state: st.session_state.p_ed_reset = 0
 
     c1,c2=st.columns(2)
-    with c1: sd=st.date_input("Start",value=sd_value or mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_sd")
-    with c2: ed=st.date_input("Ende",value=ed_value or maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_ed")
+    with c1: sd=st.date_input("Start",value=mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_sd_{st.session_state.p_sd_reset}")
+    with c2: ed=st.date_input("Ende",value=maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_ed_{st.session_state.p_ed_reset}")
 
     rc1,rc2=st.columns(2)
     with rc1:
         if st.button(f"↩️ Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", use_container_width=True):
-            st.session_state["_reset_sd"] = True
-            del st.session_state["p_sd"]
+            st.session_state.p_sd_reset += 1
             st.rerun()
     with rc2:
         if st.button(f"↩️ Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", use_container_width=True):
-            st.session_state["_reset_ed"] = True
-            del st.session_state["p_ed"]
+            st.session_state.p_ed_reset += 1
             st.rerun()
 
     if sd>ed: st.error("Start > Ende."); st.stop()
