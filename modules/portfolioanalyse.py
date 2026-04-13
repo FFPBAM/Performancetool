@@ -230,9 +230,9 @@ def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show
         if is_bond and has_faelligkeit:
             result["Fälligkeit"] = sub["Fälligkeit_parsed"].apply(lambda x: fmt_date_de(x) if pd.notna(x) else "–")
         if has_perf:
-            result["WP-Perf. (YTD)"] = sub["WP-Performance"]
+            result["Wertpapier-Perf. (YTD)"] = sub["WP-Performance"]
         if has_beitrag:
-            result["Beitrag (YTD)"] = sub["Performancebeitrag"]
+            result["Performancebeitrag (YTD)"] = sub["Performancebeitrag"]
         if use_volume:
             result["Investiert (€)"] = sub["Gewicht"] * anlagevolumen
 
@@ -242,10 +242,10 @@ def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show
             disp["Gewicht"] = disp["Gewicht"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
         if "Kupon" in disp.columns:
             disp["Kupon"] = disp["Kupon"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) and x != 0 else "–")
-        if "WP-Perf. (YTD)" in disp.columns:
-            disp["WP-Perf. (YTD)"] = disp["WP-Perf. (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
-        if "Beitrag (YTD)" in disp.columns:
-            disp["Beitrag (YTD)"] = disp["Beitrag (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
+        if "Wertpapier-Perf. (YTD)" in disp.columns:
+            disp["Wertpapier-Perf. (YTD)"] = disp["Wertpapier-Perf. (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
+        if "Performancebeitrag (YTD)" in disp.columns:
+            disp["Performancebeitrag (YTD)"] = disp["Performancebeitrag (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
         if "Investiert (€)" in disp.columns:
             disp["Investiert (€)"] = disp["Investiert (€)"].apply(lambda x: fmt_eur_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
 
@@ -543,10 +543,9 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
                 st.dataframe(fd, use_container_width=True, hide_index=True)
 
         st.caption(
-            "Die dargestellte Year-to-Date-Performance (Performancebeitrag und WP-Performance) ist eine "
-            "Momentaufnahme zum Auswertungsstichtag. Historische Wertentwicklung ist kein verlässlicher "
-            "Indikator für zukünftige Ergebnisse. Die Werte können durch zwischenzeitliche Käufe, Verkäufe "
-            "und Kursveränderungen bereits abweichen."
+            "**Performancebeitrag:** Gewichteter Beitrag des Titels zur Gesamtperformance des Portfolios seit Jahresbeginn. "
+            "**Wertpapier-Performance:** Individuelle Wertentwicklung des Wertpapiers seit Jahresbeginn, unabhängig von der Gewichtung. "
+            "Beide Werte sind eine Momentaufnahme zum Stichtag. Historische Wertentwicklung ist kein verlässlicher Indikator für zukünftige Ergebnisse."
         )
 
     # ── Anleihen-Detail + Duration ──
