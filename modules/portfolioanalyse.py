@@ -498,13 +498,13 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     rc1, rc2, rc3 = st.columns(3)
     with rc1:
         alloc_g = build_allocation(df, "Gattung")
-        if not alloc_g.empty: st.plotly_chart(build_ring_chart(alloc_g, "Gattung", "Allokation nach Gattung"), use_container_width=True)
+        if not alloc_g.empty: st.plotly_chart(build_ring_chart(alloc_g, "Gattung", "Allokation nach Gattung"), use_container_width=True, config={"displayModeBar": False})
     with rc2:
         alloc_r = build_allocation(df, "Region")
-        if not alloc_r.empty: st.plotly_chart(build_ring_chart(alloc_r, "Region", "Allokation nach Region"), use_container_width=True)
+        if not alloc_r.empty: st.plotly_chart(build_ring_chart(alloc_r, "Region", "Allokation nach Region"), use_container_width=True, config={"displayModeBar": False})
     with rc3:
         alloc_s = build_allocation(df, "Segment")
-        if not alloc_s.empty: st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True)
+        if not alloc_s.empty: st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True, config={"displayModeBar": False})
 
     # ── Einzeltitel-Bereich ──
     st.markdown("---")
@@ -513,7 +513,7 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     top5 = get_top_holdings(df, n=5)
     if not top5.empty:
         fig_top5 = build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)")
-        st.plotly_chart(fig_top5, use_container_width=True)
+        st.plotly_chart(fig_top5, use_container_width=True, config={"displayModeBar": False})
 
     # ── Einzeltitel-Tabelle (gruppiert nach Gattung) ──
     st.markdown("**Einzeltitel-Übersicht**")
@@ -596,7 +596,7 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
                 text=[fmt_pct_de(v) for v in faell["Gewicht"]], textposition="outside")])
             fig_f.update_layout(height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
                 yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
-            st.plotly_chart(fig_f, use_container_width=True)
+            st.plotly_chart(fig_f, use_container_width=True, config={"displayModeBar": False})
 
 
 # ---------------------------------------------------------------------------
