@@ -498,20 +498,24 @@ def build_portfolio_timeseries(files, mapping):
 # ==========================================================================
 st.set_page_config(page_title="FFPB – Performance & Portfolioanalyse", layout="wide")
 
-# Globale Schriftart (Material Icons ausgenommen)
+# Schriftart nur im Hauptbereich (Sidebar und System-Icons bleiben unberührt)
 st.markdown("""
 <style>
-    /* Globale Schriftart – Material Icons explizit ausschließen */
-    html, body, [class*="css"], .stMarkdown, .stMetricLabel, .stMetricValue,
-    .stSelectbox, .stMultiSelect, .stTextInput, .stNumberInput,
-    .stDataFrame, .stTable, .stCaption, .stButton, .stTabs,
-    h1, h2, h3, h4, h5, h6, p, div, label, input, textarea {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
-    }
-
-    /* Spans und Buttons NUR wenn sie KEINE Material Icons sind */
-    span:not(.material-symbols-rounded):not(.material-icons):not([class*="material"]),
-    button:not([kind="icon"]):not([title="View fullscreen"]):not([title="Exit fullscreen"]) {
+    /* Nur der Hauptinhalt – NICHT Sidebar, NICHT Toolbar-Icons */
+    [data-testid="stMainBlockContainer"] h1,
+    [data-testid="stMainBlockContainer"] h2,
+    [data-testid="stMainBlockContainer"] h3,
+    [data-testid="stMainBlockContainer"] h4,
+    [data-testid="stMainBlockContainer"] h5,
+    [data-testid="stMainBlockContainer"] h6,
+    [data-testid="stMainBlockContainer"] p,
+    [data-testid="stMainBlockContainer"] div.stMarkdown,
+    [data-testid="stMainBlockContainer"] .stMetricLabel,
+    [data-testid="stMainBlockContainer"] .stMetricValue,
+    [data-testid="stMainBlockContainer"] .stCaption,
+    [data-testid="stMainBlockContainer"] label,
+    [data-testid="stMainBlockContainer"] input,
+    [data-testid="stMainBlockContainer"] textarea {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
     }
 </style>
