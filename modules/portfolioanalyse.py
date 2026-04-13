@@ -382,7 +382,8 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         st.markdown("---")
         st.subheader("📊 Portfolioanalyse")
         show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd")
-        with st.expander("Erweiterte Einstellungen"):
+        show_adv_pf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_pf")
+        if show_adv_pf:
             date_tag_pf = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
                 help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="pf_date_tag")
 
