@@ -539,7 +539,7 @@ with tab_perf:
         st.markdown("---"); st.subheader("📈 Performance")
     date_tag = auto_tag
     with st.sidebar:
-        with st.expander("⚙️ Erweiterte Einstellungen"):
+        with st.expander("Erweiterte Einstellungen"):
             date_tag = st.text_input("Date-Tag (yyMMdd)", value=auto_tag, help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="perf_tag")
     files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
     if not files: st.error(f"Keine Dateien für Tag {date_tag}."); st.stop()
