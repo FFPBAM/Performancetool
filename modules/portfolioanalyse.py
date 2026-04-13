@@ -34,12 +34,12 @@ from modules.shared import (
 
 
 # ---------------------------------------------------------------------------
-# Ring-Chart Farben
+# Ring-Chart Farben (Corporate: Fuggerblau #003460, Fuggergold #C3A069)
 # ---------------------------------------------------------------------------
 RING_COLORS = [
-    "#B8973A", "#2C5F8A", "#A8CBE8", "#7FB5D5", "#1B3A5C",
-    "#E8A838", "#5BA0D0", "#C4C4C4", "#3A7CA5", "#D4A84B",
-    "#8FBDD3", "#4A6E8C", "#F0C070", "#6A9BC3", "#2A4A6C",
+    "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",
+    "#8B7340", "#A8CBE8", "#5C6B3C", "#E8D5B0", "#2C5F8A",
+    "#C4C4C4", "#3A7CA5", "#F0C070", "#6A9BC3", "#2A4A6C",
 ]
 SONSTIGE_THRESHOLD = 0.03  # Kategorien unter 3% → "Sonstige"
 
@@ -300,26 +300,55 @@ def get_bond_summary(df: pd.DataFrame) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Ring-Diagramm (Plotly) – verbessert
+# Ring-Diagramm (Plotly) – Labels außerhalb, Corporate Design
 # ---------------------------------------------------------------------------
 def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.Figure:
+    labels = alloc_df[group_col].tolist()
+    values = alloc_df["Gewicht"].tolist()
+    total = sum(values) if sum(values) > 0 else 1.0
+
+    # Kleine Segmente leicht herausziehen für bessere Sichtbarkeit
+    pull = [0.03 if v / total < 0.05 else 0 for v in values]
+
+    # Labels: außerhalb mit Verbindungslinie, unter 3% nur in Legende
+    text_info = []
+    for v in values:
+        pct = v / total
+        if pct >= 0.03:
+            text_info.append(f"{pct:.1%}".replace(".", ","))
+        else:
+            text_info.append("")
+
     fig = go.Figure(data=[go.Pie(
-        labels=alloc_df[group_col],
-        values=alloc_df["Gewicht"],
+        labels=labels,
+        values=values,
         hole=0.5,
-        marker=dict(colors=RING_COLORS[:len(alloc_df)]),
-        textinfo="percent",
-        textposition="inside",
-        textfont=dict(size=11, color="white"),
+        marker=dict(
+            colors=RING_COLORS[:len(alloc_df)],
+            line=dict(color="white", width=2),
+        ),
+        textinfo="text",
+        text=text_info,
+        textposition="outside",
+        textfont=dict(size=11, color="#333333"),
+        pull=pull,
         hovertemplate="<b>%{label}</b><br>Gewicht: %{percent}<extra></extra>",
         sort=False,
+        direction="clockwise",
     )])
+
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=13), x=0.5, xanchor="center"),
-        height=450,
+        title=dict(text=f"<b>{title}</b>", font=dict(size=13, color="#003460"), x=0.5, xanchor="center"),
+        height=420,
         showlegend=True,
-        legend=dict(font=dict(size=9), orientation="v", y=0.5, x=1.05),
-        margin=dict(t=50, b=20, l=20, r=120),
+        legend=dict(
+            font=dict(size=10),
+            orientation="h",
+            y=-0.15,
+            x=0.5,
+            xanchor="center",
+        ),
+        margin=dict(t=50, b=80, l=30, r=30),
     )
     return fig
 
@@ -327,7 +356,7 @@ def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.F
 # ---------------------------------------------------------------------------
 # Top 5 Holdings Säulendiagramm (Plotly)
 # ---------------------------------------------------------------------------
-TOP5_COLORS = ["#1B3A5C", "#6A9BC3", "#B8973A", "#C4B78C", "#A8CBE8"]
+TOP5_COLORS = ["#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8"]
 
 
 def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
@@ -340,7 +369,7 @@ def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
         textfont=dict(size=11),
     )])
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=13)),
+        title=dict(text=f"<b>{title}</b>", font=dict(size=13, color="#003460")),
         height=350,
         xaxis=dict(tickfont=dict(size=10), tickangle=-25),
         yaxis=dict(title="Gewicht (%)", ticksuffix="%"),
@@ -356,12 +385,22 @@ def _mpl_ring_chart(alloc_df, group_col, title):
     fig, ax = plt.subplots(figsize=(6, 5))
     labels = alloc_df[group_col].tolist()
     sizes = alloc_df["Gewicht"].tolist()
+    total = sum(sizes) if sum(sizes) > 0 else 1.0
     colors = RING_COLORS[:len(alloc_df)]
+
+    # Kleine Segmente herausziehen
+    explode = [0.03 if s / total < 0.05 else 0 for s in sizes]
+
+    # Labels nur für Segmente >= 3%
+    def _pct(pct):
+        return f"{pct:.1f}%" if pct >= 3.0 else ""
+
     wedges, texts, autotexts = ax.pie(
-        sizes, labels=None, autopct="%1.1f%%", startangle=90, colors=colors,
-        pctdistance=0.8, wedgeprops=dict(width=0.4, edgecolor="white", linewidth=1.5))
-    for t in autotexts: t.set_fontsize(8)
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=15)
+        sizes, labels=None, autopct=_pct, startangle=90, colors=colors,
+        pctdistance=0.8, explode=explode,
+        wedgeprops=dict(width=0.4, edgecolor="white", linewidth=2))
+    for t in autotexts: t.set_fontsize(8); t.set_color("#333333")
+    ax.set_title(title, fontsize=11, fontweight="bold", color="#003460", pad=15)
     ax.legend(labels, loc="center left", bbox_to_anchor=(1, 0.5), fontsize=7)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
