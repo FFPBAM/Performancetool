@@ -26,6 +26,7 @@ from reportlab.lib.colors import HexColor, white
 from modules.shared import (
     FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
     DATA_FOLDER_PF, DURATION_FOLDER, EXCLUDE_SUBSTRINGS,
+    PDF_FONT, PDF_FONT_BOLD,
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, get_logo_aspect, get_logo_path,
     csv_name_to_display,
@@ -598,11 +599,11 @@ def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
     doc = SimpleDocTemplate(buf, pagesize=A4,
         topMargin=15*mm, bottomMargin=15*mm, leftMargin=15*mm, rightMargin=15*mm)
     styles = getSampleStyleSheet()
-    st_t = ParagraphStyle("PFT", parent=styles["Title"], textColor=HexColor(FFPB_DARK), fontSize=16, spaceAfter=6)
-    st_s = ParagraphStyle("PFS", parent=styles["Heading2"], textColor=HexColor(FFPB_DARK), fontSize=12, spaceAfter=4, spaceBefore=10)
-    st_n = ParagraphStyle("PFN", parent=styles["Normal"], textColor=HexColor("#333333"), fontSize=9, leading=12)
-    st_sm = ParagraphStyle("PFSM", parent=styles["Normal"], textColor=HexColor("#666666"), fontSize=7.5, leading=10)
-    st_g = ParagraphStyle("PFG", parent=styles["Heading3"], textColor=HexColor(FFPB_GOLD), fontSize=10, spaceAfter=2, spaceBefore=6)
+    st_t = ParagraphStyle("PFT", parent=styles["Title"], fontName=PDF_FONT_BOLD, textColor=HexColor(FFPB_DARK), fontSize=16, spaceAfter=6)
+    st_s = ParagraphStyle("PFS", parent=styles["Heading2"], fontName=PDF_FONT_BOLD, textColor=HexColor(FFPB_DARK), fontSize=12, spaceAfter=4, spaceBefore=10)
+    st_n = ParagraphStyle("PFN", parent=styles["Normal"], fontName=PDF_FONT, textColor=HexColor("#333333"), fontSize=9, leading=12)
+    st_sm = ParagraphStyle("PFSM", parent=styles["Normal"], fontName=PDF_FONT, textColor=HexColor("#666666"), fontSize=7.5, leading=10)
+    st_g = ParagraphStyle("PFG", parent=styles["Heading3"], fontName=PDF_FONT_BOLD, textColor=HexColor(FFPB_GOLD), fontSize=10, spaceAfter=2, spaceBefore=6)
 
     logo_path = get_logo_path(); la = get_logo_aspect(logo_path)
     story = []
@@ -660,7 +661,7 @@ def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
             t = Table(tdata, colWidths=[cw]*nc, repeatRows=1)
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), HexColor(FFPB_DARK)), ("TEXTCOLOR", (0,0), (-1,0), white),
-                ("FONTSIZE", (0,0), (-1,-1), 6), ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE", (0,0), (-1,-1), 6), ("FONTNAME", (0,0), (-1,0), PDF_FONT_BOLD),
                 ("ALIGN", (2,0), (-1,-1), "RIGHT"), ("ALIGN", (0,0), (1,-1), "LEFT"),
                 ("GRID", (0,0), (-1,-1), 0.5, HexColor("#CCCCCC")),
                 ("ROWBACKGROUNDS", (0,1), (-1,-1), [white, HexColor("#F5F5F5")]),
