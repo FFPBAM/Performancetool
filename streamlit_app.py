@@ -31,6 +31,7 @@ from PIL import Image as PILImage
 from modules.shared import (
     LOGO_FILENAME, FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
     MAPPING_PATH, NAME_MAPPING_PATH, DATA_FOLDER, EXCLUDE_SUBSTRINGS,
+    PDF_FONT, PDF_FONT_BOLD,
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping, load_name_mapping,
     build_name_lookups, get_logo_aspect, get_logo_path,
@@ -305,10 +306,10 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
     buf=io.BytesIO()
     doc=SimpleDocTemplate(buf,pagesize=A4,topMargin=15*mm,bottomMargin=15*mm,leftMargin=15*mm,rightMargin=15*mm)
     styles=getSampleStyleSheet()
-    st_t=ParagraphStyle("T",parent=styles["Title"],textColor=HexColor(FFPB_DARK),fontSize=16,spaceAfter=6)
-    st_s=ParagraphStyle("S",parent=styles["Heading2"],textColor=HexColor(FFPB_DARK),fontSize=12,spaceAfter=4,spaceBefore=10)
-    st_n=ParagraphStyle("N",parent=styles["Normal"],textColor=HexColor("#333333"),fontSize=9,leading=12)
-    st_sm=ParagraphStyle("SM",parent=styles["Normal"],textColor=HexColor("#666666"),fontSize=7.5,leading=10)
+    st_t=ParagraphStyle("T",parent=styles["Title"],fontName=PDF_FONT_BOLD,textColor=HexColor(FFPB_DARK),fontSize=16,spaceAfter=6)
+    st_s=ParagraphStyle("S",parent=styles["Heading2"],fontName=PDF_FONT_BOLD,textColor=HexColor(FFPB_DARK),fontSize=12,spaceAfter=4,spaceBefore=10)
+    st_n=ParagraphStyle("N",parent=styles["Normal"],fontName=PDF_FONT,textColor=HexColor("#333333"),fontSize=9,leading=12)
+    st_sm=ParagraphStyle("SM",parent=styles["Normal"],fontName=PDF_FONT,textColor=HexColor("#666666"),fontSize=7.5,leading=10)
     la=get_logo_aspect(logo_path); story=[]
     if logo_path and os.path.exists(logo_path):
         lw=50*mm; story.append(RLImage(logo_path,width=lw,height=lw*la)); story.append(Spacer(1,4*mm))
@@ -361,7 +362,7 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
         td=[hdr]+df_roll.values.tolist(); nc=len(hdr); fw=45*mm; ow=(170*mm-fw)/max(nc-1,1); cw=[fw]+[ow]*(nc-1)
         t=Table(td,colWidths=cw,repeatRows=1)
         t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),HexColor(FFPB_DARK)),("TEXTCOLOR",(0,0),(-1,0),white),
-            ("FONTSIZE",(0,0),(-1,-1),7),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("ALIGN",(1,0),(-1,-1),"RIGHT"),
+            ("FONTSIZE",(0,0),(-1,-1),7),("FONTNAME",(0,0),(-1,0),PDF_FONT_BOLD),("ALIGN",(1,0),(-1,-1),"RIGHT"),
             ("ALIGN",(0,0),(0,-1),"LEFT"),("GRID",(0,0),(-1,-1),0.5,HexColor("#CCCCCC")),
             ("ROWBACKGROUNDS",(0,1),(-1,-1),[white,HexColor("#F5F5F5")]),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
             ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)])); story.append(t)
@@ -496,6 +497,19 @@ def build_portfolio_timeseries(files, mapping):
 # STREAMLIT APP
 # ==========================================================================
 st.set_page_config(page_title="FFPB – Performance & Portfolioanalyse", layout="wide")
+
+# Globale Schriftart: Segoe UI
+st.markdown("""
+<style>
+    html, body, [class*="css"], .stMarkdown, .stMetricLabel, .stMetricValue,
+    .stSelectbox, .stMultiSelect, .stTextInput, .stNumberInput,
+    .stDataFrame, .stTable, .stCaption, .stButton, .stTabs,
+    h1, h2, h3, h4, h5, h6, p, span, div, label, input, button, textarea {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 if not check_login(): st.stop()
 st.title("Fürst Fugger Privatbank – Vermögensverwaltung")
 
