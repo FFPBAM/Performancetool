@@ -430,7 +430,13 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     if df_pf_2 is not None and "Auswertungsdatum" in df_pf_2.columns and df_pf_2["Auswertungsdatum"].notna().any():
         ad2 = df_pf_2["Auswertungsdatum"].iloc[0]
 
-    st.info(f"📅 **Momentaufnahme per {fmt_date_de(ad1) if ad1 else date_tag_pf}** – "
+    auswertung_str = fmt_date_de(ad1) if ad1 else date_tag_pf
+
+    # Hinweis + Quelle oben
+    st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
+    st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
+
+    st.info(f"📅 **Momentaufnahme per {auswertung_str}** – "
             f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag.")
 
     # Render
@@ -438,6 +444,23 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     if show_compare_pf and df_pf_2 is not None:
         st.markdown("---")
         _render_single_portfolio(pf_sel_2, df_pf_2, ad2, anlagevolumen, use_volume, show_ytd, dur_2)
+
+    # Disclaimer
+    st.markdown("---")
+    st.markdown("##### Disclaimer")
+    st.markdown(
+        "Die dargestellten Daten zeigen den Portfoliobestand zu einem bestimmten Stichtag. "
+        "Die tatsächlichen Gewichtungen können zum Zeitpunkt der Betrachtung durch Käufe, Verkäufe "
+        "und Kursveränderungen bereits abweichen, da keine Live-Daten verwendet werden. "
+        "Auch die Zuordnung zu Gattungen, Segmenten und Regionen basiert auf der zum Stichtag "
+        "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern."
+    )
+    st.markdown(
+        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
+        "Beratungsgespräch. Alle Angaben sind ohne Gewähr."
+    )
+    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
+    st.markdown("**Ansprechpartner:** PBAM")
 
     # PDF
     st.markdown("---")
@@ -590,6 +613,11 @@ def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
     story.append(HRFlowable(width="100%", thickness=1, color=HexColor(FFPB_DARK)))
     story.append(Spacer(1, 3*mm))
 
+    # Quelle
+    first_ad_meta = portfolios[0][2] if portfolios else None
+    story.append(Paragraph(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {fmt_date_de(first_ad_meta) if first_ad_meta else ''}", st_sm))
+    story.append(Spacer(1, 3*mm))
+
     for item in portfolios:
         label, df, auswertungsdatum = item[0], item[1], item[2]
         dur_info = item[3] if len(item) > 3 else None
@@ -641,6 +669,34 @@ def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
             story.append(t); story.append(Spacer(1, 2*mm))
 
         story.append(PageBreak())
+
+    # ── Disclaimer ──
+    if logo_path:
+        lws = 35*mm; story.append(RLImage(logo_path, width=lws, height=lws*la)); story.append(Spacer(1, 3*mm))
+    story.append(Paragraph("Disclaimer", st_s))
+    story.append(Spacer(1, 3*mm))
+
+    # Auswertungsdatum aus erstem Portfolio für Quellenangabe
+    first_ad = portfolios[0][2] if portfolios else None
+    ad_str = fmt_date_de(first_ad) if first_ad else ""
+
+    disclaimer_pf = [
+        "Die dargestellten Daten zeigen den Portfoliobestand zu einem bestimmten Stichtag. "
+        "Die tatsächlichen Gewichtungen können zum Zeitpunkt der Betrachtung durch Käufe, Verkäufe "
+        "und Kursveränderungen bereits abweichen, da keine Live-Daten verwendet werden. "
+        "Auch die Zuordnung zu Gattungen, Segmenten und Regionen basiert auf der zum Stichtag "
+        "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern.",
+
+        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
+        "Beratungsgespräch. Alle Angaben sind ohne Gewähr.",
+    ]
+    for txt in disclaimer_pf:
+        story.append(Paragraph(txt, st_n))
+        story.append(Spacer(1, 2*mm))
+
+    story.append(Spacer(1, 3*mm))
+    story.append(Paragraph(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {ad_str}", st_n))
+    story.append(Paragraph("<b>Ansprechpartner:</b> PBAM", st_n))
 
     story.append(Spacer(1, 10*mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#CCCCCC")))
