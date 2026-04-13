@@ -311,40 +311,46 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     # BEREICH 2: FILTER (über der Suche, standardmäßig offen)
     # ══════════════════════════════════════════════════════════════════════
     st.markdown("---")
-    with st.expander("🔍 Anlageuniversum filtern", expanded=True):
-        f1, f2, f3, f4 = st.columns(4)
-        with f1: st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset", placeholder="z.B. Aktien, Renten...")
-        with f2: st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region", placeholder="z.B. Nordamerika, Europa...")
-        with f3: st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment", placeholder="z.B. Technologie, Pharma...")
-        with f4: st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml", placeholder="z.B. Vermögensverwaltung+Beratung")
+    st.markdown("### 🔍 Anlageuniversum filtern")
 
+    f1, f2, f3, f4 = st.columns(4)
+    with f1: st.multiselect("Assetklasse", sorted(universe["Assetklasse"].dropna().unique().tolist()), key="f_asset", placeholder="z.B. Aktien, Renten...")
+    with f2: st.multiselect("Region", sorted(universe["Region"].dropna().unique().tolist()), key="f_region", placeholder="z.B. Nordamerika, Europa...")
+    with f3: st.multiselect("Segment", sorted(universe["Segment"].dropna().unique().tolist()), key="f_segment", placeholder="z.B. Technologie, Pharma...")
+    with f4: st.multiselect("Masterlistenzuordnung", sorted(universe["Masterlistenzuordnung"].dropna().unique().tolist()), key="f_ml", placeholder="z.B. Vermögensverwaltung+Beratung")
+
+    show_adv_filters = st.checkbox("Erweiterte Filter anzeigen", value=False, key="adv_filters")
+    if show_adv_filters:
         ef1, ef2, ef3, ef4 = st.columns(4)
         with ef1: st.number_input("Kupon min (%)", 0.0, 20.0, value=0.0, step=0.5, key="f_kmin")
         with ef2: st.number_input("Duration min (J)", 0.0, 30.0, value=0.0, step=0.5, key="f_dmin")
         with ef3: st.number_input("Duration max (J)", 0.0, 30.0, value=30.0, step=0.5, key="f_dmax")
         with ef4: st.number_input("Risiko max", 1, 7, value=7, step=1, key="f_mrw")
 
-        # Gefilterte Übersichtstabelle
-        filters = {}
-        fa = st.session_state.get("f_asset", [])
-        fr = st.session_state.get("f_region", [])
-        fs = st.session_state.get("f_segment", [])
-        fm = st.session_state.get("f_ml", [])
-        fkm = st.session_state.get("f_kmin", 0.0)
-        fdm = st.session_state.get("f_dmin", 0.0)
-        fdx = st.session_state.get("f_dmax", 30.0)
-        fmr = st.session_state.get("f_mrw", 7)
-        if fa: filters["Assetklasse"] = fa
-        if fr: filters["Region"] = fr
-        if fs: filters["Segment"] = fs
-        if fm: filters["Masterlistenzuordnung"] = fm
-        if fkm > 0: filters["kupon_min"] = fkm / 100.0
-        if fdm > 0: filters["duration_min"] = fdm
-        if fdx < 30: filters["duration_max"] = fdx
-        if fmr < 7: filters["mrw_max"] = fmr
+    # Gefilterte Übersichtstabelle
+    filters = {}
+    fa = st.session_state.get("f_asset", [])
+    fr = st.session_state.get("f_region", [])
+    fs = st.session_state.get("f_segment", [])
+    fm = st.session_state.get("f_ml", [])
+    fkm = st.session_state.get("f_kmin", 0.0)
+    fdm = st.session_state.get("f_dmin", 0.0)
+    fdx = st.session_state.get("f_dmax", 30.0)
+    fmr = st.session_state.get("f_mrw", 7)
+    if fa: filters["Assetklasse"] = fa
+    if fr: filters["Region"] = fr
+    if fs: filters["Segment"] = fs
+    if fm: filters["Masterlistenzuordnung"] = fm
+    if fkm > 0: filters["kupon_min"] = fkm / 100.0
+    if fdm > 0: filters["duration_min"] = fdm
+    if fdx < 30: filters["duration_max"] = fdx
+    if fmr < 7: filters["mrw_max"] = fmr
 
-        filtered = apply_filters(universe, filters)
-        st.caption(f"📋 {len(filtered)} Titel gefunden")
+    filtered = apply_filters(universe, filters)
+    st.caption(f"📋 {len(filtered)} Titel gefunden")
+
+    show_table = st.checkbox("Gefilterte Titel anzeigen", value=False, key="show_filtered_table")
+    if show_table:
         show_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region", "Kupon", "Duration", "Fälligkeit", "Marktrisikowert"]
         st.dataframe(filtered[[c for c in show_cols if c in filtered.columns]].head(200),
                      use_container_width=True, hide_index=True)
