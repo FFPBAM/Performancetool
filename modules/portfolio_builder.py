@@ -215,6 +215,10 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     st.success(f"📂 Anlageuniversum: **{len(universe)} Titel** geladen (Stand: {zm_hint})")
 
+    # Hinweis + Quelle oben
+    st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
+    st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {zm_hint}")
+
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 1: MUSTERPORTFOLIO & SCHNELLZUGRIFFE
     # ══════════════════════════════════════════════════════════════════════
@@ -652,3 +656,28 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 with vr3:
                     vs = build_allocation(vgl_df, "Segment")
                     if not vs.empty: st.plotly_chart(build_ring_chart(vs, "Segment", f"Segment – {vgl_sel}"), use_container_width=True)
+    else:
+        st.info("Keine Musterportfolios verfügbar.")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # DISCLAIMER
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("##### Disclaimer")
+    st.markdown(
+        "Das zusammengestellte Portfolio stellt eine simulierte Zusammensetzung dar und spiegelt keine "
+        "tatsächliche Vermögensverwaltung wider. Die angezeigten Gewichtungen, Kennzahlen und Allokationen "
+        "basieren auf den zum Stichtag verfügbaren Stammdaten des Anlageuniversums."
+    )
+    st.markdown(
+        "Die Zuordnung von Titeln zu Segmenten, Regionen und Assetklassen sowie die Masterlistenzuordnung "
+        "können sich jederzeit ändern. Vor der Umsetzung ist die aktuelle Zulassung und Klassifizierung "
+        "der Titel zu prüfen. Die Anforderungen der Produktgovernance (Zielmarktprüfung) sind einzuhalten "
+        "und Kunden entsprechend zu informieren."
+    )
+    st.markdown(
+        "Die Portfoliozusammenstellung dient ausschließlich der unverbindlichen Veranschaulichung im "
+        "Beratungsgespräch und stellt keine Anlageberatung oder -empfehlung dar. Alle Angaben sind ohne Gewähr."
+    )
+    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {zm_hint}")
+    st.markdown("**Ansprechpartner:** PBAM")
