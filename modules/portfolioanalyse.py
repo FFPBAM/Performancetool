@@ -230,7 +230,7 @@ def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show
         if is_bond and has_faelligkeit:
             result["Fälligkeit"] = sub["Fälligkeit_parsed"].apply(lambda x: fmt_date_de(x) if pd.notna(x) else "–")
         if has_perf:
-            result["Wertpapier-Perf. (YTD)"] = sub["WP-Performance"]
+            result["Wertpapier-Performance (YTD)"] = sub["WP-Performance"]
         if has_beitrag:
             result["Performancebeitrag (YTD)"] = sub["Performancebeitrag"]
         if use_volume:
@@ -242,8 +242,8 @@ def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show
             disp["Gewicht"] = disp["Gewicht"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
         if "Kupon" in disp.columns:
             disp["Kupon"] = disp["Kupon"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) and x != 0 else "–")
-        if "Wertpapier-Perf. (YTD)" in disp.columns:
-            disp["Wertpapier-Perf. (YTD)"] = disp["Wertpapier-Perf. (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
+        if "Wertpapier-Performance (YTD)" in disp.columns:
+            disp["Wertpapier-Performance (YTD)"] = disp["Wertpapier-Performance (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
         if "Performancebeitrag (YTD)" in disp.columns:
             disp["Performancebeitrag (YTD)"] = disp["Performancebeitrag (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
         if "Investiert (€)" in disp.columns:
