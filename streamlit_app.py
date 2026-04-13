@@ -501,6 +501,7 @@ st.set_page_config(page_title="FFPB – Performance & Portfolioanalyse", layout=
 # Globale Schriftart + Toolbar-Icons ausblenden (Rendering-Bug auf Streamlit Cloud)
 st.markdown("""
 <style>
+    /* Globale Schriftart */
     html, body, [class*="css"], .stMarkdown, .stMetricLabel, .stMetricValue,
     .stSelectbox, .stMultiSelect, .stTextInput, .stNumberInput,
     .stDataFrame, .stTable, .stCaption, .stButton, .stTabs,
@@ -508,14 +509,42 @@ st.markdown("""
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
     }
 
-    /* Toolbar-Icons bei DataFrames, Charts und Expandern ausblenden */
-    [data-testid="stElementToolbar"] {
+    /* === FIX: Broken Material Icons auf Streamlit Cloud === */
+
+    /* Toolbar komplett ausblenden (Fullscreen, Download, Search bei DataFrames/Charts) */
+    [data-testid="stElementToolbar"],
+    [data-testid="StyledFullScreenButton"],
+    [data-testid="stElementToolbarButton"] {
         display: none !important;
     }
-    /* Fullscreen-Button bei Charts ausblenden */
+
+    /* Alle Material Icons Symbole die als Text rendern */
+    .material-symbols-rounded,
+    .material-icons,
+    span[class*="material"] {
+        font-size: 0 !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* Fullscreen-Buttons */
     button[title="View fullscreen"],
-    button[title="Exit fullscreen"] {
+    button[title="Exit fullscreen"],
+    button[kind="icon"] {
         display: none !important;
+    }
+
+    /* Column sort/filter Icons in DataFrames */
+    [data-testid="stDataFrame"] button[kind="icon"],
+    [data-testid="stDataFrame"] [data-testid="stElementToolbar"] {
+        display: none !important;
+    }
+
+    /* Selectbox/Multiselect Dropdown-Pfeil reparieren */
+    [data-baseweb="select"] [data-testid="stMarkdownContainer"] {
+        overflow: hidden !important;
     }
 </style>
 """, unsafe_allow_html=True)
