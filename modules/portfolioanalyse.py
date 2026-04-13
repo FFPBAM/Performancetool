@@ -390,7 +390,8 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     pf_files = load_pf_csvs(DATA_FOLDER_PF, date_tag_pf)
     if not pf_files:
         st.warning(f"Keine Portfolioanalyse-Dateien für Tag {date_tag_pf} in {DATA_FOLDER_PF}/ gefunden.")
-        with st.expander("🔍 Debug"):
+        show_debug = st.checkbox("🔍 Debug anzeigen", value=False, key="pf_debug")
+        if show_debug:
             import glob as g
             af = g.glob(os.path.join(DATA_FOLDER_PF, "*"))
             st.write("Dateien:", [os.path.basename(f) for f in af] if af else "Ordner leer/nicht vorhanden")
