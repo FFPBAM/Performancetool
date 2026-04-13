@@ -303,14 +303,16 @@ def get_bond_summary(df: pd.DataFrame) -> dict:
 # Ring-Diagramm (Plotly) – Labels außerhalb, Corporate Design
 # ---------------------------------------------------------------------------
 def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.Figure:
-    labels = alloc_df[group_col].tolist()
-    values = alloc_df["Gewicht"].tolist()
+    # Absteigend sortieren (größter Block zuerst)
+    sorted_df = alloc_df.sort_values("Gewicht", ascending=False).reset_index(drop=True)
+    labels = sorted_df[group_col].tolist()
+    values = sorted_df["Gewicht"].tolist()
     total = sum(values) if sum(values) > 0 else 1.0
 
-    # Kleine Segmente leicht herausziehen für bessere Sichtbarkeit
+    # Kleine Segmente leicht herausziehen
     pull = [0.03 if v / total < 0.05 else 0 for v in values]
 
-    # Labels: außerhalb mit Verbindungslinie, unter 3% nur in Legende
+    # Labels: außerhalb, unter 3% ausblenden
     text_info = []
     for v in values:
         pct = v / total
@@ -324,16 +326,17 @@ def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.F
         values=values,
         hole=0.5,
         marker=dict(
-            colors=RING_COLORS[:len(alloc_df)],
+            colors=RING_COLORS[:len(sorted_df)],
             line=dict(color="white", width=2),
         ),
         textinfo="text",
         text=text_info,
         textposition="outside",
-        textfont=dict(size=11, color="#333333"),
+        textfont=dict(size=13, color="#333333"),
         pull=pull,
         hovertemplate="<b>%{label}</b><br>Gewicht: %{percent}<extra></extra>",
         sort=False,
+        rotation=90,
         direction="clockwise",
     )])
 
@@ -348,7 +351,8 @@ def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.F
             x=0.5,
             xanchor="center",
         ),
-        margin=dict(t=50, b=80, l=30, r=30),
+        margin=dict(t=50, b=80, l=40, r=40),
+        uniformtext=dict(minsize=11, mode="hide"),
     )
     return fig
 
