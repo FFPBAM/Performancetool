@@ -1,713 +1,210 @@
-# modules/portfolioanalyse.py
-"""Portfolioanalyse: Bestands- und Allokationsübersicht."""
-
-import os
-import re
-import glob
-import io
-import datetime as dt
-
-import numpy as np
-import pandas as pd
-import streamlit as st
-import plotly.graph_objects as go
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
-    Table, TableStyle, PageBreak, HRFlowable,
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.colors import HexColor, white
-
-from modules.shared import (
-    FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
-    DATA_FOLDER_PF, DURATION_FOLDER, EXCLUDE_SUBSTRINGS,
-    PDF_FONT, PDF_FONT_BOLD,
-    fmt_date_de, fmt_pct_de, fmt_eur_de,
-    detect_newest_date_tag, get_logo_aspect, get_logo_path,
-    csv_name_to_display,
-)
-
-
-# ---------------------------------------------------------------------------
-# Ring-Chart Farben
-# ---------------------------------------------------------------------------
-RING_COLORS = [
-    "#B8973A", "#2C5F8A", "#A8CBE8", "#7FB5D5", "#1B3A5C",
-    "#E8A838", "#5BA0D0", "#C4C4C4", "#3A7CA5", "#D4A84B",
-    "#8FBDD3", "#4A6E8C", "#F0C070", "#6A9BC3", "#2A4A6C",
-]
-SONSTIGE_THRESHOLD = 0.03  # Kategorien unter 3% → "Sonstige"
-
-
-# ---------------------------------------------------------------------------
-# Data Loading
-# ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=True)
-def load_pf_csvs(data_folder: str, date_tag: str) -> list:
-    files = []
-    for ext in ["*.CSV", "*.csv"]:
-        all_files = glob.glob(os.path.join(data_folder, ext))
-        for f in all_files:
-            if date_tag in os.path.basename(f):
-                files.append(f)
-    return list(set(files))
-
-
-def read_pf_csv(path: str) -> pd.DataFrame:
-    return pd.read_csv(
-        path, comment="#", encoding="ISO-8859-1",
-        delimiter=";", decimal=",", thousands=".", dtype=str
-    )
-
-
-def parse_pf_data(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-
-    # Alle String-Spalten bereinigen (trim, nan-safe)
-    for col in ["Wertpapier", "WKN", "ISIN", "Segment", "Region", "Gattung", "Portfolio Name"]:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-            df[col] = df[col].replace("nan", np.nan)
-
-    for col in ["Gewicht", "Performancebeitrag", "WP-Performance", "Kupon"]:
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
-            df[col] = pd.to_numeric(df[col], errors="coerce") / 100.0
-    if "Auswertungsdatum" in df.columns:
-        df["Auswertungsdatum"] = pd.to_datetime(df["Auswertungsdatum"], format="%d.%m.%Y", errors="coerce")
-    if "Fälligkeit" in df.columns:
-        df["Fälligkeit_parsed"] = pd.to_datetime(df["Fälligkeit"], format="%d.%m.%Y", errors="coerce")
-    return df
-
-
-@st.cache_data(show_spinner=True)
-def build_pf_data(files: list[str]) -> dict:
-    out = {}
-    for path in files:
-        df = read_pf_csv(path)
-        if "Portfolio Name" not in df.columns or df.empty:
-            continue
-        portfolio_name = df["Portfolio Name"].iloc[0].strip()
-        df = parse_pf_data(df)
-        out[portfolio_name] = df
-    return out
-
-
-# ---------------------------------------------------------------------------
-# Duration Loading
-# ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
-def load_duration_data(duration_folder: str, name_mapping: pd.DataFrame) -> dict:
-    """
-    Lädt die neueste Duration-Datei und gibt ein Dict zurück:
-    {csv_portfolio_name: {"duration": float, "rendite": float}}
-    Zuordnung über Spalte C (Duration-Name) im Mapping.
-    """
-    # Neueste Datei finden
-    all_files = glob.glob(os.path.join(duration_folder, "*.CSV")) + \
-                glob.glob(os.path.join(duration_folder, "*.csv"))
-    if not all_files:
-        return {}
-
-    # Nach Zeitstempel im Namen sortieren (neueste zuerst)
-    tag_pattern = re.compile(r"_(\d{6})_(\d{4})")
-    def _sort_key(f):
-        m = tag_pattern.search(os.path.basename(f))
-        return m.group(1) + m.group(2) if m else "000000_0000"
-    all_files.sort(key=_sort_key, reverse=True)
-    newest = all_files[0]
-
-    # CSV lesen
-    try:
-        df = pd.read_csv(newest, comment="#", encoding="ISO-8859-1",
-                         delimiter=";", decimal=",", thousands=".", dtype=str)
-    except Exception:
-        # Auch Tab-getrennt oder Excel probieren
-        try:
-            df = pd.read_csv(newest, comment="#", encoding="UTF-8",
-                             delimiter="\t", decimal=",", thousands=".", dtype=str)
-        except Exception:
-            return {}
-
-    if "Wertpapier" not in df.columns or "Duration" not in df.columns:
-        return {}
-
-    # Rendite parsen
-    if "Rendite" in df.columns:
-        df["Rendite"] = df["Rendite"].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
-        df["Rendite"] = pd.to_numeric(df["Rendite"], errors="coerce") / 100.0
-    df["Duration"] = pd.to_numeric(df["Duration"].astype(str).str.replace(",", "."), errors="coerce")
-
-    # Mapping: Spalte C (Duration-Name) → Spalte B (CSV-Key)
-    col_csv_key = name_mapping.columns[1]   # "Honorarsatz Mapping"
-    col_duration = name_mapping.columns[2]  # "Duration" (Spalte C)
-    duration_to_csv = dict(zip(name_mapping[col_duration], name_mapping[col_csv_key]))
-
-    result = {}
-    for _, row in df.iterrows():
-        dur_name = str(row["Wertpapier"]).strip()
-        csv_name = duration_to_csv.get(dur_name)
-        if csv_name:
-            entry = {"duration": row["Duration"] if pd.notna(row["Duration"]) else None}
-            if "Rendite" in df.columns:
-                entry["rendite"] = row["Rendite"] if pd.notna(row["Rendite"]) else None
-            else:
-                entry["rendite"] = None
-            result[csv_name] = entry
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Berechnungen
-# ---------------------------------------------------------------------------
-def calc_liquidity(df: pd.DataFrame) -> float:
-    total_weight = df["Gewicht"].sum()
-    return max(0.0, 1.0 - total_weight)
-
-
-def build_allocation(df: pd.DataFrame, group_col: str, sonstige_threshold: float = SONSTIGE_THRESHOLD) -> pd.DataFrame:
-    """Aggregiert Gewichte nach Gruppierung + Liquidität. Kleine Kategorien → Sonstige."""
-    if group_col not in df.columns:
-        return pd.DataFrame()
-    agg = df.groupby(group_col)["Gewicht"].sum().reset_index()
-    agg.columns = [group_col, "Gewicht"]
-    agg = agg.sort_values("Gewicht", ascending=False).reset_index(drop=True)
-
-    # Kleine Positionen zusammenfassen
-    big = agg[agg["Gewicht"] >= sonstige_threshold]
-    small = agg[agg["Gewicht"] < sonstige_threshold]
-    if len(small) > 1:
-        sonstige_weight = small["Gewicht"].sum()
-        sonstige_row = pd.DataFrame([{group_col: "Sonstige", "Gewicht": sonstige_weight}])
-        agg = pd.concat([big, sonstige_row], ignore_index=True)
-    elif len(small) == 1:
-        agg = pd.concat([big, small], ignore_index=True)
-    else:
-        agg = big.reset_index(drop=True)
-
-    # Liquidität
-    liq = calc_liquidity(df)
-    if liq > 0.0001:
-        agg = pd.concat([agg, pd.DataFrame([{group_col: "Liquidität", "Gewicht": liq}])], ignore_index=True)
-
-    return agg
-
-
-def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show_ytd: bool = False):
-    """
-    Baut Tabellen-Daten gruppiert nach Gattung auf.
-    Returns: list of (gattung_name, display_dataframe)
-    """
-    if "Gattung" not in df.columns:
-        return []
-
-    base_cols = ["Wertpapier", "WKN", "Gewicht", "Segment", "Region"]
-    has_kupon = "Kupon" in df.columns and df["Kupon"].notna().any() and (df["Kupon"] != 0).any()
-    has_faelligkeit = "Fälligkeit_parsed" in df.columns and df["Fälligkeit_parsed"].notna().any()
-    has_perf = show_ytd and "WP-Performance" in df.columns and df["WP-Performance"].notna().any()
-    has_beitrag = show_ytd and "Performancebeitrag" in df.columns and df["Performancebeitrag"].notna().any()
-    use_volume = anlagevolumen > 0
-
-    groups = []
-    gattung_order = df.groupby("Gattung")["Gewicht"].sum().sort_values(ascending=False).index.tolist()
-
-    for gattung in gattung_order:
-        sub = df[df["Gattung"] == gattung].copy()
-        sub = sub.sort_values("Gewicht", ascending=False)
-
-        available = [c for c in base_cols if c in sub.columns]
-        result = sub[available].copy()
-
-        # Anleihen-spezifische Spalten nur bei Renten
-        is_bond = "rente" in gattung.lower() or "anleihe" in gattung.lower() or "bond" in gattung.lower()
-        if is_bond and has_kupon:
-            result["Kupon"] = sub["Kupon"]
-        if is_bond and has_faelligkeit:
-            result["Fälligkeit"] = sub["Fälligkeit_parsed"].apply(lambda x: fmt_date_de(x) if pd.notna(x) else "–")
-        if has_perf:
-            result["Wertpapier-Performance (YTD)"] = sub["WP-Performance"]
-        if has_beitrag:
-            result["Performancebeitrag (YTD)"] = sub["Performancebeitrag"]
-        if use_volume:
-            result["Investiert (€)"] = sub["Gewicht"] * anlagevolumen
-
-        # Formatieren
-        disp = result.copy()
-        if "Gewicht" in disp.columns:
-            disp["Gewicht"] = disp["Gewicht"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
-        if "Kupon" in disp.columns:
-            disp["Kupon"] = disp["Kupon"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) and x != 0 else "–")
-        if "Wertpapier-Performance (YTD)" in disp.columns:
-            disp["Wertpapier-Performance (YTD)"] = disp["Wertpapier-Performance (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
-        if "Performancebeitrag (YTD)" in disp.columns:
-            disp["Performancebeitrag (YTD)"] = disp["Performancebeitrag (YTD)"].apply(lambda x: fmt_pct_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
-        if "Investiert (€)" in disp.columns:
-            disp["Investiert (€)"] = disp["Investiert (€)"].apply(lambda x: fmt_eur_de(x) if isinstance(x, (int, float)) and not pd.isna(x) else "–")
-
-        # Gattung-Gewicht für Header
-        gattung_weight = sub["Gewicht"].sum()
-        groups.append((gattung, gattung_weight, disp))
-
-    # Liquidität
-    liq = calc_liquidity(df)
-    if liq > 0.0001:
-        liq_data = {"Wertpapier": "Liquidität", "Gewicht": fmt_pct_de(liq)}
-        if use_volume:
-            liq_data["Investiert (€)"] = fmt_eur_de(liq * anlagevolumen)
-        groups.append(("💰 Liquidität", liq, pd.DataFrame([liq_data])))
-
-    return groups
-
-
-def get_top_holdings(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
-    """Top N Positionen nach Gewicht."""
-    return df.nlargest(n, "Gewicht")[["Wertpapier", "WKN", "Gewicht", "Gattung"]].copy()
-
-
-def get_top_flop(df: pd.DataFrame, col: str, n: int = 5):
-    valid = df[df[col].notna() & (df[col] != 0)].copy()
-    if valid.empty:
-        return pd.DataFrame(), pd.DataFrame()
-    top = valid.nlargest(n, col)[["Wertpapier", "WKN", "Gewicht", col]].copy()
-    flop = valid.nsmallest(n, col)[["Wertpapier", "WKN", "Gewicht", col]].copy()
-    return top, flop
-
-
-def get_bond_summary(df: pd.DataFrame) -> dict:
-    bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
-    if bonds.empty:
-        return None
-    summary = {"count": len(bonds)}
-    if "Kupon" in bonds.columns and bonds["Kupon"].notna().any():
-        w = bonds["Gewicht"].fillna(0); k = bonds["Kupon"].fillna(0)
-        summary["avg_kupon"] = float((w * k).sum() / w.sum()) if w.sum() > 0 else None
-    else:
-        summary["avg_kupon"] = None
-    if "Fälligkeit_parsed" in bonds.columns and bonds["Fälligkeit_parsed"].notna().any():
-        faell = bonds[bonds["Fälligkeit_parsed"].notna()].copy()
-        faell["Jahr"] = faell["Fälligkeit_parsed"].dt.year
-        summary["faelligkeit"] = faell.groupby("Jahr")["Gewicht"].sum().reset_index()
-        summary["faelligkeit"].columns = ["Jahr", "Gewicht"]
-    else:
-        summary["faelligkeit"] = None
-    summary["total_weight"] = float(bonds["Gewicht"].sum())
-    return summary
-
-
-# ---------------------------------------------------------------------------
-# Ring-Diagramm (Plotly) – verbessert
-# ---------------------------------------------------------------------------
-def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.Figure:
-    fig = go.Figure(data=[go.Pie(
-        labels=alloc_df[group_col],
-        values=alloc_df["Gewicht"],
-        hole=0.5,
-        marker=dict(colors=RING_COLORS[:len(alloc_df)]),
-        textinfo="percent",
-        textposition="inside",
-        textfont=dict(size=11, color="white"),
-        hovertemplate="<b>%{label}</b><br>Gewicht: %{percent}<extra></extra>",
-        sort=False,
-    )])
-    fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=13), x=0.5, xanchor="center"),
-        height=450,
-        showlegend=True,
-        legend=dict(font=dict(size=9), orientation="v", y=0.5, x=1.05),
-        margin=dict(t=50, b=20, l=20, r=120),
-    )
-    return fig
-
-
-# ---------------------------------------------------------------------------
-# Top 5 Holdings Säulendiagramm (Plotly)
-# ---------------------------------------------------------------------------
-TOP5_COLORS = ["#1B3A5C", "#6A9BC3", "#B8973A", "#C4B78C", "#A8CBE8"]
-
-
-def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
-    fig = go.Figure(data=[go.Bar(
-        x=top5["Wertpapier"],
-        y=top5["Gewicht"] * 100,
-        marker_color=TOP5_COLORS[:len(top5)],
-        text=[f"{v*100:.1f}%" for v in top5["Gewicht"]],
-        textposition="outside",
-        textfont=dict(size=11),
-    )])
-    fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=13)),
-        height=350,
-        xaxis=dict(tickfont=dict(size=10), tickangle=-25),
-        yaxis=dict(title="Gewicht (%)", ticksuffix="%"),
-        margin=dict(t=50, b=80, l=50, r=20),
-    )
-    return fig
-
-
-# ---------------------------------------------------------------------------
-# Ring-Diagramm für PDF (matplotlib)
-# ---------------------------------------------------------------------------
-def _mpl_ring_chart(alloc_df, group_col, title):
-    fig, ax = plt.subplots(figsize=(6, 5))
-    labels = alloc_df[group_col].tolist()
-    sizes = alloc_df["Gewicht"].tolist()
-    colors = RING_COLORS[:len(alloc_df)]
-    wedges, texts, autotexts = ax.pie(
-        sizes, labels=None, autopct="%1.1f%%", startangle=90, colors=colors,
-        pctdistance=0.8, wedgeprops=dict(width=0.4, edgecolor="white", linewidth=1.5))
-    for t in autotexts: t.set_fontsize(8)
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=15)
-    ax.legend(labels, loc="center left", bbox_to_anchor=(1, 0.5), fontsize=7)
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
-    plt.close(fig); buf.seek(0)
-    return buf
-
-
-# ---------------------------------------------------------------------------
-# Streamlit Rendering
-# ---------------------------------------------------------------------------
-def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
-    use_volume = anlagevolumen > 0
-
-    # ── Daten laden ──
-    auto_tag_pf = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
-    date_tag_pf = auto_tag_pf
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("📊 Portfolioanalyse")
-        show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd")
-        show_adv_pf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_pf")
-        if show_adv_pf:
-            date_tag_pf = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
-                help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="pf_date_tag")
-
-    pf_files = load_pf_csvs(DATA_FOLDER_PF, date_tag_pf)
-    if not pf_files:
-        st.warning(f"Keine Portfolioanalyse-Dateien für Tag {date_tag_pf} in {DATA_FOLDER_PF}/ gefunden.")
-        with st.expander("🔍 Debug"):
-            import glob as g
-            af = g.glob(os.path.join(DATA_FOLDER_PF, "*"))
-            st.write("Dateien:", [os.path.basename(f) for f in af] if af else "Ordner leer/nicht vorhanden")
-        return
-
-    pf_data = build_pf_data(pf_files)
-    if not pf_data:
-        st.warning("Keine Portfolioanalyse-Daten geladen."); return
-
-    # Duration-Daten laden
-    duration_data = load_duration_data(DURATION_FOLDER, name_mapping)
-
-    # Name-Mapping
-    available_pf_names = set(pf_data.keys())
-    col_display = name_mapping.columns[0]; col_csv_key = name_mapping.columns[1]
-    filtered = name_mapping[name_mapping[col_csv_key].isin(available_pf_names)].copy()
-    if filtered.empty:
-        display_names_pf = sorted(list(available_pf_names))
-        display_to_csv_pf = {n: n for n in display_names_pf}
-    else:
-        display_names_pf = filtered[col_display].tolist()
-        display_to_csv_pf = dict(zip(filtered[col_display], filtered[col_csv_key]))
-
-    # Portfolio-Auswahl
-    pf_sel_1 = st.selectbox("Portfolio auswählen", display_names_pf, key="pf_sel_1")
-    csv_name_1 = display_to_csv_pf[pf_sel_1]; df_pf_1 = pf_data[csv_name_1]
-    dur_1 = duration_data.get(csv_name_1)
-
-    show_compare_pf = st.checkbox("Vergleichsportfolio anzeigen", value=False, key="pf_compare")
-    pf_sel_2 = csv_name_2 = df_pf_2 = dur_2 = None
-    if show_compare_pf:
-        pf_sel_2 = st.selectbox("Vergleichsportfolio auswählen", display_names_pf, key="pf_sel_2")
-        csv_name_2 = display_to_csv_pf[pf_sel_2]; df_pf_2 = pf_data[csv_name_2]
-        dur_2 = duration_data.get(csv_name_2)
-
-    # Auswertungsdatum
-    ad1 = df_pf_1["Auswertungsdatum"].iloc[0] if "Auswertungsdatum" in df_pf_1.columns and df_pf_1["Auswertungsdatum"].notna().any() else None
-    ad2 = None
-    if df_pf_2 is not None and "Auswertungsdatum" in df_pf_2.columns and df_pf_2["Auswertungsdatum"].notna().any():
-        ad2 = df_pf_2["Auswertungsdatum"].iloc[0]
-
-    auswertung_str = fmt_date_de(ad1) if ad1 else date_tag_pf
-
-    # Hinweis + Quelle oben
-    st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
-    st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
-
-    st.info(f"📅 **Momentaufnahme per {auswertung_str}** – "
-            f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag.")
-
-    # Render
-    _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1)
-    if show_compare_pf and df_pf_2 is not None:
-        st.markdown("---")
-        _render_single_portfolio(pf_sel_2, df_pf_2, ad2, anlagevolumen, use_volume, show_ytd, dur_2)
-
-    # Disclaimer
-    st.markdown("---")
-    st.markdown("##### Disclaimer")
-    st.markdown(
-        "Die dargestellten Daten zeigen den Portfoliobestand zu einem bestimmten Stichtag. "
-        "Die tatsächlichen Gewichtungen können zum Zeitpunkt der Betrachtung durch Käufe, Verkäufe "
-        "und Kursveränderungen bereits abweichen, da keine Live-Daten verwendet werden. "
-        "Auch die Zuordnung zu Gattungen, Segmenten und Regionen basiert auf der zum Stichtag "
-        "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern."
-    )
-    st.markdown(
-        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Angaben sind ohne Gewähr."
-    )
-    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
-    st.markdown("**Ansprechpartner:** PBAM")
-
-    # PDF
-    st.markdown("---")
-    if st.button("📄 PDF Portfolioanalyse erstellen", key="pf_pdf_btn"):
-        portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
-        if show_compare_pf and df_pf_2 is not None:
-            portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
-        with st.spinner("PDF wird erstellt..."):
-            pdf_bytes = generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd)
-        st.download_button("⬇️ PDF herunterladen", pdf_bytes,
-            f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pdf",
-            "application/pdf", key="pf_pdf_dl")
-        st.success("PDF erfolgreich erstellt!")
-
-
-def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info):
-    st.subheader(f"📊 {label}")
-
-    # ── Kennzahlen ──
-    liq = calc_liquidity(df); n_titel = len(df); total_weight = df["Gewicht"].sum()
-    kcols = st.columns(4 if use_volume else 3)
-    with kcols[0]: st.metric("Anzahl Titel", n_titel)
-    with kcols[1]: st.metric("Investitionsgrad", fmt_pct_de(total_weight),
-        help="Anteil des Portfolios, der in Wertpapiere investiert ist.")
-    with kcols[2]: st.metric("Liquidität", fmt_pct_de(liq),
-        help="Nicht investierter Anteil (100% − Investitionsgrad).")
-    if use_volume:
-        with kcols[3]: st.metric("Liquidität in €", fmt_eur_de(liq * anlagevolumen))
-
-    # ── Ring-Diagramme (3 nebeneinander, volle Breite) ──
-    st.markdown("---")
-    rc1, rc2, rc3 = st.columns(3)
-    with rc1:
-        alloc_g = build_allocation(df, "Gattung")
-        if not alloc_g.empty: st.plotly_chart(build_ring_chart(alloc_g, "Gattung", "Allokation nach Gattung"), use_container_width=True)
-    with rc2:
-        alloc_r = build_allocation(df, "Region")
-        if not alloc_r.empty: st.plotly_chart(build_ring_chart(alloc_r, "Region", "Allokation nach Region"), use_container_width=True)
-    with rc3:
-        alloc_s = build_allocation(df, "Segment")
-        if not alloc_s.empty: st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True)
-
-    # ── Einzeltitel-Bereich ──
-    st.markdown("---")
-
-    # ── Top 5 Holdings (Säulendiagramm, immer sichtbar) ──
-    top5 = get_top_holdings(df, n=5)
-    if not top5.empty:
-        fig_top5 = build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)")
-        st.plotly_chart(fig_top5, use_container_width=True)
-
-    # ── Einzeltitel-Tabelle (gruppiert nach Gattung) ──
-    st.markdown("**Einzeltitel-Übersicht**")
-    grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
-    for gattung_name, gattung_weight, disp_df in grouped:
-        if gattung_name.startswith("💰"):
-            st.markdown(f"**{gattung_name}** ({fmt_pct_de(gattung_weight)})")
-        else:
-            st.markdown(f"**📋 {gattung_name}** – {fmt_pct_de(gattung_weight)}")
-        st.dataframe(disp_df, use_container_width=True, hide_index=True)
-
-    # ── Top/Flop Performancebeitrag (nur wenn YTD aktiv) ──
-    if show_ytd and "Performancebeitrag" in df.columns and df["Performancebeitrag"].notna().any():
-        st.markdown("---")
-        tc, fc = st.columns(2)
-        top, flop = get_top_flop(df, "Performancebeitrag", n=5)
-        with tc:
-            st.markdown("**🏆 Top 5 Performancebeitrag (YTD)**")
-            if not top.empty:
-                td = top.copy(); td["Gewicht"] = td["Gewicht"].apply(fmt_pct_de)
-                td["Performancebeitrag"] = td["Performancebeitrag"].apply(fmt_pct_de)
-                st.dataframe(td, use_container_width=True, hide_index=True)
-        with fc:
-            st.markdown("**📉 Flop 5 Performancebeitrag (YTD)**")
-            if not flop.empty:
-                fd = flop.copy(); fd["Gewicht"] = fd["Gewicht"].apply(fmt_pct_de)
-                fd["Performancebeitrag"] = fd["Performancebeitrag"].apply(fmt_pct_de)
-                st.dataframe(fd, use_container_width=True, hide_index=True)
-
-        st.caption(
-            "**Performancebeitrag:** Gewichteter Beitrag des Titels zur Gesamtperformance des Portfolios seit Jahresbeginn. "
-            "**Wertpapier-Performance:** Individuelle Wertentwicklung des Wertpapiers seit Jahresbeginn, unabhängig von der Gewichtung. "
-            "Beide Werte sind eine Momentaufnahme zum Stichtag. Historische Wertentwicklung ist kein verlässlicher Indikator für zukünftige Ergebnisse."
-        )
-
-    # ── Anleihen-Detail + Duration ──
-    bond_summary = get_bond_summary(df)
-    if bond_summary is not None:
-        st.markdown("---")
-        st.markdown("**🏦 Anleihen-Detail**")
-
-        # Anzahl Kennzahlen-Spalten dynamisch
-        has_duration = duration_info is not None and duration_info.get("duration") is not None
-        has_rendite = duration_info is not None and duration_info.get("rendite") is not None
-        n_bond_cols = 3 + (1 if has_duration else 0) + (1 if has_rendite else 0)
-
-        bcols = st.columns(n_bond_cols)
-        col_idx = 0
-        with bcols[col_idx]: st.metric("Anzahl Anleihen", bond_summary["count"]); col_idx += 1
-        with bcols[col_idx]:
-            st.metric("Gewicht Anleihen", fmt_pct_de(bond_summary["total_weight"]),
-                help="Gesamtgewicht aller Anleihen im Portfolio."); col_idx += 1
-        with bcols[col_idx]:
-            if bond_summary["avg_kupon"] is not None:
-                st.metric("⌀ Kupon (gewichtet)", fmt_pct_de(bond_summary["avg_kupon"]),
-                    help="Gewichteter Durchschnittskupon aller Anleihen im Portfolio.")
-            else:
-                st.metric("⌀ Kupon", "–")
-            col_idx += 1
-        if has_duration:
-            with bcols[col_idx]:
-                st.metric("Duration (Portfolio)", f"{duration_info['duration']:.2f}".replace(".", ","),
-                    help="Die Duration misst die Zinssensitivität des Anleihenportfolios. "
-                         "Sie gibt an, um wie viel Prozent der Portfoliowert fällt, "
-                         "wenn das Zinsniveau um 1 Prozentpunkt steigt. "
-                         "Einheit: Jahre (modifizierte Duration).")
-                col_idx += 1
-        if has_rendite:
-            with bcols[col_idx]:
-                st.metric("Rendite (Portfolio)", fmt_pct_de(duration_info["rendite"]),
-                    help="Die Portfoliorendite (Yield to Maturity) gibt die erwartete jährliche "
-                         "Rendite an, wenn alle Anleihen bis zur Fälligkeit gehalten werden.")
-
-        if bond_summary["faelligkeit"] is not None and not bond_summary["faelligkeit"].empty:
-            st.markdown("**Fälligkeitsstruktur**")
-            faell = bond_summary["faelligkeit"]
-            fig_f = go.Figure(data=[go.Bar(
-                x=faell["Jahr"].astype(str), y=faell["Gewicht"],
-                marker_color=FFPB_GOLD,
-                text=[fmt_pct_de(v) for v in faell["Gewicht"]], textposition="outside")])
-            fig_f.update_layout(height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
-                yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
-            st.plotly_chart(fig_f, use_container_width=True)
-
-
-# ---------------------------------------------------------------------------
-# PDF Export
-# ---------------------------------------------------------------------------
-def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4,
-        topMargin=15*mm, bottomMargin=15*mm, leftMargin=15*mm, rightMargin=15*mm)
-    styles = getSampleStyleSheet()
-    st_t = ParagraphStyle("PFT", parent=styles["Title"], fontName=PDF_FONT_BOLD, textColor=HexColor(FFPB_DARK), fontSize=16, spaceAfter=6)
-    st_s = ParagraphStyle("PFS", parent=styles["Heading2"], fontName=PDF_FONT_BOLD, textColor=HexColor(FFPB_DARK), fontSize=12, spaceAfter=4, spaceBefore=10)
-    st_n = ParagraphStyle("PFN", parent=styles["Normal"], fontName=PDF_FONT, textColor=HexColor("#333333"), fontSize=9, leading=12)
-    st_sm = ParagraphStyle("PFSM", parent=styles["Normal"], fontName=PDF_FONT, textColor=HexColor("#666666"), fontSize=7.5, leading=10)
-    st_g = ParagraphStyle("PFG", parent=styles["Heading3"], fontName=PDF_FONT_BOLD, textColor=HexColor(FFPB_GOLD), fontSize=10, spaceAfter=2, spaceBefore=6)
-
-    logo_path = get_logo_path(); la = get_logo_aspect(logo_path)
-    story = []
-
-    if logo_path:
-        lw = 50*mm; story.append(RLImage(logo_path, width=lw, height=lw*la)); story.append(Spacer(1, 4*mm))
-    story.append(Paragraph("Portfolioanalyse", st_t))
-    story.append(HRFlowable(width="100%", thickness=1, color=HexColor(FFPB_DARK)))
-    story.append(Spacer(1, 3*mm))
-
-    # Quelle
-    first_ad_meta = portfolios[0][2] if portfolios else None
-    story.append(Paragraph(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {fmt_date_de(first_ad_meta) if first_ad_meta else ''}", st_sm))
-    story.append(Spacer(1, 3*mm))
-
-    for item in portfolios:
-        label, df, auswertungsdatum = item[0], item[1], item[2]
-        dur_info = item[3] if len(item) > 3 else None
-
-        story.append(Paragraph(f"<b>{label}</b>", st_s))
-        if auswertungsdatum:
-            story.append(Paragraph(f"Momentaufnahme per {fmt_date_de(auswertungsdatum)}", st_n))
-        story.append(Spacer(1, 2*mm))
-
-        liq = calc_liquidity(df); tw = df["Gewicht"].sum()
-        meta = [f"Titel: {len(df)}", f"Investitionsgrad: {fmt_pct_de(tw)}", f"Liquidität: {fmt_pct_de(liq)}"]
-        if use_volume: meta += [f"Volumen: {fmt_eur_de(anlagevolumen)}", f"Liq. €: {fmt_eur_de(liq*anlagevolumen)}"]
-        if dur_info and dur_info.get("duration"):
-            meta.append(f"Duration: {dur_info['duration']:.2f}".replace(".", ","))
-        if dur_info and dur_info.get("rendite"):
-            meta.append(f"Rendite: {fmt_pct_de(dur_info['rendite'])}")
-        story.append(Paragraph(" | ".join(meta), st_n))
-        story.append(Spacer(1, 4*mm))
-
-        # Ring-Diagramme
-        for gc, ct in [("Gattung", "Allokation nach Gattung"), ("Region", "nach Region"), ("Segment", "nach Segment")]:
-            alloc = build_allocation(df, gc)
-            if not alloc.empty:
-                story.append(RLImage(_mpl_ring_chart(alloc, gc, ct), width=120*mm, height=100*mm))
-                story.append(Spacer(1, 3*mm))
-
-        story.append(PageBreak())
-
-        # Einzeltitel gruppiert
-        if logo_path:
-            lws = 35*mm; story.append(RLImage(logo_path, width=lws, height=lws*la)); story.append(Spacer(1, 3*mm))
-        story.append(Paragraph(f"Einzeltitel – {label}", st_s))
-
-        grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
-        for gname, gw, disp in grouped:
-            story.append(Paragraph(f"<b>{gname}</b> – {fmt_pct_de(gw)}", st_g))
-            header = list(disp.columns)
-            tdata = [header] + disp.fillna("–").values.tolist()
-            nc = len(header); cw = (170*mm) / nc
-            t = Table(tdata, colWidths=[cw]*nc, repeatRows=1)
-            t.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), HexColor(FFPB_DARK)), ("TEXTCOLOR", (0,0), (-1,0), white),
-                ("FONTSIZE", (0,0), (-1,-1), 6), ("FONTNAME", (0,0), (-1,0), PDF_FONT_BOLD),
-                ("ALIGN", (2,0), (-1,-1), "RIGHT"), ("ALIGN", (0,0), (1,-1), "LEFT"),
-                ("GRID", (0,0), (-1,-1), 0.5, HexColor("#CCCCCC")),
-                ("ROWBACKGROUNDS", (0,1), (-1,-1), [white, HexColor("#F5F5F5")]),
-                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                ("TOPPADDING", (0,0), (-1,-1), 2), ("BOTTOMPADDING", (0,0), (-1,-1), 2)]))
-            story.append(t); story.append(Spacer(1, 2*mm))
-
-        story.append(PageBreak())
-
-    # ── Disclaimer ──
-    if logo_path:
-        lws = 35*mm; story.append(RLImage(logo_path, width=lws, height=lws*la)); story.append(Spacer(1, 3*mm))
-    story.append(Paragraph("Disclaimer", st_s))
-    story.append(Spacer(1, 3*mm))
-
-    # Auswertungsdatum aus erstem Portfolio für Quellenangabe
-    first_ad = portfolios[0][2] if portfolios else None
-    ad_str = fmt_date_de(first_ad) if first_ad else ""
-
-    disclaimer_pf = [
-        "Die dargestellten Daten zeigen den Portfoliobestand zu einem bestimmten Stichtag. "
-        "Die tatsächlichen Gewichtungen können zum Zeitpunkt der Betrachtung durch Käufe, Verkäufe "
-        "und Kursveränderungen bereits abweichen, da keine Live-Daten verwendet werden. "
-        "Auch die Zuordnung zu Gattungen, Segmenten und Regionen basiert auf der zum Stichtag "
-        "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern.",
-
-        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Angaben sind ohne Gewähr.",
-    ]
-    for txt in disclaimer_pf:
-        story.append(Paragraph(txt, st_n))
-        story.append(Spacer(1, 2*mm))
-
-    story.append(Spacer(1, 3*mm))
-    story.append(Paragraph(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {ad_str}", st_n))
-    story.append(Paragraph("<b>Ansprechpartner:</b> PBAM", st_n))
-
-    story.append(Spacer(1, 10*mm))
-    story.append(HRFlowable(width="100%", thickness=0.5, color=HexColor("#CCCCCC")))
-    story.append(Paragraph(f"Erstellt am {fmt_date_de(dt.date.today())} | Fürst Fugger Privatbank", st_sm))
-    doc.build(story); buf.seek(0)
-    return buf.getvalue()
+# FFPB Streamlit Tool – Projektdokumentation
+## Stand: April 2026
+
+---
+
+## KRITISCHE LESSONS LEARNED
+
+### CSS Font-Override: NIEMALS global auf span/button/div setzen!
+
+**Problem:** Streamlit verwendet Material Icons als Icon-Font in `<span>` Elementen. Wenn CSS global `font-family` auf `span`, `button` oder `div` setzt, überschreibt das die Material Icons Font. Der Browser zeigt dann statt Icons den Ligatur-Namen als Klartext (z.B. `keyboard_double_arrow_right`, `arrow_right`).
+
+**Lösung:** Font-Override NUR auf den Hauptbereich (`stMainBlockContainer`) und NUR auf spezifische Text-Elemente (h1-h6, p, label, input). KEINE `span`, `button`, `div` global. Sidebar und System-Elemente komplett in Ruhe lassen.
+
+```css
+/* RICHTIG – nur Hauptbereich, keine System-Elemente */
+[data-testid="stMainBlockContainer"] h1,
+[data-testid="stMainBlockContainer"] p,
+[data-testid="stMainBlockContainer"] label { font-family: 'Segoe UI' !important; }
+
+/* FALSCH – zerstört Material Icons */
+span, button, div { font-family: 'Segoe UI' !important; }
+```
+
+### Kein st.expander in der Sidebar
+Streamlit Cloud rendert den Expander-Pfeil als `_arrow_right` Text. Stattdessen `st.checkbox` verwenden.
+
+---
+
+## 1. Übersicht
+
+Streamlit-App mit 3 Tabs:
+
+| Tab | Datei | Zeilen | Zweck |
+|---|---|---|---|
+| Performance | `streamlit_app.py` | ~840 | Historische Performance, Kennzahlen, Charts, PDF |
+| Portfolioanalyse | `modules/portfolioanalyse.py` | ~715 | Strukturanalyse bestehender Musterportfolios |
+| Portfolio zusammenstellen | `modules/portfolio_builder.py` | ~695 | Individueller Portfolio-Aufbau durch Berater |
+| (gemeinsam) | `modules/shared.py` | ~190 | Konstanten, Login, Formatierung, Font-Setup |
+
+**Deployment:** Streamlit Cloud via GitHub | Python 3.10+
+
+---
+
+## 2. Dateistruktur
+
+```
+Repository Root/
+├── streamlit_app.py
+├── modules/
+│   ├── __init__.py
+│   ├── shared.py
+│   ├── portfolioanalyse.py
+│   └── portfolio_builder.py
+├── fonts/
+│   ├── segoeui.ttf
+│   └── segoeuib.ttf
+├── .streamlit/
+│   └── config.toml              (toolbarMode = "minimal")
+├── Mapping_Honorarsatz.xlsx
+├── Mapping_Namen.xlsx
+├── Fuerst_Fugger_Bank_Logo_2-ZL-RGB.jpg
+├── Daten/
+├── Daten_PF/
+├── Duration/
+├── Zieldaten/
+└── requirements.txt
+```
+
+---
+
+## 3. Abhängigkeiten
+
+```
+shared.py
+  ├──→ streamlit_app.py (importiert alles + PDF_FONT)
+  │       Tab 1 inline, importiert portfolioanalyse + portfolio_builder
+  ├──→ portfolioanalyse.py (importiert Konstanten + PDF_FONT)
+  │       Exportiert: Ring-Charts, Top 5, Tabellen → für Builder
+  └──→ portfolio_builder.py (importiert shared + portfolioanalyse-Funktionen)
+```
+
+---
+
+## 4. Datenquellen
+
+- **Mapping_Namen.xlsx:** Spalte A=Anzeige, B=CSV-Key, C=Duration, D=Benchmark
+- **Mapping_Honorarsatz.xlsx:** Inhaber → Honorarsatz (Dezimal)
+- **Daten/*.CSV:** Performance-Zeitreihen (Semikolon, ISO-8859-1, deutsch)
+- **Daten_PF/*.CSV:** Portfolioanalyse-Bestand (Gewicht, YTD, Gattung, Region...)
+- **Duration/*.CSV:** Duration/Rendite pro Portfolio
+- **Zieldaten/*.CSV:** Anlageuniversum für Builder
+- **Date-Tag:** `detect_newest_date_tag()` Regex `_(\d{6})_` → höchster Tag
+
+---
+
+## 5. Schriftarten
+
+| Kontext | Schriftart | Methode |
+|---|---|---|
+| Web Hauptbereich | Segoe UI | CSS auf `stMainBlockContainer` (NICHT global!) |
+| Web Sidebar | Standard (unberührt) | Keine Überschreibung |
+| PDF | Segoe UI / Helvetica | `PDF_FONT` aus shared.py, TTFont Registrierung |
+
+**Font-Registrierung:** `shared.py._register_pdf_fonts()` → automatisch beim Import. Ohne `fonts/` → Helvetica Fallback.
+
+---
+
+## 6. Tab 1: Performance
+
+- **Oben:** Hinweis + Quelle (Stand aus CSVs)
+- **Sidebar:** Portfolio, Vergleich, Checkboxen, Kosten (dynamischer Key), MwSt, Erweiterte Einstellungen (Checkbox!)
+- **Zeitraum:** Datumspicker + Reset-Buttons (Counter-Keys)
+- **Kennzahlen:** Strategie-Name als Überschrift, CAGR/Vola/Calmar/Endwert, DD-Euro als caption darunter
+- **Chart:** Endwerte als legendgroup-gebundene Text-Traces, Legende "Strategie" rechts, deutsches Y-Format
+- **Balken:** Benchmark-Beschreibung IMMER sichtbar
+- **PDF:** Meta+Quelle, Kennzahlen, Chart mit Endwerten, Tabelle, Balken, Disclaimer (vorletzte Seite), Glossar (letzte Seite)
+- **Disclaimer unten:** 3 Absätze + Quelle + PBAM
+
+---
+
+## 7. Tab 2: Portfolioanalyse
+
+- **Oben:** Hinweis + Quelle + Momentaufnahme
+- **YTD:** Checkbox, Spalten ausgeschrieben (Wertpapier-Performance/Performancebeitrag), Caption erklärt beide Begriffe unter Top/Flop
+- **Darstellung:** Kennzahlen → Ring-Diagramme → Top 5 → Gruppierte Tabelle → Top/Flop → Anleihen-Detail
+- **PDF:** Quelle auf Seite 1, Disclaimer als letzte Seite
+- **Disclaimer unten:** 2 Absätze (Momentaufnahme + Unverbindlichkeit) + Quelle + PBAM
+
+---
+
+## 8. Tab 3: Portfolio zusammenstellen
+
+- **Layout:** Schnellzugriffe → Musterportfolio → Filter (Hauptfilter sichtbar, erweiterte als Checkbox) → Suche (Multiselect default=[]) → Tabelle (data_editor) → Cash (Input + Residual) → Excel-Export → Strukturanalyse → Vergleich → Disclaimer
+- **Kritische Defaults:** Duration max=30.0, Risiko max=7
+- **Disclaimer:** Via `_show_builder_disclaimer()` bei JEDEM return + am Ende
+- **3 Absätze:** Simuliert + Produktgovernance + Unverbindlichkeit + Quelle + PBAM
+
+---
+
+## 9. Streamlit-Workarounds
+
+| Problem | Lösung |
+|---|---|
+| CSS Font überschreibt Material Icons | NUR `stMainBlockContainer` targeten, keine span/button/div |
+| Expander in Sidebar zeigt `_arrow_right` | `st.checkbox` statt `st.expander` |
+| Widget-Key direkt setzen → Error | Counter-Keys oder del + rerun |
+| Multiselect überschreibt Portfolio | `default=[]`, nur hinzufügen |
+| Fee bleibt bei Portfolio-Wechsel | Dynamischer Key `p_fee1_{name}` |
+| `float | None` Type Hints → Error | Keine Union-Types (Python 3.9) |
+
+---
+
+## 10. Farbschema
+
+| Farbe | Hex | Verwendung |
+|---|---|---|
+| Dunkelblau | #1B3A5C | Chart-BG, Header |
+| Gold | #B8973A | Primärfarbe, Balken |
+| Hellblau | #A8CBE8 | Benchmark |
+| Mittelblau | #2C5F8A | Zweites Portfolio |
+
+Top 5: #1B3A5C, #6A9BC3, #B8973A, #C4B78C, #A8CBE8
+
+---
+
+## 11. Berechnungsformeln
+
+```
+daily_drag      = (1 + fee_pa)^(1/365) - 1
+idx_nach_kosten = idx[i-1] * (1 + ret - daily_drag)
+cagr            = (endwert/startwert)^(365/tage) - 1
+vola            = std(tagesrenditen) * sqrt(365)
+calmar          = cagr / |max_drawdown|
+gew_duration    = Σ(gewicht × duration) / Σ(gewichte_anleihen)
+gew_kupon       = Σ(gewicht × kupon) / Σ(gewichte_anleihen)
+```
+
+---
+
+## 12. Disclaimers
+
+Alle 3 Tabs: Hinweis + Quelle oben, Disclaimer unten, in PDFs als eigene Seite.
+
+- **Performance:** Historische Wertentwicklung, tägliche Berechnung, unverbindlich
+- **Portfolioanalyse:** Momentaufnahme, Klassifizierung kann sich ändern, unverbindlich
+- **Builder:** Simuliert, Produktgovernance einhalten, keine Anlageberatung
+
+Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
+
+---
+
+## 13. Deployment
+
+- [ ] 4 Python-Dateien + requirements.txt auf GitHub
+- [ ] Ordner: Daten/, Daten_PF/, Duration/, Zieldaten/, fonts/, .streamlit/
+- [ ] .streamlit/config.toml mit `toolbarMode = "minimal"`
+- [ ] Mapping-Dateien + Logo im Root
+- [ ] Font-Dateien in fonts/
+- [ ] Secrets über Streamlit Cloud Settings
+
+---
+
+## 14. Für den nächsten Chat
+
+1. Diese Dokumentation + alle 4 Code-Dateien hochladen
+2. Konkreten Änderungswunsch beschreiben
+3. Bei UI-Problemen: Screenshot mitgeben
+4. Bei neuen Datenquellen: Beispielzeile zeigen
+
+*Stand: April 2026*
