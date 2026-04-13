@@ -441,14 +441,6 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     st.info(f"📅 **Momentaufnahme per {auswertung_str}** – "
             f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag.")
 
-    if show_ytd:
-        st.warning(
-            "Die dargestellte Year-to-Date-Performance (Performancebeitrag und WP-Performance) ist eine "
-            "Momentaufnahme zum Auswertungsstichtag. Historische Wertentwicklung ist kein verlässlicher "
-            "Indikator für zukünftige Ergebnisse. Die Werte können durch zwischenzeitliche Käufe, Verkäufe "
-            "und Kursveränderungen bereits abweichen."
-        )
-
     # Render
     _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1)
     if show_compare_pf and df_pf_2 is not None:
@@ -549,6 +541,13 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
                 fd = flop.copy(); fd["Gewicht"] = fd["Gewicht"].apply(fmt_pct_de)
                 fd["Performancebeitrag"] = fd["Performancebeitrag"].apply(fmt_pct_de)
                 st.dataframe(fd, use_container_width=True, hide_index=True)
+
+        st.caption(
+            "Die dargestellte Year-to-Date-Performance (Performancebeitrag und WP-Performance) ist eine "
+            "Momentaufnahme zum Auswertungsstichtag. Historische Wertentwicklung ist kein verlässlicher "
+            "Indikator für zukünftige Ergebnisse. Die Werte können durch zwischenzeitliche Käufe, Verkäufe "
+            "und Kursveränderungen bereits abweichen."
+        )
 
     # ── Anleihen-Detail + Duration ──
     bond_summary = get_bond_summary(df)
