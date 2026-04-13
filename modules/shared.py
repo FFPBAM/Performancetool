@@ -30,6 +30,31 @@ DURATION_FOLDER   = "Duration"
 ZIELDATEN_FOLDER  = "Zieldaten"
 EXCLUDE_SUBSTRINGS = ["Stiftung"]
 
+# PDF Font
+FONT_DIR = "fonts"
+PDF_FONT = "Helvetica"
+PDF_FONT_BOLD = "Helvetica-Bold"
+
+def _register_pdf_fonts():
+    global PDF_FONT, PDF_FONT_BOLD
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        regular = os.path.join(FONT_DIR, "segoeui.ttf")
+        bold = os.path.join(FONT_DIR, "segoeuib.ttf")
+        if os.path.exists(regular):
+            pdfmetrics.registerFont(TTFont("SegoeUI", regular))
+            PDF_FONT = "SegoeUI"
+            if os.path.exists(bold):
+                pdfmetrics.registerFont(TTFont("SegoeUI-Bold", bold))
+                PDF_FONT_BOLD = "SegoeUI-Bold"
+            else:
+                PDF_FONT_BOLD = "SegoeUI"
+    except Exception:
+        pass
+
+_register_pdf_fonts()
+
 
 # ---------------------------------------------------------------------------
 # LOGIN
