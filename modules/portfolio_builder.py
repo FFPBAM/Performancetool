@@ -187,6 +187,29 @@ def calc_weighted_kupon(df):
     return float((w * k).sum() / w.sum()) if w.sum() > 0 else None
 
 
+def _show_builder_disclaimer(zm_hint):
+    """Zeigt den Disclaimer am Ende des Builders."""
+    st.markdown("---")
+    st.markdown("##### Disclaimer")
+    st.markdown(
+        "Das zusammengestellte Portfolio stellt eine simulierte Zusammensetzung dar und spiegelt keine "
+        "tatsächliche Vermögensverwaltung wider. Die angezeigten Gewichtungen, Kennzahlen und Allokationen "
+        "basieren auf den zum Stichtag verfügbaren Stammdaten des Anlageuniversums."
+    )
+    st.markdown(
+        "Die Zuordnung von Titeln zu Segmenten, Regionen und Assetklassen sowie die Masterlistenzuordnung "
+        "können sich jederzeit ändern. Vor der Umsetzung ist die aktuelle Zulassung und Klassifizierung "
+        "der Titel zu prüfen. Die Anforderungen der Produktgovernance (Zielmarktprüfung) sind einzuhalten "
+        "und Kunden entsprechend zu informieren."
+    )
+    st.markdown(
+        "Die Portfoliozusammenstellung dient ausschließlich der unverbindlichen Veranschaulichung im "
+        "Beratungsgespräch und stellt keine Anlageberatung oder -empfehlung dar. Alle Angaben sind ohne Gewähr."
+    )
+    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {zm_hint}")
+    st.markdown("**Ansprechpartner:** PBAM")
+
+
 # ---------------------------------------------------------------------------
 # Streamlit Rendering
 # ---------------------------------------------------------------------------
@@ -398,6 +421,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     if n_titel == 0:
         st.info("Noch keine Titel im Portfolio. Nutzen Sie die Suche, einen Schnellzugriff oder laden Sie ein Musterportfolio als Startpunkt.")
+        _show_builder_disclaimer(zm_hint)
         return
 
     st.caption(f"**{n_titel} Titel** (max. {MAX_TITEL})")
@@ -458,6 +482,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     if not pf_rows:
         st.warning("Keine gültigen Titel gefunden.")
+        _show_builder_disclaimer(zm_hint)
         return
 
     pf_df = pd.DataFrame(pf_rows)
@@ -546,6 +571,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     analysis_df = build_builder_analysis_df(st.session_state.builder_portfolio, universe)
     if analysis_df.empty:
         st.info("Bitte erst Gewichte vergeben – nutzen Sie 'Gewichte gleichverteilen' oder passen Sie die Gewichte manuell an.")
+        _show_builder_disclaimer(zm_hint)
         return
 
     w_dur = calc_weighted_duration(analysis_df)
@@ -659,25 +685,4 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     else:
         st.info("Keine Musterportfolios verfügbar.")
 
-    # ══════════════════════════════════════════════════════════════════════
-    # DISCLAIMER
-    # ══════════════════════════════════════════════════════════════════════
-    st.markdown("---")
-    st.markdown("##### Disclaimer")
-    st.markdown(
-        "Das zusammengestellte Portfolio stellt eine simulierte Zusammensetzung dar und spiegelt keine "
-        "tatsächliche Vermögensverwaltung wider. Die angezeigten Gewichtungen, Kennzahlen und Allokationen "
-        "basieren auf den zum Stichtag verfügbaren Stammdaten des Anlageuniversums."
-    )
-    st.markdown(
-        "Die Zuordnung von Titeln zu Segmenten, Regionen und Assetklassen sowie die Masterlistenzuordnung "
-        "können sich jederzeit ändern. Vor der Umsetzung ist die aktuelle Zulassung und Klassifizierung "
-        "der Titel zu prüfen. Die Anforderungen der Produktgovernance (Zielmarktprüfung) sind einzuhalten "
-        "und Kunden entsprechend zu informieren."
-    )
-    st.markdown(
-        "Die Portfoliozusammenstellung dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch und stellt keine Anlageberatung oder -empfehlung dar. Alle Angaben sind ohne Gewähr."
-    )
-    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {zm_hint}")
-    st.markdown("**Ansprechpartner:** PBAM")
+    _show_builder_disclaimer(zm_hint)
