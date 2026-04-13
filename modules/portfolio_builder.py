@@ -632,26 +632,26 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 fig_f.update_layout(
                     height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
                     yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
-                st.plotly_chart(fig_f, use_container_width=True)
+                st.plotly_chart(fig_f, use_container_width=True, config={"displayModeBar": False})
 
     # Ring-Diagramme
     st.markdown("---")
     r1, r2, r3 = st.columns(3)
     with r1:
         ag = build_allocation(analysis_df, "Gattung")
-        if not ag.empty: st.plotly_chart(build_ring_chart(ag, "Gattung", "Gattung"), use_container_width=True)
+        if not ag.empty: st.plotly_chart(build_ring_chart(ag, "Gattung", "Gattung"), use_container_width=True, config={"displayModeBar": False})
     with r2:
         ar = build_allocation(analysis_df, "Region")
-        if not ar.empty: st.plotly_chart(build_ring_chart(ar, "Region", "Region"), use_container_width=True)
+        if not ar.empty: st.plotly_chart(build_ring_chart(ar, "Region", "Region"), use_container_width=True, config={"displayModeBar": False})
     with r3:
         aseg = build_allocation(analysis_df, "Segment")
-        if not aseg.empty: st.plotly_chart(build_ring_chart(aseg, "Segment", "Segment"), use_container_width=True)
+        if not aseg.empty: st.plotly_chart(build_ring_chart(aseg, "Segment", "Segment"), use_container_width=True, config={"displayModeBar": False})
 
     # Top 5
     st.markdown("---")
     top5 = get_top_holdings(analysis_df, n=5)
     if not top5.empty:
-        st.plotly_chart(build_top5_bar_chart(top5, "Top 5 Holdings"), use_container_width=True)
+        st.plotly_chart(build_top5_bar_chart(top5, "Top 5 Holdings"), use_container_width=True, config={"displayModeBar": False})
 
     # Gruppierte Tabelle
     st.markdown("**Einzeltitel-Übersicht**")
@@ -681,13 +681,13 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 vr1, vr2, vr3 = st.columns(3)
                 with vr1:
                     vg = build_allocation(vgl_df, "Gattung")
-                    if not vg.empty: st.plotly_chart(build_ring_chart(vg, "Gattung", f"Gattung – {vgl_sel}"), use_container_width=True)
+                    if not vg.empty: st.plotly_chart(build_ring_chart(vg, "Gattung", f"Gattung – {vgl_sel}"), use_container_width=True, config={"displayModeBar": False})
                 with vr2:
                     vr = build_allocation(vgl_df, "Region")
-                    if not vr.empty: st.plotly_chart(build_ring_chart(vr, "Region", f"Region – {vgl_sel}"), use_container_width=True)
+                    if not vr.empty: st.plotly_chart(build_ring_chart(vr, "Region", f"Region – {vgl_sel}"), use_container_width=True, config={"displayModeBar": False})
                 with vr3:
                     vs = build_allocation(vgl_df, "Segment")
-                    if not vs.empty: st.plotly_chart(build_ring_chart(vs, "Segment", f"Segment – {vgl_sel}"), use_container_width=True)
+                    if not vs.empty: st.plotly_chart(build_ring_chart(vs, "Segment", f"Segment – {vgl_sel}"), use_container_width=True, config={"displayModeBar": False})
     else:
         st.info("Keine Musterportfolios verfügbar.")
 
