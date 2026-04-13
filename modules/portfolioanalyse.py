@@ -386,28 +386,35 @@ def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
 # Ring-Diagramm für PDF (matplotlib)
 # ---------------------------------------------------------------------------
 def _mpl_ring_chart(alloc_df, group_col, title):
-    fig, ax = plt.subplots(figsize=(6, 5))
-    labels = alloc_df[group_col].tolist()
-    sizes = alloc_df["Gewicht"].tolist()
+    # Absteigend sortieren
+    sorted_df = alloc_df.sort_values("Gewicht", ascending=False).reset_index(drop=True)
+    labels = sorted_df[group_col].tolist()
+    sizes = sorted_df["Gewicht"].tolist()
     total = sum(sizes) if sum(sizes) > 0 else 1.0
-    colors = RING_COLORS[:len(alloc_df)]
+    colors = RING_COLORS[:len(sorted_df)]
+
+    fig, ax = plt.subplots(figsize=(5, 4))
 
     # Kleine Segmente herausziehen
     explode = [0.03 if s / total < 0.05 else 0 for s in sizes]
 
-    # Labels nur für Segmente >= 3%
-    def _pct(pct):
+    # Labels: Name + Prozent für >= 3%, leer für < 3%
+    def _make_label(pct):
         return f"{pct:.1f}%" if pct >= 3.0 else ""
 
     wedges, texts, autotexts = ax.pie(
-        sizes, labels=None, autopct=_pct, startangle=90, colors=colors,
-        pctdistance=0.8, explode=explode,
+        sizes, labels=None, autopct=_make_label, startangle=90, colors=colors,
+        pctdistance=1.15, explode=explode, counterclock=False,
         wedgeprops=dict(width=0.4, edgecolor="white", linewidth=2))
-    for t in autotexts: t.set_fontsize(8); t.set_color("#333333")
-    ax.set_title(title, fontsize=11, fontweight="bold", color="#003460", pad=15)
-    ax.legend(labels, loc="center left", bbox_to_anchor=(1, 0.5), fontsize=7)
+    for t in autotexts: t.set_fontsize(9); t.set_color("#333333")
+    ax.set_title(title, fontsize=11, fontweight="bold", color="#003460", pad=10)
+
+    # Legende horizontal unten
+    ax.legend(labels, loc="upper center", bbox_to_anchor=(0.5, -0.05),
+              fontsize=7, ncol=min(len(labels), 3), frameon=False)
+
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=180, bbox_inches="tight")
     plt.close(fig); buf.seek(0)
     return buf
 
@@ -689,12 +696,12 @@ def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
         story.append(Paragraph(" | ".join(meta), st_n))
         story.append(Spacer(1, 4*mm))
 
-        # Ring-Diagramme
-        for gc, ct in [("Gattung", "Allokation nach Gattung"), ("Region", "nach Region"), ("Segment", "nach Segment")]:
+        # Ring-Diagramme (kompakter)
+        for gc, ct in [("Gattung", f"Allokation nach Gattung – {label}"), ("Region", f"Allokation nach Region – {label}"), ("Segment", f"Allokation nach Segment – {label}")]:
             alloc = build_allocation(df, gc)
             if not alloc.empty:
-                story.append(RLImage(_mpl_ring_chart(alloc, gc, ct), width=120*mm, height=100*mm))
-                story.append(Spacer(1, 3*mm))
+                story.append(RLImage(_mpl_ring_chart(alloc, gc, ct), width=100*mm, height=85*mm))
+                story.append(Spacer(1, 2*mm))
 
         story.append(PageBreak())
 
@@ -708,8 +715,25 @@ def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
             story.append(Paragraph(f"<b>{gname}</b> – {fmt_pct_de(gw)}", st_g))
             header = list(disp.columns)
             tdata = [header] + disp.fillna("–").values.tolist()
-            nc = len(header); cw = (170*mm) / nc
-            t = Table(tdata, colWidths=[cw]*nc, repeatRows=1)
+            nc = len(header)
+
+            # Intelligente Spaltenbreiten
+            total_w = 170*mm
+            col_widths = []
+            for col_name in header:
+                cn = col_name.lower()
+                if "wertpapier" in cn or "name" in cn:
+                    col_widths.append(3.0)  # Breit
+                elif "segment" in cn or "region" in cn:
+                    col_widths.append(2.0)  # Mittel
+                elif "fälligkeit" in cn or "performance" in cn or "performancebeitrag" in cn:
+                    col_widths.append(1.5)
+                else:
+                    col_widths.append(1.0)  # Schmal (WKN, Gewicht, Kupon)
+            total_ratio = sum(col_widths)
+            col_widths = [total_w * (w / total_ratio) for w in col_widths]
+
+            t = Table(tdata, colWidths=col_widths, repeatRows=1)
             t.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), HexColor(FFPB_DARK)), ("TEXTCOLOR", (0,0), (-1,0), white),
                 ("FONTSIZE", (0,0), (-1,-1), 6), ("FONTNAME", (0,0), (-1,0), PDF_FONT_BOLD),
