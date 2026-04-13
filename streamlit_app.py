@@ -320,6 +320,7 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
     ml.append(f"<b>Kosten {label_1}:</b> {fee_pct_1:.2f}% p.a.{mwst_suffix}")
     if label_2 and fee_pct_2 is not None: ml.append(f"<b>Kosten {label_2}:</b> {fee_pct_2:.2f}% p.a.{mwst_suffix}")
     if use_volume: ml.append(f"<b>Anlagevolumen:</b> {fmt_eur_de(anlagevolumen)}")
+    ml.append(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {fmt_date_de(end_date)}")
     for l in ml: story.append(Paragraph(l,st_n))
     story.append(Spacer(1,4*mm))
     story.append(Paragraph(f"Kennzahlen ({nk})",st_s))
@@ -374,6 +375,36 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
             story.append(Spacer(1,2*mm))
             if bbt and str(bbt).strip().lower() not in ("","nan","haben keine benchmark"):
                 story.append(Paragraph(f"<b>BM {bl}:</b> {bbt}",st_sm))
+
+    # ── Disclaimer ──
+    story.append(PageBreak())
+    if logo_path and os.path.exists(logo_path):
+        lws=35*mm; story.append(RLImage(logo_path,width=lws,height=lws*la)); story.append(Spacer(1,3*mm))
+    story.append(Paragraph("Disclaimer",st_s))
+    story.append(Spacer(1,3*mm))
+
+    disclaimer_texts = [
+        "Die angegebenen Werte beziehen sich auf die historische Wertentwicklung. "
+        "Der Wert sowie die Erträge einer Kapitalanlage können sowohl steigen als auch fallen. "
+        "Eine positive Wertentwicklung in der Vergangenheit stellt keine Garantie für zukünftige "
+        "Entwicklungen dar. Die Wertentwicklung wird in Euro (€) gemessen.",
+
+        "Die ausgewiesene Performance wird auf täglicher Basis berechnet. "
+        "Der jährliche Honorarsatz wird dabei in eine äquivalente tägliche Belastung umgerechnet "
+        "und unter Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; "
+        "eine halbjährliche Berücksichtigung erfolgt nicht.",
+
+        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im "
+        "Beratungsgespräch. Alle Berechnungen sind unverbindlich und ohne Gewähr.",
+    ]
+    for txt in disclaimer_texts:
+        story.append(Paragraph(txt, st_n))
+        story.append(Spacer(1, 2*mm))
+
+    story.append(Spacer(1, 3*mm))
+    story.append(Paragraph(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {fmt_date_de(end_date)}", st_n))
+    story.append(Paragraph("<b>Ansprechpartner:</b> PBAM", st_n))
+
     # ── Glossar ──
     story.append(PageBreak())
     if logo_path and os.path.exists(logo_path):
@@ -545,6 +576,10 @@ with tab_perf:
     if sc and ps2: rm2=data[ps2].index.min().date(); rx2=data[ps2].index.max().date(); mind=max(rm1,rm2); maxd=min(rx1,rx2)
     else: mind=rm1; maxd=rx1
 
+    # Hinweis + Quelle oben
+    st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
+    st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
+
     st.markdown("#### Zeitraum auswählen")
     # Reset-Logik: Counter ändert den Widget-Key, sodass das Widget frisch mit Default rendert
     if "p_sd_reset" not in st.session_state: st.session_state.p_sd_reset = 0
@@ -714,6 +749,28 @@ with tab_perf:
             if df2 is not None and fdec2 is not None and ps2:
                 st.markdown("---"); _rb(df2,fdec2,l2,bn2 or "BM",bt2 or "",st.container())
                 show_benchmark_composition(l2,bt2)
+
+    # Disclaimer
+    st.markdown("---")
+    st.markdown("##### Disclaimer")
+    st.markdown(
+        "Die angegebenen Werte beziehen sich auf die historische Wertentwicklung. "
+        "Der Wert sowie die Erträge einer Kapitalanlage können sowohl steigen als auch fallen. "
+        "Eine positive Wertentwicklung in der Vergangenheit stellt keine Garantie für zukünftige Entwicklungen dar. "
+        "Die Wertentwicklung wird in Euro (€) gemessen."
+    )
+    st.markdown(
+        "Die ausgewiesene Performance wird auf täglicher Basis berechnet. "
+        "Der jährliche Honorarsatz wird dabei in eine äquivalente tägliche Belastung umgerechnet und unter "
+        "Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; "
+        "eine halbjährliche Berücksichtigung erfolgt nicht."
+    )
+    st.markdown(
+        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im Beratungsgespräch. "
+        "Alle Berechnungen sind unverbindlich und ohne Gewähr."
+    )
+    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
+    st.markdown("**Ansprechpartner:** PBAM")
 
     # PDF Performance
     st.markdown("---")
