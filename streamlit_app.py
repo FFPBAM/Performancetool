@@ -546,6 +546,20 @@ st.markdown("""
     [data-baseweb="select"] [data-testid="stMarkdownContainer"] {
         overflow: hidden !important;
     }
+
+    /* Hover-Overlays komplett unterdrücken (der ouble_arrow_right Tooltip) */
+    [data-testid="stElementToolbar"],
+    [data-testid="stElementToolbar"] *,
+    [data-testid="StyledFullScreenButton"],
+    [data-testid="StyledFullScreenButton"] * {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        position: absolute !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -756,7 +770,7 @@ with tab_perf:
         # Plotly nutzt Locale – wir überschreiben mit separatethousands
         fig.update_layout(separators=",.")
 
-    st.plotly_chart(fig,use_container_width=True)
+    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar": False})
     if sb: show_benchmark_composition(l1,bt1,l2,bt2)
 
     if sdd:
@@ -772,7 +786,7 @@ with tab_perf:
             fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia1_100),mode="lines",name=f"{l1} – DD (nK)"))
             if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia2_100),mode="lines",name=f"{l2} – DD (nK)"))
             fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="Drawdown",hovermode="x unified")
-        st.plotly_chart(fdd,use_container_width=True)
+        st.plotly_chart(fdd,use_container_width=True,config={"displayModeBar": False})
 
     dfr=None
     if stbl:
@@ -795,7 +809,7 @@ with tab_perf:
             bd=compute_bar_data(dfs,fee,bm,lab,csb,ceb)
             if bd.empty: cont.info(f"Keine Daten für {lab}."); return
             btt=f"{tm[bm]} – {lab}"; bdl.append((bd,lab,bname,btt,btxt))
-            cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True)
+            cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True,config={"displayModeBar": False})
             show_tbl = cont.checkbox(f"🔢 Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}")
             if show_tbl:
                 cp=f"{lab} (nach Kosten)"; dp=bd[["label",cp,"ret_bm_raw"]].copy()
