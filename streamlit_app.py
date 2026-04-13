@@ -498,7 +498,7 @@ def build_portfolio_timeseries(files, mapping):
 # ==========================================================================
 st.set_page_config(page_title="FFPB – Performance & Portfolioanalyse", layout="wide")
 
-# Globale Schriftart: Segoe UI
+# Globale Schriftart + Toolbar-Icons ausblenden (Rendering-Bug auf Streamlit Cloud)
 st.markdown("""
 <style>
     html, body, [class*="css"], .stMarkdown, .stMetricLabel, .stMetricValue,
@@ -506,6 +506,16 @@ st.markdown("""
     .stDataFrame, .stTable, .stCaption, .stButton, .stTabs,
     h1, h2, h3, h4, h5, h6, p, span, div, label, input, button, textarea {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    }
+
+    /* Toolbar-Icons bei DataFrames, Charts und Expandern ausblenden */
+    [data-testid="stElementToolbar"] {
+        display: none !important;
+    }
+    /* Fullscreen-Button bei Charts ausblenden */
+    button[title="View fullscreen"],
+    button[title="Exit fullscreen"] {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -757,7 +767,8 @@ with tab_perf:
             if bd.empty: cont.info(f"Keine Daten für {lab}."); return
             btt=f"{tm[bm]} – {lab}"; bdl.append((bd,lab,bname,btt,btxt))
             cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True)
-            with cont.expander("🔢 Tabelle"):
+            show_tbl = cont.checkbox(f"🔢 Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}")
+            if show_tbl:
                 cp=f"{lab} (nach Kosten)"; dp=bd[["label",cp,"ret_bm_raw"]].copy()
                 dp[cp]=dp[cp].map(lambda x:f"{x:+.2f}%"); dp["ret_bm_raw"]=dp["ret_bm_raw"].map(lambda x:f"{x:+.2f}%" if pd.notna(x) else "–")
                 dp.columns=["Zeitraum",f"{lab} nK",bname]; cont.dataframe(dp,use_container_width=True,hide_index=True)
