@@ -498,67 +498,21 @@ def build_portfolio_timeseries(files, mapping):
 # ==========================================================================
 st.set_page_config(page_title="FFPB – Performance & Portfolioanalyse", layout="wide")
 
-# Globale Schriftart + Toolbar-Icons ausblenden (Rendering-Bug auf Streamlit Cloud)
+# Globale Schriftart (Material Icons ausgenommen)
 st.markdown("""
 <style>
-    /* Globale Schriftart */
+    /* Globale Schriftart – Material Icons explizit ausschließen */
     html, body, [class*="css"], .stMarkdown, .stMetricLabel, .stMetricValue,
     .stSelectbox, .stMultiSelect, .stTextInput, .stNumberInput,
     .stDataFrame, .stTable, .stCaption, .stButton, .stTabs,
-    h1, h2, h3, h4, h5, h6, p, span, div, label, input, button, textarea {
+    h1, h2, h3, h4, h5, h6, p, div, label, input, textarea {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
     }
 
-    /* === FIX: Broken Material Icons auf Streamlit Cloud === */
-
-    /* Toolbar komplett ausblenden (Fullscreen, Download, Search bei DataFrames/Charts) */
-    [data-testid="stElementToolbar"],
-    [data-testid="StyledFullScreenButton"],
-    [data-testid="stElementToolbarButton"] {
-        display: none !important;
-    }
-
-    /* Alle Material Icons Symbole die als Text rendern */
-    .material-symbols-rounded,
-    .material-icons,
-    span[class*="material"] {
-        font-size: 0 !important;
-        visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
-        overflow: hidden !important;
-    }
-
-    /* Fullscreen-Buttons */
-    button[title="View fullscreen"],
-    button[title="Exit fullscreen"],
-    button[kind="icon"] {
-        display: none !important;
-    }
-
-    /* Column sort/filter Icons in DataFrames */
-    [data-testid="stDataFrame"] button[kind="icon"],
-    [data-testid="stDataFrame"] [data-testid="stElementToolbar"] {
-        display: none !important;
-    }
-
-    /* Selectbox/Multiselect Dropdown-Pfeil reparieren */
-    [data-baseweb="select"] [data-testid="stMarkdownContainer"] {
-        overflow: hidden !important;
-    }
-
-    /* Hover-Overlays komplett unterdrücken (der ouble_arrow_right Tooltip) */
-    [data-testid="stElementToolbar"],
-    [data-testid="stElementToolbar"] *,
-    [data-testid="StyledFullScreenButton"],
-    [data-testid="StyledFullScreenButton"] * {
-        display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        opacity: 0 !important;
-        position: absolute !important;
-        width: 0 !important;
-        height: 0 !important;
+    /* Spans und Buttons NUR wenn sie KEINE Material Icons sind */
+    span:not(.material-symbols-rounded):not(.material-icons):not([class*="material"]),
+    button:not([kind="icon"]):not([title="View fullscreen"]):not([title="Exit fullscreen"]) {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
     }
 </style>
 """, unsafe_allow_html=True)
