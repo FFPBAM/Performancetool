@@ -797,7 +797,7 @@ with tab_perf:
     )
     st.markdown(
         "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im Beratungsgespräch. "
-        "Alle Berechnungen sind unverbindlich und ohne Gewähr."
+        "Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr."
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
     st.markdown("**Ansprechpartner:** PBAM")
