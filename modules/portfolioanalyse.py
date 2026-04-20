@@ -493,10 +493,10 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag.")
 
     # Render
-    _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1)
+    _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1, suffix="pf1")
     if show_compare_pf and df_pf_2 is not None:
         st.markdown("---")
-        _render_single_portfolio(pf_sel_2, df_pf_2, ad2, anlagevolumen, use_volume, show_ytd, dur_2)
+        _render_single_portfolio(pf_sel_2, df_pf_2, ad2, anlagevolumen, use_volume, show_ytd, dur_2, suffix="pf2")
 
     # Disclaimer
     st.markdown("---")
@@ -510,7 +510,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     )
     st.markdown(
         "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Angaben erfolgen ohne Gewähr."
+        "Beratungsgespräch. Alle Angaben sind ohne Gewähr."
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
     st.markdown("**Ansprechpartner:** PBAM")
@@ -529,7 +529,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         st.success("PDF erfolgreich erstellt!")
 
 
-def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info):
+def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info, suffix="pf1"):
     st.subheader(f"📊 {label}")
 
     # ── Kennzahlen ──
@@ -548,13 +548,13 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     rc1, rc2, rc3 = st.columns(3)
     with rc1:
         alloc_g = build_allocation(df, "Gattung")
-        if not alloc_g.empty: st.plotly_chart(build_ring_chart(alloc_g, "Gattung", "Allokation nach Gattung"), use_container_width=True, config={"displayModeBar": False})
+        if not alloc_g.empty: st.plotly_chart(build_ring_chart(alloc_g, "Gattung", "Allokation nach Gattung"), use_container_width=True, config={"displayModeBar": False}, key=f"ring_g_{suffix}")
     with rc2:
         alloc_r = build_allocation(df, "Region")
-        if not alloc_r.empty: st.plotly_chart(build_ring_chart(alloc_r, "Region", "Allokation nach Region"), use_container_width=True, config={"displayModeBar": False})
+        if not alloc_r.empty: st.plotly_chart(build_ring_chart(alloc_r, "Region", "Allokation nach Region"), use_container_width=True, config={"displayModeBar": False}, key=f"ring_r_{suffix}")
     with rc3:
         alloc_s = build_allocation(df, "Segment")
-        if not alloc_s.empty: st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True, config={"displayModeBar": False})
+        if not alloc_s.empty: st.plotly_chart(build_ring_chart(alloc_s, "Segment", "Allokation nach Segment"), use_container_width=True, config={"displayModeBar": False}, key=f"ring_s_{suffix}")
 
     # ── Einzeltitel-Bereich ──
     st.markdown("---")
@@ -563,17 +563,17 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     top5 = get_top_holdings(df, n=5)
     if not top5.empty:
         fig_top5 = build_top5_bar_chart(top5, "Top 5 Holdings (nach Gewicht)")
-        st.plotly_chart(fig_top5, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_top5, use_container_width=True, config={"displayModeBar": False}, key=f"top5_{suffix}")
 
     # ── Einzeltitel-Tabelle (gruppiert nach Gattung) ──
     st.markdown("**Einzeltitel-Übersicht**")
     grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
-    for gattung_name, gattung_weight, disp_df in grouped:
+    for i, (gattung_name, gattung_weight, disp_df) in enumerate(grouped):
         if gattung_name.startswith("💰"):
             st.markdown(f"**{gattung_name}** ({fmt_pct_de(gattung_weight)})")
         else:
             st.markdown(f"**📋 {gattung_name}** – {fmt_pct_de(gattung_weight)}")
-        st.dataframe(disp_df, use_container_width=True, hide_index=True)
+        st.dataframe(disp_df, use_container_width=True, hide_index=True, key=f"tbl_{suffix}_{i}")
 
     # ── Top/Flop Performancebeitrag (nur wenn YTD aktiv) ──
     if show_ytd and "Performancebeitrag" in df.columns and df["Performancebeitrag"].notna().any():
@@ -585,13 +585,13 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
             if not top.empty:
                 td = top.copy(); td["Gewicht"] = td["Gewicht"].apply(fmt_pct_de)
                 td["Performancebeitrag"] = td["Performancebeitrag"].apply(fmt_pct_de)
-                st.dataframe(td, use_container_width=True, hide_index=True)
+                st.dataframe(td, use_container_width=True, hide_index=True, key=f"top5ytd_{suffix}")
         with fc:
             st.markdown("**📉 Flop 5 Performancebeitrag (YTD)**")
             if not flop.empty:
                 fd = flop.copy(); fd["Gewicht"] = fd["Gewicht"].apply(fmt_pct_de)
                 fd["Performancebeitrag"] = fd["Performancebeitrag"].apply(fmt_pct_de)
-                st.dataframe(fd, use_container_width=True, hide_index=True)
+                st.dataframe(fd, use_container_width=True, hide_index=True, key=f"flop5ytd_{suffix}")
 
         st.caption(
             "**Performancebeitrag:** Gewichteter Beitrag des Titels zur Gesamtperformance des Portfolios seit Jahresbeginn. "
@@ -646,7 +646,7 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
                 text=[fmt_pct_de(v) for v in faell["Gewicht"]], textposition="outside")])
             fig_f.update_layout(height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
                 yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
-            st.plotly_chart(fig_f, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_f, use_container_width=True, config={"displayModeBar": False}, key=f"faell_{suffix}")
 
 
 # ---------------------------------------------------------------------------
