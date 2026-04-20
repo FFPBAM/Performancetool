@@ -198,9 +198,9 @@ def _show_builder_disclaimer(zm_hint):
     )
     st.markdown(
         "Die Zuordnung von Titeln zu Segmenten, Regionen und Assetklassen sowie die Masterlistenzuordnung "
-        "können sich jederzeit ändern. Vor der Umsetzung ist die aktuelle Zulassung und Klassifizierung "
-        "der Titel zu prüfen. Die Anforderungen der Produktgovernance (Zielmarktprüfung) sind einzuhalten "
-        "und Kunden entsprechend zu informieren."
+        "können sich jederzeit ändern. Vor einer Umsetzung ist die aktuelle Zulassung und Klassifizierung "
+        "der Titel zu prüfen. Zudem sind die Anforderungen der Produktgovernance (insbesondere die Zielmarktprüfung) "
+        "einzuhalten und Kunden entsprechend zu informieren."
     )
     st.markdown(
         "Die Portfoliozusammenstellung dient ausschließlich der unverbindlichen Veranschaulichung im "
