@@ -204,7 +204,7 @@ def _show_builder_disclaimer(zm_hint):
     )
     st.markdown(
         "Die Portfoliozusammenstellung dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch und stellt keine Anlageberatung oder -empfehlung dar. Alle Angaben sind ohne Gewähr."
+        "Beratungsgespräch und stellt keine Anlageberatung oder -empfehlung dar. Alle Angaben erfolgen ohne Gewähr."
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {zm_hint}")
     st.markdown("**Ansprechpartner:** PBAM")
