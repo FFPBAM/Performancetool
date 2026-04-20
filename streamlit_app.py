@@ -396,7 +396,7 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
         "eine halbjährliche Berücksichtigung erfolgt nicht.",
 
         "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Berechnungen sind unverbindlich und ohne Gewähr.",
+        "Beratungsgespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr.",
     ]
     for txt in disclaimer_texts:
         story.append(Paragraph(txt, st_n))
