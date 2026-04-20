@@ -510,7 +510,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     )
     st.markdown(
         "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Angaben sind ohne Gewähr."
+        "Beratungsgespräch. Alle Angaben erfolgen ohne Gewähr."
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
     st.markdown("**Ansprechpartner:** PBAM")
