@@ -396,7 +396,7 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
         "eine halbjährliche Berücksichtigung erfolgt nicht.",
 
         "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr.",
+        "Beratungsgespräch. Alle Berechnungen sind unverbindlich und ohne Gewähr.",
     ]
     for txt in disclaimer_texts:
         story.append(Paragraph(txt, st_n))
@@ -763,21 +763,21 @@ with tab_perf:
                 csb=st.date_input("Von",value=sd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bv")
                 ceb=st.date_input("Bis",value=ed,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bb")
         tm={"Kalenderjahre":"PERFORMANCE P.A. (NACH KOSTEN)","Quartale":"PERFORMANCE QUARTALE (NACH KOSTEN)","Benutzerdefiniert":"PERFORMANCE (NACH KOSTEN) – BENUTZERDEFINIERT"}
-        def _rb(dfs,fee,lab,bname,btxt,cont):
+        def _rb(dfs,fee,lab,bname,btxt,cont,suffix="1"):
             bd=compute_bar_data(dfs,fee,bm,lab,csb,ceb)
             if bd.empty: cont.info(f"Keine Daten für {lab}."); return
             btt=f"{tm[bm]} – {lab}"; bdl.append((bd,lab,bname,btt,btxt))
-            cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True,config={"displayModeBar": False})
-            show_tbl = cont.checkbox(f"🔢 Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}")
+            cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True,config={"displayModeBar": False},key=f"bar_chart_{suffix}")
+            show_tbl = cont.checkbox(f"🔢 Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}_{suffix}")
             if show_tbl:
                 cp=f"{lab} (nach Kosten)"; dp=bd[["label",cp,"ret_bm_raw"]].copy()
                 dp[cp]=dp[cp].map(lambda x:f"{x:+.2f}%"); dp["ret_bm_raw"]=dp["ret_bm_raw"].map(lambda x:f"{x:+.2f}%" if pd.notna(x) else "–")
                 dp.columns=["Zeitraum",f"{lab} nK",bname]; cont.dataframe(dp,use_container_width=True,hide_index=True)
         with br:
-            _rb(df1,fdec1,l1,bn1,bt1,st.container())
+            _rb(df1,fdec1,l1,bn1,bt1,st.container(),suffix="p1")
             show_benchmark_composition(l1,bt1)
             if df2 is not None and fdec2 is not None and ps2:
-                st.markdown("---"); _rb(df2,fdec2,l2,bn2 or "BM",bt2 or "",st.container())
+                st.markdown("---"); _rb(df2,fdec2,l2,bn2 or "BM",bt2 or "",st.container(),suffix="p2")
                 show_benchmark_composition(l2,bt2)
 
     # Disclaimer
@@ -797,7 +797,7 @@ with tab_perf:
     )
     st.markdown(
         "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im Beratungsgespräch. "
-        "Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr."
+        "Alle Berechnungen sind unverbindlich und ohne Gewähr."
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
     st.markdown("**Ansprechpartner:** PBAM")
