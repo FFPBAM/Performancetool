@@ -400,10 +400,33 @@ GROUP_SONSTIGE = "SONSTIGE"
 GROUP_ORDER = [GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET, GROUP_SONSTIGE]
 
 
-def _classify_gattung(gattung: str) -> str:
+def _safe_float(value, default: float = 0.0) -> float:
+    """
+    Konvertiert einen Wert zu float. NaN, NaT, None, ungültige Werte → default (0.0).
+    Wichtig: Verhindert TypeError beim Vergleich/Sortieren gemischter Typen.
+    """
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _classify_gattung(gattung) -> str:
     """Ordnet eine Gattung einer der 5 Hauptgruppen zu."""
-    if not gattung or pd.isna(gattung):
+    if gattung is None:
         return GROUP_SONSTIGE
+    try:
+        if pd.isna(gattung):
+            return GROUP_SONSTIGE
+    except (TypeError, ValueError):
+        pass
     g = str(gattung).lower()
     if "aktie" in g or "equity" in g:
         return GROUP_AKTIEN
@@ -437,20 +460,25 @@ def _group_portfolio_positions(df: pd.DataFrame) -> dict:
         pos = {
             "wertpapier": str(row.get("Wertpapier", "")).strip(),
             "wkn": str(row.get("WKN", "")).strip(),
-            "gewicht": row.get("Gewicht", 0.0),
-            "kupon": row.get("Kupon"),
+            "gewicht": _safe_float(row.get("Gewicht", 0.0), 0.0),
+            "kupon": row.get("Kupon"),  # kann NaN sein, wird beim Formatieren behandelt
             "faelligkeit": row.get("Fälligkeit_parsed") if "Fälligkeit_parsed" in row.index else None,
             "rating": "-",  # TODO: bei Bedarf echtes Rating
         }
         groups[gruppe].append(pos)
 
     # Nach Gewicht absteigend sortieren innerhalb jeder Gruppe
+    # WICHTIG: _safe_float stellt sicher dass alle Keys saubere floats sind
     for g in groups:
-        groups[g] = sorted(groups[g], key=lambda p: p["gewicht"] or 0, reverse=True)
+        groups[g] = sorted(groups[g], key=lambda p: _safe_float(p["gewicht"], 0.0), reverse=True)
 
     # Liquidität aus Differenz berechnen (falls nicht explizit in Daten)
-    total_weight = df["Gewicht"].sum() if "Gewicht" in df.columns else 0
-    liq_from_positions = sum(p["gewicht"] for p in groups[GROUP_LIQUIDITAET])
+    if "Gewicht" in df.columns:
+        # skipna=True ist default, aber explizit zur Sicherheit
+        total_weight = _safe_float(df["Gewicht"].sum(skipna=True), 0.0)
+    else:
+        total_weight = 0.0
+    liq_from_positions = sum(_safe_float(p["gewicht"], 0.0) for p in groups[GROUP_LIQUIDITAET])
     implicit_liq = max(0.0, 1.0 - total_weight)
     if implicit_liq > 0.0001 and liq_from_positions < 0.0001:
         groups[GROUP_LIQUIDITAET].append({
@@ -502,7 +530,7 @@ def _distribute_positions_to_slides(groups: dict) -> list:
     # Alle Gruppen nach Gesamtgewicht absteigend
     ordered_groups = sorted(
         groups.items(),
-        key=lambda kv: sum(p["gewicht"] or 0 for p in kv[1]),
+        key=lambda kv: sum(_safe_float(p["gewicht"], 0.0) for p in kv[1]),
         reverse=True,
     )
 
@@ -523,7 +551,7 @@ def _distribute_positions_to_slides(groups: dict) -> list:
     for group_name, positions in ordered_groups[1:]:
         if group_name == GROUP_LIQUIDITAET:
             # Liquidität: Wert in den Gruppen-Header, keine separate Position
-            total_liq = sum(p["gewicht"] or 0 for p in positions)
+            total_liq = sum(_safe_float(p["gewicht"], 0.0) for p in positions)
             slide_8_rows.append({
                 "type": "group_header",
                 "data": {"name": group_name, "liq_value": total_liq}
@@ -650,10 +678,10 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     alloc_values = []
     for g in GROUP_ORDER:
         if g in groups:
-            total = sum(p["gewicht"] or 0 for p in groups[g])
+            total = sum(_safe_float(p["gewicht"], 0.0) for p in groups[g])
             if total > 0.0001:
                 alloc_labels.append(g)
-                alloc_values.append(total)
+                alloc_values.append(float(total))
 
     # Gesamt-Gewicht (für Summen-Zeile)
     total_weight = sum(alloc_values)
@@ -703,23 +731,46 @@ def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy
     if title:
         _replace_text_in_shape(title, f"Aktuelle Portfoliozusammenstellung – {strategy_name}")
 
+    # Defensive Vorbereitung: Gewicht muss sauberer Float sein, keine NaN, keine NaT
+    # (Verhindert den Fehler "'<' not supported between instances of 'numpy.float64' and 'NaTType'")
+    df_clean = df.copy()
+    if "Gewicht" in df_clean.columns:
+        # Gewicht zu Float zwingen, NaN zu 0 machen
+        df_clean["Gewicht"] = pd.to_numeric(df_clean["Gewicht"], errors="coerce").fillna(0.0).astype(float)
+
     # Regionen (links)
-    if "Region" in df.columns:
-        region_agg = df.groupby("Region")["Gewicht"].sum().sort_values(ascending=False)
-        region_agg = region_agg[region_agg > 0.0001]
-        if not region_agg.empty:
-            chart_left = _find_shape_by_name(slide, SHAPE_CHART_LEFT)
-            if chart_left:
-                _replace_chart_data(chart_left, region_agg.index.tolist(), region_agg.values.tolist())
+    if "Region" in df_clean.columns and "Gewicht" in df_clean.columns:
+        # Region-Spalte auf saubere Strings bringen, NaN zu leerem String
+        df_clean["Region"] = df_clean["Region"].astype(str).replace(["nan", "NaT", "None"], "")
+        # Leere Regionen ausfiltern
+        region_df = df_clean[df_clean["Region"].str.strip() != ""]
+        if not region_df.empty:
+            region_agg = region_df.groupby("Region")["Gewicht"].sum().sort_values(ascending=False)
+            region_agg = region_agg[region_agg > 0.0001]
+            if not region_agg.empty:
+                chart_left = _find_shape_by_name(slide, SHAPE_CHART_LEFT)
+                if chart_left:
+                    _replace_chart_data(
+                        chart_left,
+                        region_agg.index.tolist(),
+                        [float(v) for v in region_agg.values]
+                    )
 
     # Segmente/Branchen (rechts)
-    if "Segment" in df.columns:
-        segment_agg = df.groupby("Segment")["Gewicht"].sum().sort_values(ascending=False)
-        segment_agg = segment_agg[segment_agg > 0.0001]
-        if not segment_agg.empty:
-            chart_right = _find_shape_by_name(slide, SHAPE_CHART_RIGHT)
-            if chart_right:
-                _replace_chart_data(chart_right, segment_agg.index.tolist(), segment_agg.values.tolist())
+    if "Segment" in df_clean.columns and "Gewicht" in df_clean.columns:
+        df_clean["Segment"] = df_clean["Segment"].astype(str).replace(["nan", "NaT", "None"], "")
+        segment_df = df_clean[df_clean["Segment"].str.strip() != ""]
+        if not segment_df.empty:
+            segment_agg = segment_df.groupby("Segment")["Gewicht"].sum().sort_values(ascending=False)
+            segment_agg = segment_agg[segment_agg > 0.0001]
+            if not segment_agg.empty:
+                chart_right = _find_shape_by_name(slide, SHAPE_CHART_RIGHT)
+                if chart_right:
+                    _replace_chart_data(
+                        chart_right,
+                        segment_agg.index.tolist(),
+                        [float(v) for v in segment_agg.values]
+                    )
 
 
 # ---------------------------------------------------------------------------
