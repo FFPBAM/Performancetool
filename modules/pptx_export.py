@@ -444,6 +444,11 @@ def _group_portfolio_positions(df: pd.DataFrame) -> dict:
     Gruppiert Portfoliopositionen nach GROUP_ORDER.
     Innerhalb jeder Gruppe sind Positionen nach Gewicht absteigend sortiert.
 
+    Positionen werden ausgefiltert wenn:
+    - Kein Wertpapier-Name vorhanden ist
+    - Gewicht = 0 oder NaN ist
+    - Wertpapier-Name "nan", "NaT", "None" oder leer ist (Müll aus CSV)
+
     Returns:
         {
             "AKTIEN": [{"wertpapier": ..., "wkn": ..., "gewicht": 0.02, ...}, ...],
@@ -454,13 +459,30 @@ def _group_portfolio_positions(df: pd.DataFrame) -> dict:
     """
     groups = {g: [] for g in GROUP_ORDER}
 
+    # Junk-Strings die wir als "leer" behandeln
+    JUNK_STRINGS = {"", "nan", "NaN", "NaT", "None", "null"}
+
     for _, row in df.iterrows():
+        wertpapier = str(row.get("Wertpapier", "")).strip()
+        gewicht = _safe_float(row.get("Gewicht", 0.0), 0.0)
+
+        # Müll-Zeilen rausfiltern
+        if wertpapier in JUNK_STRINGS:
+            continue
+        if gewicht <= 0.0001:
+            continue
+
         gruppe = _classify_gattung(row.get("Gattung"))
 
+        # WKN auch auf Müll checken
+        wkn = str(row.get("WKN", "")).strip()
+        if wkn in JUNK_STRINGS:
+            wkn = ""
+
         pos = {
-            "wertpapier": str(row.get("Wertpapier", "")).strip(),
-            "wkn": str(row.get("WKN", "")).strip(),
-            "gewicht": _safe_float(row.get("Gewicht", 0.0), 0.0),
+            "wertpapier": wertpapier,
+            "wkn": wkn,
+            "gewicht": gewicht,
             "kupon": row.get("Kupon"),  # kann NaN sein, wird beim Formatieren behandelt
             "faelligkeit": row.get("Fälligkeit_parsed") if "Fälligkeit_parsed" in row.index else None,
             "rating": "-",  # TODO: bei Bedarf echtes Rating
@@ -508,24 +530,23 @@ def _distribute_positions_to_slides(groups: dict) -> list:
     """
     Verteilt gruppierte Positionen auf 2 Slides (Slide 7 und Slide 8).
 
-    Logik (Variante X):
-    - Slide 7 zeigt NUR die größte Gruppe (typischerweise AKTIEN).
-      → Der Gruppen-Header + alle Positionen dieser Gruppe
-      → Keine Summen-Zeile (weil nur eine Gruppe zu sehen ist)
-    - Slide 8 zeigt ALLE übrigen Gruppen (RENTEN + EDELMETALLE + LIQUIDITÄT)
-      + Summen-Zeile am Ende (100%)
-    - Sonderfall bei >33 Positionen in der größten Gruppe:
-      Die ersten 33 kommen auf Slide 7, die restlichen auf eine zusätzliche
-      Fortsetzungs-Slide (TODO, selten in der Praxis)
+    Logik (Variante X+):
+    - Slide 7 zeigt die größte Gruppe (typischerweise AKTIEN oder RENTEN).
+      → Gruppen-Header + bis zu 33 Positionen dieser Gruppe
+      → Keine Summen-Zeile
+    - Slide 8 zeigt:
+      → OPTIONAL: Fortsetzung der größten Gruppe (wenn >33 Positionen)
+        mit "FORTSETZUNG"-Header
+      → Alle übrigen Gruppen (RENTEN + EDELMETALLE + LIQUIDITÄT oder was auch immer)
+      → Summen-Zeile am Ende (100%)
+    - Bei Portfolios mit >12 Positionen auf Slide 8 wird abgeschnitten (sehr selten
+      bei Musterportfolios mit max. ~35 Titeln).
 
     Returns: Liste mit 2 Einträgen (je eine Slide-Definition):
         [
             {"rows": [...], "is_last_slide": False},  # Slide 7
             {"rows": [...], "is_last_slide": True},   # Slide 8 mit Summen-Zeile
         ]
-
-    Jede Row hat die Form:
-        {"type": "group_header" | "position", "data": {...}}
     """
     # Alle Gruppen nach Gesamtgewicht absteigend
     ordered_groups = sorted(
@@ -542,12 +563,29 @@ def _distribute_positions_to_slides(groups: dict) -> list:
 
     # Größte Gruppe → Slide 7
     biggest_name, biggest_positions = ordered_groups[0]
+    max_on_slide_7 = SLIDE_7_DATA_ROWS - 1  # -1 für Gruppen-Header
+
     slide_7_rows = [{"type": "group_header", "data": {"name": biggest_name}}]
-    for pos in biggest_positions[:SLIDE_7_DATA_ROWS - 1]:  # -1 weil Gruppen-Header eine Zeile braucht
+    for pos in biggest_positions[:max_on_slide_7]:
         slide_7_rows.append({"type": "position", "data": pos})
 
-    # Rest (alle anderen Gruppen) → Slide 8
+    # Überlauf: Wenn die größte Gruppe mehr Positionen hat als auf Slide 7 passen,
+    # kommen die restlichen auf Slide 8 unter "FORTSETZUNG {GRUPPE}"
+    overflow_positions = biggest_positions[max_on_slide_7:]
+
+    # Slide 8 aufbauen
     slide_8_rows = []
+
+    # 1. Fortsetzung der größten Gruppe (falls nötig)
+    if overflow_positions:
+        slide_8_rows.append({
+            "type": "group_header",
+            "data": {"name": f"{biggest_name} (Fortsetzung)"}
+        })
+        for pos in overflow_positions:
+            slide_8_rows.append({"type": "position", "data": pos})
+
+    # 2. Alle anderen Gruppen
     for group_name, positions in ordered_groups[1:]:
         if group_name == GROUP_LIQUIDITAET:
             # Liquidität: Wert in den Gruppen-Header, keine separate Position
