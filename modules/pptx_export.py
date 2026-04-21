@@ -611,24 +611,26 @@ def _distribute_positions_to_slides(groups: dict) -> list:
             all_rows.append({"type": "position", "data": pos})
             row_group_idx.append(g_idx)
 
-    # 3. Liquiditäts-Zeile vorbereiten (wird als genau 1 Zeile auf Slide 8 angehängt)
+    # 3. Liquidität als EIGENE Zeile ganz am Ende an all_rows anhängen.
+    #    Sie bekommt einen eigenen row_group_idx und den Typ "liquidity" (nicht
+    #    "group_header"), damit sie von der Pull-Back-Logik (die verhindert, dass
+    #    Slide 7 mit einem nackten Gruppen-Header endet) NICHT zurückgezogen wird.
+    #    Dadurch landet Liquidität automatisch auf Slide 7, wenn dort Platz ist,
+    #    und nur bei Überlauf auf Slide 8.
     if has_liq:
         total_liq = sum(_safe_float(p["gewicht"], 0.0) for p in liq_positions)
-        liq_row = {
-            "type": "group_header",
+        liq_group_idx = len(non_liq)  # eigener Index, unterscheidet sich von allen non_liq
+        all_rows.append({
+            "type": "liquidity",
             "data": {"name": GROUP_LIQUIDITAET, "liq_value": total_liq},
-        }
-    else:
-        liq_row = None
-
-    slide_8_capacity = SLIDE_8_DATA_ROWS - (1 if liq_row else 0)
+        })
+        row_group_idx.append(liq_group_idx)
 
     def _rows_needed_on_slide_8(split_at: int) -> int:
-        """Zeilenbedarf auf Slide 8 OHNE Liq-Zeile (die ist in slide_8_capacity rausgerechnet).
-
-        Wenn bei split_at eine Gruppe aufgeteilt wird (d.h. die Zeile links vom Split
-        und die Zeile rechts vom Split gehören zur selben Gruppe), muss auf Slide 8
-        der Gruppen-Header wiederholt werden → +1 extra Zeile.
+        """Zeilenbedarf auf Slide 8. Wenn bei split_at eine Gruppe aufgeteilt
+        wird (Zeile links und rechts vom Split gehören zur selben Gruppe UND
+        die rechte Zeile ist eine Position), muss auf Slide 8 der Gruppen-Header
+        wiederholt werden → +1 extra Zeile.
         """
         tail = len(all_rows) - split_at
         if tail <= 0:
@@ -642,10 +644,11 @@ def _distribute_positions_to_slides(groups: dict) -> list:
             return tail + 1
         return tail
 
-    # 4. Split-Punkt finden
+    # 4. Split-Punkt finden. Liquidität ist jetzt in all_rows enthalten, deshalb
+    #    wird sie automatisch auf Slide 7 gepackt, wenn sie dort reinpasst.
     max_split = min(SLIDE_7_DATA_ROWS, len(all_rows))
     split_at = max_split
-    while split_at > 0 and _rows_needed_on_slide_8(split_at) > slide_8_capacity:
+    while split_at > 0 and _rows_needed_on_slide_8(split_at) > SLIDE_8_DATA_ROWS:
         split_at -= 1
 
     # Fallback: keine Aufteilung gefunden bei der Slide 8 nicht überläuft
@@ -657,6 +660,9 @@ def _distribute_positions_to_slides(groups: dict) -> list:
     # Kosmetik-Korrektur: Slide 7 darf nicht mit einem nackten Gruppen-Header enden
     # (würde zu redundantem doppeltem Header auf Slide 8 führen). In dem Fall den
     # Header ganz auf Slide 8 wandern lassen, indem wir split_at zurückziehen.
+    # ACHTUNG: Liquidität ist kein group_header, also greift dieser Check für sie
+    # korrekterweise NICHT, und sie bleibt als letzte Zeile auf Slide 7 wenn sie
+    # dort hinpasst.
     while (
         split_at > 0
         and split_at < len(all_rows)
@@ -682,10 +688,6 @@ def _distribute_positions_to_slides(groups: dict) -> list:
         )
 
     slide_8_rows.extend(all_rows[split_at:])
-
-    # Liquidität immer als letzte Zeile auf Slide 8
-    if liq_row is not None:
-        slide_8_rows.append(liq_row)
 
     return [
         {"rows": slide_7_rows, "is_last_slide": False},
@@ -746,7 +748,7 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
         target_row_idx = i + 1  # +1 weil Zeile 0 der Tabellen-Header ist
         row = table.rows[target_row_idx]
 
-        if row_def["type"] == "group_header":
+        if row_def["type"] in ("group_header", "liquidity"):
             # Gruppen-Header: Name in Spalte 0, alle anderen leer
             # Explizit BOLD für Headers
             name = row_def["data"]["name"]
