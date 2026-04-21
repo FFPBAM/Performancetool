@@ -516,40 +516,76 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     st.markdown("**Ansprechpartner:** PBAM")
 
     # Export: PDF und PowerPoint nebeneinander
+    # Pattern: Session-State Cache für Export-Daten, verhindert Re-Generierung bei jedem Rerun.
+    # Cache-Key enthält die aktuelle Auswahl - bei Änderungen wird alter Cache invalidiert.
     st.markdown("---")
+
+    # Cache-Key aus aktueller Auswahl (ändert sich → Cache ungültig → Download-Button verschwindet)
+    compare_key = pf_sel_2 if (show_compare_pf and df_pf_2 is not None) else "single"
+    current_key = f"{pf_sel_1}|{compare_key}|{date_tag_pf}|{anlagevolumen}|{show_ytd}"
+
+    # Cache invalidieren wenn Auswahl geändert wurde
+    if st.session_state.get("pf_export_key") != current_key:
+        st.session_state.pop("pf_pdf_bytes", None)
+        st.session_state.pop("pf_pptx_bytes", None)
+        st.session_state["pf_export_key"] = current_key
+
     exp_col1, exp_col2 = st.columns(2)
 
+    # ── PDF Export ──
     with exp_col1:
-        if st.button("📄 PDF Portfolioanalyse erstellen", key="pf_pdf_btn", use_container_width=True):
-            portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
-            if show_compare_pf and df_pf_2 is not None:
-                portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
-            with st.spinner("PDF wird erstellt..."):
-                pdf_bytes = generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd)
-            st.download_button("⬇️ PDF herunterladen", pdf_bytes,
-                f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pdf",
-                "application/pdf", key="pf_pdf_dl", use_container_width=True)
-            st.success("PDF erfolgreich erstellt!")
+        if "pf_pdf_bytes" not in st.session_state:
+            # Button zum Generieren
+            if st.button("📄 PDF erstellen", key="pf_pdf_btn", use_container_width=True):
+                portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
+                if show_compare_pf and df_pf_2 is not None:
+                    portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
+                with st.spinner("PDF wird erstellt..."):
+                    st.session_state["pf_pdf_bytes"] = generate_pf_pdf(
+                        portfolios, anlagevolumen, use_volume, show_ytd
+                    )
+                st.rerun()
+        else:
+            # Download-Button mit gecachten Bytes
+            st.download_button(
+                "⬇️ PDF herunterladen",
+                data=st.session_state["pf_pdf_bytes"],
+                file_name=f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pdf",
+                mime="application/pdf",
+                key="pf_pdf_dl",
+                use_container_width=True,
+            )
 
+    # ── PowerPoint Export ──
     with exp_col2:
-        if st.button("📊 PowerPoint erstellen", key="pf_pptx_btn", use_container_width=True,
-                     help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Slides 7-9)."):
-            portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
-            if show_compare_pf and df_pf_2 is not None:
-                portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
-            try:
-                with st.spinner("PowerPoint wird erstellt..."):
-                    from modules.pptx_export import generate_portfolioanalyse_pptx
-                    pptx_bytes = generate_portfolioanalyse_pptx(portfolios, anlagevolumen)
-                st.download_button("⬇️ PowerPoint herunterladen", pptx_bytes,
-                    f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pptx",
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    key="pf_pptx_dl", use_container_width=True)
-                st.success("PowerPoint erfolgreich erstellt!")
-            except FileNotFoundError as e:
-                st.error(f"❌ Vorlage nicht gefunden: {e}\n\nBitte `Vorlage_FFPB.pptx` im Ordner `Vorlage/` im Repo ablegen.")
-            except Exception as e:
-                st.error(f"❌ Fehler beim PowerPoint-Export: {e}")
+        if "pf_pptx_bytes" not in st.session_state:
+            # Button zum Generieren
+            if st.button("📊 PowerPoint erstellen", key="pf_pptx_btn", use_container_width=True,
+                         help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Slides 7-9)."):
+                portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
+                if show_compare_pf and df_pf_2 is not None:
+                    portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
+                try:
+                    with st.spinner("PowerPoint wird erstellt..."):
+                        from modules.pptx_export import generate_portfolioanalyse_pptx
+                        st.session_state["pf_pptx_bytes"] = generate_portfolioanalyse_pptx(
+                            portfolios, anlagevolumen
+                        )
+                    st.rerun()
+                except FileNotFoundError as e:
+                    st.error(f"❌ Vorlage nicht gefunden: {e}\n\nBitte `Vorlage_FFPB.pptx` im Ordner `Vorlage/` im Repo ablegen.")
+                except Exception as e:
+                    st.error(f"❌ Fehler beim PowerPoint-Export: {e}")
+        else:
+            # Download-Button mit gecachten Bytes
+            st.download_button(
+                "⬇️ PowerPoint herunterladen",
+                data=st.session_state["pf_pptx_bytes"],
+                file_name=f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                key="pf_pptx_dl",
+                use_container_width=True,
+            )
 
 
 def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info, suffix="pf1"):
