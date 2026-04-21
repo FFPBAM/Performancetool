@@ -328,12 +328,22 @@ def _set_cell_text(cell, text: str, is_bold: bool = None):
     """
     Setzt den Text einer Tabellenzelle.
 
+    WICHTIG: Leere Strings werden zu NBSP (U+00A0) konvertiert. Grund:
+    Die Vorlage verwendet in nicht-befüllten Zellen ebenfalls NBSP als
+    Platzhalter. Lässt man die Zelle mit leerem <a:t/> zurück, rendert
+    LibreOffice sie mit Default-Font-Metriken (größere Zeilenhöhe), was
+    die gesamte Tabelle vertikal streckt und zu Überlauf auf Slide 7 führt.
+
     Args:
         cell: Die Zelle
-        text: Der neue Text
+        text: Der neue Text (leer → NBSP)
         is_bold: Wenn explizit True/False: setzt Bold-Formatierung.
                  Wenn None: behält vorherige Formatierung bei.
     """
+    # Leere Zellen auf NBSP setzen (siehe Docstring oben)
+    if text == "":
+        text = "\u00A0"
+
     tf = cell.text_frame
     # Alle Paragraphen außer dem ersten löschen
     while len(tf.paragraphs) > 1:
@@ -703,14 +713,15 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
     """
     Befüllt eine Tabelle (Slide 7 oder 8) mit Positionen.
 
-    Nach dem Befüllen werden leere Zeilen (zwischen letzter Datenzeile und Summen-Zeile)
-    entfernt, sodass die Tabelle in die vorgesehene Shape-Höhe passt.
+    Die Tabellen-Struktur der Vorlage bleibt UNVERÄNDERT (keine Zeilen entfernt,
+    keine Höhen geändert). Nicht benötigte Zeilen bleiben leer sichtbar.
 
     Args:
         table: Die Tabelle (shape.table)
         slide_data: {"rows": [...], "is_last_slide": bool}
         total_weight: Summe aller Gewichte (für Summen-Zeile, default 100%)
-        shape_height: Höhe der Tabellen-Shape in EMU (für Maximum-Berechnung)
+        shape_height: Höhe der Tabellen-Shape in EMU (wird nicht mehr verwendet,
+                      aus Kompat-Gründen in der Signatur belassen)
     """
     n_rows_initial = len(table.rows)
     rows = slide_data["rows"]
@@ -726,19 +737,6 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
         row = table.rows[row_idx]
         for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
             _set_cell_text(row.cells[col_idx], "")
-
-    # Ursprüngliche Zeilenhöhen merken (für spätere Skalierung)
-    original_header_height = table.rows[0].height
-    original_data_row_height = table.rows[1].height if n_rows_initial > 1 else 0
-    original_summary_height = table.rows[summary_row_idx].height
-
-    # Gesamthöhe der Datenzeilen (ohne Header, ohne Summen-Zeile)
-    original_data_total_height = sum(
-        table.rows[i].height for i in range(1, summary_row_idx)
-    )
-
-    # Anzahl der tatsächlich zu befüllenden Zeilen
-    n_filled = min(len(rows), max_data_rows)
 
     # Zeilen befüllen
     for i, row_def in enumerate(rows):
@@ -790,83 +788,14 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
         # 100,00% in der Anteil-Spalte der Summen-Zeile
         _set_cell_text(summary_row.cells[COL_ANTEIL], _fmt_pct(total_weight))
 
-    # ── Leere Zeilen entfernen wenn möglich ──
-    _optimize_table_layout(table, n_filled, is_last,
-                           original_data_total_height, original_data_row_height,
-                           shape_height)
-
-
-def _optimize_table_layout(table, n_filled: int, is_last: bool,
-                           original_data_total_height: int,
-                           original_data_row_height: int,
-                           shape_height: int = 0):
-    """
-    Optimiert die Tabellen-Darstellung nach dem Befüllen:
-    - Entfernt überzählige leere Zeilen
-    - Behält die Original-Zeilenhöhen bei (KEINE Skalierung!)
-    - Berechnet die Maximal-Zeilenzahl so, dass die Tabelle IMMER in die
-      ursprüngliche Shape-Höhe passt (auch beim Render-Verhalten von LibreOffice/
-      PowerPoint, die die Zeilenhöhen oft als Minimum interpretieren).
-
-    Args:
-        table: Die Tabelle
-        n_filled: Anzahl tatsächlich befüllter Datenzeilen (inkl. Gruppen-Header)
-        is_last: True wenn diese Tabelle die Summen-Zeile zeigt
-        original_data_total_height: Summe der Original-Höhen aller Datenzeilen
-        original_data_row_height: Original-Höhe einer einzelnen Datenzeile
-        shape_height: Höhe der Tabellen-Shape (für Maximum-Berechnung)
-    """
-    n_rows_current = len(table.rows)
-    summary_idx = n_rows_current - 1
-    # Datenzeilen: von 1 bis summary_idx-1 (inklusive)
-    n_data_slots = summary_idx - 1
-
-    # Wie viele leere Zeilen gibt's?
-    n_empty = n_data_slots - n_filled
-
-    if n_empty <= 0:
-        return  # Tabelle voll oder überfüllt - nichts zu tun
-
-    # ── Effective-Height-Berechnung ──
-    # PowerPoint/LibreOffice interpretieren die Zeilenhöhe oft als Minimum,
-    # nicht als fester Wert. Typischerweise rendern Zeilen ca. 1.6x höher
-    # als angegeben. Wir rechnen defensiv damit.
-    EFFECTIVE_ROW_HEIGHT_FACTOR = 1.6
-    effective_row_h = original_data_row_height * EFFECTIVE_ROW_HEIGHT_FACTOR
-
-    if shape_height > 0 and effective_row_h > 0:
-        # Wieviele Datenzeilen passen maximal?
-        # Header+Summe brauchen zusammen ca. 3 Zeilen-Äquivalente (defensiv)
-        max_fitting_rows = int(shape_height / effective_row_h) - 3
-        # Minimum: Wir behalten mindestens n_filled Zeilen
-        target_n_rows = max(n_filled, min(max_fitting_rows, n_data_slots))
-    else:
-        # Fallback ohne shape_height: behalte n_filled + 2 Puffer
-        target_n_rows = min(n_filled + 2, n_data_slots)
-
-    # Wie viele Zeilen müssen wir entfernen?
-    n_to_remove = n_data_slots - target_n_rows
-
-    if n_to_remove <= 0:
-        return
-
-    # Leere Zeilen entfernen: von unten (direkt vor Summen-Zeile)
-    # Die zu behaltenden sind Zeilen 1..target_n_rows (inkl)
-    # Also die Zeilen (target_n_rows+1)..(summary_idx-1) werden entfernt
-    start_remove_idx = 1 + target_n_rows  # erste zu entfernende Zeile
-
-    tbl = table._tbl
-    tr_elements = tbl.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tr")
-
-    rows_to_delete = []
-    for i in range(start_remove_idx, start_remove_idx + n_to_remove):
-        if i < len(tr_elements):
-            rows_to_delete.append(tr_elements[i])
-
-    for tr in rows_to_delete:
-        tr.getparent().remove(tr)
-
-    # Zeilenhöhen werden NICHT verändert - sie bleiben wie in der Vorlage!
+    # ── Tabellen-Struktur der Vorlage UNVERÄNDERT lassen ──
+    # Früher wurden hier überzählige leere Zeilen entfernt (_optimize_table_layout),
+    # das hat aber die Shape-Höhe geschrumpft und LibreOffice zum Vergrößern
+    # der verbleibenden Zeilen gebracht → Überlauf am unteren Slide-Rand.
+    # Die Vorlage ist mit ihren Zeilenhöhen exakt auf die Slide-Höhe kalibriert,
+    # also lassen wir ungefüllte Zeilen einfach leer stehen. Das ergibt zwar
+    # visuell einen leeren Bereich zwischen letztem Eintrag und Summenzeile,
+    # rendert aber korrekt ohne Überlauf.
 
 
 # ---------------------------------------------------------------------------
