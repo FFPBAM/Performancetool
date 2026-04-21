@@ -515,18 +515,41 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
     st.markdown("**Ansprechpartner:** PBAM")
 
-    # PDF
+    # Export: PDF und PowerPoint nebeneinander
     st.markdown("---")
-    if st.button("📄 PDF Portfolioanalyse erstellen", key="pf_pdf_btn"):
-        portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
-        if show_compare_pf and df_pf_2 is not None:
-            portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
-        with st.spinner("PDF wird erstellt..."):
-            pdf_bytes = generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd)
-        st.download_button("⬇️ PDF herunterladen", pdf_bytes,
-            f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pdf",
-            "application/pdf", key="pf_pdf_dl")
-        st.success("PDF erfolgreich erstellt!")
+    exp_col1, exp_col2 = st.columns(2)
+
+    with exp_col1:
+        if st.button("📄 PDF Portfolioanalyse erstellen", key="pf_pdf_btn", use_container_width=True):
+            portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
+            if show_compare_pf and df_pf_2 is not None:
+                portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
+            with st.spinner("PDF wird erstellt..."):
+                pdf_bytes = generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd)
+            st.download_button("⬇️ PDF herunterladen", pdf_bytes,
+                f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pdf",
+                "application/pdf", key="pf_pdf_dl", use_container_width=True)
+            st.success("PDF erfolgreich erstellt!")
+
+    with exp_col2:
+        if st.button("📊 PowerPoint erstellen", key="pf_pptx_btn", use_container_width=True,
+                     help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Slides 7-9)."):
+            portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
+            if show_compare_pf and df_pf_2 is not None:
+                portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
+            try:
+                with st.spinner("PowerPoint wird erstellt..."):
+                    from modules.pptx_export import generate_portfolioanalyse_pptx
+                    pptx_bytes = generate_portfolioanalyse_pptx(portfolios, anlagevolumen)
+                st.download_button("⬇️ PowerPoint herunterladen", pptx_bytes,
+                    f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pptx",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    key="pf_pptx_dl", use_container_width=True)
+                st.success("PowerPoint erfolgreich erstellt!")
+            except FileNotFoundError as e:
+                st.error(f"❌ Vorlage nicht gefunden: {e}\n\nBitte `Vorlage_FFPB.pptx` im Ordner `Vorlage/` im Repo ablegen.")
+            except Exception as e:
+                st.error(f"❌ Fehler beim PowerPoint-Export: {e}")
 
 
 def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info, suffix="pf1"):
