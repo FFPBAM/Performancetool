@@ -847,11 +847,13 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     chart = _find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
     if chart:
         _replace_chart_data(chart, alloc_labels, alloc_values)
-    # Tabelle
+    # Tabelle befüllen (mit ursprünglicher Shape-Höhe als Referenz für _optimize_table_layout)
     table_shape = _find_shape_by_name(slide_7, SHAPE_TABLE)
     if table_shape:
         _fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
                                    shape_height=table_shape.height)
+        # NACH dem Befüllen: Shape-Höhe an tatsächliche Zeilen-Summe anpassen
+        _fit_shape_to_table(table_shape)
 
     # 4. Slide 8 befüllen
     slide_8 = prs.slides[slide_8_idx]
@@ -863,11 +865,80 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     chart = _find_shape_by_name(slide_8, SHAPE_CHART_ALLOCATION)
     if chart:
         _replace_chart_data(chart, alloc_labels, alloc_values)
-    # Tabelle
+    # Tabelle - ggf. Shape-Höhe vergrößern wenn viele Positionen
     table_shape = _find_shape_by_name(slide_8, SHAPE_TABLE)
     if table_shape:
         _fill_table_with_positions(table_shape.table, slide_distribution[1], total_weight,
                                    shape_height=table_shape.height)
+        _fit_shape_to_table(table_shape)
+
+
+def _fit_shape_to_table(table_shape):
+    """
+    Passt die Höhe der Tabellen-Shape an die Summe der Zeilenhöhen an.
+    
+    Das ist WICHTIG weil LibreOffice/PowerPoint die Zeilen automatisch vergrößern,
+    wenn die Summe aller Zeilenhöhen kleiner ist als die Shape-Höhe. Wenn wir die
+    Shape auf die korrekte Größe setzen, bleiben die Zeilen in ihrer ursprünglichen
+    Höhe (0.142") und die Tabelle ragt nicht über den Footer.
+    """
+    table = table_shape.table
+    # Summe aller Zeilenhöhen berechnen
+    total_row_h = sum(row.height for row in table.rows)
+    
+    # Shape-Höhe auf diese Summe setzen (+ kleiner Puffer für Rahmen)
+    # 0.02" (~50000 EMU) Puffer
+    table_shape.height = total_row_h + 50000
+
+
+def _adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary: bool):
+    """
+    Passt die Höhe der Tabellen-Shape an die tatsächlich benötigte Zeilenanzahl an.
+    
+    Das ist WICHTIG weil LibreOffice/PowerPoint die Zeilen automatisch vergrößern,
+    wenn die Summe aller Zeilenhöhen kleiner ist als die Shape-Höhe. Wenn wir die
+    Shape auf die korrekte Größe setzen, bleiben die Zeilen in ihrer ursprünglichen
+    Höhe (0.142").
+    
+    Kann die Shape auch vergrößern (nach unten), aber nur bis max. 6.60" Bottom
+    (vor Footer bei 6.76").
+    
+    Args:
+        prs: Presentation
+        table_shape: Die Tabelle-Shape
+        n_data_rows: Anzahl Datenzeilen die wir tatsächlich befüllen (inkl. Gruppen-Header)
+        needs_summary: True wenn Summen-Zeile benötigt wird
+    """
+    ORIGINAL_HEADER_H = 0.236
+    ORIGINAL_DATA_ROW_H = 0.142
+    ORIGINAL_SUMMARY_H = 0.142
+    MAX_TABLE_BOTTOM = 6.60  # inches - max. Bottom-Position (vor Footer bei 6.76")
+    
+    # Benötigte Höhe berechnen (Summe aller XML-Zeilenhöhen):
+    # Header + (n Datenzeilen) + (ggf. Summen-Zeile)
+    # Nach _optimize_table_layout sind leere Zeilen entfernt, nur noch n_filled + evtl. 1-2 Puffer
+    # Wir brauchen Puffer: auch leere Zeilen bleiben als Buffer übrig
+    
+    n_buffer_rows = 2 if needs_summary else 0
+    xml_rows_estimate = 1 + n_data_rows + n_buffer_rows + (1 if needs_summary else 0)
+    
+    needed_h = ORIGINAL_HEADER_H + (n_data_rows * ORIGINAL_DATA_ROW_H) + (n_buffer_rows * ORIGINAL_DATA_ROW_H)
+    if needs_summary:
+        needed_h += ORIGINAL_SUMMARY_H
+    
+    # Aktuelle Shape-Position
+    shape_top_inch = table_shape.top / 914400
+    shape_current_h_inch = table_shape.height / 914400
+    
+    # Maximal verfügbare Höhe (bis Footer-Margin)
+    max_available_h = MAX_TABLE_BOTTOM - shape_top_inch
+    
+    # Neue Höhe: So groß wie benötigt, aber nie über max_available
+    new_h_inch = min(needed_h, max_available_h)
+    
+    # Nur ändern wenn Änderung signifikant (>0.05" Differenz)
+    if abs(new_h_inch - shape_current_h_inch) > 0.05:
+        table_shape.height = int(new_h_inch * 914400)
 
 
 # ---------------------------------------------------------------------------
