@@ -624,25 +624,42 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
     """
     Befüllt eine Tabelle (Slide 7 oder 8) mit Positionen.
 
+    Nach dem Befüllen werden leere Zeilen (zwischen letzter Datenzeile und Summen-Zeile)
+    entfernt. Die verbleibenden Datenzeilen werden auf die ursprüngliche Tabellenhöhe
+    proportional vergrößert, sodass der Platz gut ausgenutzt wird.
+
     Args:
         table: Die Tabelle (shape.table)
         slide_data: {"rows": [...], "is_last_slide": bool}
         total_weight: Summe aller Gewichte (für Summen-Zeile, default 100%)
     """
-    n_rows = len(table.rows)
+    n_rows_initial = len(table.rows)
     rows = slide_data["rows"]
     is_last = slide_data["is_last_slide"]
 
     # Summen-Zeile ist immer die letzte Zeile in der Vorlage
-    summary_row_idx = n_rows - 1
-    # Datenzeilen gehen von 1 bis n_rows-2 (Zeile 0 = Header, Zeile n_rows-1 = Summe)
-    max_data_rows = n_rows - 2
+    summary_row_idx = n_rows_initial - 1
+    # Datenzeilen gehen von 1 bis n_rows-2
+    max_data_rows = n_rows_initial - 2
 
     # Erst alle Datenzeilen leeren (nur Spalten 0, 2, 4, 6, 8, 10 - Spacer bleiben)
-    for row_idx in range(1, n_rows):
+    for row_idx in range(1, n_rows_initial):
         row = table.rows[row_idx]
         for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
             _set_cell_text(row.cells[col_idx], "")
+
+    # Ursprüngliche Zeilenhöhen merken (für spätere Skalierung)
+    original_header_height = table.rows[0].height
+    original_data_row_height = table.rows[1].height if n_rows_initial > 1 else 0
+    original_summary_height = table.rows[summary_row_idx].height
+
+    # Gesamthöhe der Datenzeilen (ohne Header, ohne Summen-Zeile)
+    original_data_total_height = sum(
+        table.rows[i].height for i in range(1, summary_row_idx)
+    )
+
+    # Anzahl der tatsächlich zu befüllenden Zeilen
+    n_filled = min(len(rows), max_data_rows)
 
     # Zeilen befüllen
     for i, row_def in enumerate(rows):
@@ -690,6 +707,99 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
     if is_last:
         # 100,00% in der Anteil-Spalte der Summen-Zeile
         _set_cell_text(summary_row.cells[COL_ANTEIL], _fmt_pct(total_weight))
+
+    # ── NEU: Leere Zeilen entfernen + Rest skalieren ──
+    # Ziel: Wenn wir z.B. 21 Zeilen belegt haben aber 34 Datenzeilen-Slots existieren,
+    # entfernen wir einige leere Zeilen und machen die verbleibenden Datenzeilen höher.
+    _optimize_table_layout(table, n_filled, is_last,
+                           original_data_total_height, original_data_row_height)
+
+
+def _optimize_table_layout(table, n_filled: int, is_last: bool,
+                           original_data_total_height: int,
+                           original_data_row_height: int):
+    """
+    Optimiert die Tabellen-Darstellung nach dem Befüllen:
+    - Entfernt überzählige leere Zeilen (maximal so viele dass min. 8 Zeilen bleiben)
+    - Skaliert verbleibende Datenzeilen sodass sie die ursprüngliche Gesamthöhe füllen
+      (max. 1.8x der Original-Höhe, sonst wird's zu luftig)
+
+    Args:
+        table: Die Tabelle
+        n_filled: Anzahl tatsächlich befüllter Datenzeilen (inkl. Gruppen-Header)
+        is_last: True wenn diese Tabelle die Summen-Zeile zeigt
+        original_data_total_height: Summe der Original-Höhen aller Datenzeilen
+        original_data_row_height: Original-Höhe einer einzelnen Datenzeile
+    """
+    n_rows_current = len(table.rows)
+    summary_idx = n_rows_current - 1
+    # Datenzeilen: von 1 bis summary_idx-1 (inklusive)
+    n_data_slots = summary_idx - 1  # gesamt verfügbare Datenzeilen (leer + belegt)
+
+    # Wie viele leere Zeilen gibt's?
+    n_empty = n_data_slots - n_filled
+
+    if n_empty <= 0:
+        return  # Tabelle voll oder überfüllt - nichts zu tun
+
+    # Ziel: Faktor abhängig von Anzahl Zeilen
+    # Wenige Zeilen → stärkere Skalierung für luftige Darstellung,
+    # aber Summen-Zeile muss noch drauf passen.
+    if n_filled <= 4:
+        MAX_ROW_HEIGHT_FACTOR = 2.5
+    elif n_filled <= 8:
+        MAX_ROW_HEIGHT_FACTOR = 2.0
+    elif n_filled <= 15:
+        MAX_ROW_HEIGHT_FACTOR = 1.7
+    else:
+        MAX_ROW_HEIGHT_FACTOR = 1.5
+    target_row_height = int(original_data_row_height * MAX_ROW_HEIGHT_FACTOR)
+
+    # Wie viele Datenzeilen brauchen wir, um mit target_row_height die Original-Höhe zu füllen?
+    # total_data_height = n_remaining * target_row_height
+    # → n_remaining = total_data_height / target_row_height
+    n_remaining = max(n_filled, int(original_data_total_height / target_row_height))
+
+    # Aber: Nie mehr Zeilen behalten als wir haben
+    n_remaining = min(n_remaining, n_data_slots)
+
+    # Wie viele leere Zeilen müssen wir entfernen?
+    n_to_remove = n_data_slots - n_remaining
+
+    if n_to_remove <= 0:
+        return
+
+    # Leere Zeilen entfernen: Die letzten leeren Datenzeilen vor der Summen-Zeile
+    # Wir löschen von hinten nach vorne (Indizes 1..summary_idx-1 sind Daten)
+    # Die leeren Zeilen sind die Zeilen am Ende der Datenzeilen (nach n_filled)
+    # Also: Zeilen mit Index (1 + n_filled) bis (1 + n_filled + n_to_remove - 1) entfernen
+    start_remove_idx = 1 + n_filled  # erste leere Zeile
+    # Ende: start_remove_idx + n_to_remove - 1
+
+    # Entfernen von hinten nach vorne (stabile Indizes)
+    tbl = table._tbl  # CT_Table (etree element)
+    tr_elements = tbl.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tr")
+
+    # Wir wollen n_to_remove Zeilen aus dem Bereich start_remove_idx..start_remove_idx+n_to_remove-1 löschen
+    rows_to_delete = []
+    for i in range(start_remove_idx, start_remove_idx + n_to_remove):
+        if i < len(tr_elements):
+            rows_to_delete.append(tr_elements[i])
+
+    for tr in rows_to_delete:
+        tr.getparent().remove(tr)
+
+    # Jetzt die verbleibenden Datenzeilen auf target_row_height skalieren
+    # Tabelle neu auslesen nachdem Zeilen entfernt wurden
+    n_rows_new = len(table.rows)
+    summary_idx_new = n_rows_new - 1
+
+    # Datenzeilen (Index 1 bis summary_idx_new-1) auf target_row_height setzen
+    for i in range(1, summary_idx_new):
+        try:
+            table.rows[i].height = target_row_height
+        except Exception:
+            pass  # Zeile existiert nicht mehr oder sonstiger Fehler - ignorieren
 
 
 # ---------------------------------------------------------------------------
