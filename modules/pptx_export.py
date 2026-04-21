@@ -634,18 +634,19 @@ COL_RATING = 10
 COL_SPACERS = [1, 3, 5, 7, 9]
 
 
-def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0):
+def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0,
+                               shape_height: int = 0):
     """
     Befüllt eine Tabelle (Slide 7 oder 8) mit Positionen.
 
     Nach dem Befüllen werden leere Zeilen (zwischen letzter Datenzeile und Summen-Zeile)
-    entfernt. Die verbleibenden Datenzeilen werden auf die ursprüngliche Tabellenhöhe
-    proportional vergrößert, sodass der Platz gut ausgenutzt wird.
+    entfernt, sodass die Tabelle in die vorgesehene Shape-Höhe passt.
 
     Args:
         table: Die Tabelle (shape.table)
         slide_data: {"rows": [...], "is_last_slide": bool}
         total_weight: Summe aller Gewichte (für Summen-Zeile, default 100%)
+        shape_height: Höhe der Tabellen-Shape in EMU (für Maximum-Berechnung)
     """
     n_rows_initial = len(table.rows)
     rows = slide_data["rows"]
@@ -725,29 +726,31 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
         # 100,00% in der Anteil-Spalte der Summen-Zeile
         _set_cell_text(summary_row.cells[COL_ANTEIL], _fmt_pct(total_weight))
 
-    # ── NEU: Leere Zeilen entfernen + Rest skalieren ──
-    # Ziel: Wenn wir z.B. 21 Zeilen belegt haben aber 34 Datenzeilen-Slots existieren,
-    # entfernen wir einige leere Zeilen und machen die verbleibenden Datenzeilen höher.
+    # ── Leere Zeilen entfernen wenn möglich ──
     _optimize_table_layout(table, n_filled, is_last,
-                           original_data_total_height, original_data_row_height)
+                           original_data_total_height, original_data_row_height,
+                           shape_height)
 
 
 def _optimize_table_layout(table, n_filled: int, is_last: bool,
                            original_data_total_height: int,
-                           original_data_row_height: int):
+                           original_data_row_height: int,
+                           shape_height: int = 0):
     """
     Optimiert die Tabellen-Darstellung nach dem Befüllen:
     - Entfernt überzählige leere Zeilen
     - Behält die Original-Zeilenhöhen bei (KEINE Skalierung!)
-    - Ergebnis: Die Tabelle wird kürzer wenn weniger Positionen da sind,
-      ragt aber NIE über die ursprünglichen Slide-Grenzen hinaus.
+    - Berechnet die Maximal-Zeilenzahl so, dass die Tabelle IMMER in die
+      ursprüngliche Shape-Höhe passt (auch beim Render-Verhalten von LibreOffice/
+      PowerPoint, die die Zeilenhöhen oft als Minimum interpretieren).
 
     Args:
         table: Die Tabelle
         n_filled: Anzahl tatsächlich befüllter Datenzeilen (inkl. Gruppen-Header)
         is_last: True wenn diese Tabelle die Summen-Zeile zeigt
-        original_data_total_height: (nicht mehr verwendet, für Kompatibilität)
+        original_data_total_height: Summe der Original-Höhen aller Datenzeilen
         original_data_row_height: Original-Höhe einer einzelnen Datenzeile
+        shape_height: Höhe der Tabellen-Shape (für Maximum-Berechnung)
     """
     n_rows_current = len(table.rows)
     summary_idx = n_rows_current - 1
@@ -760,20 +763,33 @@ def _optimize_table_layout(table, n_filled: int, is_last: bool,
     if n_empty <= 0:
         return  # Tabelle voll oder überfüllt - nichts zu tun
 
-    # Pufferzeilen behalten: 2 leere Zeilen vor der Summe für optische Trennung
-    # (nur wenn genug vorhanden)
-    BUFFER_ROWS = 2 if n_empty >= 3 else 0
+    # ── Effective-Height-Berechnung ──
+    # PowerPoint/LibreOffice interpretieren die Zeilenhöhe oft als Minimum,
+    # nicht als fester Wert. Typischerweise rendern Zeilen ca. 1.6x höher
+    # als angegeben. Wir rechnen defensiv damit.
+    EFFECTIVE_ROW_HEIGHT_FACTOR = 1.6
+    effective_row_h = original_data_row_height * EFFECTIVE_ROW_HEIGHT_FACTOR
 
-    # Zu entfernende leere Zeilen
-    n_to_remove = n_empty - BUFFER_ROWS
+    if shape_height > 0 and effective_row_h > 0:
+        # Wieviele Datenzeilen passen maximal?
+        # Header+Summe brauchen zusammen ca. 3 Zeilen-Äquivalente (defensiv)
+        max_fitting_rows = int(shape_height / effective_row_h) - 3
+        # Minimum: Wir behalten mindestens n_filled Zeilen
+        target_n_rows = max(n_filled, min(max_fitting_rows, n_data_slots))
+    else:
+        # Fallback ohne shape_height: behalte n_filled + 2 Puffer
+        target_n_rows = min(n_filled + 2, n_data_slots)
+
+    # Wie viele Zeilen müssen wir entfernen?
+    n_to_remove = n_data_slots - target_n_rows
 
     if n_to_remove <= 0:
         return
 
-    # Leere Zeilen entfernen: die letzten leeren Datenzeilen vor der Summen-Zeile
-    # Start bei: 1 + n_filled + BUFFER_ROWS (erste zu entfernende Zeile)
-    # Ende bei: start + n_to_remove - 1
-    start_remove_idx = 1 + n_filled + BUFFER_ROWS
+    # Leere Zeilen entfernen: von unten (direkt vor Summen-Zeile)
+    # Die zu behaltenden sind Zeilen 1..target_n_rows (inkl)
+    # Also die Zeilen (target_n_rows+1)..(summary_idx-1) werden entfernt
+    start_remove_idx = 1 + target_n_rows  # erste zu entfernende Zeile
 
     tbl = table._tbl
     tr_elements = tbl.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tr")
@@ -787,7 +803,6 @@ def _optimize_table_layout(table, n_filled: int, is_last: bool,
         tr.getparent().remove(tr)
 
     # Zeilenhöhen werden NICHT verändert - sie bleiben wie in der Vorlage!
-    # Dadurch bleibt die Tabelle innerhalb der ursprünglichen Shape-Höhe.
 
 
 # ---------------------------------------------------------------------------
@@ -835,7 +850,8 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     # Tabelle
     table_shape = _find_shape_by_name(slide_7, SHAPE_TABLE)
     if table_shape:
-        _fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight)
+        _fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
+                                   shape_height=table_shape.height)
 
     # 4. Slide 8 befüllen
     slide_8 = prs.slides[slide_8_idx]
@@ -850,7 +866,8 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     # Tabelle
     table_shape = _find_shape_by_name(slide_8, SHAPE_TABLE)
     if table_shape:
-        _fill_table_with_positions(table_shape.table, slide_distribution[1], total_weight)
+        _fill_table_with_positions(table_shape.table, slide_distribution[1], total_weight,
+                                   shape_height=table_shape.height)
 
 
 # ---------------------------------------------------------------------------
