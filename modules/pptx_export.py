@@ -542,19 +542,29 @@ SLIDE_8_DATA_ROWS = 12   # Zeilen 1-12, Zeile 13 = Summe
 
 def _distribute_positions_to_slides(groups: dict) -> list:
     """
-    Verteilt gruppierte Positionen auf 2 Slides (Slide 7 und Slide 8).
+    Verteilt gruppierte Positionen flexibel auf 2 Slides (Slide 7 und Slide 8).
 
-    Logik (Variante X+):
-    - Slide 7 zeigt die größte Gruppe (typischerweise AKTIEN oder RENTEN).
-      → Gruppen-Header + bis zu 33 Positionen dieser Gruppe
-      → Keine Summen-Zeile
-    - Slide 8 zeigt:
-      → OPTIONAL: Fortsetzung der größten Gruppe (wenn >33 Positionen)
-        mit "FORTSETZUNG"-Header
-      → Alle übrigen Gruppen (RENTEN + EDELMETALLE + LIQUIDITÄT oder was auch immer)
-      → Summen-Zeile am Ende (100%)
-    - Bei Portfolios mit >12 Positionen auf Slide 8 wird abgeschnitten (sehr selten
-      bei Musterportfolios mit max. ~35 Titeln).
+    Spec:
+    - Slide 7 (asymmetrisch groß): max SLIDE_7_DATA_ROWS (34) Datenzeilen
+    - Slide 8 (klein): max SLIDE_8_DATA_ROWS (12) Datenzeilen
+    - Gruppen nach Gewicht absteigend, LIQUIDITÄT IMMER am Ende
+    - Gruppen dürfen über Slide-Grenzen fließen
+    - Bei aufgeteilter Gruppe: Gruppen-Header auf Slide 8 doppelt wiederholen
+      (KEIN "(Fortsetzung)"-Suffix — das ist die alte Logik)
+    - LIQUIDITÄT erzeugt genau EINE Zeile (Header mit Wert, keine separaten Positionen)
+    - Summen-Zeile kommt immer auf Slide 8 (die letzte Zeile der Vorlage)
+    - Bei Überlauf auf Slide 8: Fallback — Slide 7 voll machen, Slide 8 abschneiden
+
+    Strategie (split-based):
+    1. Alle nicht-LIQUIDITÄT-Gruppen zu flacher Zeilen-Liste `all_rows` expandieren:
+       [H_A, a1..an, H_B, b1..bm, ...]
+    2. Größten möglichen `split_at` finden, sodass:
+       - Slide 7 bekommt all_rows[:split_at] (max SLIDE_7_DATA_ROWS)
+       - Slide 8 bekommt all_rows[split_at:] + ggf. wiederholten Gruppen-Header
+         (wenn Split eine Gruppe aufteilt) + Liquiditäts-Zeile
+       - Slide 8 Zeilen ≤ SLIDE_8_DATA_ROWS
+    3. Falls kein solcher split_at existiert (split_at auf 0 runtergelaufen):
+       → Fallback: split_at = max_split (Slide 7 voll, Slide 8 wird abgeschnitten)
 
     Returns: Liste mit 2 Einträgen (je eine Slide-Definition):
         [
@@ -562,56 +572,110 @@ def _distribute_positions_to_slides(groups: dict) -> list:
             {"rows": [...], "is_last_slide": True},   # Slide 8 mit Summen-Zeile
         ]
     """
-    # Alle Gruppen nach Gesamtgewicht absteigend
-    ordered_groups = sorted(
-        groups.items(),
+    # 1. Gruppen nach Gewicht sortieren, LIQUIDITÄT explizit ans Ende
+    non_liq = [(n, ps) for n, ps in groups.items() if n != GROUP_LIQUIDITAET]
+    non_liq.sort(
         key=lambda kv: sum(_safe_float(p["gewicht"], 0.0) for p in kv[1]),
         reverse=True,
     )
+    liq_positions = groups.get(GROUP_LIQUIDITAET, [])
+    has_liq = bool(liq_positions) and sum(
+        _safe_float(p["gewicht"], 0.0) for p in liq_positions
+    ) > 0.0001
 
-    if not ordered_groups:
+    if not non_liq and not has_liq:
         return [
-            {"rows": [], "is_last_slide": True},
+            {"rows": [], "is_last_slide": False},
             {"rows": [], "is_last_slide": True},
         ]
 
-    # Größte Gruppe → Slide 7
-    biggest_name, biggest_positions = ordered_groups[0]
-    max_on_slide_7 = SLIDE_7_DATA_ROWS - 1  # -1 für Gruppen-Header
+    # 2. Alle nicht-Liq-Gruppen in flache Zeilen-Liste expandieren.
+    #    Parallel row_group_idx tracken, damit wir wissen welche Zeile zu welcher
+    #    Gruppe gehört (für Header-Wiederholung bei Split).
+    all_rows = []
+    row_group_idx = []  # parallel zu all_rows: Index in non_liq, bei dem die Zeile steht
+    for g_idx, (group_name, positions) in enumerate(non_liq):
+        all_rows.append({"type": "group_header", "data": {"name": group_name}})
+        row_group_idx.append(g_idx)
+        for pos in positions:
+            all_rows.append({"type": "position", "data": pos})
+            row_group_idx.append(g_idx)
 
-    slide_7_rows = [{"type": "group_header", "data": {"name": biggest_name}}]
-    for pos in biggest_positions[:max_on_slide_7]:
-        slide_7_rows.append({"type": "position", "data": pos})
+    # 3. Liquiditäts-Zeile vorbereiten (wird als genau 1 Zeile auf Slide 8 angehängt)
+    if has_liq:
+        total_liq = sum(_safe_float(p["gewicht"], 0.0) for p in liq_positions)
+        liq_row = {
+            "type": "group_header",
+            "data": {"name": GROUP_LIQUIDITAET, "liq_value": total_liq},
+        }
+    else:
+        liq_row = None
 
-    # Überlauf: Wenn die größte Gruppe mehr Positionen hat als auf Slide 7 passen,
-    # kommen die restlichen auf Slide 8 unter "FORTSETZUNG {GRUPPE}"
-    overflow_positions = biggest_positions[max_on_slide_7:]
+    slide_8_capacity = SLIDE_8_DATA_ROWS - (1 if liq_row else 0)
 
-    # Slide 8 aufbauen
+    def _rows_needed_on_slide_8(split_at: int) -> int:
+        """Zeilenbedarf auf Slide 8 OHNE Liq-Zeile (die ist in slide_8_capacity rausgerechnet).
+
+        Wenn bei split_at eine Gruppe aufgeteilt wird (d.h. die Zeile links vom Split
+        und die Zeile rechts vom Split gehören zur selben Gruppe), muss auf Slide 8
+        der Gruppen-Header wiederholt werden → +1 extra Zeile.
+        """
+        tail = len(all_rows) - split_at
+        if tail <= 0:
+            return 0
+        # Header-Wiederholung nötig?
+        if (
+            0 < split_at < len(all_rows)
+            and row_group_idx[split_at - 1] == row_group_idx[split_at]
+            and all_rows[split_at]["type"] == "position"
+        ):
+            return tail + 1
+        return tail
+
+    # 4. Split-Punkt finden
+    max_split = min(SLIDE_7_DATA_ROWS, len(all_rows))
+    split_at = max_split
+    while split_at > 0 and _rows_needed_on_slide_8(split_at) > slide_8_capacity:
+        split_at -= 1
+
+    # Fallback: keine Aufteilung gefunden bei der Slide 8 nicht überläuft
+    # → Slide 7 voll packen, Slide 8 nimmt was passt, Rest wird in
+    #   _fill_table_with_positions abgeschnitten (dort gibt es ein break bei max_data_rows)
+    if split_at == 0 and max_split > 0:
+        split_at = max_split
+
+    # Kosmetik-Korrektur: Slide 7 darf nicht mit einem nackten Gruppen-Header enden
+    # (würde zu redundantem doppeltem Header auf Slide 8 führen). In dem Fall den
+    # Header ganz auf Slide 8 wandern lassen, indem wir split_at zurückziehen.
+    while (
+        split_at > 0
+        and split_at < len(all_rows)
+        and all_rows[split_at - 1]["type"] == "group_header"
+    ):
+        split_at -= 1
+
+    # 5. Slides zusammenbauen
+    slide_7_rows = all_rows[:split_at]
     slide_8_rows = []
 
-    # 1. Fortsetzung der größten Gruppe (falls nötig)
-    if overflow_positions:
-        slide_8_rows.append({
-            "type": "group_header",
-            "data": {"name": f"{biggest_name} (Fortsetzung)"}
-        })
-        for pos in overflow_positions:
-            slide_8_rows.append({"type": "position", "data": pos})
+    # Wiederholter Gruppen-Header auf Slide 8 wenn Gruppe bei split_at aufgeteilt wird
+    # (d.h. Slide 7 endet mit einer Position und Slide 8 beginnt mit einer Position
+    # derselben Gruppe — dann muss der Gruppen-Header auf Slide 8 wiederholt werden)
+    if (
+        0 < split_at < len(all_rows)
+        and all_rows[split_at]["type"] == "position"
+        and row_group_idx[split_at - 1] == row_group_idx[split_at]
+    ):
+        split_group_name = non_liq[row_group_idx[split_at]][0]
+        slide_8_rows.append(
+            {"type": "group_header", "data": {"name": split_group_name}}
+        )
 
-    # 2. Alle anderen Gruppen
-    for group_name, positions in ordered_groups[1:]:
-        if group_name == GROUP_LIQUIDITAET:
-            # Liquidität: Wert in den Gruppen-Header, keine separate Position
-            total_liq = sum(_safe_float(p["gewicht"], 0.0) for p in positions)
-            slide_8_rows.append({
-                "type": "group_header",
-                "data": {"name": group_name, "liq_value": total_liq}
-            })
-        else:
-            slide_8_rows.append({"type": "group_header", "data": {"name": group_name}})
-            for pos in positions:
-                slide_8_rows.append({"type": "position", "data": pos})
+    slide_8_rows.extend(all_rows[split_at:])
+
+    # Liquidität immer als letzte Zeile auf Slide 8
+    if liq_row is not None:
+        slide_8_rows.append(liq_row)
 
     return [
         {"rows": slide_7_rows, "is_last_slide": False},
@@ -811,7 +875,10 @@ def _optimize_table_layout(table, n_filled: int, is_last: bool,
 def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
                                   df: pd.DataFrame, strategy_name: str):
     """
-    Befüllt Slide 7 (Aktien-Seite) und Slide 8 (Renten-Fortsetzung) mit Portfolio-Daten.
+    Befüllt Slide 7 und Slide 8 (Anlagevorschlag) mit Portfolio-Daten.
+    Positionen werden über `_distribute_positions_to_slides` flexibel verteilt;
+    Gruppen dürfen über die Slide-Grenze fließen und Header werden ggf.
+    wiederholt.
 
     Args:
         prs: Presentation
