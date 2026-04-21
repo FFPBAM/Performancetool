@@ -324,8 +324,16 @@ def _update_cache_elements(parent, new_values, is_numeric: bool):
 # ---------------------------------------------------------------------------
 # Tabellen-Befüllung
 # ---------------------------------------------------------------------------
-def _set_cell_text(cell, text: str):
-    """Setzt den Text einer Tabellenzelle, behält Formatierung bei."""
+def _set_cell_text(cell, text: str, is_bold: bool = None):
+    """
+    Setzt den Text einer Tabellenzelle.
+
+    Args:
+        cell: Die Zelle
+        text: Der neue Text
+        is_bold: Wenn explizit True/False: setzt Bold-Formatierung.
+                 Wenn None: behält vorherige Formatierung bei.
+    """
     tf = cell.text_frame
     # Alle Paragraphen außer dem ersten löschen
     while len(tf.paragraphs) > 1:
@@ -334,8 +342,14 @@ def _set_cell_text(cell, text: str):
     p = tf.paragraphs[0]
     if len(p.runs) == 0:
         p.text = text
+        # Bold explizit setzen wenn gewünscht
+        if is_bold is not None and p.runs:
+            p.runs[0].font.bold = is_bold
     else:
         p.runs[0].text = text
+        # Bold explizit setzen wenn gewünscht
+        if is_bold is not None:
+            p.runs[0].font.bold = is_bold
         for run in p.runs[1:]:
             r = run._r
             r.getparent().remove(r)
@@ -671,32 +685,35 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
 
         if row_def["type"] == "group_header":
             # Gruppen-Header: Name in Spalte 0, alle anderen leer
+            # Explizit BOLD für Headers
             name = row_def["data"]["name"]
-            _set_cell_text(row.cells[COL_WERTPAPIER], name)
+            _set_cell_text(row.cells[COL_WERTPAPIER], name, is_bold=True)
             # Bei RENTEN: "KUPON" und "FÄLLIGKEIT" als Sub-Header in Spalten 2 und 4
             if name == GROUP_RENTEN:
-                _set_cell_text(row.cells[COL_KUPON], "KUPON")
-                _set_cell_text(row.cells[COL_FAELLIGKEIT], "FÄLLIGKEIT")
+                _set_cell_text(row.cells[COL_KUPON], "KUPON", is_bold=True)
+                _set_cell_text(row.cells[COL_FAELLIGKEIT], "FÄLLIGKEIT", is_bold=True)
             # Bei LIQUIDITÄT: Wert direkt in der Header-Zeile (nicht als separate Position)
             if name == GROUP_LIQUIDITAET and "liq_value" in row_def["data"]:
-                _set_cell_text(row.cells[COL_ANTEIL], _fmt_pct(row_def["data"]["liq_value"]))
+                _set_cell_text(row.cells[COL_ANTEIL], _fmt_pct(row_def["data"]["liq_value"]), is_bold=True)
 
         elif row_def["type"] == "position":
             data = row_def["data"]
-            # Wertpapier-Name
-            _set_cell_text(row.cells[COL_WERTPAPIER], data["wertpapier"])
-            # WKN
-            _set_cell_text(row.cells[COL_WKN], data["wkn"])
-            # Anteil
-            _set_cell_text(row.cells[COL_ANTEIL], _fmt_pct(data["gewicht"]))
-            # Rating
-            _set_cell_text(row.cells[COL_RATING], data.get("rating", "-"))
+            # Alle Felder einer Position: explizit NICHT BOLD
+            # (verhindert dass bei Zeilen die ursprünglich Header waren, die Formatierung hängen bleibt)
+            _set_cell_text(row.cells[COL_WERTPAPIER], data["wertpapier"], is_bold=False)
+            _set_cell_text(row.cells[COL_WKN], data["wkn"], is_bold=False)
+            _set_cell_text(row.cells[COL_ANTEIL], _fmt_pct(data["gewicht"]), is_bold=False)
+            _set_cell_text(row.cells[COL_RATING], data.get("rating", "-"), is_bold=False)
             # Kupon (nur wenn vorhanden)
             if data.get("kupon") is not None and not pd.isna(data["kupon"]) and data["kupon"] != 0:
-                _set_cell_text(row.cells[COL_KUPON], _fmt_pct(data["kupon"]))
+                _set_cell_text(row.cells[COL_KUPON], _fmt_pct(data["kupon"]), is_bold=False)
+            else:
+                _set_cell_text(row.cells[COL_KUPON], "", is_bold=False)
             # Fälligkeit (nur wenn vorhanden)
             if data.get("faelligkeit") is not None and not pd.isna(data["faelligkeit"]):
-                _set_cell_text(row.cells[COL_FAELLIGKEIT], _fmt_date_de(data["faelligkeit"]))
+                _set_cell_text(row.cells[COL_FAELLIGKEIT], _fmt_date_de(data["faelligkeit"]), is_bold=False)
+            else:
+                _set_cell_text(row.cells[COL_FAELLIGKEIT], "", is_bold=False)
 
     # Summen-Zeile: nur auf letzter Slide
     summary_row = table.rows[summary_row_idx]
@@ -720,21 +737,22 @@ def _optimize_table_layout(table, n_filled: int, is_last: bool,
                            original_data_row_height: int):
     """
     Optimiert die Tabellen-Darstellung nach dem Befüllen:
-    - Entfernt überzählige leere Zeilen (maximal so viele dass min. 8 Zeilen bleiben)
-    - Skaliert verbleibende Datenzeilen sodass sie die ursprüngliche Gesamthöhe füllen
-      (max. 1.8x der Original-Höhe, sonst wird's zu luftig)
+    - Entfernt überzählige leere Zeilen
+    - Behält die Original-Zeilenhöhen bei (KEINE Skalierung!)
+    - Ergebnis: Die Tabelle wird kürzer wenn weniger Positionen da sind,
+      ragt aber NIE über die ursprünglichen Slide-Grenzen hinaus.
 
     Args:
         table: Die Tabelle
         n_filled: Anzahl tatsächlich befüllter Datenzeilen (inkl. Gruppen-Header)
         is_last: True wenn diese Tabelle die Summen-Zeile zeigt
-        original_data_total_height: Summe der Original-Höhen aller Datenzeilen
+        original_data_total_height: (nicht mehr verwendet, für Kompatibilität)
         original_data_row_height: Original-Höhe einer einzelnen Datenzeile
     """
     n_rows_current = len(table.rows)
     summary_idx = n_rows_current - 1
     # Datenzeilen: von 1 bis summary_idx-1 (inklusive)
-    n_data_slots = summary_idx - 1  # gesamt verfügbare Datenzeilen (leer + belegt)
+    n_data_slots = summary_idx - 1
 
     # Wie viele leere Zeilen gibt's?
     n_empty = n_data_slots - n_filled
@@ -742,45 +760,24 @@ def _optimize_table_layout(table, n_filled: int, is_last: bool,
     if n_empty <= 0:
         return  # Tabelle voll oder überfüllt - nichts zu tun
 
-    # Ziel: Faktor abhängig von Anzahl Zeilen
-    # Wenige Zeilen → stärkere Skalierung für luftige Darstellung,
-    # aber Summen-Zeile muss noch drauf passen.
-    if n_filled <= 4:
-        MAX_ROW_HEIGHT_FACTOR = 2.5
-    elif n_filled <= 8:
-        MAX_ROW_HEIGHT_FACTOR = 2.0
-    elif n_filled <= 15:
-        MAX_ROW_HEIGHT_FACTOR = 1.7
-    else:
-        MAX_ROW_HEIGHT_FACTOR = 1.5
-    target_row_height = int(original_data_row_height * MAX_ROW_HEIGHT_FACTOR)
+    # Pufferzeilen behalten: 2 leere Zeilen vor der Summe für optische Trennung
+    # (nur wenn genug vorhanden)
+    BUFFER_ROWS = 2 if n_empty >= 3 else 0
 
-    # Wie viele Datenzeilen brauchen wir, um mit target_row_height die Original-Höhe zu füllen?
-    # total_data_height = n_remaining * target_row_height
-    # → n_remaining = total_data_height / target_row_height
-    n_remaining = max(n_filled, int(original_data_total_height / target_row_height))
-
-    # Aber: Nie mehr Zeilen behalten als wir haben
-    n_remaining = min(n_remaining, n_data_slots)
-
-    # Wie viele leere Zeilen müssen wir entfernen?
-    n_to_remove = n_data_slots - n_remaining
+    # Zu entfernende leere Zeilen
+    n_to_remove = n_empty - BUFFER_ROWS
 
     if n_to_remove <= 0:
         return
 
-    # Leere Zeilen entfernen: Die letzten leeren Datenzeilen vor der Summen-Zeile
-    # Wir löschen von hinten nach vorne (Indizes 1..summary_idx-1 sind Daten)
-    # Die leeren Zeilen sind die Zeilen am Ende der Datenzeilen (nach n_filled)
-    # Also: Zeilen mit Index (1 + n_filled) bis (1 + n_filled + n_to_remove - 1) entfernen
-    start_remove_idx = 1 + n_filled  # erste leere Zeile
-    # Ende: start_remove_idx + n_to_remove - 1
+    # Leere Zeilen entfernen: die letzten leeren Datenzeilen vor der Summen-Zeile
+    # Start bei: 1 + n_filled + BUFFER_ROWS (erste zu entfernende Zeile)
+    # Ende bei: start + n_to_remove - 1
+    start_remove_idx = 1 + n_filled + BUFFER_ROWS
 
-    # Entfernen von hinten nach vorne (stabile Indizes)
-    tbl = table._tbl  # CT_Table (etree element)
+    tbl = table._tbl
     tr_elements = tbl.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tr")
 
-    # Wir wollen n_to_remove Zeilen aus dem Bereich start_remove_idx..start_remove_idx+n_to_remove-1 löschen
     rows_to_delete = []
     for i in range(start_remove_idx, start_remove_idx + n_to_remove):
         if i < len(tr_elements):
@@ -789,17 +786,8 @@ def _optimize_table_layout(table, n_filled: int, is_last: bool,
     for tr in rows_to_delete:
         tr.getparent().remove(tr)
 
-    # Jetzt die verbleibenden Datenzeilen auf target_row_height skalieren
-    # Tabelle neu auslesen nachdem Zeilen entfernt wurden
-    n_rows_new = len(table.rows)
-    summary_idx_new = n_rows_new - 1
-
-    # Datenzeilen (Index 1 bis summary_idx_new-1) auf target_row_height setzen
-    for i in range(1, summary_idx_new):
-        try:
-            table.rows[i].height = target_row_height
-        except Exception:
-            pass  # Zeile existiert nicht mehr oder sonstiger Fehler - ignorieren
+    # Zeilenhöhen werden NICHT verändert - sie bleiben wie in der Vorlage!
+    # Dadurch bleibt die Tabelle innerhalb der ursprünglichen Shape-Höhe.
 
 
 # ---------------------------------------------------------------------------
@@ -868,9 +856,63 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
 # ---------------------------------------------------------------------------
 # Slide-Befüllung – Aktuelle Portfoliozusammenstellung (Slide 9)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Slide 9: Aktuelle Portfoliozusammenstellung (Regionen + Branchen)
+# ---------------------------------------------------------------------------
+
+# Kleine Segmente unter diesem Schwellwert werden zu "Sonstige" zusammengefasst
+SMALL_SEGMENT_THRESHOLD = 0.03  # 3%
+# Maximal so viele Segmente im Ring-Chart (alle weiteren → "Sonstige")
+MAX_SEGMENTS_IN_CHART = 8
+
+
+def _consolidate_small_segments(agg_series: pd.Series, threshold: float = SMALL_SEGMENT_THRESHOLD,
+                                max_segments: int = MAX_SEGMENTS_IN_CHART) -> pd.Series:
+    """
+    Fasst kleine Kategorien zu "Sonstige" zusammen.
+    
+    Regel:
+    - Alle Kategorien unter threshold werden zu "Sonstige" gruppiert
+    - Wenn nach Konsolidierung noch mehr als max_segments Kategorien da sind,
+      werden die kleinsten zusätzlich in Sonstige verschoben bis max_segments erreicht ist
+    
+    Args:
+        agg_series: Pandas Series (Index = Kategorie-Name, Werte = Gewicht)
+        threshold: Schwellwert für "kleine" Kategorie
+        max_segments: Maximale Anzahl Segmente im Chart
+    
+    Returns:
+        Konsolidierte Series, absteigend sortiert
+    """
+    agg = agg_series.sort_values(ascending=False)
+    
+    # Große Kategorien (≥ threshold)
+    big = agg[agg >= threshold]
+    small = agg[agg < threshold]
+    
+    # Maximale Anzahl Segmente beachten
+    if len(big) > max_segments - 1:  # -1 weil wir Platz für "Sonstige" brauchen
+        # Die kleinsten der "big" werden auch zu "Sonstige"
+        keep = big.head(max_segments - 1)
+        move_to_small = big.tail(len(big) - (max_segments - 1))
+        big = keep
+        small = pd.concat([small, move_to_small])
+    
+    # Sonstige zusammenfassen
+    if len(small) > 0:
+        sonstige_sum = small.sum()
+        if sonstige_sum > 0.0001:
+            big["Sonstige"] = sonstige_sum
+    
+    return big
+
+
 def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy_name: str):
     """
     Befüllt Slide 9 mit 2 Ringen: Regionen (links) + Branchen/Segment (rechts).
+    
+    Kleine Kategorien (<3%) werden zu "Sonstige" zusammengefasst, maximal 8 Segmente
+    werden angezeigt. Das verhindert überlappende Labels im Ring-Chart.
     """
     slide = prs.slides[slide_idx]
 
@@ -880,21 +922,19 @@ def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy
         _replace_text_in_shape(title, f"Aktuelle Portfoliozusammenstellung – {strategy_name}")
 
     # Defensive Vorbereitung: Gewicht muss sauberer Float sein, keine NaN, keine NaT
-    # (Verhindert den Fehler "'<' not supported between instances of 'numpy.float64' and 'NaTType'")
     df_clean = df.copy()
     if "Gewicht" in df_clean.columns:
-        # Gewicht zu Float zwingen, NaN zu 0 machen
         df_clean["Gewicht"] = pd.to_numeric(df_clean["Gewicht"], errors="coerce").fillna(0.0).astype(float)
 
     # Regionen (links)
     if "Region" in df_clean.columns and "Gewicht" in df_clean.columns:
-        # Region-Spalte auf saubere Strings bringen, NaN zu leerem String
         df_clean["Region"] = df_clean["Region"].astype(str).replace(["nan", "NaT", "None"], "")
-        # Leere Regionen ausfiltern
         region_df = df_clean[df_clean["Region"].str.strip() != ""]
         if not region_df.empty:
-            region_agg = region_df.groupby("Region")["Gewicht"].sum().sort_values(ascending=False)
+            region_agg = region_df.groupby("Region")["Gewicht"].sum()
             region_agg = region_agg[region_agg > 0.0001]
+            # Konsolidierung: kleine Regionen zu "Sonstige"
+            region_agg = _consolidate_small_segments(region_agg)
             if not region_agg.empty:
                 chart_left = _find_shape_by_name(slide, SHAPE_CHART_LEFT)
                 if chart_left:
@@ -909,8 +949,10 @@ def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy
         df_clean["Segment"] = df_clean["Segment"].astype(str).replace(["nan", "NaT", "None"], "")
         segment_df = df_clean[df_clean["Segment"].str.strip() != ""]
         if not segment_df.empty:
-            segment_agg = segment_df.groupby("Segment")["Gewicht"].sum().sort_values(ascending=False)
+            segment_agg = segment_df.groupby("Segment")["Gewicht"].sum()
             segment_agg = segment_agg[segment_agg > 0.0001]
+            # Konsolidierung: kleine Branchen zu "Sonstige"
+            segment_agg = _consolidate_small_segments(segment_agg)
             if not segment_agg.empty:
                 chart_right = _find_shape_by_name(slide, SHAPE_CHART_RIGHT)
                 if chart_right:
