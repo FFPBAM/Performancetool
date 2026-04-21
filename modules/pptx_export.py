@@ -946,8 +946,10 @@ def _adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary
 
 # Kleine Segmente unter diesem Schwellwert werden zu "Sonstige" zusammengefasst
 SMALL_SEGMENT_THRESHOLD = 0.03  # 3%
-# Maximal so viele Segmente im Ring-Chart (alle weiteren → "Sonstige")
-MAX_SEGMENTS_IN_CHART = 8
+# Maximal so viele Kategorien in der klassifizierten Aggregation (alle weiteren
+# → "Sonstige"). Liquidität wird ggf. NACH dieser Konsolidierung angehängt,
+# sodass der Ring am Ende bis zu MAX_SEGMENTS_IN_CHART+1 Segmente haben kann.
+MAX_SEGMENTS_IN_CHART = 7
 
 
 def _consolidate_small_segments(agg_series: pd.Series, threshold: float = SMALL_SEGMENT_THRESHOLD,
@@ -982,21 +984,72 @@ def _consolidate_small_segments(agg_series: pd.Series, threshold: float = SMALL_
         big = keep
         small = pd.concat([small, move_to_small])
     
-    # Sonstige zusammenfassen
+    # Sonstige zusammenfassen. Falls in den Daten bereits ein Eintrag
+    # "Sonstige" existiert (z.B. Branche "Sonstige" aus dem Portfolio),
+    # wird der kleine-Kategorien-Sammelbetrag AUFADDIERT statt überschrieben.
     if len(small) > 0:
         sonstige_sum = small.sum()
         if sonstige_sum > 0.0001:
-            big["Sonstige"] = sonstige_sum
-    
+            existing = float(big["Sonstige"]) if "Sonstige" in big.index else 0.0
+            big["Sonstige"] = existing + sonstige_sum
+            # Nach dem Update nochmal sortieren, damit Sonstige an der
+            # richtigen Stelle der Reihenfolge landet
+            big = big.sort_values(ascending=False)
+
     return big
+
+
+def _build_ring_series(df: pd.DataFrame, dim_col: str) -> pd.Series:
+    """
+    Baut die Werte-Serie für einen Ring auf Slide 9 (Regionen oder Branchen).
+
+    - Aggregiert `Gewicht` nach `dim_col` (z.B. "Region" oder "Segment")
+    - Positionen ohne Eintrag in `dim_col` werden ignoriert (z.B. Liquidität
+      hat typischerweise keine Region/Branche zugeordnet)
+    - Konsolidiert kleine Kategorien zu "Sonstige"
+    - Hängt anschließend die Summe der NICHT in der Aggregation enthaltenen
+      Gewichte als Kategorie "Liquidität" an — damit der Ring auf 100%
+      summiert und keine Label-Lücke am oberen Rand entsteht.
+      Das greift zuverlässig auch wenn Liquidität (oder andere nicht-
+      klassifizierte Positionen) in der Rohdaten keine Region/Branche haben.
+
+    Liquidität wird nach der Konsolidierung angehängt, damit sie NICHT in
+    "Sonstige" einsortiert wird, auch wenn sie unter dem 3%-Threshold liegt.
+    """
+    if dim_col not in df.columns or "Gewicht" not in df.columns:
+        return pd.Series(dtype=float)
+
+    # Normalisierung: leere/NaN-Strings als Platzhalter
+    col = df[dim_col].astype(str).replace(["nan", "NaT", "None"], "")
+    has_value = col.str.strip() != ""
+    classified = df[has_value]
+    unclassified_weight = float(df.loc[~has_value, "Gewicht"].sum())
+
+    if classified.empty:
+        return pd.Series(dtype=float)
+
+    agg = classified.groupby(col[has_value])["Gewicht"].sum()
+    agg = agg[agg > 0.0001]
+    if agg.empty:
+        return pd.Series(dtype=float)
+
+    agg = _consolidate_small_segments(agg)
+
+    # Liquidität / nicht-klassifiziertes Gewicht als eigenes Segment am Ende
+    if unclassified_weight > 0.0001:
+        agg["Liquidität"] = unclassified_weight
+
+    return agg
 
 
 def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy_name: str):
     """
     Befüllt Slide 9 mit 2 Ringen: Regionen (links) + Branchen/Segment (rechts).
-    
+
     Kleine Kategorien (<3%) werden zu "Sonstige" zusammengefasst, maximal 8 Segmente
     werden angezeigt. Das verhindert überlappende Labels im Ring-Chart.
+    Nicht-klassifizierte Positionen (typischerweise Liquidität) erscheinen als
+    eigenes Segment "Liquidität", damit der Ring auf 100% summiert.
     """
     slide = prs.slides[slide_idx]
 
@@ -1011,40 +1064,26 @@ def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy
         df_clean["Gewicht"] = pd.to_numeric(df_clean["Gewicht"], errors="coerce").fillna(0.0).astype(float)
 
     # Regionen (links)
-    if "Region" in df_clean.columns and "Gewicht" in df_clean.columns:
-        df_clean["Region"] = df_clean["Region"].astype(str).replace(["nan", "NaT", "None"], "")
-        region_df = df_clean[df_clean["Region"].str.strip() != ""]
-        if not region_df.empty:
-            region_agg = region_df.groupby("Region")["Gewicht"].sum()
-            region_agg = region_agg[region_agg > 0.0001]
-            # Konsolidierung: kleine Regionen zu "Sonstige"
-            region_agg = _consolidate_small_segments(region_agg)
-            if not region_agg.empty:
-                chart_left = _find_shape_by_name(slide, SHAPE_CHART_LEFT)
-                if chart_left:
-                    _replace_chart_data(
-                        chart_left,
-                        region_agg.index.tolist(),
-                        [float(v) for v in region_agg.values]
-                    )
+    region_agg = _build_ring_series(df_clean, "Region")
+    if not region_agg.empty:
+        chart_left = _find_shape_by_name(slide, SHAPE_CHART_LEFT)
+        if chart_left:
+            _replace_chart_data(
+                chart_left,
+                region_agg.index.tolist(),
+                [float(v) for v in region_agg.values]
+            )
 
     # Segmente/Branchen (rechts)
-    if "Segment" in df_clean.columns and "Gewicht" in df_clean.columns:
-        df_clean["Segment"] = df_clean["Segment"].astype(str).replace(["nan", "NaT", "None"], "")
-        segment_df = df_clean[df_clean["Segment"].str.strip() != ""]
-        if not segment_df.empty:
-            segment_agg = segment_df.groupby("Segment")["Gewicht"].sum()
-            segment_agg = segment_agg[segment_agg > 0.0001]
-            # Konsolidierung: kleine Branchen zu "Sonstige"
-            segment_agg = _consolidate_small_segments(segment_agg)
-            if not segment_agg.empty:
-                chart_right = _find_shape_by_name(slide, SHAPE_CHART_RIGHT)
-                if chart_right:
-                    _replace_chart_data(
-                        chart_right,
-                        segment_agg.index.tolist(),
-                        [float(v) for v in segment_agg.values]
-                    )
+    segment_agg = _build_ring_series(df_clean, "Segment")
+    if not segment_agg.empty:
+        chart_right = _find_shape_by_name(slide, SHAPE_CHART_RIGHT)
+        if chart_right:
+            _replace_chart_data(
+                chart_right,
+                segment_agg.index.tolist(),
+                [float(v) for v in segment_agg.values]
+            )
 
 
 # ---------------------------------------------------------------------------
