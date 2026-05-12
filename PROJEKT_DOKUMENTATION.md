@@ -153,6 +153,26 @@ Diese Logik wird in diesem Projekt schon länger bei `to_decimal_interval()` fü
 
 ---
 
+### 9. Negative Werte in Finanzzeitreihen einplanen
+
+**Situation:** Eine Finanzkennzahl die "normalerweise positiv" ist kann unter bestimmten Marktbedingungen negativ werden — z.B. der risikofreie Zins während der EZB-Negativzinsphase (ca. 2015-2022 für EUR-Geldmarktsätze, bis -0,5% EONIA).
+
+**Falle:** Helper-Funktionen die mathematische Operationen auf positiven Werten testen aber nicht auf negativen, brechen oder liefern falsche Ergebnisse. Typische Stolpersteine:
+- `growth ** (1/n)` mit negativem `growth` → komplexe Zahl oder NaN
+- `log(rf)` für negative rf → ungültig
+- Schutzbedingung `if value > 0` schließt versehentlich negative aus
+
+**Lösung:** Bei jeder Helper-Funktion explizit prüfen ob sie mit negativen Werten umgehen muss, und Tests dafür schreiben. In diesem Projekt:
+- `aggregate_rf_geometric()`: arbeitet mit `(1 + rf)` statt `rf` direkt → für rf > -100% mathematisch wohldefiniert (rf-Werte um -0,5% kein Problem)
+- `make_index_from_rf()`: Index sinkt bei negativem rf — visuell korrekt
+- Schutzbedingung `if growth <= 0: return None` fängt nur unrealistische Edge Cases
+
+**Validiert in diesem Projekt:** Mit echter 17-Jahres-Zeitreihe (2008-2026) inkl. Negativzinsphase. Konstantes rf = -0,5% wird exakt als -0,5% zurückaggregiert.
+
+**Wichtig für UI/Beratung:** Bei Zeitraum-Auswahl die VOLLSTÄNDIG in der Negativzinsphase liegt (z.B. nur 2018-2020), zeigt die Caption `Ø Risikofreier Zins p.a. (Zeitraum): -0,25%` an. Das ist KEIN Bug, sondern die wirtschaftliche Realität jener Jahre.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 3 Tabs.
@@ -297,6 +317,8 @@ Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GO
 **Reihe 2:** Calmar Ratio | **Sharpe Ratio** | Endwert (nur wenn Anlagevolumen > 0)
 **Darunter als Caption:** `Ø Risikofreier Zins p.a. (Zeitraum): X,XX%`
 
+**Sharpe-Berechnung:** Wissenschaftlich saubere Variante nach Sharpe (1994) auf Basis täglicher Excess Returns — NICHT die p.a.-Approximation. Details siehe Abschnitt 11.
+
 ### Charts
 - Linien-Chart: Endwerte als legendgroup-gebundene Text-Traces, Legende "Strategie" rechts
 - **rf-Linie:** Optional per Sidebar-Checkbox `Risikofreier Zins` (Default aus). Wird aus täglich variablem rf zinstaggenau aufkompoundiert via `make_index_from_rf()`. Bei fehlenden Daten → freundliche Info-Caption statt Crash.
@@ -359,11 +381,38 @@ idx_nach_kosten = idx[i-1] * (1 + ret - daily_drag)
 cagr            = (endwert/startwert)^(365/tage) - 1
 vola            = std(tagesrenditen) * sqrt(365)
 calmar          = cagr / |max_drawdown|
-sharpe          = (cagr - rf_pa) / vola
 gew_duration    = Σ(gewicht × duration) / Σ(gewichte_anleihen)
 ```
 
-### Risikofreier Zins – Aggregation (geometrisch)
+### Sharpe Ratio – wissenschaftlich saubere Variante nach Sharpe (1994)
+
+Wir nutzen NICHT die häufige Approximation `(CAGR − rf_pa) / Vola_pa`, sondern die mathematisch korrekte Variante auf Basis täglicher Excess Returns:
+
+```
+# 1. Annualisierten rf pro Tag in Tagessatz wandeln
+daily_rf[t]   = (1 + rf_annual[t])^(1/365) - 1
+
+# 2. Tägliche Überrendite des Portfolios
+excess[t]     = ret_port_nachKosten[t] - daily_rf[t]
+
+# 3. Sharpe auf Tagesbasis
+sharpe_daily  = mean(excess) / std(excess, ddof=1)
+
+# 4. Annualisierung
+sharpe_p.a.   = sharpe_daily × √365
+```
+
+**Warum diese Variante:** Zähler (Mittelwert) und Nenner (Standardabweichung) basieren auf **derselben** Excess-Return-Zeitreihe. Das entspricht Sharpe's eigener Definition (1994, "The Sharpe Ratio", JPM) und ist robust bei stark schwankenden rf-Zeitreihen (z.B. Zinswende-Phasen).
+
+**Unterschied zur p.a.-Approximation:** Bei konstantem rf liegen beide Varianten dicht beieinander (Differenz < 0,02), bei stark variablem rf wird der Unterschied spürbar. Beispiel-Validierung (3-Jahres-Zeitreihe, rf von 0 → 4%): klassisch 1,04 vs. Excess-Variante 1,02.
+
+**Validierung mit echten Daten (Mai 2026):** Mit einer 17-Jahres-rf-Zeitreihe (2008-2026, ~6300 Tageswerte) getestet. Die Zeitreihe enthält Niedrigzinsphase, Negativzinsphase (rf bis -0,33%) und Zinswende (rf bis +3,99%). Alle Helper-Funktionen liefern plausible Werte. Negative rf-Werte werden mathematisch korrekt verarbeitet (siehe Transferwissen #9).
+
+Implementiert in `calc_sharpe_excess(draf, df["rf"])` in `streamlit_app.py`.
+
+### Risikofreier Zins – Aggregation (geometrisch, nur für Anzeige)
+
+Wird **nur** für die Caption-Anzeige `Ø Risikofreier Zins p.a. (Zeitraum)` und die PDF-Meta-Zeile verwendet — NICHT für die Sharpe-Berechnung. Die Sharpe nutzt die tägliche rf-Zeitreihe direkt (siehe oben).
 
 Eingabe: Zeitreihe annualisierter rf-Werte (z.B. 0,03928 = 3,928% p.a.) pro Handelstag.
 
@@ -402,7 +451,23 @@ Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_
 
 ## 13. Changelog
 
-### Mai 2026 – Risikofreier Zins & Sharpe Ratio
+### Mai 2026 (Validierung) – Echtdaten-Test mit 17-Jahres-Zeitreihe
+- Sharpe-Berechnung und rf-Verarbeitung mit echter Zeitreihe (31.12.2008 – 12.05.2026, ~6300 Tageswerte) validiert
+- Zeitreihe enthält alle drei relevanten Zins-Regime: Niedrigzins (2008-2014), Negativzins (2015-2022, bis -0,33%), Zinswende (2022-2024, bis +3,99%)
+- Bestätigt: Auto-Format-Erkennung greift korrekt (Median ≈ 0,014 → als Dezimal erkannt, keine Fehl-Division)
+- Bestätigt: Negative rf-Werte mathematisch korrekt verarbeitet — rf-Index sinkt bei negativem rf, was visuell der wirtschaftlichen Realität entspricht
+- Bestätigt: Sharpe Ratio mit Excess-Return-Variante über kompletten Zeitraum plausibel
+- Transferwissen #9 (Negative Werte in Finanzzeitreihen) ergänzt
+
+### Mai 2026 (Update) – Sharpe Ratio auf Excess-Return-Variante
+- `calc_sharpe(cagr, rf_pa, vola)` ersetzt durch `calc_sharpe_excess(draf, rf_series)`
+- Sharpe nun nach Sharpe (1994): Mittelwert und Standardabweichung auf täglicher Excess-Return-Zeitreihe, anschließend × √365
+- Vorher: p.a.-Approximation `(CAGR − rf_pa) / Vola_pa`
+- Tooltips, PDF-Glossar und Doku-Formeln entsprechend aktualisiert
+- `aggregate_rf_geometric()` bleibt erhalten — wird nur noch für die Caption- und PDF-Meta-Anzeige des Ø rf verwendet, nicht mehr für die Sharpe-Berechnung
+- Defensive Bedingung: Sharpe nur berechnet wenn `df["rf"]` existiert UND mindestens einen Nicht-NaN-Wert enthält
+
+### Mai 2026 – Risikofreier Zins & Sharpe Ratio (Erstimplementierung)
 - CSV-Spalte 8 `Währung` (ungenutzt) ersetzt durch `Risiko freier Zins` (annualisiert, dezimal)
 - `build_portfolio_timeseries` liest neue Spalte ein, mit Fallback `NaN` für alte CSVs
 - Auto-Format-Erkennung (Dezimal vs. Prozent) via Median > 1
