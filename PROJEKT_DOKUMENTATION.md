@@ -1,5 +1,5 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: April 2026
+## Stand: Mai 2026
 
 ---
 
@@ -120,18 +120,51 @@ st.rerun()
 
 ---
 
+### 7. Cache muss nach Daten-Struktur-Änderungen geleert werden
+
+**Situation:** Du änderst die Struktur einer CSV (neue Spalte, andere Reihenfolge, Spalte ersetzt) UND die Funktion die die CSV einliest ist mit `@st.cache_data` dekoriert.
+
+**Falle:** Streamlit Cloud cached den DataFrame im alten Format. Auch nach Code-Deploy zeigt die App alte Daten / wirft KeyError auf die neue Spalte. Lokal sieht alles gut aus, in der Cloud crasht es.
+
+**Lösung:** Nach JEDEM Daten-Struktur-Change einmal Cache leeren:
+- Streamlit Cloud: "Manage app" → "Reboot app" (löscht ALL cached data)
+- Alternativ: User klickt im 3-Punkte-Menü oben rechts "Clear cache"
+- Im Code beim Testen: `st.cache_data.clear()` einmalig ausführen
+
+**Betroffen in diesem Projekt:** `build_portfolio_timeseries`, `load_all_csvs`, `load_mapping`, `load_name_mapping` — alles `@st.cache_data`.
+
+---
+
+### 8. Dezimal-/Prozent-Auto-Erkennung bei numerischen CSV-Spalten
+
+**Situation:** Eine CSV-Spalte könnte Werte als Dezimal (0,03928) oder Prozent (3,928) enthalten — verschiedene Datenquellen, verschiedene Konventionen.
+
+**Falle:** Wenn du hartcodierst "ist immer Dezimal" und jemand liefert mal Prozent, ist deine ganze Berechnung um Faktor 100 falsch. Stille Fehler, schwer zu finden.
+
+**Lösung:** Median-basierte Auto-Erkennung. Wenn der Median der Beträge > 1 ist → war Prozent, durch 100 teilen.
+
+```python
+rf_raw = vv.loc[1:, "Risiko freier Zins"].to_numpy(dtype=float)
+if np.nanmedian(np.abs(rf_raw[~np.isnan(rf_raw)])) > 1.0:
+    rf_raw = rf_raw / 100.0
+```
+
+Diese Logik wird in diesem Projekt schon länger bei `to_decimal_interval()` für Performance-Werte verwendet — wird jetzt analog auf rf angewendet.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 3 Tabs.
 
 | Tab | Datei | Zeilen | Zweck |
 |---|---|---|---|
-| 📈 Performance | `streamlit_app.py` | ~840 | Historische Performance, Kennzahlen, Charts, PDF+Glossar |
+| 📈 Performance | `streamlit_app.py` | ~960 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar |
 | 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~780 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail, PDF |
 | 📋 Portfolio zusammenstellen | `modules/portfolio_builder.py` | ~695 | Individueller Portfolio-Aufbau durch Berater |
 | (gemeinsam) | `modules/shared.py` | ~190 | Konstanten, Login, Formatierung, Font-Setup |
 
-**Gesamt: ~2.500 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
+**Gesamt: ~2.625 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
 
 ---
 
@@ -213,19 +246,75 @@ Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GO
 
 ---
 
-## 6. Tab 1: Performance
+## 6. CSV-Datenstrukturen
 
-- Hinweis + Quelle oben, Disclaimer unten
-- Sidebar: Portfolio, Vergleich, Checkboxen, Kosten (dynamischer Key), MwSt (×1.19)
-- Zeitraum: Datumspicker + Reset-Buttons (Counter-Keys, siehe Transferwissen #4)
-- Chart: Endwerte als legendgroup-gebundene Text-Traces, Legende "Strategie" rechts
-- Balken-Chart: `_rb()` Funktion mit `suffix="p1"/"p2"` (siehe Transferwissen #3)
-- PDF: Meta, Kennzahlen, Chart+Endwerte, Tabelle, Balken, Disclaimer, Glossar (9 Begriffe)
-- Disclaimer: "Alle Berechnungen sind unverbindlich und **erfolgen** ohne Gewähr."
+### 6.1 Performance-CSVs (`Daten/`)
+
+**Encoding:** ISO-8859-1, Separator `;`, Decimal `,`, Thousands `.`
+**Dateinamen-Pattern:** `*_<yyMMdd>_*.CSV` (Date-Tag wird per Regex extrahiert)
+**Erste Zeile** enthält Metadaten (Portfolio-Name, Benchmark-Name), **ab Zeile 2** beginnen die Tageswerte. Die erste Zeile wird beim Einlesen weggeworfen (`vv.loc[1:]`).
+
+**Spalten (Stand Mai 2026, nach Umstellung Währung → rf):**
+
+| # | Spalte | Inhalt | Format |
+|---|---|---|---|
+| 1 | `Portfolio Name` | CSV-Key, mappt auf Anzeigenamen | String |
+| 2 | `Datum` | Tageswert-Datum | `DD.MM.YYYY` |
+| 3 | `Performance [%] (Intervall)` | Tagesperformance Portfolio | Prozent (z.B. `0,12`) |
+| 4 | `Performance (Intervall)` | (ungenutzt im Code) | – |
+| 5 | `Performance [%] (kumuliert)` | (ungenutzt im Code) | – |
+| 6 | `Performance (kumuliert)` | (ungenutzt im Code) | – |
+| 7 | `Benchmark Performance [%] (Intervall)` | Tagesperformance Benchmark | Prozent |
+| 8 | `Risiko freier Zins` | Annualisierter risikofreier Zins | Dezimal (z.B. `0,03928`) |
+
+**Historische Anmerkung:** Spalte 8 enthielt früher `Währung` (String, z.B. "EUR") und wurde **nicht im Code verwendet**. Im Mai 2026 wurde die Spalte ersetzt durch `Risiko freier Zins`. Die alten CSVs ohne rf-Spalte werden vom Code abgefangen (Fallback `NaN`).
+
+**Auto-Format-Erkennung:** Für `Performance [%]` und `Risiko freier Zins` ist Median-basierte Auto-Erkennung implementiert (siehe Transferwissen #8). Werte können also auch als Prozent (3,928) statt Dezimal (0,03928) geliefert werden — werden automatisch konvertiert.
+
+### 6.2 Mapping-Dateien
+
+**`Mapping_Honorarsatz.xlsx`:**
+- Spalte `Inhaber` (= Portfolio Name aus CSV)
+- Spalte `Honorarsatz Standard` (Dezimal, z.B. 0.015 für 1,5%)
+
+**`Mapping_Namen.xlsx`:**
+- Spalte A: Anzeigename (was der User sieht)
+- Spalte B: CSV-Key (= Portfolio Name in CSVs)
+- Spalte C: Duration
+- Spalte D: Benchmark-Zusammensetzung (Text, wird unter Charts angezeigt)
 
 ---
 
-## 7. Tab 2: Portfolioanalyse
+## 7. Tab 1: Performance
+
+### Layout & Aufbau
+- Hinweis + Quelle oben, Disclaimer unten
+- Sidebar: Portfolio, Vergleich, Checkboxen (Vor Kosten, Benchmark, **Risikofreier Zins**, Drawdown, Tabelle, Balken), Kosten (dynamischer Key), MwSt (×1.19)
+- Zeitraum: Datumspicker + Reset-Buttons (Counter-Keys, siehe Transferwissen #4)
+
+### Kennzahlen (zwei Reihen)
+**Reihe 1:** Auflagedatum im PM | ⌀ Rendite p.a. (CAGR) | Volatilität p.a.
+**Reihe 2:** Calmar Ratio | **Sharpe Ratio** | Endwert (nur wenn Anlagevolumen > 0)
+**Darunter als Caption:** `Ø Risikofreier Zins p.a. (Zeitraum): X,XX%`
+
+### Charts
+- Linien-Chart: Endwerte als legendgroup-gebundene Text-Traces, Legende "Strategie" rechts
+- **rf-Linie:** Optional per Sidebar-Checkbox `Risikofreier Zins` (Default aus). Wird aus täglich variablem rf zinstaggenau aufkompoundiert via `make_index_from_rf()`. Bei fehlenden Daten → freundliche Info-Caption statt Crash.
+- Balken-Chart: `_rb()` Funktion mit `suffix="p1"/"p2"` (siehe Transferwissen #3)
+
+### PDF
+- Meta-Block: Portfolio, Zeitraum, Kosten, Anlagevolumen, **Ø Risikofreier Zins p.a. (Zeitraum)**, Quelle
+- Kennzahlen: in `" | "`-Pipe-Liste, jetzt inkl. Sharpe direkt nach Calmar
+- Chart: rf-Linie wird mitgenommen wenn aktiv
+- Disclaimer-Seite
+- Glossar (11 Begriffe): Auflagedatum, CAGR, Vola, Calmar, **Sharpe Ratio**, **Ø Risikofreier Zins p.a. (Zeitraum)**, Max DD, Recovery, Längste DD-Phase, Benchmark, Vor/Nach Kosten
+
+### Disclaimer-Wording
+*"Alle Berechnungen sind unverbindlich und **erfolgen** ohne Gewähr."*
+
+---
+
+## 8. Tab 2: Portfolioanalyse
 
 - `_render_single_portfolio()` mit `suffix="pf1"/"pf2"` (siehe Transferwissen #3)
 - Ring-Diagramme: Absteigend sortiert, Labels außen (13px), <3% ausgeblendet, Legende horizontal unten
@@ -236,7 +325,7 @@ Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GO
 
 ---
 
-## 8. Tab 3: Portfolio zusammenstellen
+## 9. Tab 3: Portfolio zusammenstellen
 
 - Schnellzugriffe (9 Buttons) → setzen Filter via session_state
 - Filter: Hauptfilter sichtbar, erweiterte als Checkbox (NICHT Expander!)
@@ -248,7 +337,7 @@ Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GO
 
 ---
 
-## 9. Disclaimers
+## 10. Disclaimers
 
 Alle 3 Tabs: Hinweis + Quelle oben, Disclaimer unten, in PDFs als eigene Seite.
 
@@ -262,7 +351,7 @@ Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
 
 ---
 
-## 10. Berechnungsformeln
+## 11. Berechnungsformeln
 
 ```
 daily_drag      = (1 + fee_pa)^(1/365) - 1
@@ -270,23 +359,75 @@ idx_nach_kosten = idx[i-1] * (1 + ret - daily_drag)
 cagr            = (endwert/startwert)^(365/tage) - 1
 vola            = std(tagesrenditen) * sqrt(365)
 calmar          = cagr / |max_drawdown|
+sharpe          = (cagr - rf_pa) / vola
 gew_duration    = Σ(gewicht × duration) / Σ(gewichte_anleihen)
 ```
 
+### Risikofreier Zins – Aggregation (geometrisch)
+
+Eingabe: Zeitreihe annualisierter rf-Werte (z.B. 0,03928 = 3,928% p.a.) pro Handelstag.
+
+```
+# 1. Tagessatz aus annualisiertem rf
+daily_rf = (1 + rf_annual)^(1/365) - 1
+
+# 2. Alle Tagessätze über den Zeitraum kompoundieren
+growth = Π (1 + daily_rf)
+
+# 3. Zurück auf p.a. annualisieren
+rf_pa = growth^(365 / n_days) - 1
+```
+
+**Validierung:** Konstanter rf von 3,928% kommt nach Aggregation exakt als 3,928% zurück (0 ppm Differenz). Implementiert in `aggregate_rf_geometric()` in `streamlit_app.py`.
+
+### rf-Index für Chart
+
+Jeder Tag verzinst sich mit seinem eigenen Tagessatz:
+```
+daily_rf[i] = (1 + rf_annual[i])^(1/365) - 1
+idx[i]      = idx[i-1] * (1 + daily_rf[i])
+```
+Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_from_rf()`.
+
 ---
 
-## 11. Geplante nächste Schritte
+## 12. Geplante nächste Schritte
 
 1. **Portfolioanalyse PDF → PowerPoint** (python-pptx, 16:9, Fuggerblau/Fuggergold)
 2. Performance-Charts auf neue Corporate Colors umstellen
 3. Compliance-Feedback abwarten → Disclaimer ggf. anpassen
+4. Ggf. Sharpe + rf-Linie auch in Portfolioanalyse-Tab (aktuell nur Tab 1)
 
 ---
 
-## 12. Für den nächsten Chat / Kollegen
+## 13. Changelog
 
-**Hochladen:** Diese MD + alle 4 Code-Dateien
+### Mai 2026 – Risikofreier Zins & Sharpe Ratio
+- CSV-Spalte 8 `Währung` (ungenutzt) ersetzt durch `Risiko freier Zins` (annualisiert, dezimal)
+- `build_portfolio_timeseries` liest neue Spalte ein, mit Fallback `NaN` für alte CSVs
+- Auto-Format-Erkennung (Dezimal vs. Prozent) via Median > 1
+- Neue Helper: `aggregate_rf_geometric()`, `calc_sharpe()`, `make_index_from_rf()`
+- Kennzahlen-Layout auf 2 Reihen umgestellt (Reihe 2: Calmar / Sharpe / Endwert)
+- Caption mit `Ø Risikofreier Zins p.a. (Zeitraum)` unter den Kacheln
+- Neue Sidebar-Checkbox `Risikofreier Zins` (Default aus) für Chart-Linie
+- Join-Logik bei Vergleichsportfolio: rf-Spalte wird mitgezogen
+- PDF erweitert: rf in Meta, Sharpe in Kennzahlen, rf-Linie im Chart, 2 neue Glossar-Einträge
+- Transferwissen #7 (Cache leeren bei Daten-Struktur-Änderungen) ergänzt
+- Transferwissen #8 (Dezimal-/Prozent-Auto-Erkennung) ergänzt
+
+### April 2026 – Initiale Doku-Version
+- 6 Transferwissen-Einträge
+- 3 Tabs strukturiert dokumentiert
+- Corporate Design + Schriftarten festgehalten
+
+---
+
+## 14. Für den nächsten Chat / Kollegen
+
+**Hochladen:** Diese MD + alle 4 Code-Dateien (`streamlit_app.py`, `modules/shared.py`, `modules/portfolioanalyse.py`, `modules/portfolio_builder.py`)
 **Sagen:** "Lies die PROJEKT_DOKUMENTATION.md zuerst komplett. Dann [Aufgabe]."
 **Bei Problemen:** Screenshot + erwartetes Verhalten
 
-*Stand: April 2026*
+**Wichtig bei CSV-Änderungen:** Nach Deploy IMMER Cache leeren (Transferwissen #7).
+
+*Stand: Mai 2026*
