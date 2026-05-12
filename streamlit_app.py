@@ -115,6 +115,40 @@ def calc_max_drawdown_duration(idx_after, dates_list):
         if dur > max_dur: max_dur = dur; max_start = current_start; max_end = len(dd)-1
     return max_dur, dates_list[max_start], dates_list[max_end]
 
+# --- NEU: Risikofreier Zins + Sharpe -------------------------------------
+
+def aggregate_rf_geometric(rf_annual_series, n_days):
+    """Aggregiert eine Zeitreihe annualisierter rf-Werte geometrisch zu einem
+    einzelnen p.a.-Wert über den Zeitraum.
+
+    Logik: Jeder Tageswert ist ein annualisierter Zinssatz. Wir wandeln ihn in
+    den korrespondierenden Tagessatz um ((1+rf)^(1/365)-1), kompoundieren alle
+    Tagessätze und rechnen das Ergebnis zurück auf p.a.
+    """
+    rf = pd.Series(rf_annual_series).dropna().to_numpy(dtype=float)
+    if len(rf) == 0 or n_days <= 0:
+        return None
+    daily = (1.0 + rf) ** (1.0/365.0) - 1.0
+    growth = float(np.prod(1.0 + daily))
+    if growth <= 0:
+        return None
+    return growth ** (365.0 / n_days) - 1.0
+
+def calc_sharpe(cagr, rf_pa, vola):
+    """Sharpe Ratio = (CAGR - rf_pa) / Vola"""
+    if cagr is None or vola is None or vola == 0 or rf_pa is None:
+        return None
+    return (cagr - rf_pa) / vola
+
+def make_index_from_rf(rf_annual_series, startwert=100.0):
+    """Baut einen Index aus täglich variablen annualisierten rf-Werten.
+    Jeder Tag verzinst sich mit seinem eigenen Tagessatz."""
+    rf = pd.Series(rf_annual_series).fillna(0).to_numpy(dtype=float)
+    daily = (1.0 + rf) ** (1.0/365.0) - 1.0
+    return make_index_from_returns(daily, startwert)
+
+# -------------------------------------------------------------------------
+
 def _asof_value(series, target_ts):
     s = series.dropna()
     if s.empty or target_ts < s.index.min(): return None
@@ -211,16 +245,43 @@ def show_benchmark_composition(dn, bt, dn2=None, bt2=None):
     if dn2 and bt2 and str(bt2).strip() and str(bt2).strip().lower() not in ("","nan","haben keine benchmark"):
         st.caption(f"**Zusammensetzung Benchmark {dn2}:** {bt2}")
 
-def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar, mwst_suffix=""):
+def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar, sharpe, rf_pa, mwst_suffix=""):
+    """Kennzahlen in zwei Reihen:
+       Reihe 1: Auflagedatum | CAGR | Vola
+       Reihe 2: Calmar | Sharpe | (Endwert wenn Volumen)
+       Ø Risikofreier Zins p.a. (Zeitraum) als Caption unter den Kacheln.
+    """
     nk = f"nach Kosten{mwst_suffix}"
     st.markdown(f"**{label}**")
-    n=4+(1 if use_volume else 0); cols=st.columns(n)
-    with cols[0]: st.metric("Auflagedatum im PM",fmt_date_de(auflagedatum),help="Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement.")
-    with cols[1]: st.metric(f"⌀ Rendite p.a. ({nk})",fmt_pct_de(cagr) if cagr else "–",help="Annualisierte Rendite nach Kosten (CAGR): (Endwert/Startwert)^(365/Tage) − 1.")
-    with cols[2]: st.metric(f"Volatilität p.a. ({nk})",fmt_pct_de(vola) if vola else "–",help="Annualisierte Schwankungsbreite: Standardabweichung der Tagesrenditen × √365.")
-    with cols[3]: st.metric(f"Calmar Ratio ({nk})",f"{calmar:.2f}".replace(".",",") if calmar else "–",help="CAGR / |Max Drawdown|. Je höher, desto besser die risikoadjustierte Rendite.")
+    # Reihe 1
+    r1 = st.columns(3)
+    with r1[0]:
+        st.metric("Auflagedatum im PM", fmt_date_de(auflagedatum),
+                  help="Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement.")
+    with r1[1]:
+        st.metric(f"⌀ Rendite p.a. ({nk})", fmt_pct_de(cagr) if cagr else "–",
+                  help="Annualisierte Rendite nach Kosten (CAGR): (Endwert/Startwert)^(365/Tage) − 1.")
+    with r1[2]:
+        st.metric(f"Volatilität p.a. ({nk})", fmt_pct_de(vola) if vola else "–",
+                  help="Annualisierte Schwankungsbreite: Standardabweichung der Tagesrenditen × √365.")
+    # Reihe 2
+    n2 = 3 if use_volume else 2
+    r2 = st.columns(3)
+    with r2[0]:
+        st.metric(f"Calmar Ratio ({nk})",
+                  f"{calmar:.2f}".replace(".",",") if calmar else "–",
+                  help="CAGR / |Max Drawdown|. Je höher, desto besser die risikoadjustierte Rendite.")
+    with r2[1]:
+        st.metric(f"Sharpe Ratio ({nk})",
+                  f"{sharpe:.2f}".replace(".",",") if sharpe is not None else "–",
+                  help="(CAGR − Ø rf p.a.) / Volatilität. Misst die Überrendite über den risikofreien Zins pro Risikoeinheit.")
     if use_volume and endwert:
-        with cols[4]: st.metric(f"Endwert ({nk})",fmt_eur_de(endwert),help="Aktueller Wert des Anlagevolumens nach Abzug aller Kosten.")
+        with r2[2]:
+            st.metric(f"Endwert ({nk})", fmt_eur_de(endwert),
+                      help="Aktueller Wert des Anlagevolumens nach Abzug aller Kosten.")
+    # Aggregierter rf als Caption
+    if rf_pa is not None:
+        st.caption(f"Ø Risikofreier Zins p.a. (Zeitraum): **{fmt_pct_de(rf_pa)}**")
 
 def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds, dde, mwst_suffix=""):
     nk = f"nach Kosten{mwst_suffix}"
@@ -321,6 +382,12 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
     ml.append(f"<b>Kosten {label_1}:</b> {fee_pct_1:.2f}% p.a.{mwst_suffix}")
     if label_2 and fee_pct_2 is not None: ml.append(f"<b>Kosten {label_2}:</b> {fee_pct_2:.2f}% p.a.{mwst_suffix}")
     if use_volume: ml.append(f"<b>Anlagevolumen:</b> {fmt_eur_de(anlagevolumen)}")
+    # Ø Risikofreier Zins p.a. (Zeitraum) — nimmt rf von erstem Portfolio (gilt zeitraumweise gleich für beide)
+    rf_meta = None
+    if metrics_data and metrics_data[0].get("rf_pa") is not None:
+        rf_meta = metrics_data[0]["rf_pa"]
+    if rf_meta is not None:
+        ml.append(f"<b>Ø Risikofreier Zins p.a. (Zeitraum):</b> {fmt_pct_de(rf_meta)}")
     ml.append(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {fmt_date_de(end_date)}")
     for l in ml: story.append(Paragraph(l,st_n))
     story.append(Spacer(1,4*mm))
@@ -331,6 +398,7 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
         if m.get("cagr") is not None: p.append(f"CAGR: {fmt_pct_de(m['cagr'])}")
         if m.get("vola") is not None: p.append(f"Vola: {fmt_pct_de(m['vola'])}")
         if m.get("calmar") is not None: p.append(f"Calmar: {m['calmar']:.2f}".replace(".",","))
+        if m.get("sharpe") is not None: p.append(f"Sharpe: {m['sharpe']:.2f}".replace(".",","))
         if use_volume and m.get("endwert"): p.append(f"Endwert: {fmt_eur_de(m['endwert'])}")
         if m.get("max_dd_val") is not None:
             ds=f"Max DD: {fmt_pct_de(m['max_dd_val'])} am {fmt_date_de(m['max_dd_date'])}"
@@ -430,6 +498,16 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
          "Berechnung: CAGR / |Max. Drawdown|. "
          "Je höher der Wert, desto besser die risikoadjustierte Rendite. "
          "Ein Wert > 1 bedeutet, dass die Rendite den größten Verlust übersteigt."),
+        ("Sharpe Ratio",
+         "Verhältnis der Überrendite (CAGR − risikofreier Zins) zur Volatilität. "
+         "Berechnung: (CAGR − Ø rf p.a.) / Volatilität p.a. "
+         "Misst, wie viel Rendite pro Einheit Risiko über die risikofreie Alternative hinaus erzielt wurde. "
+         "Je höher, desto besser die risikoadjustierte Rendite."),
+        ("Ø Risikofreier Zins p.a. (Zeitraum)",
+         "Durchschnittlicher annualisierter risikofreier Zinssatz über den gewählten Zeitraum. "
+         "Aggregiert aus den täglichen Werten der Datenquelle (geometrisches Aufkompoundieren der "
+         "Tagessätze, anschließend Annualisierung). Dient als Vergleichsmaßstab für die "
+         "Berechnung der Sharpe Ratio."),
         ("Maximaler Drawdown",
          "Größter Verlust vom Höchststand bis zum Tiefpunkt im gewählten Zeitraum. "
          "Angabe in Prozent (und Euro, wenn ein Anlagevolumen eingegeben wurde). "
@@ -485,10 +563,23 @@ def build_portfolio_timeseries(files, mapping):
         if "Benchmark Performance [%] (Intervall)" in vv.columns:
             vv["Benchmark Performance [%] (Intervall)"]=vv["Benchmark Performance [%] (Intervall)"].astype(str).str.replace(",",".").astype(float)
             rb=to_decimal_interval(vv.loc[1:,"Benchmark Performance [%] (Intervall)"])
+        # NEU: Risikofreier Zins (annualisiert, dezimal) – Spalte ersetzte frühere "Währung"
+        rf_arr = None
+        if "Risiko freier Zins" in vv.columns:
+            try:
+                vv["Risiko freier Zins"] = vv["Risiko freier Zins"].astype(str).str.replace(",", ".").astype(float)
+                rf_raw = vv.loc[1:, "Risiko freier Zins"].to_numpy(dtype=float)
+                # Falls Werte > 1 (z.B. 3.928 statt 0.03928) → durch 100
+                if np.nanmedian(np.abs(rf_raw[~np.isnan(rf_raw)])) > 1.0:
+                    rf_raw = rf_raw / 100.0
+                rf_arr = rf_raw
+            except Exception:
+                rf_arr = None
         try: fd=float(mapping.loc[mapping["Inhaber"]==pn,"Honorarsatz Standard"].values[0])
         except: fd=0.0
         idx=dates.iloc[1:].reset_index(drop=True); df=pd.DataFrame(index=idx); df.index.name="Datum"
         df["ret_port"]=rp; df["ret_bm"]=rb if (rb is not None and len(rb)==len(df)) else np.nan
+        df["rf"] = rf_arr if (rf_arr is not None and len(rf_arr) == len(df)) else np.nan
         df["fee_default"]=fd; df=df.sort_index(); df.attrs["benchmark_name"]=bn; out[pn]=df
     return out
 
@@ -567,6 +658,8 @@ with tab_perf:
         sc=st.checkbox("Vergleichsportfolio",value=False,key="p_cmp"); ps2=ds2=None
         if sc: ds2=st.selectbox("Vergleichsportfolio",dn_ordered,key="p_sel2"); ps2=d2c[ds2]
         sv=st.checkbox("Vor Kosten",value=True,key="p_vk"); sb=st.checkbox("Benchmark",value=True,key="p_bm")
+        sb_rf=st.checkbox("Risikofreier Zins",value=False,key="p_rf",
+            help="Zeigt den risikofreien Zins als zusätzliche Linie im Performance-Chart (kompoundiert aus den täglichen Werten).")
         sdd=st.checkbox("Drawdown (nach Kosten)",value=False,key="p_dd")
         stbl=st.checkbox("Tabelle rollierend",value=True,key="p_tbl"); sbar=st.checkbox("Balken-Chart",value=True,key="p_bar")
         st.markdown("---")
@@ -633,11 +726,15 @@ with tab_perf:
     df1=data[ps1].copy(); df1=df1.loc[(df1.index.date>=sd)&(df1.index.date<=ed)].copy(); df2=None
     if sc and ps2:
         d2r=data[ps2].copy(); d2r=d2r.loc[(d2r.index.date>=sd)&(d2r.index.date<=ed)].copy()
-        j=df1[["ret_port","ret_bm"]].rename(columns={"ret_port":"rp1","ret_bm":"rb1"}).join(
-            d2r[["ret_port","ret_bm"]].rename(columns={"ret_port":"rp2","ret_bm":"rb2"}),how="inner")
+        # rf mitziehen damit es nach dem Join verfügbar bleibt
+        cols1 = ["ret_port","ret_bm","rf"] if "rf" in df1.columns else ["ret_port","ret_bm"]
+        cols2 = ["ret_port","ret_bm","rf"] if "rf" in d2r.columns else ["ret_port","ret_bm"]
+        ren1 = {"ret_port":"rp1","ret_bm":"rb1","rf":"rf1"}
+        ren2 = {"ret_port":"rp2","ret_bm":"rb2","rf":"rf2"}
+        j = df1[cols1].rename(columns=ren1).join(d2r[cols2].rename(columns=ren2), how="inner")
         if j.empty: st.error("Kein gemeinsamer Zeitraum."); st.stop()
-        df1=j[["rp1","rb1"]].rename(columns={"rp1":"ret_port","rb1":"ret_bm"})
-        df2=j[["rp2","rb2"]].rename(columns={"rp2":"ret_port","rb2":"ret_bm"})
+        df1 = j[["rp1","rb1"] + (["rf1"] if "rf1" in j.columns else [])].rename(columns={"rp1":"ret_port","rb1":"ret_bm","rf1":"rf"})
+        df2 = j[["rp2","rb2"] + (["rf2"] if "rf2" in j.columns else [])].rename(columns={"rp2":"ret_port","rb2":"ret_bm","rf2":"rf"})
 
     sw=anlagevolumen if use_volume else 100.0
     r1=df1["ret_port"].to_numpy(float); ia1=make_index_after_fee(r1,fdec1,sw); ib1=make_index_from_returns(r1,sw)
@@ -655,32 +752,43 @@ with tab_perf:
     bn1=data[ps1].attrs.get("benchmark_name","Benchmark"); bn2=data[ps2].attrs.get("benchmark_name","Benchmark") if sc and ps2 else None
     bt1=d2b.get(ds1,""); bt2=d2b.get(ds2,"") if ds2 else ""
 
+    # ── rf aggregieren und rf-Index für Chart bauen ──
+    rf_series_1 = df1["rf"] if "rf" in df1.columns else pd.Series(dtype=float)
+    rf_pa_1 = aggregate_rf_geometric(rf_series_1, len(r1)) if not rf_series_1.empty else None
+    rf_pa_2 = None
+    rf_series_2 = pd.Series(dtype=float)
+    if df2 is not None and "rf" in df2.columns:
+        rf_series_2 = df2["rf"]
+        rf_pa_2 = aggregate_rf_geometric(rf_series_2, len(r2))
+
     # Kennzahlen
     nd1=len(r1); draf1=calc_daily_returns_after_fee(r1,fdec1); cg1=calc_cagr(ia1,nd1); vo1=calc_vola(draf1)
     ew1=float(ia1[-1]) if use_volume else None
     ia1_100=make_index_after_fee(r1,fdec1,100.0); mddv1,mddd1=calc_max_drawdown(ia1_100,xd)
     mdde1=calc_max_drawdown_euro(ia1,xd)[0] if use_volume else None
-    cm1=calc_calmar_ratio(cg1,mddv1); rd1,rdt1=calc_drawdown_recovery(ia1_100,xd); dur1,ds1_,de1_=calc_max_drawdown_duration(ia1_100,xd)
-    cg2=vo2=ew2=mddv2=mddd2=mdde2=cm2=rd2=rdt2=dur2=ds2_=de2_=None
+    cm1=calc_calmar_ratio(cg1,mddv1); sh1=calc_sharpe(cg1, rf_pa_1, vo1)
+    rd1,rdt1=calc_drawdown_recovery(ia1_100,xd); dur1,ds1_,de1_=calc_max_drawdown_duration(ia1_100,xd)
+    cg2=vo2=ew2=mddv2=mddd2=mdde2=cm2=sh2=rd2=rdt2=dur2=ds2_=de2_=None
     if df2 is not None:
         nd2=len(r2); draf2=calc_daily_returns_after_fee(r2,float(fdec2)); cg2=calc_cagr(ia2,nd2); vo2=calc_vola(draf2)
         ew2=float(ia2[-1]) if use_volume else None
         ia2_100=make_index_after_fee(r2,float(fdec2),100.0); mddv2,mddd2=calc_max_drawdown(ia2_100,xd)
         mdde2=calc_max_drawdown_euro(ia2,xd)[0] if use_volume else None
-        cm2=calc_calmar_ratio(cg2,mddv2); rd2,rdt2=calc_drawdown_recovery(ia2_100,xd); dur2,ds2_,de2_=calc_max_drawdown_duration(ia2_100,xd)
+        cm2=calc_calmar_ratio(cg2,mddv2); sh2=calc_sharpe(cg2, rf_pa_2, vo2)
+        rd2,rdt2=calc_drawdown_recovery(ia2_100,xd); dur2,ds2_,de2_=calc_max_drawdown_duration(ia2_100,xd)
 
-    md=[{"label":l1,"auflagedatum":ad1,"cagr":cg1,"vola":vo1,"endwert":ew1,"calmar":cm1,
+    md=[{"label":l1,"auflagedatum":ad1,"cagr":cg1,"vola":vo1,"endwert":ew1,"calmar":cm1,"sharpe":sh1,"rf_pa":rf_pa_1,
         "max_dd_val":mddv1 if sdd else None,"max_dd_date":mddd1 if sdd else None,"max_dd_eur":mdde1 if sdd else None,
         "recovery_days":rd1 if sdd else None,"recovery_date":rdt1 if sdd else None,"max_dd_dur":dur1 if sdd else None}]
     if df2 is not None and l2:
-        md.append({"label":l2,"auflagedatum":ad2,"cagr":cg2,"vola":vo2,"endwert":ew2,"calmar":cm2,
+        md.append({"label":l2,"auflagedatum":ad2,"cagr":cg2,"vola":vo2,"endwert":ew2,"calmar":cm2,"sharpe":sh2,"rf_pa":rf_pa_2,
             "max_dd_val":mddv2 if sdd else None,"max_dd_date":mddd2 if sdd else None,"max_dd_eur":mdde2 if sdd else None,
             "recovery_days":rd2 if sdd else None,"recovery_date":rdt2 if sdd else None,"max_dd_dur":dur2 if sdd else None})
 
     nk_label = f"nach Kosten{mwst_suffix}"
     st.subheader(f"📊 Kennzahlen ({nk_label})")
-    display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,mwst_suffix)
-    if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,mwst_suffix)
+    display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix)
+    if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix)
 
     eff_fee_1 = fp1 * mwst_faktor  # effektive Kosten in %
     eff_fee_2 = (fp2 * mwst_faktor) if fp2 is not None else 0.0
@@ -715,6 +823,14 @@ with tab_perf:
         if df2 is not None and df2["ret_bm"].notna().any():
             rbm2=df2["ret_bm"].fillna(0).to_numpy(float); ibm2=make_index_from_returns(rbm2,sw)
             _add_line(xd, ibm2, f"BM {l2}: {bn2}")
+    # rf-Linie (nur eine, da für gleichen Zeitraum identisch)
+    rf_idx = None
+    if sb_rf and not rf_series_1.empty and rf_series_1.notna().any():
+        irf = make_index_from_rf(rf_series_1.fillna(0).to_numpy(float), sw)
+        _add_line(xd, irf, "Risikofreier Zins")
+        rf_idx = irf
+    elif sb_rf:
+        st.caption("ℹ️ Keine Daten zum risikofreien Zins für den gewählten Zeitraum verfügbar.")
 
     fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
         yaxis=dict(tickformat=",.0f" if use_volume else None, separatethousands=True),
@@ -812,6 +928,9 @@ with tab_perf:
         plt_.append((f"BM {l1}: {bn1}",make_index_from_returns(df1["ret_bm"].fillna(0).to_numpy(float),sw)))
         if df2 is not None and df2["ret_bm"].notna().any():
             plt_.append((f"BM {l2}: {bn2}",make_index_from_returns(df2["ret_bm"].fillna(0).to_numpy(float),sw)))
+    # rf-Linie ins PDF wenn aktiv UND Daten vorhanden
+    if sb_rf and rf_idx is not None:
+        plt_.append(("Risikofreier Zins", rf_idx))
     pdd=[]
     if sdd:
         if use_volume: pdd.append((f"{l1} DD €",drawdown_euro_from_index(ia1)));
