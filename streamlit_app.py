@@ -134,11 +134,41 @@ def aggregate_rf_geometric(rf_annual_series, n_days):
         return None
     return growth ** (365.0 / n_days) - 1.0
 
-def calc_sharpe(cagr, rf_pa, vola):
-    """Sharpe Ratio = (CAGR - rf_pa) / Vola"""
-    if cagr is None or vola is None or vola == 0 or rf_pa is None:
+def calc_sharpe_excess(daily_returns_after_fee, rf_annual_series):
+    """Sharpe Ratio nach Sharpe (1994) – wissenschaftlich saubere Variante.
+
+    Berechnung direkt auf den täglichen Excess Returns:
+      1. rf_annual[t] → daily_rf[t] = (1 + rf_annual[t])^(1/365) - 1
+      2. excess[t]    = ret_port_nachKosten[t] - daily_rf[t]
+      3. Sharpe_daily = mean(excess) / std(excess, ddof=1)
+      4. Sharpe_p.a.  = Sharpe_daily * sqrt(365)
+
+    Zähler und Nenner basieren auf derselben Excess-Return-Zeitreihe.
+    Robust bei stark schwankendem rf (z.B. Zinswende-Phasen).
+    """
+    rp = pd.Series(daily_returns_after_fee).to_numpy(dtype=float)
+    if rp.size < 2:
         return None
-    return (cagr - rf_pa) / vola
+    # rf-Serie auf Länge der Renditen bringen
+    rf_ser = pd.Series(rf_annual_series).reset_index(drop=True)
+    if len(rf_ser) != len(rp):
+        # Längenangleich: kürzen oder mit NaN auffüllen
+        if len(rf_ser) > len(rp):
+            rf_ser = rf_ser.iloc[:len(rp)]
+        else:
+            rf_ser = rf_ser.reindex(range(len(rp)))
+    rf_ann = rf_ser.fillna(0.0).to_numpy(dtype=float)
+    daily_rf = (1.0 + rf_ann) ** (1.0/365.0) - 1.0
+    # NaN-Werte in Portfolio-Renditen rausfiltern
+    mask = ~np.isnan(rp)
+    if mask.sum() < 2:
+        return None
+    excess = rp[mask] - daily_rf[mask]
+    mu = float(np.mean(excess))
+    sd = float(np.std(excess, ddof=1))
+    if sd == 0:
+        return None
+    return (mu / sd) * np.sqrt(365.0)
 
 def make_index_from_rf(rf_annual_series, startwert=100.0):
     """Baut einen Index aus täglich variablen annualisierten rf-Werten.
@@ -274,7 +304,7 @@ def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar
     with r2[1]:
         st.metric(f"Sharpe Ratio ({nk})",
                   f"{sharpe:.2f}".replace(".",",") if sharpe is not None else "–",
-                  help="(CAGR − Ø rf p.a.) / Volatilität. Misst die Überrendite über den risikofreien Zins pro Risikoeinheit.")
+                  help="Sharpe Ratio nach Sharpe (1994): Mittelwert der täglichen Überrenditen (Portfolio − rf) geteilt durch deren Standardabweichung, anschließend × √365 annualisiert. Misst die Überrendite über den risikofreien Zins pro Risikoeinheit.")
     if use_volume and endwert:
         with r2[2]:
             st.metric(f"Endwert ({nk})", fmt_eur_de(endwert),
@@ -499,15 +529,19 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
          "Je höher der Wert, desto besser die risikoadjustierte Rendite. "
          "Ein Wert > 1 bedeutet, dass die Rendite den größten Verlust übersteigt."),
         ("Sharpe Ratio",
-         "Verhältnis der Überrendite (CAGR − risikofreier Zins) zur Volatilität. "
-         "Berechnung: (CAGR − Ø rf p.a.) / Volatilität p.a. "
-         "Misst, wie viel Rendite pro Einheit Risiko über die risikofreie Alternative hinaus erzielt wurde. "
-         "Je höher, desto besser die risikoadjustierte Rendite."),
+         "Risikoadjustierte Rendite nach Sharpe (1994). Wissenschaftlich saubere Variante "
+         "auf Basis täglicher Überrenditen. "
+         "Berechnung: (1) Pro Handelstag wird der annualisierte risikofreie Zins in den "
+         "korrespondierenden Tagessatz umgerechnet. (2) Tägliche Excess Return = Portfolio-"
+         "Tagesrendite (nach Kosten) minus Tagessatz rf. (3) Sharpe = Mittelwert der Excess "
+         "Returns geteilt durch deren Standardabweichung, anschließend × √365 annualisiert. "
+         "Misst, wie viel Rendite pro Einheit Risiko über die risikofreie Alternative hinaus "
+         "erzielt wurde. Je höher, desto besser die risikoadjustierte Rendite."),
         ("Ø Risikofreier Zins p.a. (Zeitraum)",
          "Durchschnittlicher annualisierter risikofreier Zinssatz über den gewählten Zeitraum. "
          "Aggregiert aus den täglichen Werten der Datenquelle (geometrisches Aufkompoundieren der "
-         "Tagessätze, anschließend Annualisierung). Dient als Vergleichsmaßstab für die "
-         "Berechnung der Sharpe Ratio."),
+         "Tagessätze, anschließend Annualisierung). Wird zur Information ausgewiesen; die "
+         "Sharpe-Ratio-Berechnung selbst nutzt die tägliche rf-Zeitreihe direkt."),
         ("Maximaler Drawdown",
          "Größter Verlust vom Höchststand bis zum Tiefpunkt im gewählten Zeitraum. "
          "Angabe in Prozent (und Euro, wenn ein Anlagevolumen eingegeben wurde). "
@@ -766,7 +800,8 @@ with tab_perf:
     ew1=float(ia1[-1]) if use_volume else None
     ia1_100=make_index_after_fee(r1,fdec1,100.0); mddv1,mddd1=calc_max_drawdown(ia1_100,xd)
     mdde1=calc_max_drawdown_euro(ia1,xd)[0] if use_volume else None
-    cm1=calc_calmar_ratio(cg1,mddv1); sh1=calc_sharpe(cg1, rf_pa_1, vo1)
+    cm1=calc_calmar_ratio(cg1,mddv1)
+    sh1=calc_sharpe_excess(draf1, df1["rf"]) if ("rf" in df1.columns and df1["rf"].notna().any()) else None
     rd1,rdt1=calc_drawdown_recovery(ia1_100,xd); dur1,ds1_,de1_=calc_max_drawdown_duration(ia1_100,xd)
     cg2=vo2=ew2=mddv2=mddd2=mdde2=cm2=sh2=rd2=rdt2=dur2=ds2_=de2_=None
     if df2 is not None:
@@ -774,7 +809,8 @@ with tab_perf:
         ew2=float(ia2[-1]) if use_volume else None
         ia2_100=make_index_after_fee(r2,float(fdec2),100.0); mddv2,mddd2=calc_max_drawdown(ia2_100,xd)
         mdde2=calc_max_drawdown_euro(ia2,xd)[0] if use_volume else None
-        cm2=calc_calmar_ratio(cg2,mddv2); sh2=calc_sharpe(cg2, rf_pa_2, vo2)
+        cm2=calc_calmar_ratio(cg2,mddv2)
+        sh2=calc_sharpe_excess(draf2, df2["rf"]) if ("rf" in df2.columns and df2["rf"].notna().any()) else None
         rd2,rdt2=calc_drawdown_recovery(ia2_100,xd); dur2,ds2_,de2_=calc_max_drawdown_duration(ia2_100,xd)
 
     md=[{"label":l1,"auflagedatum":ad1,"cagr":cg1,"vola":vo1,"endwert":ew1,"calmar":cm1,"sharpe":sh1,"rf_pa":rf_pa_1,
