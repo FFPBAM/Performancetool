@@ -1,5 +1,5 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: Mai 2026
+## Stand: Juni 2026
 
 ---
 
@@ -175,16 +175,17 @@ Diese Logik wird in diesem Projekt schon länger bei `to_decimal_interval()` fü
 
 ## 1. Projektübersicht
 
-Streamlit-App für Fürst Fugger Privatbank mit 3 Tabs.
+Streamlit-App für Fürst Fugger Privatbank mit 2 aktiven Tabs.
 
 | Tab | Datei | Zeilen | Zweck |
 |---|---|---|---|
-| 📈 Performance | `streamlit_app.py` | ~960 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar |
+| 📈 Performance | `streamlit_app.py` | ~990 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar |
 | 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~780 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail, PDF |
-| 📋 Portfolio zusammenstellen | `modules/portfolio_builder.py` | ~695 | Individueller Portfolio-Aufbau durch Berater |
 | (gemeinsam) | `modules/shared.py` | ~190 | Konstanten, Login, Formatierung, Font-Setup |
 
-**Gesamt: ~2.625 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
+**Gesamt aktiv: ~1.960 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
+
+**Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~695 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung: Berater dürfen keinen freien Portfolio-Builder nutzen). Datei bleibt für mögliche spätere Reaktivierung im Repo.
 
 ---
 
@@ -230,10 +231,11 @@ Pillow>=10.0
 ## 3. Abhängigkeiten
 
 ```
-shared.py ──→ streamlit_app.py (Tab 1 inline + importiert Tab 2 + Tab 3)
-          ──→ portfolioanalyse.py (exportiert Ring-Charts, Tabellen → für Builder)
-          ──→ portfolio_builder.py (importiert shared + portfolioanalyse-Funktionen)
+shared.py ──→ streamlit_app.py (Tab 1 inline + importiert Tab 2)
+          ──→ portfolioanalyse.py (eigenständig)
 ```
+
+`portfolio_builder.py` liegt im Repo, wird aber nicht importiert (siehe Abschnitt 1).
 
 ---
 
@@ -347,33 +349,20 @@ Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GO
 
 ---
 
-## 9. Tab 3: Portfolio zusammenstellen
+## 9. Disclaimers
 
-- Schnellzugriffe (9 Buttons) → setzen Filter via session_state
-- Filter: Hauptfilter sichtbar, erweiterte als Checkbox (NICHT Expander!)
-- Suche: Multiselect mit `default=[]` (NUR hinzufügen, nie syncen)
-- Cash: Input + Residual + Hinweis
-- Export: Excel (.xlsx, nicht CSV wegen Encoding)
-- `_show_builder_disclaimer(zm_hint)` bei JEDEM return + am Ende
-- Filter-Defaults: Duration max=30.0, Risiko max=7 (siehe Transferwissen #5)
-
----
-
-## 10. Disclaimers
-
-Alle 3 Tabs: Hinweis + Quelle oben, Disclaimer unten, in PDFs als eigene Seite.
+Beide Tabs: Hinweis + Quelle oben, Disclaimer unten, in PDFs als eigene Seite.
 
 | Tab | Schlüsselsatz |
 |---|---|
 | Performance | "Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr." |
 | Portfolioanalyse | "Alle Angaben erfolgen ohne Gewähr." |
-| Builder | "Alle Angaben sind ohne Gewähr." + Produktgovernance |
 
 Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
 
 ---
 
-## 11. Berechnungsformeln
+## 10. Berechnungsformeln
 
 ```
 daily_drag      = (1 + fee_pa)^(1/365) - 1
@@ -440,7 +429,7 @@ Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_
 
 ---
 
-## 12. Geplante nächste Schritte
+## 11. Geplante nächste Schritte
 
 1. **Portfolioanalyse PDF → PowerPoint** (python-pptx, 16:9, Fuggerblau/Fuggergold)
 2. Performance-Charts auf neue Corporate Colors umstellen
@@ -449,7 +438,15 @@ Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_
 
 ---
 
-## 13. Changelog
+## 12. Changelog
+
+### Juni 2026 – Tab "Portfolio zusammenstellen" deaktiviert
+- **Compliance-Entscheidung:** Berater dürfen den freien Portfolio-Builder nicht nutzen
+- `streamlit_app.py`: Import von `render_portfolio_builder` entfernt, Tab-Tuple von 3 auf 2 Tabs reduziert, Tab-3-Block komplett raus
+- Docstring angepasst mit Hinweis warum
+- `modules/portfolio_builder.py` bleibt im Repo (nicht gelöscht, nicht verschoben) — kann bei späterer Compliance-Klärung wieder aktiviert werden indem Import + Tab wieder hinzugefügt werden
+- `modules/portfolioanalyse.py` unverändert (importierte nie aus dem Builder)
+- Doku: Abschnitt "Tab 3" komplett entfernt, Nummerierung von 14 auf 13 Abschnitte reduziert, Abhängigkeits-Diagramm und Disclaimers-Tabelle aktualisiert
 
 ### Mai 2026 (Validierung) – Echtdaten-Test mit 17-Jahres-Zeitreihe
 - Sharpe-Berechnung und rf-Verarbeitung mit echter Zeitreihe (31.12.2008 – 12.05.2026, ~6300 Tageswerte) validiert
@@ -487,12 +484,13 @@ Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_
 
 ---
 
-## 14. Für den nächsten Chat / Kollegen
+## 13. Für den nächsten Chat / Kollegen
 
-**Hochladen:** Diese MD + alle 4 Code-Dateien (`streamlit_app.py`, `modules/shared.py`, `modules/portfolioanalyse.py`, `modules/portfolio_builder.py`)
+**Hochladen:** Diese MD + 3 aktive Code-Dateien (`streamlit_app.py`, `modules/shared.py`, `modules/portfolioanalyse.py`).
+`modules/portfolio_builder.py` ist deaktiviert und muss nicht mitgegeben werden — nur falls es um eine Reaktivierung geht.
 **Sagen:** "Lies die PROJEKT_DOKUMENTATION.md zuerst komplett. Dann [Aufgabe]."
 **Bei Problemen:** Screenshot + erwartetes Verhalten
 
 **Wichtig bei CSV-Änderungen:** Nach Deploy IMMER Cache leeren (Transferwissen #7).
 
-*Stand: Mai 2026*
+*Stand: Juni 2026*
