@@ -495,8 +495,8 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
         "und unter Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; "
         "eine halbjährliche Berücksichtigung erfolgt nicht.",
 
-        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr.",
+        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der "
+        "Vermögensverwaltungsstrategien im Kundengespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr.",
     ]
     for txt in disclaimer_texts:
         story.append(Paragraph(txt, st_n))
@@ -950,7 +950,7 @@ with tab_perf:
         "eine halbjährliche Berücksichtigung erfolgt nicht."
     )
     st.markdown(
-        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung im Beratungsgespräch. "
+        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. "
         "Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr."
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
