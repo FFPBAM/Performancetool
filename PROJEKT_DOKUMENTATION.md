@@ -235,11 +235,14 @@ Streamlit-App für Fürst Fugger Privatbank mit 2 aktiven Tabs.
 |---|---|---|---|
 | 📈 Performance | `streamlit_app.py` | ~990 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar |
 | 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~780 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail, PDF |
-| (gemeinsam) | `modules/shared.py` | ~190 | Konstanten, Login, Formatierung, Font-Setup |
+| (gemeinsam) | `modules/shared.py` | ~200 | Konstanten, Login, Formatierung, Font-Setup, Corporate-Palette |
+| (PowerPoint-Export) | `modules/pptx_export.py` | ~850 | PPTX-Export aus Portfolioanalyse-Tab (geplant: auch Performance-Tab) |
 
-**Gesamt aktiv: ~1.960 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
+**Gesamt aktiv: ~2.820 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
 
 **Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~695 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung: Berater dürfen keinen freien Portfolio-Builder nutzen). Datei bleibt für mögliche spätere Reaktivierung im Repo.
+
+**Vorlage-Datei:** `Vorlage/Vorlage_FFPB.pptx` – PowerPoint-Master mit Corporate-Design, benannten Shapes und 24 Slides. Wird von `pptx_export.py` als Template genutzt.
 
 ---
 
@@ -252,7 +255,10 @@ Repository Root/
 │   ├── __init__.py
 │   ├── shared.py
 │   ├── portfolioanalyse.py
-│   └── portfolio_builder.py
+│   ├── pptx_export.py               ← PowerPoint-Export (Portfolioanalyse + geplant Performance)
+│   └── portfolio_builder.py         ← deaktiviert seit Juni 2026
+├── Vorlage/
+│   └── Vorlage_FFPB.pptx            ← Corporate-Master, 24 Slides, benannte Shapes
 ├── fonts/
 │   ├── segoeui.ttf                  ← Von C:\Windows\Fonts kopiert
 │   └── segoeuib.ttf
@@ -264,7 +270,7 @@ Repository Root/
 ├── Daten/                           ← Performance-CSVs
 ├── Daten_PF/                        ← Portfolioanalyse-CSVs
 ├── Duration/                        ← Duration/Rendite pro Portfolio
-├── Zieldaten/                       ← Anlageuniversum für Builder
+├── Zieldaten/                       ← Anlageuniversum für Builder (deaktiviert)
 └── requirements.txt
 ```
 
@@ -278,6 +284,8 @@ openpyxl>=3.1
 matplotlib>=3.7
 reportlab>=4.0
 Pillow>=10.0
+python-pptx>=1.0                     ← für pptx_export.py
+lxml>=4.9                            ← für pptx_export.py (XML-Manipulation der Charts)
 ```
 
 ---
@@ -286,10 +294,12 @@ Pillow>=10.0
 
 ```
 shared.py ──→ streamlit_app.py (Tab 1 inline + importiert Tab 2)
-          ──→ portfolioanalyse.py (eigenständig)
+          ──→ portfolioanalyse.py ──→ pptx_export.py (für PowerPoint-Export)
+          ──→ pptx_export.py (geplant: auch von streamlit_app.py)
 ```
 
 `portfolio_builder.py` liegt im Repo, wird aber nicht importiert (siehe Abschnitt 1).
+`pptx_export.py` nutzt `Vorlage/Vorlage_FFPB.pptx` als Master-Template.
 
 ---
 
@@ -422,8 +432,13 @@ Vor Juni 2026 nutzte das Performance-Tool ein eigenes, ähnliches aber nicht ide
 - `_render_single_portfolio()` mit `suffix="pf1"/"pf2"` (siehe Transferwissen #3)
 - Ring-Diagramme: Absteigend sortiert, Labels außen (13px), <3% ausgeblendet, Legende horizontal unten
 - YTD: Spalten ausgeschrieben (Wertpapier-Performance/Performancebeitrag), Caption erklärt beide
-- PDF (aktuell reportlab): Ring-Charts kompakter (100×85mm), intelligente Spaltenbreiten
-- **Geplant: Umstellung auf PowerPoint (python-pptx)**
+- PDF (reportlab): Ring-Charts kompakter (100×85mm), intelligente Spaltenbreiten
+- **PowerPoint-Export aktiv** (`modules/pptx_export.py` + `Vorlage/Vorlage_FFPB.pptx`):
+  - Slides 7-8: Anlagevorschlag (Tabelle pro Gattung + Allokations-Ring)
+  - Slide 9: Aktuelle Portfoliozusammenstellung (Regionen + Branchen-Ringe)
+  - Slide 10 (Währungen) wird entfernt — keine Währungs-Daten verfügbar
+  - Bei Vergleichsportfolio: Slides 7-9 werden dupliziert (3 weitere Slides für Portfolio 2)
+  - Details siehe Abschnitt 10 "PowerPoint-Export-System"
 - Disclaimer: *"Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr."*
 
 ---
@@ -443,7 +458,122 @@ Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
 
 ---
 
-## 10. Berechnungsformeln
+## 10. PowerPoint-Export-System
+
+Das PowerPoint-Export-System ist ein zentraler Baustein für die Kunden-Kommunikation. Beide Tabs (Performance + Portfolioanalyse) erzeugen aus denselben Daten eine fertig formatierte PPTX-Datei, die der Berater an Kunden weiterleiten kann.
+
+### 10.1 Architektur-Prinzip "B2" — jeder Tab füllt nur eigene Folien
+
+Beim PPTX-Export gibt es **keine** zentrale "alles in einem"-Funktion. Jeder Tab hat seinen eigenen Export-Button und befüllt **nur seine eigenen Folien**:
+
+| Tab | Befüllt Slides | Entfernt Slides |
+|---|---|---|
+| 📊 Portfolioanalyse | 7-9 (Anlagevorschlag, Zusammenstellung) | 10-12 (Performance) — wenn vorhanden |
+| 📈 Performance (geplant) | 10-12 (Wertentwicklung) | 7-9 (Anlagevorschlag) |
+
+**Begründung:** Saubere Trennung. Der Berater entscheidet welcher Tab den Export erzeugt, und bekommt eine schlanke Datei mit nur den für ihn relevanten Folien.
+
+### 10.2 Vorlage `Vorlage/Vorlage_FFPB.pptx`
+
+24 Slides mit Corporate-Design der Fürst Fugger Privatbank. Wichtige Eigenschaften:
+
+| # | Slide | Verwendung |
+|---|---|---|
+| 1 | Cover "Unsere Vermögensverwaltung" | statisch |
+| 2 | Inhaltsverzeichnis | wird ggf. dynamisch angepasst (Performance-Eintrag nur wenn Performance-Folien drin) |
+| 3-6 | Intro (Begrüßung, Die Fugger, VV-Konzept) | statisch |
+| 7-8 | **Anlagevorschlag** (Aktien/Renten Tabelle + Allokations-Ring) | dynamisch befüllt von `pptx_export.py` |
+| 9 | **Zusammenstellung** (Regionen + Branchen-Ringe) | dynamisch befüllt |
+| ~~10~~ | ~~Währungen-Ring~~ | wird beim Export ENTFERNT (keine Daten) |
+| 11+ | Honorar, Bank, Standorte, Tradition, Impressum | statisch |
+
+**Geplante Erweiterung (Juni 2026):** Folien 10-12 sollen Performance-Folien werden (siehe Abschnitt 11 "Geplante Implementierungen").
+
+### 10.3 Shape-Namen-Konvention
+
+Die Vorlage nutzt **benannte Shapes**, damit `pptx_export.py` sie per Name finden und befüllen kann (statt per Index). Diese Konvention muss bei jeder Vorlagen-Änderung in PowerPoint eingehalten werden:
+
+| Shape-Name | Typ | Verwendung |
+|---|---|---|
+| `Titel` / `Titel 2` | Placeholder | Folien-Headline (z.B. "Anlagevorschlag – Konservativ") |
+| `C_Kennzahlen` | Chart | Großer Allokations-Ring (Slides 7, 8) |
+| `T_Kennzahlen` | Tabelle | Positionen-Tabelle (Slides 7, 8) |
+| `C_Kennzahlen1` | Chart | Linker Ring (Slide 9: Regionen) |
+| `C_Kennzahlen2` | Chart | Rechter Ring (Slide 9: Segmente/Branchen) |
+| `Fußnote` | Placeholder | Disclaimer-Text |
+| `Quelle` | Textbox | "Quelle: Eigene Berechnung, Stand DD.MM.YYYY" |
+| `Foliennummer` | Placeholder | Seitenzahl |
+
+**Geplante Performance-Folien-Shapes** (für Slides 10-12):
+- `Titel` — Wertentwicklung-Headline
+- `Tabelle` — 4×2 Kennzahlen-Tabelle (Performance p.a., Vola, Sharpe, Max DD × Referenz/Benchmark)
+- `Diagramm links` — Balken-Chart Performance p.a. (Kalenderjahre)
+- `Diagramm rechts` — Linien-Chart Wertentwicklung
+- `Header Diagramm links` / `Header Diagramm rechts` — Header-Textboxen
+- `Legende Diagramm links` — Legende Balken-Chart
+- `Fußnote` — Disclaimer
+- `Quelle` — Quelle/Stand
+
+### 10.4 Strategienamen-Normalisierung
+
+`clean_strategy_name()` in `pptx_export.py` entfernt unerwünschte Präfixe vor der Anzeige:
+- `"cVV Konservativ"` → `"Konservativ"`
+- `"Stiftung Konservativ"` → `"Konservativ"`
+- `"Muster Konservativ cVV"` → `"Konservativ"`
+
+Präfixe-Liste: `STRATEGY_PREFIXES = ["cVV", "Muster", "Stiftung"]`. Wird sowohl am Anfang als auch am Ende entfernt. Erster Buchstabe wird groß geschrieben.
+
+### 10.5 Slide-Duplikation für Vergleichsportfolio
+
+`_duplicate_slide(prs, source_idx)` dupliziert eine komplette Slide inklusive:
+- Aller Shape-Inhalte (per `deepcopy`)
+- Chart-Parts (eigene XML-Datei pro Chart, damit Änderungen unabhängig sind — kritisch!)
+- Image-Referenzen (geteilt, weil unveränderlich)
+- Sub-Relationships (z.B. eingebettete XLSX-Files in Charts)
+
+Nach Duplikation: **immer** `_save_and_reload(prs)` aufrufen, um interne Slide-IDs zu konsolidieren. Sonst "Duplicate name"-Warnungen beim späteren Speichern.
+
+Bei 2 Portfolios: Slides 7-9 werden 3× dupliziert, dann umsortiert zu `[P1.S7, P1.S8, P1.S9, P2.S7, P2.S8, P2.S9]`, dann P2-Slides befüllt.
+
+### 10.6 Chart-Befüllung — XML-basiert, NICHT über python-pptx CategoryChartData
+
+**Wichtig:** Charts in Vorlagen können auf externe Excel-Dateien referenzieren (`xl/embeddings/`). Die python-pptx Standard-API `CategoryChartData` würde diese Referenzen brechen.
+
+**Lösung:** `_replace_chart_data(chart_shape, categories, values)` manipuliert direkt das Chart-XML:
+- Findet `<c:cat>` und `<c:val>` Elemente
+- Tauscht `<c:pt>`-Punkte aus
+- Updated `<c:ptCount>`
+- Lässt externe Referenzen intakt
+
+Diese Mechanik wurde experimentell entwickelt und ist robust gegen Vorlagen-Eigenheiten.
+
+### 10.7 Positionen-Verteilung auf Slides 7+8
+
+Slide 7 (asymmetrisch groß): max 34 Datenzeilen
+Slide 8 (kleiner): max 12 Datenzeilen
+
+Eine Gruppe (z.B. AKTIEN) darf über die Slide-Grenze fließen. Bei Aufteilung wird der Gruppen-Header auf Slide 8 wiederholt.
+
+**Wichtige Regel — Tabellen-Struktur unverändert lassen:** Frühere Versuche, leere Tabellenzeilen zu entfernen, haben dazu geführt dass LibreOffice die Zeilenhöhen automatisch vergrößert und die Tabelle den Footer überlappt. Daher: leere Zeilen bleiben sichtbar leer (mit NBSP gefüllt), die Vorlagen-Höhen sind exakt auf die Slide-Höhe kalibriert.
+
+### 10.8 Kritische Compliance-Anforderungen für PowerPoint-Export
+
+Die PPTX wird an Kunden weitergegeben — alle nachfolgenden Regeln sind **nicht verhandelbar**:
+
+| Anforderung | Umsetzung |
+|---|---|
+| **Anti-Cherry-Picking** | Performance-Folien zeigen **die gesamte verfügbare Historie**, nicht den Berater-Custom-Zeitraum |
+| **Benchmark wenn gemappt** | Bei Portfolios mit gemappter Benchmark wird die BM **immer** angezeigt (UI-Schalter wird im Export ignoriert) |
+| **Nur Nach Kosten** | "Vor Kosten"-Linien werden im Export **nie** gezeigt, auch wenn UI-Checkbox aktiv |
+| **Strategieentwurf-Hinweis** | Folie 7 hat Überschrift "Strategieentwurf im Rahmen einer Vermögensverwaltung" statt "Anlagevorschlag" (Email-Anforderung Juni 2026) |
+| **Disclaimer auf jeder Folie** | Standard-Wertentwicklungs-Disclaimer + Quelle + Stand |
+| **Mindestens 5 Jahre Historie** | Durch "gesamte Historie zeigen" implizit erfüllt |
+| **Custom-Zeitraum als separate Folie** | F3 "Berater-Auswahl" — transparent macht welcher Zeitraum tatsächlich vom Berater betrachtet wurde |
+| **Strategienamen-Bereinigung** | `cVV`, `Muster`, `Stiftung` werden vor Anzeige entfernt |
+
+---
+
+## 11. Berechnungsformeln
 
 ```
 daily_drag      = (1 + fee_pa)^(1/365) - 1
@@ -510,16 +640,138 @@ Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_
 
 ---
 
-## 11. Geplante nächste Schritte
+## 12. Roadmap — Geplante Implementierungen
 
-1. **Portfolioanalyse PDF → PowerPoint** (python-pptx, 16:9, Fuggerblau/Fuggergold)
-2. Performance-Charts auf neue Corporate Colors umstellen
-3. Compliance-Feedback abwarten → Disclaimer ggf. anpassen
-4. Ggf. Sharpe + rf-Linie auch in Portfolioanalyse-Tab (aktuell nur Tab 1)
+### 12.1 Aktuelle Aufgaben (Juni 2026 — Email-Anforderung Compliance)
+
+Stand: alle Brainstorming-Punkte sind geklärt, Implementierung steht noch aus.
+
+#### Aufgabe A: Strategieentwurf-Überschrift auf PPTX Folie 7
+- **Was:** Überschrift "Anlagevorschlag" → "Strategieentwurf im Rahmen einer Vermögensverwaltung"
+- **Wo:** Nur Folie 7 (nicht 8, 9)
+- **Code:** In `pptx_export.py` → `_fill_anlagevorschlag_slides()` → bei Slide 7 den Titel-Shape mit dem festen neuen Text ersetzen, statt mit dem dynamischen "Anlagevorschlag – <Strategie>"
+- **Zusatztext:** Kein Footer-Hinweis (nur Überschrift wird geändert)
+- **Aufwand:** Trivial (~10 Min)
+
+#### Aufgabe B: Seitenzahlen in PDF-Druckversionen
+- **Was:** Seitenzahlen einfügen, wie in der PPTX-Vorlage
+- **Wo:** `streamlit_app.py` (Performance-PDF) + `portfolioanalyse.py` (Portfolioanalyse-PDF)
+- **Format:** Nur die Zahl (z.B. "7") — kein "Seite X von Y"
+- **Position:** **NOCH ZU KLÄREN — Anforderer hatte gesagt "ich gebe dir sie", Spec ausstehend**
+  - Default-Annahme falls keine andere Spec: rechts unten (wie in der PPTX-Vorlage)
+- **Technik:** reportlab `onFirstPage` + `onLaterPages` Callback im `SimpleDocTemplate` — zeichnet auf canvas via `canvas.drawRightString()` o.ä.
+- **Aufwand:** Klein (~30 Min)
+
+#### Aufgabe C: Seitenzahlen in PPTX-Export — dynamisch korrekt
+- **Problem:** Die Vorlage hat statische Seitenzahlen (Slides 7-9 zeigen "13"-"15"), Lücke 7-12 für dynamische Slides reserviert
+- **Was:** Bei Export Seitenzahlen dynamisch auf die finale Slide-Position setzen
+- **Logik:** Nach allen Add/Remove-Operationen über alle Slides iterieren, Shape `Foliennummer` finden und mit der korrekten Slide-Position (1-indexed, Cover ausgenommen) befüllen
+- **Aufwand:** Mittel (~1h, weil Edge-Cases beachten: Slides ohne `Foliennummer`-Shape, Cover/Endseiten)
+
+#### Aufgabe D: Performance-PPTX-Export (großes Feature)
+Komplette neue Funktionalität — alle Spezifikationen aus Brainstorming Juni 2026 (siehe 12.2).
+- **Aufwand:** Groß (~6-8h)
+
+### 12.2 Spezifikation Performance-PPTX-Export (vollständig geklärt)
+
+Alle Punkte sind durch Brainstorming geklärt — kann ohne weitere Klärung implementiert werden.
+
+#### Architektur
+- **B2-Prinzip:** Jeder Tab füllt nur eigene Folien
+- **Position:** Performance-Folien NACH Anlagevorschlag — Slides 10-12 in der Vorlage (nach Entfernung Slide 10 alt = Währungen)
+- **TOC** (Slide 2): "3. Wertentwicklung" neu, "3. Honorar" wird zu "4. Honorar" etc.
+- **Button:** In `streamlit_app.py` neben "PDF erstellen" — analog zum Portfolioanalyse-Tab
+- **Dateiname:** `<Strategie>_Performance_<Datum>.pptx`
+
+#### Folien
+Aus EINER Master-Vorlagen-Folie (in `Anlagevorschlag_Master_Dynamische_Folien.pptx` als Slide 8 angelegt) werden bis zu 3 Folien generiert:
+
+| Folie | Überschrift | Zeitraum | Benchmark |
+|---|---|---|---|
+| F1 | `<Strategie>\| Wertentwicklung (ohne Benchmark)` | Gesamte verfügbare Historie | — |
+| F2 | `<Strategie>\| Wertentwicklung (mit Benchmark)` | Gesamte verfügbare Historie | nur wenn gemappt |
+| F3 | `<Strategie>\| Wertentwicklung (Berater-Auswahl)` | Berater-Custom-Zeitraum aus UI | wie F2 (mit BM wenn gemappt) |
+
+**Skip-Regeln:**
+- F2: übersprungen wenn keine Benchmark im Mapping
+- F3: übersprungen wenn UI-Zeitraum = volle Historie (±5 Tage Toleranz)
+
+**Bei Vergleich** (2 Portfolios im UI): V1 = je 3 Folien sequentiell (analog Portfolioanalyse-Vergleich), 6 Folien total.
+
+#### Folien-Inhalt pro Folie
+- **Überschrift** oben links: `<Strategie>\| Wertentwicklung (...)`
+- **Kennzahlen-Tabelle** links oben: 4 Zeilen × 2 Spalten (Referenz / Benchmark)
+  - Performance p.a.
+  - Volatilität
+  - Sharpe Ratio
+  - Max Drawdown
+- **Linien-Chart** rechts oben: Wertentwicklung (Index, Start=100), immer normalisiert (egal ob Anlagevolumen im UI gesetzt)
+- **Balken-Chart** links unten: Performance p.a. nach Kalenderjahren (nach Kosten)
+- **Disclaimer** rechts unten: *"Die angegebenen Werte beziehen sich auf die historische Wertentwicklung. Der Wert sowie die Erträge einer Kapitalanlage können sowohl steigen als auch fallen. Eine positive Wertentwicklung in der Vergangenheit stellt keine Garantie für zukünftige Entwicklungen dar. Die Wertentwicklung wird in Euro (€) gemessen. Die ausgewiesene Performance wird auf täglicher Basis berechnet. Der jährliche Honorarsatz wird dabei in eine äquivalente tägliche Belastung umgerechnet und unter Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; eine halbjährliche Berücksichtigung erfolgt nicht."*
+- **Footer:** Logo links, "Quelle: Eigene Berechnung, Stand <heutiges Datum>" rechts neben Seitenzahl
+
+#### Compliance-Regeln (siehe auch Abschnitt 10.8)
+- **Nur Nach Kosten** im Export (UI-Schalter "Vor Kosten" ignoriert)
+- **Strategiename gereinigt** (via `clean_strategy_name`)
+- **Heutiges Datum** im Footer (Erstellungsdatum)
+- **Benchmark immer wenn gemappt** — UI-Checkbox ignoriert
+
+#### Shape-Namen in der neuen Vorlagen-Folie
+Bereits angelegt in `Anlagevorschlag_Master_Dynamische_Folien.pptx` Slide 8:
+
+| Name | Typ | Zweck |
+|---|---|---|
+| `Titel` | Placeholder | Folien-Headline |
+| `Tabelle` | Tabelle (4×2) | Kennzahlen (Referenz/Benchmark) |
+| `Diagramm links` | Chart | Balken Performance p.a. |
+| `Diagramm rechts` | Chart | Linien Wertentwicklung |
+| `Header Diagramm links` | Textbox | "PERFORMANCE P.A. (NACH KOSTEN)" |
+| `Header Diagramm rechts` | Textbox | "WERTENTWICKLUNG" |
+| `Legende Diagramm links` | Textbox | Balken-Legende (Referenz/Benchmark) |
+| `Fußnote` | Placeholder | Disclaimer-Text |
+| `Quelle` | Textbox | "Quelle: Eigene Berechnung, Stand DD.MM.YYYY" |
+| `Foliennummer` | Placeholder | Seitenzahl |
+
+### 12.3 Implementierungs-Reihenfolge (Vorschlag)
+
+1. **Aufgabe A** (Strategieentwurf-Überschrift) — trivial, schneller Win
+2. **Aufgabe B** (PDF-Seitenzahlen) — wartet auf Position-Spec vom Anforderer
+3. **Aufgabe C** (PPTX-Seitenzahlen dynamisch)
+4. **Aufgabe D** (Performance-PPTX-Export) — größtes Feature, in Teilschritten:
+   - 4.1 Vorlage Performance-Folie in `Vorlage_FFPB.pptx` integrieren (Slides 10-12)
+   - 4.2 `generate_performance_pptx()` in `pptx_export.py` neu anlegen
+   - 4.3 Streamlit-Button in `streamlit_app.py` einbauen
+   - 4.4 End-to-End-Test mit echten Daten
+
+### 12.4 Sonstige Pflege-Punkte (langfristig)
+
+- Ggf. Sharpe + rf-Linie auch in Portfolioanalyse-Tab (aktuell nur Tab 1)
+- Compliance-Feedback weiter beobachten → Disclaimer ggf. anpassen
+- Bei Bedarf: Portfolio-Builder-Reaktivierung (siehe Abschnitt 1, deaktiviert seit Juni 2026)
 
 ---
 
-## 12. Changelog
+## 13. Changelog
+
+### Juni 2026 – Brainstorming PowerPoint-Export-Erweiterung (Spezifikation komplett, Implementierung steht aus)
+- **Email-Anforderung mit 3 Compliance-Punkten:** Seitenzahlen in Druckversionen, Mindest-Historie 5 Jahre, Strategieentwurf-Hinweis auf PPTX
+- **Bestehender PPTX-Export** (`pptx_export.py`) erstmals in Doku dokumentiert (Abschnitt 10 "PowerPoint-Export-System")
+- **Performance-PPTX-Export** als neues großes Feature spezifiziert:
+  - Architektur **B2:** jeder Tab füllt nur seine eigenen Folien
+  - Position: Performance nach Anlagevorschlag in der Vorlage (Slides 10-12)
+  - Inhalts-VZ-Eintrag "3. Wertentwicklung" wird neu in TOC eingefügt
+  - 3 Folien-Varianten F1 (ohne BM), F2 (mit BM), F3 (Berater-Auswahl)
+  - F2 wird übersprungen wenn keine BM gemappt; F3 wenn Custom-Zeitraum = volle Historie
+  - Vergleichsportfolio: V1 = je 3 Folien sequentiell (analog Portfolioanalyse-Vergleich)
+  - Nur "Nach Kosten" im Export, UI-Schalter ignoriert
+  - Heutiges Datum im Footer (nicht Auswertungsdatum)
+  - Linien-Chart immer normalisiert (Start=100), Anlagevolumen ignoriert
+  - Kennzahlen: Performance p.a., Volatilität, Sharpe, Max Drawdown (4 Zeilen)
+  - Charts: Linien + Balken; KEIN Drawdown, KEINE rollierende Tabelle
+- **Master-Vorlage** mit Performance-Folie wurde vom Anforderer geliefert (`Anlagevorschlag_Master_Dynamische_Folien.pptx` Slide 8, Shape-Namen extrahiert und dokumentiert)
+- **Disclaimer-Text für Performance-Folien** finalisiert (siehe Abschnitt 12.2)
+- **"Strategieentwurf im Rahmen einer Vermögensverwaltung"** ersetzt die Überschrift "Anlagevorschlag" auf PPTX-Folie 7 (nur Überschrift, kein zusätzlicher Footer-Text, nur Slide 7 nicht 8/9)
+- Detailfragen zu Folien-Layout, Strategienamen-Bereinigung, Compliance-Anforderungen alle geklärt — siehe Abschnitt 10 und 12
 
 ### Juni 2026 – Performance-Tab auf Corporate Colors umgestellt
 - **Strategie A:** Konstanten in `shared.py` direkt umdefiniert (single source of truth)
@@ -584,7 +836,7 @@ Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_
 
 ---
 
-## 13. Für den nächsten Chat / Kollegen
+## 14. Für den nächsten Chat / Kollegen
 
 **Hochladen:** Diese MD + 3 aktive Code-Dateien (`streamlit_app.py`, `modules/shared.py`, `modules/portfolioanalyse.py`).
 `modules/portfolio_builder.py` ist deaktiviert und muss nicht mitgegeben werden — nur falls es um eine Reaktivierung geht.
