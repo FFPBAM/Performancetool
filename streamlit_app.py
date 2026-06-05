@@ -875,6 +875,7 @@ with tab_perf:
         yaxis=dict(tickformat=",.0f" if use_volume else None, separatethousands=True),
         legend=dict(title_text="Strategie", x=1.02, y=1, xanchor="left"),
         showlegend=True, hovermode="x unified",
+        colorway=FFPB_PALETTE,
         margin=dict(r=120))
 
     # Deutsche Tausender-Formatierung auf Y-Achse bei Volumen
@@ -894,11 +895,11 @@ with tab_perf:
         if use_volume:
             fdd.add_trace(go.Scatter(x=xd,y=drawdown_euro_from_index(ia1),mode="lines",name=f"{l1} – DD € (nK)"))
             if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_euro_from_index(ia2),mode="lines",name=f"{l2} – DD € (nK)"))
-            fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="DD in €",yaxis=dict(tickformat=",.0f"),hovermode="x unified")
+            fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="DD in €",yaxis=dict(tickformat=",.0f"),hovermode="x unified",colorway=FFPB_PALETTE)
         else:
             fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia1_100),mode="lines",name=f"{l1} – DD (nK)"))
             if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia2_100),mode="lines",name=f"{l2} – DD (nK)"))
-            fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="Drawdown",hovermode="x unified")
+            fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="Drawdown",hovermode="x unified",colorway=FFPB_PALETTE)
         st.plotly_chart(fdd,use_container_width=True,config={"displayModeBar": False})
 
     dfr=None
