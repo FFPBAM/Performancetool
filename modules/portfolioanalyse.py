@@ -509,8 +509,8 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern."
     )
     st.markdown(
-        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Angaben sind ohne Gewähr."
+        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der "
+        "Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr."
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
     st.markdown("**Ansprechpartner:** PBAM")
@@ -822,8 +822,8 @@ def generate_pf_pdf(portfolios, anlagevolumen, use_volume, show_ytd):
         "Auch die Zuordnung zu Gattungen, Segmenten und Regionen basiert auf der zum Stichtag "
         "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern.",
 
-        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung im "
-        "Beratungsgespräch. Alle Angaben sind ohne Gewähr.",
+        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der "
+        "Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr.",
     ]
     for txt in disclaimer_pf:
         story.append(Paragraph(txt, st_n))
