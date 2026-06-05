@@ -17,10 +17,21 @@ from PIL import Image as PILImage
 # CONSTANTS
 # ---------------------------------------------------------------------------
 LOGO_FILENAME = "Fuerst_Fugger_Bank_Logo_2-ZL-RGB.jpg"
-FFPB_DARK     = "#1B3A5C"
-FFPB_GOLD     = "#B8973A"
-FFPB_LIGHT    = "#A8CBE8"
-FFPB_BLUE2    = "#2C5F8A"
+
+# Corporate Colors (Fürst Fugger Privatbank) — gilt für ALLE Tabs.
+# Stand: Juni 2026. Performance-Tab wurde von alten Theme-Farben auf Corporate umgestellt.
+FFPB_DARK     = "#003460"   # Fuggerblau (vorher #1B3A5C)
+FFPB_GOLD     = "#C3A069"   # Fuggergold (vorher #B8973A)
+FFPB_BLUE2    = "#4A7FAA"   # Mittelblau (vorher #2C5F8A)
+FFPB_SAND     = "#D4BD8A"   # Sand (neu)
+FFPB_LIGHT    = "#7FABC8"   # Hellblau (vorher #A8CBE8)
+
+# Erweiterte Corporate-Palette (für PDF-Linien-Charts, Reihenfolge wie Portfolioanalyse RING_COLORS)
+FFPB_PALETTE = [
+    "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",
+    "#8B7340", "#A8CBE8", "#5C6B3C", "#E8D5B0", "#2C5F8A",
+    "#C4C4C4", "#3A7CA5", "#F0C070", "#6A9BC3", "#2A4A6C",
+]
 
 MAPPING_PATH      = "Mapping_Honorarsatz.xlsx"
 NAME_MAPPING_PATH = "Mapping_Namen.xlsx"
