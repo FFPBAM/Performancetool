@@ -32,7 +32,7 @@ from reportlab.lib.colors import HexColor, white
 from PIL import Image as PILImage
 
 from modules.shared import (
-    LOGO_FILENAME, FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
+    LOGO_FILENAME, FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2, FFPB_SAND, FFPB_PALETTE,
     MAPPING_PATH, NAME_MAPPING_PATH, DATA_FOLDER, EXCLUDE_SUBSTRINGS,
     PDF_FONT, PDF_FONT_BOLD,
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
@@ -240,21 +240,21 @@ def compute_bar_data(df, fee_dec, mode, label, custom_start=None, custom_end=Non
     return pd.DataFrame(rows)
 
 def build_bar_chart(bar_df1, label_1, bench_name_1, bar_df2=None, label_2=None, bench_name_2=None, title=""):
-    BG="#1B3A5C"; fig=go.Figure(); cp1=f"{label_1} (nach Kosten)"
+    BG=FFPB_DARK; fig=go.Figure(); cp1=f"{label_1} (nach Kosten)"
     if cp1 in bar_df1.columns:
         v=bar_df1[cp1].tolist()
-        fig.add_trace(go.Bar(name=cp1,x=bar_df1["label"],y=v,marker_color="#B8973A",text=[f"{x:+.2f}%" for x in v],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
+        fig.add_trace(go.Bar(name=cp1,x=bar_df1["label"],y=v,marker_color=FFPB_GOLD,text=[f"{x:+.2f}%" for x in v],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
     if "ret_bm_raw" in bar_df1.columns and bar_df1["ret_bm_raw"].notna().any():
         bv=bar_df1["ret_bm_raw"].tolist()
-        fig.add_trace(go.Bar(name=bench_name_1,x=bar_df1["label"],y=bv,marker_color="#A8CBE8",text=[f"{x:+.2f}%" if pd.notna(x) else "" for x in bv],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
+        fig.add_trace(go.Bar(name=bench_name_1,x=bar_df1["label"],y=bv,marker_color=FFPB_LIGHT,text=[f"{x:+.2f}%" if pd.notna(x) else "" for x in bv],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
     if bar_df2 is not None and label_2:
         cp2=f"{label_2} (nach Kosten)"
         if cp2 in bar_df2.columns:
             v2=bar_df2[cp2].tolist()
-            fig.add_trace(go.Bar(name=cp2,x=bar_df2["label"],y=v2,marker_color="#2C5F8A",text=[f"{x:+.2f}%" for x in v2],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
+            fig.add_trace(go.Bar(name=cp2,x=bar_df2["label"],y=v2,marker_color=FFPB_BLUE2,text=[f"{x:+.2f}%" for x in v2],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
         if bench_name_2 and bench_name_2!=bench_name_1 and "ret_bm_raw" in bar_df2.columns and bar_df2["ret_bm_raw"].notna().any():
             bv2=bar_df2["ret_bm_raw"].tolist()
-            fig.add_trace(go.Bar(name=bench_name_2,x=bar_df2["label"],y=bv2,marker_color="#7FB5D5",text=[f"{x:+.2f}%" if pd.notna(x) else "" for x in bv2],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
+            fig.add_trace(go.Bar(name=bench_name_2,x=bar_df2["label"],y=bv2,marker_color=FFPB_SAND,text=[f"{x:+.2f}%" if pd.notna(x) else "" for x in bv2],textposition="outside",textfont=dict(size=11,color="white"),cliponaxis=False))
     fig.add_hline(y=0,line_color="white",line_width=1)
     av=[]
     for c in [cp1]+([f"{label_2} (nach Kosten)"] if label_2 else []):
@@ -265,8 +265,8 @@ def build_bar_chart(bar_df1, label_1, bench_name_1, bar_df2=None, label_2=None, 
     ymi=min(av)*1.45 if av and min(av)<0 else -2; yma=max(av)*1.45 if av and max(av)>0 else 2
     fig.update_layout(title=dict(text=f"<b>{title}</b>",font=dict(size=13,color="white"),x=0,xanchor="left"),
         paper_bgcolor=BG,plot_bgcolor=BG,barmode="group",bargap=0.28,bargroupgap=0.05,height=480,
-        xaxis=dict(tickfont=dict(color="white",size=12),showgrid=False,zeroline=False,linecolor="#3A5A7C"),
-        yaxis=dict(range=[ymi,yma],tickformat=".1f",ticksuffix="%",tickfont=dict(color="white",size=11),gridcolor="#2A4A6C",zeroline=False),
+        xaxis=dict(tickfont=dict(color="white",size=12),showgrid=False,zeroline=False,linecolor="#1A4880"),
+        yaxis=dict(range=[ymi,yma],tickformat=".1f",ticksuffix="%",tickfont=dict(color="white",size=11),gridcolor="#0A4576",zeroline=False),
         legend=dict(font=dict(color="white",size=11),bgcolor="rgba(0,0,0,0)",orientation="h",y=-0.18),
         margin=dict(t=55,b=75,l=65,r=25))
     return fig
@@ -331,7 +331,8 @@ def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds,
 # PDF helpers for performance
 def _mpl_line_chart(x_dates, traces, y_label, title, use_volume, startwert=100.0):
     fig,ax=plt.subplots(figsize=(10,4.5)); fig.patch.set_facecolor(FFPB_DARK); ax.set_facecolor(FFPB_DARK)
-    colors=[FFPB_GOLD,FFPB_BLUE2,"#E8A838","#5BA0D0",FFPB_LIGHT,"#7FB5D5","#C4C4C4","#F0C070"]
+    # FFPB_PALETTE[0] = Fuggerblau = Hintergrund → würde unsichtbar; deshalb ab Index 1.
+    colors=FFPB_PALETTE[1:]
     for i,(l,y) in enumerate(traces): ax.plot(x_dates,y,label=l,color=colors[i%len(colors)],linewidth=1.3)
 
     # Endwerte am rechten Rand jeder Linie
@@ -351,9 +352,9 @@ def _mpl_line_chart(x_dates, traces, y_label, title, use_volume, startwert=100.0
     ax.set_ylabel(y_label,color="white",fontsize=9); ax.tick_params(colors="white",labelsize=8)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m.%Y")); ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     fig.autofmt_xdate(rotation=30)
-    for s in ax.spines.values(): s.set_color("#3A5A7C")
-    ax.grid(axis="y",color="#2A4A6C",linewidth=0.5)
-    ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#3A5A7C",labelcolor="white",loc="upper left")
+    for s in ax.spines.values(): s.set_color("#1A4880")
+    ax.grid(axis="y",color="#0A4576",linewidth=0.5)
+    ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#1A4880",labelcolor="white",loc="upper left")
     if use_volume: ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:,.0f} €"))
     buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=180,bbox_inches="tight",facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
 
@@ -367,9 +368,9 @@ def _mpl_drawdown_chart(x_dates, traces, title, use_volume):
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m.%Y")); fig.autofmt_xdate(rotation=30)
     if use_volume: ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:,.0f} €"))
     else: ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:.0%}"))
-    for s in ax.spines.values(): s.set_color("#3A5A7C")
-    ax.grid(axis="y",color="#2A4A6C",linewidth=0.5)
-    ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#3A5A7C",labelcolor="white")
+    for s in ax.spines.values(): s.set_color("#1A4880")
+    ax.grid(axis="y",color="#0A4576",linewidth=0.5)
+    ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#1A4880",labelcolor="white")
     buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=180,bbox_inches="tight",facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
 
 def _mpl_bar_chart(bar_df, label, bench_name, title):
@@ -388,8 +389,8 @@ def _mpl_bar_chart(bar_df, label, bench_name, title):
     ax.set_xticks(x); ax.set_xticklabels(labels,fontsize=8,color="white",rotation=30,ha="right")
     ax.set_title(title,color="white",fontsize=10,fontweight="bold",loc="left"); ax.axhline(y=0,color="white",linewidth=0.5)
     ax.tick_params(colors="white",labelsize=8); ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:.1f}%"))
-    for s in ax.spines.values(): s.set_color("#3A5A7C")
-    ax.grid(axis="y",color="#2A4A6C",linewidth=0.5); ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#3A5A7C",labelcolor="white")
+    for s in ax.spines.values(): s.set_color("#1A4880")
+    ax.grid(axis="y",color="#0A4576",linewidth=0.5); ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#1A4880",labelcolor="white")
     buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=180,bbox_inches="tight",facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
 
 def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, bench_text_1, bench_text_2,
