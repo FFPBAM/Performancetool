@@ -173,6 +173,60 @@ Diese Logik wird in diesem Projekt schon länger bei `to_decimal_interval()` fü
 
 ---
 
+### 10. Plotly Default-Farben überschreiben: `colorway` im Layout
+
+**Situation:** Ein Plotly-Chart mit mehreren Traces (Linien, Balken, Bereiche) soll Corporate-Farben statt der Plotly-Standard-Palette (Blau/Rot/Grün/Lila) nutzen.
+
+**Falle (umständlicher Weg):** Jedem `go.Scatter(...)` oder `go.Bar(...)` einzeln `marker_color=...` oder `line=dict(color=...)` setzen. Bei 5-10 Traces ist das fehleranfällig (Index-Fehler, vergessene Trace) und unübersichtlich.
+
+**Lösung:** Einmal `colorway` im Layout setzen — Plotly weist Traces dann automatisch in der gegebenen Reihenfolge zu:
+
+```python
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=x, y=y1, name="Portfolio 1"))
+fig.add_trace(go.Scatter(x=x, y=y2, name="Portfolio 2"))
+fig.add_trace(go.Scatter(x=x, y=y3, name="Benchmark"))
+
+fig.update_layout(colorway=FFPB_PALETTE)  # ← eine Zeile, fertig
+```
+
+`y1` bekommt `FFPB_PALETTE[0]` (Fuggerblau), `y2` `FFPB_PALETTE[1]` (Fuggergold), `y3` `FFPB_PALETTE[2]` (Mittelblau) etc. Bei mehr als 15 Traces (extrem unwahrscheinlich) wird zyklisch von vorne durchlaufen.
+
+**Achtung bei dunklen Hintergründen:** Wenn der Plot-Hintergrund Fuggerblau ist (z.B. der Balken-Chart `paper_bgcolor=FFPB_DARK`), wäre die erste Palette-Farbe unsichtbar. Lösung: `colorway=FFPB_PALETTE[1:]` oder explizite `marker_color`-Zuweisung pro Trace.
+
+**Implementiert in diesem Projekt:** `streamlit_app.py` Hauptlinien-Chart (Z. 874), Drawdown-Chart Euro/% (Z. 898, 902). PDF-matplotlib-Charts nutzen `FFPB_PALETTE[1:]` aus dem gleichen Grund (Hintergrund-Skip).
+
+---
+
+### 11. Import-Änderungen brauchen IMMER gleichzeitiges Deployment der referenzierten Datei
+
+**Situation:** Du erweiterst den Import in Datei A:
+```python
+# A.py
+from B import KONSTANTE_ALT, KONSTANTE_NEU  # KONSTANTE_NEU neu hinzugefügt
+```
+Und definierst `KONSTANTE_NEU` in `B.py`.
+
+**Falle:** Wenn du nur `A.py` ins Repo pushst aber `B.py` vergisst (oder die alte Version von B oben drüber lädst), crasht die App beim Start mit `ImportError: cannot import name 'KONSTANTE_NEU' from 'B'`.
+
+**Klingt trivial.** Ist in der Praxis aber **DER häufigste Deployment-Fehler**, weil:
+- Die ältere Datei lokal im Editor-Cache "richtig aussieht"
+- Der Push-Workflow (z.B. Drag-and-Drop in GitHub Desktop) übersieht stille Dateien
+- Streamlit Cloud zeigt nur den Crash, nicht welche Datei nicht-aktuell ist
+- Mehrfaches "Reboot app" ändert nichts (die Datei IST falsch im Repo)
+
+**Lösungen:**
+
+1. **Vor jedem Commit ein Pärchen-Check:** Wenn ein Import-Block einer Datei geändert wurde, kontrollieren ob alle referenzierten Module wirklich gleichzeitig aktualisiert wurden.
+
+2. **GitHub Web-Editor als Notfall-Workflow:** Falls lokaler Datei-Sync hängt, direkt im Browser unter `github.com/<user>/<repo>/blob/main/<datei>` über das Bleistift-Icon editieren. Umgeht jeden lokalen Upload-Stolperstein.
+
+3. **Bei ImportError zuerst in den App-Logs nachschauen:** Streamlit Cloud-Logs (`Manage app` → Logs) zeigen den genauen Namen, der nicht importiert werden kann. Daraus ist sofort klar welche Datei fehlt/falsch ist.
+
+**Real passiert in diesem Projekt (Juni 2026, Corporate Colors Migration):** `streamlit_app.py` wurde mit neuem Import auf `FFPB_SAND, FFPB_PALETTE` gepusht, `shared.py` lag aber noch in der alten Version im Repo. Vier "Reboot app" später war klar dass die `shared.py`-Datei lokal nicht ersetzt worden war. Fix: über GitHub Web-Editor direkt online editiert.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 aktiven Tabs.
@@ -241,20 +295,45 @@ shared.py ──→ streamlit_app.py (Tab 1 inline + importiert Tab 2)
 
 ## 4. Corporate Design
 
-| Farbe | Hex | Verwendung |
-|---|---|---|
-| Fuggerblau | #003460 | Ring-Charts, Überschriften, größtes Segment |
-| Fuggergold | #C3A069 | Akzent, zweites Segment, Fälligkeit |
-| Mittelblau | #4A7FAA | Drittes Segment |
-| Sand | #D4BD8A | Viertes Segment |
-| Hellblau | #7FABC8 | Fünftes Segment |
+**Seit Juni 2026 nutzen beide Tabs durchgängig die offiziellen Fürst Fugger Privatbank Corporate Colors.**
+Single source of truth ist `modules/shared.py` — dort sind alle 5 Hauptfarben + erweiterte 15er-Sequenz als Konstanten definiert. Alle anderen Module importieren von dort.
+
+### Hauptfarben (Konstanten in `shared.py`)
+
+| Konstante | Hex | Name | Hauptverwendung |
+|---|---|---|---|
+| `FFPB_DARK` | #003460 | Fuggerblau | PDF-Headlines, Tabellen-Kopfzeile, Balken-Chart Hintergrund, Ring-Chart größtes Segment |
+| `FFPB_GOLD` | #C3A069 | Fuggergold | Akzent, Portfolio-Balken, Fälligkeits-Balken, Ring-Chart zweites Segment |
+| `FFPB_BLUE2` | #4A7FAA | Mittelblau | Portfolio 2 (Vergleich), Ring-Chart drittes Segment |
+| `FFPB_SAND` | #D4BD8A | Sand | Benchmark 2 (Vergleich), Ring-Chart viertes Segment |
+| `FFPB_LIGHT` | #7FABC8 | Hellblau | Benchmark, Ring-Chart fünftes Segment |
+
+### Erweiterte 15er-Sequenz für Linien-Charts (`FFPB_PALETTE`)
 
 ```python
-RING_COLORS = ["#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8", ...]
-TOP5_COLORS = ["#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8"]
+FFPB_PALETTE = [
+    "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",   # Hauptfarben
+    "#8B7340", "#A8CBE8", "#5C6B3C", "#E8D5B0", "#2C5F8A",   # Erweiterung 1
+    "#C4C4C4", "#3A7CA5", "#F0C070", "#6A9BC3", "#2A4A6C",   # Erweiterung 2
+]
 ```
 
-Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GOLD=#B8973A`
+**Verwendung:**
+- **Plotly Linien-Charts (Tab 1):** `fig.update_layout(colorway=FFPB_PALETTE)` — Plotly weist Traces automatisch in dieser Reihenfolge zu (siehe Transferwissen #10).
+- **PDF Linien-Chart matplotlib:** `FFPB_PALETTE[1:]` (Index 0 = Fuggerblau = Hintergrund → würde unsichtbar; deshalb ab Index 1 starten).
+- **Portfolioanalyse `RING_COLORS`:** Identische 15-Werte-Sequenz, in `modules/portfolioanalyse.py` separat definiert (historisch gewachsen, könnte langfristig auf `FFPB_PALETTE` zusammengeführt werden).
+
+### Spines & Gridlines (PDF/Plotly auf dunklem Hintergrund)
+
+Bei Balken-/Linien-Charts mit Fuggerblau-Hintergrund:
+- **Spines (Achsen-Linien):** `#1A4880` (heller als BG, dezent sichtbar)
+- **Gridlines:** `#0A4576` (sehr subtil, deutet nur an)
+
+Diese Werte sind hartcodiert in `streamlit_app.py` (vier Stellen: Plotly-Balken-Chart, PDF-Linien-, PDF-Drawdown-, PDF-Bar-Chart) und konsistent mit der Hintergrundfarbe `FFPB_DARK` abgestimmt.
+
+### Historischer Kontext
+
+Vor Juni 2026 nutzte das Performance-Tool ein eigenes, ähnliches aber nicht identisches Farb-Set (`#1B3A5C` als FFPB_DARK, `#B8973A` als FFPB_GOLD, etc.). Die Portfolioanalyse hatte schon vorher die Corporate Colors als hartcodierte Werte in `RING_COLORS`. Im Juni 2026 wurde **shared.py auf Corporate umgestellt** (Strategie A: Konstanten umdefinieren statt neue anlegen), damit beide Tabs durchgängig dasselbe Design haben. Dies betraf zusätzlich die PDF-Header/Tabellenkopfzeilen der Portfolioanalyse (Fuggerblau statt Dunkelblau-Annäherung).
 
 ---
 
@@ -334,7 +413,7 @@ Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GO
 - Glossar (11 Begriffe): Auflagedatum, CAGR, Vola, Calmar, **Sharpe Ratio**, **Ø Risikofreier Zins p.a. (Zeitraum)**, Max DD, Recovery, Längste DD-Phase, Benchmark, Vor/Nach Kosten
 
 ### Disclaimer-Wording
-*"Alle Berechnungen sind unverbindlich und **erfolgen** ohne Gewähr."*
+*"Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr."*
 
 ---
 
@@ -345,7 +424,7 @@ Alte Performance-Chart Farben (noch in shared.py): `FFPB_DARK=#1B3A5C`, `FFPB_GO
 - YTD: Spalten ausgeschrieben (Wertpapier-Performance/Performancebeitrag), Caption erklärt beide
 - PDF (aktuell reportlab): Ring-Charts kompakter (100×85mm), intelligente Spaltenbreiten
 - **Geplant: Umstellung auf PowerPoint (python-pptx)**
-- Disclaimer: "Alle Angaben **erfolgen** ohne Gewähr."
+- Disclaimer: *"Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr."*
 
 ---
 
@@ -355,8 +434,10 @@ Beide Tabs: Hinweis + Quelle oben, Disclaimer unten, in PDFs als eigene Seite.
 
 | Tab | Schlüsselsatz |
 |---|---|
-| Performance | "Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr." |
-| Portfolioanalyse | "Alle Angaben erfolgen ohne Gewähr." |
+| Performance | "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr." |
+| Portfolioanalyse | "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr." |
+
+**Wording-Historie:** Bis Mai 2026 hieß es "im Beratungsgespräch". Im Juni 2026 wurde dies — in Abstimmung mit Compliance — auf das aktuelle Wording umgestellt, um klarzustellen, dass die Tools nur im Rahmen der Vermögensverwaltung zur Veranschaulichung dienen (nicht zur Anlageberatung).
 
 Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
 
@@ -439,6 +520,25 @@ Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_
 ---
 
 ## 12. Changelog
+
+### Juni 2026 – Performance-Tab auf Corporate Colors umgestellt
+- **Strategie A:** Konstanten in `shared.py` direkt umdefiniert (single source of truth)
+- `FFPB_DARK`: `#1B3A5C` → `#003460` (Fuggerblau)
+- `FFPB_GOLD`: `#B8973A` → `#C3A069` (Fuggergold)
+- `FFPB_LIGHT`: `#A8CBE8` → `#7FABC8` (Hellblau)
+- `FFPB_BLUE2`: `#2C5F8A` → `#4A7FAA` (Mittelblau)
+- Neue Konstanten: `FFPB_SAND = "#D4BD8A"` und `FFPB_PALETTE` (15-Farben-Sequenz analog zu Portfolioanalyse `RING_COLORS`)
+- `streamlit_app.py`: Plotly-Balken-Chart (BG + 4 Balkenfarben + Achsen-Linien) auf Konstanten; PDF-Linien/Drawdown/Bar-Charts auf neue Konstanten + neue Spines/Grid-Werte (`#1A4880`/`#0A4576`)
+- **Plotly-Linien-Charts** (Hauptchart Performance, Drawdown Euro/%): nutzen jetzt `fig.update_layout(colorway=FFPB_PALETTE)` — siehe Transferwissen #10
+- **PDF-Linien-Chart** matplotlib: `colors=FFPB_PALETTE[1:]` (Skip Index 0 weil = Hintergrund-Farbe Fuggerblau)
+- Portfolioanalyse-PDF-Header/Tabellenkopfzeilen profitieren automatisch (nutzen `FFPB_DARK` aus shared.py)
+- Doku: Abschnitt 4 (Corporate Design) komplett neu — Hauptfarben-Tabelle + Palette + Spines/Grid + historischer Kontext
+- Transferwissen #10 (Plotly `colorway`) und #11 (Import-Pärchen-Deployment) ergänzt
+
+### Juni 2026 – Disclaimer-Wording auf Vermögensverwaltung
+- **Compliance-Abstimmung:** "im Beratungsgespräch" → "der Vermögensverwaltungsstrategien im Kundengespräch"
+- 4 Stellen geändert: `streamlit_app.py` Performance UI + PDF, `portfolioanalyse.py` UI + PDF
+- Doku: Abschnitt 7 (Performance), 8 (Portfolioanalyse), 9 (Disclaimers-Tabelle) auf neues Wording
 
 ### Juni 2026 – Tab "Portfolio zusammenstellen" deaktiviert
 - **Compliance-Entscheidung:** Berater dürfen den freien Portfolio-Builder nicht nutzen
