@@ -184,6 +184,7 @@ def csv_name_to_display(csv_name: str, name_mapping: pd.DataFrame) -> str:
         return match.iloc[0]
     return csv_name
 
+
 # ---------------------------------------------------------------------------
 # Logo Helper
 # ---------------------------------------------------------------------------
