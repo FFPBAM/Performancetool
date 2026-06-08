@@ -50,6 +50,22 @@ SHAPE_CHART_RIGHT = "C_Kennzahlen2"        # Rechtes Ring-Diagramm (Slide 9)
 SHAPE_TITLE = "Titel"
 SHAPE_TITLE_ALT = "Titel 2"
 
+# Strategieentwurf-Titel für Slide 7 (Email-Anforderung Juni 2026, Compliance)
+# Ersetzt den dynamischen "Anlagevorschlag – <Strategie>"-Titel ausschließlich
+# auf Slide 7. Slide 8 (zweite Anlagevorschlag-Folie) behält den dynamischen Titel.
+STRATEGIEENTWURF_TITLE = "Strategieentwurf im Rahmen einer Vermögensverwaltung"
+
+# Foliennummer-Shape-Namen (uneinheitlich in der Vorlage):
+# - Die meisten Slides nutzen "Foliennummer"
+# - Slides 7, 8, 10 nutzen "Foliennummernplatzhalter 1" (anderer Layout-Master)
+# Slides ohne eines dieser Shapes (Cover, Sub-Cover, Impressum) behalten keine Seitenzahl.
+SHAPE_FOLIENNUMMER_NAMES = (
+    "Foliennummer",
+    "Foliennummernplatzhalter 1",
+    "Slide Number",
+    "Folienzahl",
+)
+
 
 # ---------------------------------------------------------------------------
 # Strategienamen-Konvertierung
@@ -837,10 +853,12 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
 
     # 3. Slide 7 befüllen
     slide_7 = prs.slides[slide_7_idx]
-    # Titel
+    # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance)
+    # WICHTIG: Nur auf Slide 7 — Slide 8 behält den dynamischen "Anlagevorschlag – <Strategie>"-Titel.
+    # Begründung: Klare Compliance-Auszeichnung als Strategieentwurf, kein Anlageberatungs-Charakter.
     title = _find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or _find_shape_by_name(slide_7, SHAPE_TITLE)
     if title:
-        _replace_text_in_shape(title, f"Anlagevorschlag – {strategy_name}")
+        _replace_text_in_shape(title, STRATEGIEENTWURF_TITLE)
     # Ring-Chart
     chart = _find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
     if chart:
@@ -1089,6 +1107,32 @@ def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy
 
 
 # ---------------------------------------------------------------------------
+# Foliennummern dynamisch setzen
+# ---------------------------------------------------------------------------
+def _update_slide_numbers(prs):
+    """
+    Setzt die Foliennummer auf jeder Slide auf die korrekte 1-indexed Position.
+
+    HINTERGRUND:
+    Die Vorlage hat statische Seitenzahlen (Slides 7-9 zeigen z.B. "13"-"15",
+    weil der Designer eine Lücke für dynamische Folien angenommen hat). Nach
+    Add/Remove/Duplicate-Operationen stimmen diese Werte nicht mehr — daher
+    nach allen Slide-Manipulationen einmal alle Foliennummern auf die korrekte
+    Position überschreiben.
+
+    Slides ohne Foliennummer-Shape (Cover, Sub-Cover, Impressum) bleiben
+    unverändert — das ist gewollt: solche Slides sollen keine Seitenzahl tragen.
+
+    Sollte als LETZTER Schritt vor `prs.save()` aufgerufen werden.
+    """
+    for idx, slide in enumerate(prs.slides, start=1):
+        for shape in slide.shapes:
+            if shape.name in SHAPE_FOLIENNUMMER_NAMES and shape.has_text_frame:
+                _replace_text_in_shape(shape, str(idx))
+                break
+
+
+# ---------------------------------------------------------------------------
 # Slide entfernen (Slide 10 Währungen wird weggelassen)
 # ---------------------------------------------------------------------------
 def _remove_slide(prs, slide_idx: int):
@@ -1137,9 +1181,14 @@ def generate_portfolioanalyse_pptx(
     """
     prs = _load_template()
 
-    # Slide 10 (Währungen) entfernen - wir haben keine Währungs-Daten
-    # 0-indexed: Slide 10 = Index 9
-    _remove_slide(prs, 9)
+    # In der Vorlage_FFPB.pptx (v2) gibt es nach Slide 9 (Zusammenstellung) zwei
+    # Slides, die für den Portfolioanalyse-Export NICHT relevant sind:
+    #   Slide 10 (Index 9):  Performance-Vorlage (für Performance-Tab — B2-Prinzip)
+    #   Slide 11 (Index 10): Währungen (keine Daten dafür)
+    # Beide entfernen. Erst Performance-Vorlage (Index 9), dann rutscht
+    # die Währungen-Slide auf Index 9 → nochmal entfernen.
+    _remove_slide(prs, 9)  # Performance-Vorlage entfernen
+    _remove_slide(prs, 9)  # Währungen entfernen (jetzt an Index 9)
     # Nach dem Entfernen: Save/Load-Zyklus um interne Slide-IDs aufzuräumen
     # (verhindert 'Duplicate name' Warnungen beim späteren Speichern)
     prs = _save_and_reload(prs)
@@ -1205,6 +1254,11 @@ def generate_portfolioanalyse_pptx(
 
     else:
         raise ValueError(f"Erwarte 1 oder 2 Portfolios, erhalten: {len(portfolios)}")
+
+    # Foliennummern dynamisch setzen (NACH allen Add/Remove/Duplicate-Operationen,
+    # VOR dem Speichern). Korrigiert die statischen Werte aus der Vorlage
+    # (Slide 7 hat z.B. "13", soll aber "7" sein nach Renumber).
+    _update_slide_numbers(prs)
 
     # Speichern
     buf = io.BytesIO()
