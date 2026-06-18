@@ -787,6 +787,15 @@ def _distribute_positions_to_slides(groups: dict) -> list:
 
     slide_8_rows.extend(all_rows[split_at:])
 
+    # Wenn Slide 8 leer bleibt, wandert die Summenzeile zu Slide 7
+    # (sonst wäre die 100,00%-Zeile unsichtbar)
+    slide_8_is_empty = len(slide_8_rows) == 0
+    if slide_8_is_empty:
+        return [
+            {"rows": slide_7_rows, "is_last_slide": True},   # Slide 7 zeigt die Summe
+            {"rows": [], "is_last_slide": False},            # Slide 8 bleibt komplett leer
+        ]
+
     return [
         {"rows": slide_7_rows, "is_last_slide": False},
         {"rows": slide_8_rows, "is_last_slide": True},
@@ -951,7 +960,9 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     if table_shape:
         _fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
                                    shape_height=table_shape.height)
-        # NACH dem Befüllen: Shape-Höhe an tatsächliche Zeilen-Summe anpassen
+        # Leere Zeilen entfernen (Striche unter der Tabelle eliminieren)
+        _remove_empty_table_rows(table_shape.table)
+        # NACH dem Befüllen + Bereinigen: Shape-Höhe an verbleibende Zeilen anpassen
         _fit_shape_to_table(table_shape)
 
     # 4. Slide 8 befüllen
@@ -969,7 +980,54 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     if table_shape:
         _fill_table_with_positions(table_shape.table, slide_distribution[1], total_weight,
                                    shape_height=table_shape.height)
+        _remove_empty_table_rows(table_shape.table)
         _fit_shape_to_table(table_shape)
+
+
+def _remove_empty_table_rows(table):
+    """
+    Entfernt leere Daten-Zeilen aus der Tabelle. Header und gefüllte Zeilen bleiben.
+
+    Eine Zeile gilt als 'leer' wenn alle relevanten Daten-Spalten leer sind
+    (WERTPAPIER, KUPON, FÄLLIGKEIT, WKN, ANTEIL, RATING).
+
+    Wird nach _fill_table_with_positions aufgerufen um die hässlichen Striche
+    unterhalb der echten Positionen zu eliminieren. Die Summenzeile bleibt
+    erhalten wenn sie befüllt ist (enthält "100,00%"), sonst wird auch sie
+    entfernt.
+
+    WICHTIG: Anschließend muss _fit_shape_to_table aufgerufen werden, damit
+    die Tabellen-Shape-Höhe an die jetzt geringere Zeilenanzahl angepasst wird
+    (sonst stretcht LibreOffice die verbleibenden Zeilen).
+    """
+    n_rows = len(table.rows)
+    if n_rows <= 1:
+        return
+
+    indices_to_remove = []
+    for i in range(1, n_rows):  # Header (Zeile 0) immer behalten
+        row = table.rows[i]
+        is_empty = True
+        for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
+            text = row.cells[col_idx].text_frame.text.strip()
+            # NBSP wird auch als leer betrachtet
+            if text and text != "\u00a0":
+                is_empty = False
+                break
+        if is_empty:
+            indices_to_remove.append(i)
+
+    if not indices_to_remove:
+        return
+
+    # Aus dem XML entfernen — rückwärts, damit Indizes vorderer Zeilen stabil bleiben
+    from pptx.oxml.ns import qn
+    tbl_elem = table._tbl
+    tr_elements = tbl_elem.findall(qn('a:tr'))
+
+    for idx in sorted(indices_to_remove, reverse=True):
+        tr_to_remove = tr_elements[idx]
+        tbl_elem.remove(tr_to_remove)
 
 
 def _fit_shape_to_table(table_shape):
