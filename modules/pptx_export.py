@@ -529,10 +529,10 @@ def _group_portfolio_positions(df: pd.DataFrame) -> dict:
         }
         groups[gruppe].append(pos)
 
-    # Nach Gewicht absteigend sortieren innerhalb jeder Gruppe
-    # WICHTIG: _safe_float stellt sicher dass alle Keys saubere floats sind
+    # Innerhalb jeder Gruppe alphabetisch nach Wertpapier-Name sortieren
+    # (anstelle der früheren Sortierung nach Gewicht — auf Wunsch des Anforderers, Juni 2026)
     for g in groups:
-        groups[g] = sorted(groups[g], key=lambda p: _safe_float(p["gewicht"], 0.0), reverse=True)
+        groups[g] = sorted(groups[g], key=lambda p: str(p["wertpapier"]).lower())
 
     # Liquidität aus Differenz berechnen (falls nicht explizit in Daten)
     if "Gewicht" in df.columns:
@@ -855,10 +855,10 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     slide_7 = prs.slides[slide_7_idx]
     # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance)
     # WICHTIG: Nur auf Slide 7 — Slide 8 behält den dynamischen "Anlagevorschlag – <Strategie>"-Titel.
-    # Begründung: Klare Compliance-Auszeichnung als Strategieentwurf, kein Anlageberatungs-Charakter.
+    # Format: "Strategieentwurf im Rahmen einer Vermögensverwaltung - <Strategiename>"
     title = _find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or _find_shape_by_name(slide_7, SHAPE_TITLE)
     if title:
-        _replace_text_in_shape(title, STRATEGIEENTWURF_TITLE)
+        _replace_text_in_shape(title, f"{STRATEGIEENTWURF_TITLE} - {strategy_name}")
     # Ring-Chart
     chart = _find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
     if chart:
