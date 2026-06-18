@@ -458,6 +458,29 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
+def _safe_marktrisikowert(value) -> str:
+    """
+    Konvertiert einen Wert aus der CSV-Spalte 'Marktrisikowert' zu einem String.
+    Fallback zu '-' wenn None, NaN, leer, oder ungültiger Typ.
+    Float-Werte werden als Integer dargestellt (3.0 → '3'), damit in der
+    Tabelle keine Nachkommastellen erscheinen.
+    """
+    if value is None:
+        return "-"
+    try:
+        if pd.isna(value):
+            return "-"
+    except (TypeError, ValueError):
+        pass
+    # Versuch: als ganze Zahl darstellen (3.0 → '3')
+    try:
+        return str(int(float(value)))
+    except (ValueError, TypeError):
+        # Fallback: String trimmen
+        s = str(value).strip()
+        return s if s else "-"
+
+
 def _classify_gattung(gattung) -> str:
     """Ordnet eine Gattung einer der 5 Hauptgruppen zu."""
     if gattung is None:
@@ -525,7 +548,7 @@ def _group_portfolio_positions(df: pd.DataFrame) -> dict:
             "gewicht": gewicht,
             "kupon": row.get("Kupon"),  # kann NaN sein, wird beim Formatieren behandelt
             "faelligkeit": row.get("Fälligkeit_parsed") if "Fälligkeit_parsed" in row.index else None,
-            "rating": "-",  # TODO: bei Bedarf echtes Rating
+            "rating": _safe_marktrisikowert(row.get("Marktrisikowert")),  # CSV-Spalte 'Marktrisikowert' (3-6), Fallback '-'
         }
         groups[gruppe].append(pos)
 
