@@ -458,6 +458,65 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
+def _set_title_with_autoscale(title_shape, text: str):
+    """
+    Setzt den Titel-Text auf Folie 7 und passt die Schriftgröße dynamisch
+    an die Textlänge an, damit der gesamte Titel auf EINE Zeile passt.
+
+    Hintergrund:
+    Die Titel-Box ist nur ~0.39" hoch (1 Zeile) und ~10.67" breit.
+    Bei langem Strategienamen würde der Text in 2 Zeilen umbrechen.
+
+    Strategie (kombiniert):
+    1. Manuelle, aggressive Schwellen (empirisch kalibriert in Juni 2026)
+    2. Auto-Fit als zusätzliche Sicherheit (PowerPoint skaliert ggf. nach)
+
+    Schwellen (für Standard-Bold-Schrift, 10.67" Box-Breite):
+    - ≤ 66 Zeichen → Layout-Default (~32 pt)
+    - 67-72 Zeichen → 26 pt
+    - 73-80 Zeichen → 22 pt
+    - 81-88 Zeichen → 20 pt
+    - 89-96 Zeichen → 18 pt
+    - 97-108 Zeichen → 16 pt
+    - > 108 Zeichen → 14 pt
+    """
+    # Text setzen (existierender Helper)
+    _replace_text_in_shape(title_shape, text)
+
+    # Schriftgröße basierend auf Textlänge
+    char_count = len(text)
+    if char_count <= 66:
+        font_size_pt = None  # Layout-Default beibehalten
+    elif char_count <= 72:
+        font_size_pt = 26
+    elif char_count <= 80:
+        font_size_pt = 22
+    elif char_count <= 88:
+        font_size_pt = 20
+    elif char_count <= 96:
+        font_size_pt = 18
+    elif char_count <= 108:
+        font_size_pt = 16
+    else:
+        font_size_pt = 14
+
+    tf = title_shape.text_frame
+
+    if font_size_pt is not None:
+        for para in tf.paragraphs:
+            for run in para.runs:
+                run.font.size = Pt(font_size_pt)
+
+    # Auto-Fit aktivieren als Sicherheits-Netz
+    # PowerPoint reduziert die Schriftgröße weiter, falls der Text immer noch nicht passt.
+    try:
+        from pptx.enum.text import MSO_AUTO_SIZE
+        tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+        tf.word_wrap = True
+    except Exception:
+        pass  # Nicht verfügbar in alten python-pptx-Versionen
+
+
 def _safe_marktrisikowert(value) -> str:
     """
     Konvertiert einen Wert aus der CSV-Spalte 'Marktrisikowert' zu einem String.
@@ -879,9 +938,10 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance)
     # WICHTIG: Nur auf Slide 7 — Slide 8 behält den dynamischen "Anlagevorschlag – <Strategie>"-Titel.
     # Format: "Strategieentwurf im Rahmen einer Vermögensverwaltung - <Strategiename>"
+    # Schriftgröße wird dynamisch angepasst, damit der Titel auf eine Zeile passt.
     title = _find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or _find_shape_by_name(slide_7, SHAPE_TITLE)
     if title:
-        _replace_text_in_shape(title, f"{STRATEGIEENTWURF_TITLE} - {strategy_name}")
+        _set_title_with_autoscale(title, f"{STRATEGIEENTWURF_TITLE} - {strategy_name}")
     # Ring-Chart
     chart = _find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
     if chart:
