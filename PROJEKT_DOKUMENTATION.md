@@ -1,9 +1,9 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: Juni 2026
+## Stand: Juni 2026 (Phase 2: Performance-PPTX-Export implementiert)
 
 ---
 
-## ⚠️ TRANSFERWISSEN: Streamlit-Fallen (gilt für JEDES Streamlit-Projekt)
+## ⚠️ TRANSFERWISSEN: Streamlit- und Office-Fallen (gilt für JEDES Streamlit/PPTX-Projekt)
 
 ### 1. CSS Font-Override zerstört Streamlit Icons
 
@@ -169,8 +169,6 @@ Diese Logik wird in diesem Projekt schon länger bei `to_decimal_interval()` fü
 
 **Validiert in diesem Projekt:** Mit echter 17-Jahres-Zeitreihe (2008-2026) inkl. Negativzinsphase. Konstantes rf = -0,5% wird exakt als -0,5% zurückaggregiert.
 
-**Wichtig für UI/Beratung:** Bei Zeitraum-Auswahl die VOLLSTÄNDIG in der Negativzinsphase liegt (z.B. nur 2018-2020), zeigt die Caption `Ø Risikofreier Zins p.a. (Zeitraum): -0,25%` an. Das ist KEIN Bug, sondern die wirtschaftliche Realität jener Jahre.
-
 ---
 
 ### 10. Plotly Default-Farben überschreiben: `colorway` im Layout
@@ -193,8 +191,6 @@ fig.update_layout(colorway=FFPB_PALETTE)  # ← eine Zeile, fertig
 `y1` bekommt `FFPB_PALETTE[0]` (Fuggerblau), `y2` `FFPB_PALETTE[1]` (Fuggergold), `y3` `FFPB_PALETTE[2]` (Mittelblau) etc. Bei mehr als 15 Traces (extrem unwahrscheinlich) wird zyklisch von vorne durchlaufen.
 
 **Achtung bei dunklen Hintergründen:** Wenn der Plot-Hintergrund Fuggerblau ist (z.B. der Balken-Chart `paper_bgcolor=FFPB_DARK`), wäre die erste Palette-Farbe unsichtbar. Lösung: `colorway=FFPB_PALETTE[1:]` oder explizite `marker_color`-Zuweisung pro Trace.
-
-**Implementiert in diesem Projekt:** `streamlit_app.py` Hauptlinien-Chart (Z. 874), Drawdown-Chart Euro/% (Z. 898, 902). PDF-matplotlib-Charts nutzen `FFPB_PALETTE[1:]` aus dem gleichen Grund (Hintergrund-Skip).
 
 ---
 
@@ -227,6 +223,567 @@ Und definierst `KONSTANTE_NEU` in `B.py`.
 
 ---
 
+### 12. python-pptx `chart.replace_data()` ist VERSEUCHT — Bug-Trio bei Charts mit embedded Excel
+
+**Situation:** Du willst Chart-Daten in einer PPTX programmatisch ändern (Balken-Werte, Linien-Werte, Kategorien). Die Standard-Methode in python-pptx ist `chart.replace_data(CategoryChartData)`.
+
+**Falle (drei zusammenhängende Bugs):** Wenn der Chart ein **embedded Excel-Workbook** hat (das ist bei aus PowerPoint exportierten Vorlagen-Charts der Standard), passiert beim `replace_data()`:
+
+1. **Embedded Excel wird NICHT aktualisiert.** Die XML-Daten werden geändert, das eingebettete `Microsoft_Excel_Worksheet1.xlsx` behält aber die alten Vorlagen-Werte. PowerPoint erkennt die Diskrepanz → "**Datei muss repariert werden**"-Dialog → die Folie wird beschädigt oder verschwindet.
+
+2. **`style*.xml` wird mit Binärmüll überschrieben.** Konkret: die Chart-Style-Datei (z.B. `ppt/charts/style7.xml`) wird VOR `replace_data()` ein gültiges `<cs:chartStyle ...>` XML — und NACH `replace_data()` ein **ZIP-Header** (`PK\x03\x04...`). python-pptx schreibt aus Versehen ZIP-Inhalt in den falschen Pfad. Auch das löst den Reparieren-Dialog aus.
+
+3. **Format-Codes der Daten-Labels werden auf `"General"` zurückgesetzt.** Das Daten-Label das vorher `0.05` als `5,00%` angezeigt hat, zeigt jetzt `0.05` als Text — die Prozent-Formatierung ist weg. Visueller Schaden, aber nicht datei-zerstörend.
+
+**Diagnose:** Datei nach `replace_data()` öffnen mit:
+```python
+import zipfile
+with zipfile.ZipFile("output.pptx") as z:
+    for name in ["ppt/charts/style7.xml", "ppt/charts/style8.xml"]:
+        c = z.read(name)
+        if c[:2] == b"PK":
+            print(f"⚠️ KORRUPT: {name} hat ZIP-Header statt XML")
+```
+
+**Lösung — Backup-Restore Pattern:**
+
+```python
+def _replace_chart_data_safe(chart_shape, categories, series_data, data_label_format=None):
+    """
+    Workaround für 3 python-pptx-Bugs bei chart.replace_data() mit embedded Excel.
+    """
+    from pptx.chart.data import CategoryChartData
+    
+    chart = chart_shape.chart
+    chart_part = chart.part
+    
+    # ─── 1. Style/Color-Parts SICHERN ───
+    backup_parts = {}  # partname -> (part_obj, blob_bytes)
+    for rel_id, rel in chart_part.rels.items():
+        try:
+            reltype = rel.reltype
+        except Exception:
+            continue
+        if 'chartStyle' in reltype or 'chartColorStyle' in reltype:
+            try:
+                target = rel.target_part
+                backup_parts[str(target.partname)] = (target, bytes(target.blob))
+            except Exception:
+                pass
+    
+    # ─── 2. replace_data ausführen ───
+    cd = CategoryChartData()
+    cd.categories = categories
+    for name, vals in series_data:
+        cd.add_series(name, vals)
+    chart.replace_data(cd)
+    
+    # ─── 3. Style/Color-Parts WIEDERHERSTELLEN (Bug 2 Fix) ───
+    for partname, (part_obj, blob) in backup_parts.items():
+        try:
+            part_obj._blob = blob
+        except Exception:
+            pass
+    
+    # ─── 4. <c:externalData> entfernen (Bug 1 Fix) ───
+    # PowerPoint ignoriert dann das embedded Excel und nutzt nur die XML-Daten
+    ns = {"c": "http://schemas.openxmlformats.org/drawingml/2006/chart"}
+    chart_xml = chart._chartSpace
+    ext_data = chart_xml.find(".//c:externalData", ns)
+    if ext_data is not None:
+        ext_data.getparent().remove(ext_data)
+    
+    # ─── 5. Format-Code wiederherstellen (Bug 3 Fix) ───
+    if data_label_format:
+        _restore_data_label_format(chart_shape, data_label_format)
+
+
+def _restore_data_label_format(chart_shape, format_code: str):
+    """Setzt den Format-Code (z.B. '0.00%') in <c:dLbls><c:numFmt> jeder Series."""
+    from lxml import etree
+    ns_uri = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+    ns = {"c": ns_uri}
+    chart_xml = chart_shape.chart._chartSpace
+    
+    for ser in chart_xml.findall(".//c:ser", ns):
+        dlbls = ser.find("c:dLbls", ns)
+        if dlbls is None:
+            continue
+        num_fmt = dlbls.find("c:numFmt", ns)
+        if num_fmt is None:
+            num_fmt = etree.SubElement(dlbls, f"{{{ns_uri}}}numFmt")
+            dlbls.insert(0, num_fmt)
+        num_fmt.set("formatCode", format_code)
+        num_fmt.set("sourceLinked", "0")
+```
+
+**Validierung:** Vor/Nach dem Fix:
+
+```python
+# Vorher (KAPUTT):
+style7.xml: 5569 bytes, beginnt mit b'PK\x03\x04...'  ← ZIP-Müll!
+
+# Nachher (RESTORED):
+style7.xml: 9674 bytes, beginnt mit b'<cs:chartStyle xmlns:cs=...'  ← Korrektes XML
+```
+
+**Verwendet in diesem Projekt:** `modules/pptx_export.py` → `_replace_chart_data_safe()`. Beide Performance-Charts (Säulen + Linien) gehen durch diese Funktion.
+
+**Generelle Lesson:** Wenn eine populäre Bibliothek einen Bug hat den du nicht umgehen kannst → **Backup-Restore-Pattern** ist oft die schnellste Lösung. Statt den Bug zu fixen (kann Wochen dauern bis upstream merged ist), sicherst du den State vorher und stellst ihn hinterher wieder her. Funktioniert für `_blob`-Manipulation in python-pptx, könnte ähnlich für openpyxl oder python-docx funktionieren.
+
+---
+
+### 13. PPTX-Dateigröße optimieren: PNG → JPEG mit Alpha-Check
+
+**Situation:** Eine PPTX-Vorlage ist 22 MB groß und der Streamlit-Cloud-Download bricht mit `progress.html` ab. Ursache: 19 PNGs in der Vorlage à 1-2 MB.
+
+**Falle:** Naiv "alle PNGs zu JPEG konvertieren" zerstört Bilder die echte Transparenz haben (z.B. Logo-Freisteller, Icons). JPEG hat keinen Alpha-Channel — alles wird auf weißem Hintergrund "geflattet".
+
+**Lösung:** PNG-Bilder unterscheiden in:
+- **Fake-Alpha (min=255):** RGBA aber jedes Pixel ist voll opak → JPEG ohne Verlust möglich (~85% kleiner)
+- **Fast-opak (min≥192):** Sehr leichte Transparenz, optisch kaum wahrnehmbar → JPEG mit weißem Hintergrund OK
+- **Echtes Alpha (min<192, oft 0):** Echte Transparenz → MUSS PNG bleiben
+
+```python
+from PIL import Image
+import io
+
+def png_alpha_status(png_bytes):
+    """Returns: 'fake' / 'nearly_opak' / 'real' / 'no_alpha'"""
+    img = Image.open(io.BytesIO(png_bytes))
+    if img.mode != "RGBA":
+        return "no_alpha"
+    alpha = img.split()[-1]
+    min_alpha = alpha.getextrema()[0]
+    if min_alpha == 255:
+        return "fake"
+    if min_alpha >= 192:
+        return "nearly_opak"
+    return "real"
+
+def png_to_jpeg(png_bytes, quality=85):
+    img = Image.open(io.BytesIO(png_bytes))
+    if img.mode == "RGBA":
+        white_bg = Image.new("RGB", img.size, (255, 255, 255))
+        white_bg.paste(img, mask=img.split()[-1])
+        img = white_bg
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
+```
+
+**Beim PPTX modifizieren musst du dran denken:**
+
+1. Bild-Datei umbenennen: `ppt/media/imageN.png` → `ppt/media/imageN.jpeg`
+2. **`[Content_Types].xml`** updaten — Override-Pfad anpassen oder bei Default-Extensions sicherstellen dass `jpeg` registriert ist
+3. **Alle `.rels`-Dateien** durchsuchen die das Bild referenzieren → Pfad aktualisieren
+
+```python
+# ContentTypes: PNG-Override → JPEG-Pfad
+content = z.read("[Content_Types].xml").decode("utf-8")
+for img in TO_JPEG:
+    jpeg_img = img.replace(".png", ".jpeg")
+    content = content.replace(f"/ppt/media/{img}", f"/ppt/media/{jpeg_img}")
+
+# Alle .rels mit Bild-Referenz
+for name in z.namelist():
+    if name.endswith(".rels"):
+        rels = z.read(name).decode("utf-8")
+        for img in TO_JPEG:
+            jpeg_img = img.replace(".png", ".jpeg")
+            rels = rels.replace(f"media/{img}", f"media/{jpeg_img}")
+```
+
+**Validiert in diesem Projekt:** Original-Vorlage 22.7 MB → optimierte Vorlage 4.14 MB. **−82% Größe** ohne sichtbaren Qualitätsverlust. Streamlit-Cloud progress.html Problem gelöst.
+
+**Statistik der 19 konvertierten Bilder:** Alle hatten min-Alpha = 255 (fake), zusammen 17 MB → 1.8 MB als JPEG. Ohne erkennbaren visuellen Unterschied bei q=85.
+
+**Generelle Lesson:** Vor jeder PPTX-Optimierung — Inhalts-Inventur. Welche Bilder sind drin, wie groß, welche Alpha-Properties? Dann gezielt komprimieren. Erspart blindes Trial-and-Error.
+
+---
+
+### 14. Slide-Copy zwischen PPTX-Dateien (python-pptx kann das NICHT eingebaut)
+
+**Situation:** Du hast eine Master-PPTX mit einer ausgefeilten Folie (Charts, Tabellen, Layout) und möchtest **diese eine Folie** in eine andere PPTX einbauen — z.B. eine Corporate-Hauptvorlage um eine zusätzliche Folie ergänzen.
+
+**Falle:** python-pptx hat KEINE eingebaute "copy slide from another presentation"-Funktion. Naive Versuche (Slide-Objekt direkt zwischen Presentation-Instanzen kopieren) brechen die internen ID-Konsistenzen — Charts verlinken auf falsche Embeddings, Layout-References sind kaputt, ContentTypes inkonsistent.
+
+**Lösung — Recipe für sauberen Slide-Copy via ZIP-Manipulation:**
+
+**Phase 1: Inventur der Abhängigkeiten der Quell-Folie**
+
+Lies `master/slides/_rels/slideN.xml.rels` und folge ALLEN Targets:
+- `../charts/chartX.xml` (Charts)
+- `../slideLayouts/slideLayoutY.xml` (Layout)
+- `../media/imageZ.png/jpeg` (Bilder)
+
+Dann pro Chart `master/charts/_rels/chartX.xml.rels`:
+- `../embeddings/Microsoft_Excel_WorksheetA.xlsx` (eingebettetes Excel)
+- `colorsX.xml` (Chart-Farbschema)
+- `styleX.xml` (Chart-Style)
+
+Pro Layout `master/slideLayouts/_rels/slideLayoutY.xml.rels`:
+- `../slideMasters/slideMasterN.xml` (meist nur slideMaster1)
+
+**Phase 2: Ziel-Indizes finden (in der Ziel-PPTX)**
+
+```python
+import zipfile, re
+with zipfile.ZipFile(target_pptx) as z:
+    def next_free_idx(pattern, suffix=".xml"):
+        idxs = [int(m.group(1)) for n in z.namelist()
+                for m in [re.fullmatch(pattern + r"(\d+)" + re.escape(suffix), n)] if m]
+        return max(idxs, default=0) + 1
+    
+    next_slide = next_free_idx("ppt/slides/slide")        # z.B. 26
+    next_chart = next_free_idx("ppt/charts/chart")        # z.B. 7
+    next_layout = next_free_idx("ppt/slideLayouts/slideLayout")  # z.B. 29
+```
+
+**Phase 3: Mapping erstellen — Master-Pfad → Ziel-Pfad**
+
+```python
+RENAME = {
+    "ppt/slides/slide8.xml": f"ppt/slides/slide{next_slide}.xml",
+    "ppt/slides/_rels/slide8.xml.rels": f"ppt/slides/_rels/slide{next_slide}.xml.rels",
+    "ppt/charts/chart4.xml": f"ppt/charts/chart{next_chart}.xml",      # bar
+    "ppt/charts/chart3.xml": f"ppt/charts/chart{next_chart+1}.xml",    # line
+    "ppt/charts/_rels/chart4.xml.rels": f"ppt/charts/_rels/chart{next_chart}.xml.rels",
+    # ... style, colors, embeddings, layout
+}
+```
+
+**Phase 4: Files kopieren + Pfade in Rels aktualisieren**
+
+```python
+# Dateien rüber kopieren
+for old_path, new_path in RENAME.items():
+    files_target[new_path] = master_zip.read(old_path)
+
+# Innere Pfade in .rels aktualisieren
+def update_rels(content_str, mappings):
+    for old, new in mappings.items():
+        content_str = content_str.replace(f'Target="{old}"', f'Target="{new}"')
+    return content_str
+
+# Beispiel: slide26.xml.rels referenziert chart7, chart8, slideLayout29
+slide_rels = files_target[new_slide_rels_path].decode("utf-8")
+slide_rels = update_rels(slide_rels, {
+    "../charts/chart3.xml": "../charts/chart8.xml",
+    "../charts/chart4.xml": "../charts/chart7.xml",
+    "../slideLayouts/slideLayout17.xml": "../slideLayouts/slideLayout29.xml",
+})
+files_target[new_slide_rels_path] = slide_rels.encode("utf-8")
+```
+
+**Phase 5: `presentation.xml` + `presentation.xml.rels` erweitern**
+
+```python
+from lxml import etree
+
+NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+NS_PKG = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+# Lese presentation.xml und .rels
+pres = etree.fromstring(files_target["ppt/presentation.xml"])
+pres_rels = etree.fromstring(files_target["ppt/_rels/presentation.xml.rels"])
+
+# Nächste freie rId und sldId bestimmen
+existing_rids = [r.get("Id") for r in pres_rels.findall(f"{{{NS_PKG}}}Relationship")]
+new_rid = f"rId{max(int(r[3:]) for r in existing_rids if r.startswith('rId')) + 1}"
+
+sld_ids = pres.findall(f".//{{{NS_P}}}sldIdLst/{{{NS_P}}}sldId")
+new_sld_id = max(int(s.get("id")) for s in sld_ids) + 1
+
+# Relationship hinzufügen
+new_rel = etree.SubElement(pres_rels, f"{{{NS_PKG}}}Relationship")
+new_rel.set("Id", new_rid)
+new_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide")
+new_rel.set("Target", f"slides/slide{next_slide}.xml")
+
+# Slide in sldIdLst an gewünschter Position einfügen (z.B. Index 9 = Slide 10)
+new_sld = etree.Element(f"{{{NS_P}}}sldId")
+new_sld.set("id", str(new_sld_id))
+new_sld.set(f"{{{NS_R}}}id", new_rid)
+sld_id_lst = pres.find(f"{{{NS_P}}}sldIdLst")
+sld_id_lst.insert(9, new_sld)
+```
+
+**Phase 6: `slideMaster1.xml` + `slideMaster1.xml.rels` erweitern (für neues Layout)**
+
+```python
+# slideMaster1.xml.rels: neue Layout-Relationship
+sm_rels = etree.fromstring(files_target["ppt/slideMasters/_rels/slideMaster1.xml.rels"])
+sm_rids = [r.get("Id") for r in sm_rels.findall(f"{{{NS_PKG}}}Relationship")]
+new_layout_rid = f"rId{max(int(r[3:]) for r in sm_rids if r.startswith('rId')) + 1}"
+
+new_layout_rel = etree.SubElement(sm_rels, f"{{{NS_PKG}}}Relationship")
+new_layout_rel.set("Id", new_layout_rid)
+new_layout_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout")
+new_layout_rel.set("Target", f"../slideLayouts/slideLayout{next_layout}.xml")
+
+# slideMaster1.xml: sldLayoutIdLst erweitern
+sm = etree.fromstring(files_target["ppt/slideMasters/slideMaster1.xml"])
+layout_lst = sm.find(f"{{{NS_P}}}sldLayoutIdLst")
+existing_layout_ids = [int(e.get("id")) for e in layout_lst.findall(f"{{{NS_P}}}sldLayoutId")]
+new_layout_entry = etree.SubElement(layout_lst, f"{{{NS_P}}}sldLayoutId")
+new_layout_entry.set("id", str(max(existing_layout_ids) + 1))
+new_layout_entry.set(f"{{{NS_R}}}id", new_layout_rid)
+```
+
+**Phase 7: `[Content_Types].xml` erweitern (8 neue Overrides für die importierten Files)**
+
+```python
+NS_CT = "http://schemas.openxmlformats.org/package/2006/content-types"
+ct = etree.fromstring(files_target["[Content_Types].xml"])
+
+NEW_OVERRIDES = [
+    (f"/ppt/slides/slide{next_slide}.xml", "application/vnd.openxmlformats-officedocument.presentationml.slide+xml"),
+    (f"/ppt/charts/chart{next_chart}.xml", "application/vnd.openxmlformats-officedocument.drawingml.chart+xml"),
+    (f"/ppt/charts/chart{next_chart+1}.xml", "application/vnd.openxmlformats-officedocument.drawingml.chart+xml"),
+    (f"/ppt/charts/style{next_chart}.xml", "application/vnd.ms-office.chartstyle+xml"),
+    (f"/ppt/charts/style{next_chart+1}.xml", "application/vnd.ms-office.chartstyle+xml"),
+    (f"/ppt/charts/colors{next_chart}.xml", "application/vnd.ms-office.chartcolorstyle+xml"),
+    (f"/ppt/charts/colors{next_chart+1}.xml", "application/vnd.ms-office.chartcolorstyle+xml"),
+    (f"/ppt/slideLayouts/slideLayout{next_layout}.xml", "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"),
+]
+for partname, ct_type in NEW_OVERRIDES:
+    ov = etree.SubElement(ct, f"{{{NS_CT}}}Override")
+    ov.set("PartName", partname)
+    ov.set("ContentType", ct_type)
+```
+
+**Phase 8: ZIP zusammenstellen**
+
+```python
+with zipfile.ZipFile(target_pptx_path, "w", zipfile.ZIP_DEFLATED) as zout:
+    for path, content in files_target.items():
+        zout.writestr(path, content)
+```
+
+**Validiert in diesem Projekt:** v7-Vorlage komplett aus zwei Quellen (Original + Master) gebaut, 25 Slides, 0 XML-Fehler. Siehe Abschnitt 11 "PowerPoint-Vorlage Recipe" für das vollständige `build_v7.py` Skript.
+
+**Generelle Lesson:** Office-Dokumente sind ZIP-Archive mit strenger Hierarchie. Was ein einzelner Slide-Copy in PowerPoint mit zwei Mausklicks tut, sind im Code ~8 Phasen synchroner Updates. Das ist OK, weil reproduzierbar und versionierbar.
+
+---
+
+### 15. Streamlit Cross-Tab Daten-Sharing — robuste Fallback-Strategie
+
+**Situation:** Daten aus Tab A werden in Tab B benötigt (z.B. Performance-Zeitreihe aus Tab A wird in Tab B für PPTX-Export verwendet).
+
+**Falle:** Naive Lösung `st.session_state["data"] = data` in Tab A, dann `data = st.session_state["data"]` in Tab B — funktioniert NICHT zuverlässig:
+- Streamlit-Tabs werden zwar alle gerendert, aber wenn Tab A einen `st.stop()` aufruft (z.B. fehlende CSV-Datei), wird `session_state` nie gesetzt
+- User könnte direkt auf Tab B klicken bevor Tab A "warm" ist
+- Bei Reload geht session_state verloren
+
+**Symptom in diesem Projekt:** User klickte Portfolioanalyse → PowerPoint, ohne den Performance-Tab vorher geöffnet zu haben → Slide 8 zeigte Vorlagen-Defaults (0,0%) statt echte Daten.
+
+**Lösung — Fallback-Pattern:**
+
+```python
+# Tab B: erst session_state versuchen, dann selbst laden
+perf_timeseries = st.session_state.get("perf_timeseries", {})
+
+# Wenn leer → direkt laden statt aufgeben
+fallback_loaded = False
+if not perf_timeseries:
+    try:
+        date_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+        files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
+        if files and mapping is not None:
+            perf_timeseries = build_portfolio_timeseries(files, mapping)
+            fallback_loaded = True
+    except Exception as ex:
+        st.warning(f"Performance-Daten konnten nicht geladen werden: {ex}")
+
+# Diagnose-Warnung wenn das Portfolio trotz Fallback fehlt
+missing = []
+for pf_name in selected_portfolios:
+    csv_n = perf_d2c.get(pf_name) or display_to_csv.get(pf_name)
+    if not csv_n or csv_n not in perf_timeseries:
+        missing.append((pf_name, csv_n))
+
+if missing:
+    st.warning(
+        f"⚠️ Performance-Daten fehlen für: {missing}. "
+        f"Verfügbar: {list(perf_timeseries.keys())[:5]}. "
+        f"Fallback aktiv: {fallback_loaded}."
+    )
+```
+
+**Wichtige Voraussetzung:** Die Lade-Funktionen müssen aus einem GEMEINSAMEN Modul kommen, nicht aus dem Top-Level eines Tab-Files. In diesem Projekt: `build_portfolio_timeseries`, `load_all_csvs` etc. wurden in `modules/shared.py` verschoben, damit sowohl `streamlit_app.py` (Tab A) als auch `portfolioanalyse.py` (Tab B) sie nutzen können.
+
+**Generelle Lesson:** Cross-Tab Coupling ist Streamlit-Antipattern. Wenn du die Daten in Tab B brauchst, lade sie in Tab B. session_state ist eine Optimierung (Cache), keine Datenquelle. Plan also: **session_state ist nie garantiert da, immer Fallback einbauen, immer Diagnose bei Datenlücken zeigen.**
+
+---
+
+### 16. PPTX-Validierung Multi-Layer-Toolchain
+
+**Situation:** Du hast eine PPTX generiert/modifiziert und musst herausfinden warum PowerPoint sie nicht öffnen kann (oder reparieren möchte).
+
+**Falle:** PowerPoint zeigt nur "Datei muss repariert werden" — keine Diagnose welcher Part kaputt ist. LibreOffice öffnet die Datei vielleicht fehlerfrei (LO ist toleranter), also `soffice --convert-to pdf` ist kein zuverlässiger Validitäts-Test.
+
+**Lösung — Multi-Layer-Validierung** (in der Reihenfolge ausführen, jeder Layer baut auf vorherigem auf):
+
+```python
+import zipfile
+from lxml import etree
+from pptx import Presentation
+
+def validate_pptx(path):
+    """Mehrstufige PPTX-Validierung."""
+    errors = []
+    
+    # Layer 1: ZIP-Integrität
+    with zipfile.ZipFile(path) as z:
+        bad = z.testzip()
+        if bad is not None:
+            errors.append(f"L1 ZIP: {bad} korrupt")
+            return errors
+    
+    # Layer 2: Alle XML-Files parsen
+    with zipfile.ZipFile(path) as z:
+        for name in z.namelist():
+            if not (name.endswith(".xml") or name.endswith(".rels")):
+                continue
+            content = z.read(name)
+            # Sanity: kein ZIP-Header in XML-Files (Bug 2 aus #12)
+            if content[:2] == b"PK":
+                errors.append(f"L2 KORRUPT: {name} hat ZIP-Header (python-pptx style-bug?)")
+                continue
+            try:
+                etree.fromstring(content)
+            except Exception as e:
+                errors.append(f"L2 PARSE: {name}: {str(e)[:60]}")
+    
+    # Layer 3: ContentTypes ↔ ZIP-Inhalt
+    NS_CT = "http://schemas.openxmlformats.org/package/2006/content-types"
+    with zipfile.ZipFile(path) as z:
+        ct = etree.fromstring(z.read("[Content_Types].xml"))
+        defaults = {d.get("Extension") for d in ct.findall(f"{{{NS_CT}}}Default")}
+        overrides = {ov.get("PartName") for ov in ct.findall(f"{{{NS_CT}}}Override")}
+        actual_files = {f"/{n}" for n in z.namelist() if not n.endswith("/")}
+        
+        # Overrides ohne entsprechende ZIP-Datei?
+        missing = overrides - actual_files
+        if missing:
+            errors.append(f"L3 CT: Overrides ohne Datei: {sorted(missing)[:3]}")
+        
+        # Files im ZIP ohne ContentType?
+        for f in actual_files:
+            if f.startswith("/_rels"): continue
+            ext = f.rsplit(".", 1)[-1] if "." in f else ""
+            if ext not in defaults and f not in overrides:
+                errors.append(f"L3 CT: {f} hat keinen ContentType")
+    
+    # Layer 4: Relationships valide (Targets existieren)
+    NS_RP = "http://schemas.openxmlformats.org/package/2006/relationships"
+    import posixpath
+    with zipfile.ZipFile(path) as z:
+        for name in z.namelist():
+            if not name.endswith(".rels"): continue
+            tree = etree.fromstring(z.read(name))
+            base = name.rsplit("_rels/", 1)[0]
+            for rel in tree.findall(f"{{{NS_RP}}}Relationship"):
+                if rel.get("TargetMode") == "External": continue
+                target = rel.get("Target")
+                target_path = posixpath.normpath(
+                    target[1:] if target.startswith("/") else base + target
+                )
+                if target_path not in z.namelist():
+                    errors.append(f"L4 REL: {name} → {target} (fehlt)")
+    
+    # Layer 5: python-pptx kann es öffnen (semantisch)
+    try:
+        prs = Presentation(path)
+        _ = len(prs.slides)
+    except Exception as e:
+        errors.append(f"L5 SEMANTIK: python-pptx failure: {str(e)[:80]}")
+    
+    return errors
+```
+
+**Tabelle: Validation-Layer**
+
+| Layer | Tool | Findet |
+|---|---|---|
+| L1 | `zipfile.testzip()` | Korrupte ZIP-Bytes |
+| L2 | `lxml.etree.fromstring()` | XML-Syntax-Fehler, ZIP-Header in XML-Files (#12 Bug 2!) |
+| L3 | ContentTypes-Vergleich | Inkonsistente Overrides/Defaults |
+| L4 | Relationship-Target-Check | Tote Links zwischen Parts |
+| L5 | `pptx.Presentation()` | Semantische OOXML-Fehler |
+| (L6) | PowerPoint öffnen | Microsoft-spezifische Strenge (kann nicht in CI getestet werden) |
+
+**Wichtig:** Manche Bugs werden NUR von einem bestimmten Layer gefunden. Der python-pptx style-corruption Bug (#12) wird z.B. von L2 erkannt (ZIP-Header in XML), aber L5 (python-pptx) findet ihn NICHT — er ist tolerant gegen seine eigene Korruption.
+
+**Generelle Lesson:** Office-Dokument-Validierung braucht mehrere Layer. Auch dann gibt es PowerPoint-spezifische Strenge die nur in der echten Office-App auffällt. Best practice: nach jeder Code-Änderung an einem PPTX-Builder einmal manuell PowerPoint öffnen.
+
+---
+
+### 17. Office-Dokumente sind ZIP-Archive — Manipulation-Recipe
+
+**Situation:** Du willst etwas an einem `.docx`, `.pptx` oder `.xlsx` modifizieren wozu die offizielle Library (python-docx, python-pptx, openpyxl) keine API hat — z.B. Footer-Texte in allen Slides ersetzen, Chart-Styles patchen, Custom-XML-Parts einfügen.
+
+**Falle:** Du suchst stundenlang nach einer API-Methode die nicht existiert, statt direkt das ZIP zu manipulieren.
+
+**Lösung — Allgemeines Manipulation-Recipe:**
+
+```python
+import zipfile, shutil
+
+def modify_office_file(source_path, target_path, modifications):
+    """
+    Generisches Pattern: Office-Datei modifizieren.
+    
+    modifications: dict {file_in_zip: bytes | callable(bytes) -> bytes}
+    """
+    with zipfile.ZipFile(source_path, "r") as zin:
+        with zipfile.ZipFile(target_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for info in zin.infolist():
+                content = zin.read(info.filename)
+                
+                # Modification anwenden falls definiert
+                if info.filename in modifications:
+                    mod = modifications[info.filename]
+                    if callable(mod):
+                        content = mod(content)
+                    else:
+                        content = mod
+                
+                zout.writestr(info, content)
+
+# Beispiel: "Stand 12.02.2026" durch aktuelles Datum ersetzen in allen Slides
+import datetime
+new_date = datetime.date.today().strftime("%d.%m.%Y")
+def replace_date(content):
+    return content.decode("utf-8").replace("12.02.2026", new_date).encode("utf-8")
+
+mods = {
+    "ppt/slides/slide24.xml": replace_date,
+    "ppt/slides/slide25.xml": replace_date,
+}
+modify_office_file("Vorlage.pptx", "Vorlage_neu.pptx", mods)
+```
+
+**Faustregeln für sichere ZIP-Manipulation:**
+
+| Regel | Warum |
+|---|---|
+| **Lese-Modus zuerst** | Niemals direkt überschreiben — könnte korrupt schreiben |
+| **`ZIP_DEFLATED`** | Office-Dateien sind immer deflated, sonst wird's deutlich größer |
+| **UTF-8 ohne BOM** | Office-XML ist immer UTF-8, BOM verwirrt Parser |
+| **`<?xml ... standalone="yes"?>`** | Office erwartet diese Deklaration, sonst manchmal Reparieren-Dialog |
+| **Relative Pfade in .rels** | `../charts/chart1.xml` NICHT `/ppt/charts/chart1.xml` (mit Slash am Anfang) |
+| **PartNames in ContentTypes** | MIT führendem Slash (`/ppt/charts/chart1.xml`) — anders als in .rels |
+| **Endung-Casing** | `.xml` und `.rels` immer kleingeschrieben |
+
+**Generelle Lesson:** Vor jedem ZIP-Manipulation-Projekt einmal eine fertige Office-Datei entpacken und die Struktur durchschauen. Office-Dokumente sind erstaunlich gut lesbar als ZIP-Inhalt — manche Bugs erkennt man sofort wenn man die Files in der Hand hat.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 aktiven Tabs.
@@ -234,15 +791,15 @@ Streamlit-App für Fürst Fugger Privatbank mit 2 aktiven Tabs.
 | Tab | Datei | Zeilen | Zweck |
 |---|---|---|---|
 | 📈 Performance | `streamlit_app.py` | ~990 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar |
-| 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~780 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail, PDF |
-| (gemeinsam) | `modules/shared.py` | ~200 | Konstanten, Login, Formatierung, Font-Setup, Corporate-Palette |
-| (PowerPoint-Export) | `modules/pptx_export.py` | ~850 | PPTX-Export aus Portfolioanalyse-Tab (geplant: auch Performance-Tab) |
+| 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~870 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail, PDF, **PPTX-Export inkl. Performance-Folie** |
+| (gemeinsam) | `modules/shared.py` | ~290 | Konstanten, Login, Formatierung, Font-Setup, Corporate-Palette, **CSV-Loading-Helpers** |
+| (PowerPoint-Export) | `modules/pptx_export.py` | ~1920 | PPTX-Export aus Portfolioanalyse-Tab inkl. **Performance-Folie mit Daten-Befüllung** |
 
-**Gesamt aktiv: ~2.820 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
+**Gesamt aktiv: ~4.070 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
 
-**Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~695 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung: Berater dürfen keinen freien Portfolio-Builder nutzen). Datei bleibt für mögliche spätere Reaktivierung im Repo.
+**Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~695 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung). Datei bleibt für mögliche spätere Reaktivierung im Repo.
 
-**Vorlage-Datei:** `Vorlage/Vorlage_FFPB.pptx` – PowerPoint-Master mit Corporate-Design, benannten Shapes und 24 Slides. Wird von `pptx_export.py` als Template genutzt.
+**Vorlage-Datei:** `Vorlage/Vorlage_FFPB.pptx` – PowerPoint-Master mit Corporate-Design, benannten Shapes und 25 Slides (inkl. Performance-Folie an Position 10). Wird von `pptx_export.py` als Template genutzt. Größe: 4.14 MB (optimiert von ursprünglich 22.7 MB — siehe Transferwissen #13).
 
 ---
 
@@ -255,17 +812,17 @@ Repository Root/
 │   ├── __init__.py
 │   ├── shared.py
 │   ├── portfolioanalyse.py
-│   ├── pptx_export.py               ← PowerPoint-Export (Portfolioanalyse + geplant Performance)
+│   ├── pptx_export.py               ← PowerPoint-Export (Portfolioanalyse + Performance-Folie aktiv)
 │   └── portfolio_builder.py         ← deaktiviert seit Juni 2026
 ├── Vorlage/
-│   └── Vorlage_FFPB.pptx            ← Corporate-Master, 24 Slides, benannte Shapes
+│   └── Vorlage_FFPB.pptx            ← Corporate-Master, 25 Slides, benannte Shapes, JPEG-optimiert
 ├── fonts/
-│   ├── segoeui.ttf                  ← Von C:\Windows\Fonts kopiert
+│   ├── segoeui.ttf
 │   └── segoeuib.ttf
 ├── .streamlit/
 │   └── config.toml                  ← toolbarMode = "minimal"
-├── Mapping_Honorarsatz.xlsx         ← Inhaber → Honorarsatz (Dezimal)
-├── Mapping_Namen.xlsx               ← A=Anzeige, B=CSV-Key, C=Duration, D=Benchmark
+├── Mapping_Honorarsatz.xlsx
+├── Mapping_Namen.xlsx
 ├── Fuerst_Fugger_Bank_Logo_2-ZL-RGB.jpg
 ├── Daten/                           ← Performance-CSVs
 ├── Daten_PF/                        ← Portfolioanalyse-CSVs
@@ -284,8 +841,8 @@ openpyxl>=3.1
 matplotlib>=3.7
 reportlab>=4.0
 Pillow>=10.0
-python-pptx>=1.0                     ← für pptx_export.py
-lxml>=4.9                            ← für pptx_export.py (XML-Manipulation der Charts)
+python-pptx>=1.0
+lxml>=4.9                            ← KRITISCH für Chart-XML-Manipulation
 ```
 
 ---
@@ -294,21 +851,24 @@ lxml>=4.9                            ← für pptx_export.py (XML-Manipulation d
 
 ```
 shared.py ──→ streamlit_app.py (Tab 1 inline + importiert Tab 2)
-          ──→ portfolioanalyse.py ──→ pptx_export.py (für PowerPoint-Export)
-          ──→ pptx_export.py (geplant: auch von streamlit_app.py)
+          ──→ portfolioanalyse.py ──→ pptx_export.py
+          ──→ pptx_export.py
 ```
 
-`portfolio_builder.py` liegt im Repo, wird aber nicht importiert (siehe Abschnitt 1).
-`pptx_export.py` nutzt `Vorlage/Vorlage_FFPB.pptx` als Master-Template.
+Seit Juni 2026 (Phase 2):
+- `shared.py` enthält die CSV-Loading-Helpers (`build_portfolio_timeseries`, `load_all_csvs`, `read_one_csv`, `parse_dates_col`, `extract_benchmark_name`, `to_decimal_interval`). Damit kann sowohl der Performance-Tab als auch der Portfolioanalyse-Tab die Performance-Zeitreihen laden — egal in welcher Reihenfolge der User die Tabs öffnet.
+- `pptx_export.py` enthält die `compute_performance_data()` Funktion, die aus einer Zeitreihe alle Kennzahlen + Chart-Daten für die Performance-Folie berechnet.
+
+`portfolio_builder.py` liegt im Repo, wird aber nicht importiert.
 
 ---
 
 ## 4. Corporate Design
 
 **Seit Juni 2026 nutzen beide Tabs durchgängig die offiziellen Fürst Fugger Privatbank Corporate Colors.**
-Single source of truth ist `modules/shared.py` — dort sind alle 5 Hauptfarben + erweiterte 15er-Sequenz als Konstanten definiert. Alle anderen Module importieren von dort.
+Single source of truth ist `modules/shared.py`.
 
-### Hauptfarben (Konstanten in `shared.py`)
+### Hauptfarben
 
 | Konstante | Hex | Name | Hauptverwendung |
 |---|---|---|---|
@@ -318,32 +878,20 @@ Single source of truth ist `modules/shared.py` — dort sind alle 5 Hauptfarben 
 | `FFPB_SAND` | #D4BD8A | Sand | Benchmark 2 (Vergleich), Ring-Chart viertes Segment |
 | `FFPB_LIGHT` | #7FABC8 | Hellblau | Benchmark, Ring-Chart fünftes Segment |
 
-### Erweiterte 15er-Sequenz für Linien-Charts (`FFPB_PALETTE`)
+### Erweiterte 15er-Sequenz (`FFPB_PALETTE`)
 
 ```python
 FFPB_PALETTE = [
-    "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",   # Hauptfarben
-    "#8B7340", "#A8CBE8", "#5C6B3C", "#E8D5B0", "#2C5F8A",   # Erweiterung 1
-    "#C4C4C4", "#3A7CA5", "#F0C070", "#6A9BC3", "#2A4A6C",   # Erweiterung 2
+    "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",
+    "#8B7340", "#A8CBE8", "#5C6B3C", "#E8D5B0", "#2C5F8A",
+    "#C4C4C4", "#3A7CA5", "#F0C070", "#6A9BC3", "#2A4A6C",
 ]
 ```
 
-**Verwendung:**
-- **Plotly Linien-Charts (Tab 1):** `fig.update_layout(colorway=FFPB_PALETTE)` — Plotly weist Traces automatisch in dieser Reihenfolge zu (siehe Transferwissen #10).
-- **PDF Linien-Chart matplotlib:** `FFPB_PALETTE[1:]` (Index 0 = Fuggerblau = Hintergrund → würde unsichtbar; deshalb ab Index 1 starten).
-- **Portfolioanalyse `RING_COLORS`:** Identische 15-Werte-Sequenz, in `modules/portfolioanalyse.py` separat definiert (historisch gewachsen, könnte langfristig auf `FFPB_PALETTE` zusammengeführt werden).
-
 ### Spines & Gridlines (PDF/Plotly auf dunklem Hintergrund)
 
-Bei Balken-/Linien-Charts mit Fuggerblau-Hintergrund:
-- **Spines (Achsen-Linien):** `#1A4880` (heller als BG, dezent sichtbar)
-- **Gridlines:** `#0A4576` (sehr subtil, deutet nur an)
-
-Diese Werte sind hartcodiert in `streamlit_app.py` (vier Stellen: Plotly-Balken-Chart, PDF-Linien-, PDF-Drawdown-, PDF-Bar-Chart) und konsistent mit der Hintergrundfarbe `FFPB_DARK` abgestimmt.
-
-### Historischer Kontext
-
-Vor Juni 2026 nutzte das Performance-Tool ein eigenes, ähnliches aber nicht identisches Farb-Set (`#1B3A5C` als FFPB_DARK, `#B8973A` als FFPB_GOLD, etc.). Die Portfolioanalyse hatte schon vorher die Corporate Colors als hartcodierte Werte in `RING_COLORS`. Im Juni 2026 wurde **shared.py auf Corporate umgestellt** (Strategie A: Konstanten umdefinieren statt neue anlegen), damit beide Tabs durchgängig dasselbe Design haben. Dies betraf zusätzlich die PDF-Header/Tabellenkopfzeilen der Portfolioanalyse (Fuggerblau statt Dunkelblau-Annäherung).
+- **Spines:** `#1A4880`  
+- **Gridlines:** `#0A4576`
 
 ---
 
@@ -361,38 +909,22 @@ Vor Juni 2026 nutzte das Performance-Tool ein eigenes, ähnliches aber nicht ide
 
 ### 6.1 Performance-CSVs (`Daten/`)
 
-**Encoding:** ISO-8859-1, Separator `;`, Decimal `,`, Thousands `.`
-**Dateinamen-Pattern:** `*_<yyMMdd>_*.CSV` (Date-Tag wird per Regex extrahiert)
-**Erste Zeile** enthält Metadaten (Portfolio-Name, Benchmark-Name), **ab Zeile 2** beginnen die Tageswerte. Die erste Zeile wird beim Einlesen weggeworfen (`vv.loc[1:]`).
-
-**Spalten (Stand Mai 2026, nach Umstellung Währung → rf):**
+**Encoding:** ISO-8859-1, Separator `;`, Decimal `,`, Thousands `.`  
+**Dateinamen-Pattern:** `*_<yyMMdd>_*.CSV`  
+**Erste Zeile** enthält Metadaten, **ab Zeile 2** beginnen die Tageswerte.
 
 | # | Spalte | Inhalt | Format |
 |---|---|---|---|
-| 1 | `Portfolio Name` | CSV-Key, mappt auf Anzeigenamen | String |
+| 1 | `Portfolio Name` | CSV-Key | String |
 | 2 | `Datum` | Tageswert-Datum | `DD.MM.YYYY` |
-| 3 | `Performance [%] (Intervall)` | Tagesperformance Portfolio | Prozent (z.B. `0,12`) |
-| 4 | `Performance (Intervall)` | (ungenutzt im Code) | – |
-| 5 | `Performance [%] (kumuliert)` | (ungenutzt im Code) | – |
-| 6 | `Performance (kumuliert)` | (ungenutzt im Code) | – |
+| 3 | `Performance [%] (Intervall)` | Tagesperformance Portfolio | Prozent |
 | 7 | `Benchmark Performance [%] (Intervall)` | Tagesperformance Benchmark | Prozent |
-| 8 | `Risiko freier Zins` | Annualisierter risikofreier Zins | Dezimal (z.B. `0,03928`) |
-
-**Historische Anmerkung:** Spalte 8 enthielt früher `Währung` (String, z.B. "EUR") und wurde **nicht im Code verwendet**. Im Mai 2026 wurde die Spalte ersetzt durch `Risiko freier Zins`. Die alten CSVs ohne rf-Spalte werden vom Code abgefangen (Fallback `NaN`).
-
-**Auto-Format-Erkennung:** Für `Performance [%]` und `Risiko freier Zins` ist Median-basierte Auto-Erkennung implementiert (siehe Transferwissen #8). Werte können also auch als Prozent (3,928) statt Dezimal (0,03928) geliefert werden — werden automatisch konvertiert.
+| 8 | `Risiko freier Zins` | Annualisierter rf | Dezimal |
 
 ### 6.2 Mapping-Dateien
 
-**`Mapping_Honorarsatz.xlsx`:**
-- Spalte `Inhaber` (= Portfolio Name aus CSV)
-- Spalte `Honorarsatz Standard` (Dezimal, z.B. 0.015 für 1,5%)
-
-**`Mapping_Namen.xlsx`:**
-- Spalte A: Anzeigename (was der User sieht)
-- Spalte B: CSV-Key (= Portfolio Name in CSVs)
-- Spalte C: Duration
-- Spalte D: Benchmark-Zusammensetzung (Text, wird unter Charts angezeigt)
+**`Mapping_Honorarsatz.xlsx`:** Inhaber + Honorarsatz Standard (Dezimal)  
+**`Mapping_Namen.xlsx`:** A=Anzeigename, B=CSV-Key, C=Duration, D=Benchmark-Zusammensetzung
 
 ---
 
@@ -404,26 +936,20 @@ Vor Juni 2026 nutzte das Performance-Tool ein eigenes, ähnliches aber nicht ide
 - Zeitraum: Datumspicker + Reset-Buttons (Counter-Keys, siehe Transferwissen #4)
 
 ### Kennzahlen (zwei Reihen)
-**Reihe 1:** Auflagedatum im PM | ⌀ Rendite p.a. (CAGR) | Volatilität p.a.
-**Reihe 2:** Calmar Ratio | **Sharpe Ratio** | Endwert (nur wenn Anlagevolumen > 0)
-**Darunter als Caption:** `Ø Risikofreier Zins p.a. (Zeitraum): X,XX%`
+**Reihe 1:** Auflagedatum | ⌀ Rendite p.a. (CAGR) | Volatilität p.a.  
+**Reihe 2:** Calmar Ratio | **Sharpe Ratio** | Endwert  
+**Caption:** `Ø Risikofreier Zins p.a. (Zeitraum): X,XX%`
 
-**Sharpe-Berechnung:** Wissenschaftlich saubere Variante nach Sharpe (1994) auf Basis täglicher Excess Returns — NICHT die p.a.-Approximation. Details siehe Abschnitt 11.
+**Sharpe-Berechnung:** Wissenschaftlich saubere Variante nach Sharpe (1994) auf Basis täglicher Excess Returns.
 
-### Charts
-- Linien-Chart: Endwerte als legendgroup-gebundene Text-Traces, Legende "Strategie" rechts
-- **rf-Linie:** Optional per Sidebar-Checkbox `Risikofreier Zins` (Default aus). Wird aus täglich variablem rf zinstaggenau aufkompoundiert via `make_index_from_rf()`. Bei fehlenden Daten → freundliche Info-Caption statt Crash.
-- Balken-Chart: `_rb()` Funktion mit `suffix="p1"/"p2"` (siehe Transferwissen #3)
+### Cross-Tab Daten-Sharing (NEU Juni 2026)
+Tab 1 setzt nach erfolgreichem Daten-Loading:
+```python
+st.session_state["perf_timeseries"] = data
+st.session_state["perf_d2c"] = d2c
+```
 
-### PDF
-- Meta-Block: Portfolio, Zeitraum, Kosten, Anlagevolumen, **Ø Risikofreier Zins p.a. (Zeitraum)**, Quelle
-- Kennzahlen: in `" | "`-Pipe-Liste, jetzt inkl. Sharpe direkt nach Calmar
-- Chart: rf-Linie wird mitgenommen wenn aktiv
-- Disclaimer-Seite
-- Glossar (11 Begriffe): Auflagedatum, CAGR, Vola, Calmar, **Sharpe Ratio**, **Ø Risikofreier Zins p.a. (Zeitraum)**, Max DD, Recovery, Längste DD-Phase, Benchmark, Vor/Nach Kosten
-
-### Disclaimer-Wording
-*"Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr."*
+Tab 2 (Portfolioanalyse) liest diese im PPTX-Export — mit Fallback-Loader falls leer (siehe Transferwissen #15).
 
 ---
 
@@ -431,28 +957,23 @@ Vor Juni 2026 nutzte das Performance-Tool ein eigenes, ähnliches aber nicht ide
 
 - `_render_single_portfolio()` mit `suffix="pf1"/"pf2"` (siehe Transferwissen #3)
 - Ring-Diagramme: Absteigend sortiert, Labels außen (13px), <3% ausgeblendet, Legende horizontal unten
-- YTD: Spalten ausgeschrieben (Wertpapier-Performance/Performancebeitrag), Caption erklärt beide
+- YTD: Spalten ausgeschrieben (Wertpapier-Performance/Performancebeitrag)
 - PDF (reportlab): Ring-Charts kompakter (100×85mm), intelligente Spaltenbreiten
-- **PowerPoint-Export aktiv** (`modules/pptx_export.py` + `Vorlage/Vorlage_FFPB.pptx`):
-  - Slides 7-8: Anlagevorschlag (Tabelle pro Gattung + Allokations-Ring)
-  - Slide 9: Aktuelle Portfoliozusammenstellung (Regionen + Branchen-Ringe)
-  - Slide 10 (Währungen) wird entfernt — keine Währungs-Daten verfügbar
-  - Bei Vergleichsportfolio: Slides 7-9 werden dupliziert (3 weitere Slides für Portfolio 2)
-  - Details siehe Abschnitt 10 "PowerPoint-Export-System"
-- Disclaimer: *"Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr."*
+- **PowerPoint-Export aktiv** mit Performance-Folie (siehe Abschnitt 10)
+
+### Sidebar-Optionen (Portfolioanalyse-Sektion)
+- ☐ YTD Performance anzeigen
+- ☐ **Bruttohonorar (inkl. 19% MwSt.)** — wirkt auf Performance-Folie-Kennzahlen im PPTX
+- ☐ Erweiterte Einstellungen (Date-Tag-Override)
 
 ---
 
 ## 9. Disclaimers
 
-Beide Tabs: Hinweis + Quelle oben, Disclaimer unten, in PDFs als eigene Seite.
-
 | Tab | Schlüsselsatz |
 |---|---|
 | Performance | "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr." |
 | Portfolioanalyse | "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr." |
-
-**Wording-Historie:** Bis Mai 2026 hieß es "im Beratungsgespräch". Im Juni 2026 wurde dies — in Abstimmung mit Compliance — auf das aktuelle Wording umgestellt, um klarzustellen, dass die Tools nur im Rahmen der Vermögensverwaltung zur Veranschaulichung dienen (nicht zur Anlageberatung).
 
 Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
 
@@ -460,120 +981,460 @@ Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
 
 ## 10. PowerPoint-Export-System
 
-Das PowerPoint-Export-System ist ein zentraler Baustein für die Kunden-Kommunikation. Beide Tabs (Performance + Portfolioanalyse) erzeugen aus denselben Daten eine fertig formatierte PPTX-Datei, die der Berater an Kunden weiterleiten kann.
+Das PowerPoint-Export-System ist ein zentraler Baustein für die Kunden-Kommunikation.
 
-### 10.1 Architektur-Prinzip "B2" — jeder Tab füllt nur eigene Folien
+### 10.1 Architektur-Prinzip "B2"
 
-Beim PPTX-Export gibt es **keine** zentrale "alles in einem"-Funktion. Jeder Tab hat seinen eigenen Export-Button und befüllt **nur seine eigenen Folien**:
+Jeder Tab füllt **nur seine eigenen Folien**:
 
 | Tab | Befüllt Slides | Entfernt Slides |
 |---|---|---|
-| 📊 Portfolioanalyse | 7-9 (Anlagevorschlag, Zusammenstellung) | 10-12 (Performance) — wenn vorhanden |
-| 📈 Performance (geplant) | 10-12 (Wertentwicklung) | 7-9 (Anlagevorschlag) |
-
-**Begründung:** Saubere Trennung. Der Berater entscheidet welcher Tab den Export erzeugt, und bekommt eine schlanke Datei mit nur den für ihn relevanten Folien.
+| 📊 Portfolioanalyse | 7-9 (Anlagevorschlag, **Performance**, Zusammenstellung) | 11 (Währungen) |
+| 📈 Performance (geplant) | (eigener Export) | analog |
 
 ### 10.2 Vorlage `Vorlage/Vorlage_FFPB.pptx`
 
-24 Slides mit Corporate-Design der Fürst Fugger Privatbank. Wichtige Eigenschaften:
+25 Slides nach Phase-2-Integration:
 
 | # | Slide | Verwendung |
 |---|---|---|
-| 1 | Cover "Unsere Vermögensverwaltung" | statisch |
-| 2 | Inhaltsverzeichnis | wird ggf. dynamisch angepasst (Performance-Eintrag nur wenn Performance-Folien drin) |
-| 3-6 | Intro (Begrüßung, Die Fugger, VV-Konzept) | statisch |
-| 7-8 | **Anlagevorschlag** (Aktien/Renten Tabelle + Allokations-Ring) | dynamisch befüllt von `pptx_export.py` |
-| 9 | **Zusammenstellung** (Regionen + Branchen-Ringe) | dynamisch befüllt |
-| ~~10~~ | ~~Währungen-Ring~~ | wird beim Export ENTFERNT (keine Daten) |
-| 11+ | Honorar, Bank, Standorte, Tradition, Impressum | statisch |
+| 1-6 | Cover, Intro | statisch |
+| 7 | **Anlagevorschlag** (Tabelle + Allokations-Ring) | dynamisch befüllt |
+| 8 | (alte Anlagevorschlag-Teil-2) | wird beim Export ENTFERNT |
+| 9 | **Aktuelle Portfoliozusammenstellung** | dynamisch befüllt |
+| 10 | **Performance/Wertentwicklung** (NEU Juni 2026) | dynamisch befüllt |
+| 11 | Währungen-Ring | wird beim Export ENTFERNT |
+| 12+ | Honorar, Bank, Ansprechpartner, etc. | statisch |
 
-**Geplante Erweiterung (Juni 2026):** Folien 10-12 sollen Performance-Folien werden (siehe Abschnitt 11 "Geplante Implementierungen").
+**Beim Export passiert** (in `pptx_export.py`):
+1. `_remove_slide(prs, 7)` → alte Anlagevorschlag-Teil-2 raus (Index 7 = Slide 8)
+2. `_remove_slide(prs, 9)` → Währungen raus (war Index 10, nach Op1 = 9)
+3. `_move_slide(prs, 8, 7)` → Performance nach Position 8 (vor Portfolio)
+
+**Resultierende Reihenfolge:**
+- Slide 7 = Anlagevorschlag
+- Slide 8 = **Performance** (war Slide 10 in der Vorlage)
+- Slide 9 = Portfoliozusammenstellung
 
 ### 10.3 Shape-Namen-Konvention
 
-Die Vorlage nutzt **benannte Shapes**, damit `pptx_export.py` sie per Name finden und befüllen kann (statt per Index). Diese Konvention muss bei jeder Vorlagen-Änderung in PowerPoint eingehalten werden:
+Die Vorlage nutzt **benannte Shapes**:
 
+#### Anlagevorschlag-Slide (Slide 7 in der Vorlage)
 | Shape-Name | Typ | Verwendung |
 |---|---|---|
-| `Titel` / `Titel 2` | Placeholder | Folien-Headline (z.B. "Anlagevorschlag – Konservativ") |
-| `C_Kennzahlen` | Chart | Großer Allokations-Ring (Slides 7, 8) |
-| `T_Kennzahlen` | Tabelle | Positionen-Tabelle (Slides 7, 8) |
-| `C_Kennzahlen1` | Chart | Linker Ring (Slide 9: Regionen) |
-| `C_Kennzahlen2` | Chart | Rechter Ring (Slide 9: Segmente/Branchen) |
-| `Fußnote` | Placeholder | Disclaimer-Text |
-| `Quelle` | Textbox | "Quelle: Eigene Berechnung, Stand DD.MM.YYYY" |
-| `Foliennummer` | Placeholder | Seitenzahl |
+| `Titel` | Placeholder | "Anlagevorschlag – {Strategie}" |
+| `C_Kennzahlen` | Chart | Allokations-Ring |
+| `T_Kennzahlen` | Tabelle | Positionen mit "Marktrisikowert" Header |
+| `Fußnote` | Placeholder | Disclaimer |
+| `Quelle` | Textbox | "Quelle: ... Stand DD.MM.YYYY" |
 
-**Geplante Performance-Folien-Shapes** (für Slides 10-12):
-- `Titel` — Wertentwicklung-Headline
-- `Tabelle` — 4×2 Kennzahlen-Tabelle (Performance p.a., Vola, Sharpe, Max DD × Referenz/Benchmark)
-- `Diagramm links` — Balken-Chart Performance p.a. (Kalenderjahre)
-- `Diagramm rechts` — Linien-Chart Wertentwicklung
-- `Header Diagramm links` / `Header Diagramm rechts` — Header-Textboxen
-- `Legende Diagramm links` — Legende Balken-Chart
-- `Fußnote` — Disclaimer
-- `Quelle` — Quelle/Stand
+#### Performance-Slide (Slide 10 in der Vorlage)
+| Shape-Name | Typ | Verwendung |
+|---|---|---|
+| `Titel` | Placeholder | "{Strategie} \| Wertentwicklung (mit Benchmark)" |
+| `Tabelle` | Tabelle 7×5 | KENNZAHLEN / REFERENZ / BENCHMARK |
+| `Diagramm links` | Chart (Säulen) | "PERFORMANCE P.A. (NACH KOSTEN)" |
+| `Diagramm rechts` | Chart (Linien) | "WERTENTWICKLUNG" |
+| `Fußnote` | Placeholder | Disclaimer |
+| `Quelle` | Textbox | Dynamisch via Drawing-XML-Manipulation |
+
+**Tabellen-Struktur** (7×5):
+- Row 0: Header (KENNZAHLEN | _ | REFERENZ | _ | BENCHMARK)
+- Row 1: Spacer
+- Row 2: Performance p.a.
+- Row 3: Volatilität
+- Row 4: Sharpe Ratio
+- Row 5: Max Drawdown
+- Row 6: Spacer
 
 ### 10.4 Strategienamen-Normalisierung
 
-`clean_strategy_name()` in `pptx_export.py` entfernt unerwünschte Präfixe vor der Anzeige:
-- `"cVV Konservativ"` → `"Konservativ"`
-- `"Stiftung Konservativ"` → `"Konservativ"`
-- `"Muster Konservativ cVV"` → `"Konservativ"`
-
-Präfixe-Liste: `STRATEGY_PREFIXES = ["cVV", "Muster", "Stiftung"]`. Wird sowohl am Anfang als auch am Ende entfernt. Erster Buchstabe wird groß geschrieben.
+`clean_strategy_name()` entfernt: `cVV`, `Muster`, `Stiftung`.
 
 ### 10.5 Slide-Duplikation für Vergleichsportfolio
 
-`_duplicate_slide(prs, source_idx)` dupliziert eine komplette Slide inklusive:
-- Aller Shape-Inhalte (per `deepcopy`)
-- Chart-Parts (eigene XML-Datei pro Chart, damit Änderungen unabhängig sind — kritisch!)
-- Image-Referenzen (geteilt, weil unveränderlich)
-- Sub-Relationships (z.B. eingebettete XLSX-Files in Charts)
+`_duplicate_slide(prs, source_idx)` mit deepcopy aller Shapes, eigene Chart-Parts, geteilte Image-Referenzen. Nach Duplikation immer `_save_and_reload(prs)`.
 
-Nach Duplikation: **immer** `_save_and_reload(prs)` aufrufen, um interne Slide-IDs zu konsolidieren. Sonst "Duplicate name"-Warnungen beim späteren Speichern.
+### 10.6 Chart-Befüllung — XML-basiert, `_replace_chart_data_safe()`
 
-Bei 2 Portfolios: Slides 7-9 werden 3× dupliziert, dann umsortiert zu `[P1.S7, P1.S8, P1.S9, P2.S7, P2.S8, P2.S9]`, dann P2-Slides befüllt.
+Charts in Vorlagen haben oft embedded Excel-Workbooks. Python-pptx's `chart.replace_data()` hat dabei **drei bekannte Bugs** (siehe Transferwissen #12):
 
-### 10.6 Chart-Befüllung — XML-basiert, NICHT über python-pptx CategoryChartData
+1. embedded Excel wird nicht aktualisiert
+2. `style*.xml` wird mit ZIP-Header überschrieben  
+3. Format-Codes der Daten-Labels gehen verloren
 
-**Wichtig:** Charts in Vorlagen können auf externe Excel-Dateien referenzieren (`xl/embeddings/`). Die python-pptx Standard-API `CategoryChartData` würde diese Referenzen brechen.
+**Lösung:** `_replace_chart_data_safe()` Wrapper in `pptx_export.py`:
 
-**Lösung:** `_replace_chart_data(chart_shape, categories, values)` manipuliert direkt das Chart-XML:
-- Findet `<c:cat>` und `<c:val>` Elemente
-- Tauscht `<c:pt>`-Punkte aus
-- Updated `<c:ptCount>`
-- Lässt externe Referenzen intakt
+```python
+# Pseudocode des Workflows:
+def _replace_chart_data_safe(chart_shape, categories, series_data, data_label_format):
+    # 1. Backup style/colors parts (Bytes)
+    # 2. chart.replace_data(CategoryChartData(...))
+    # 3. Restore style/colors parts from backup
+    # 4. Remove <c:externalData> from chart XML
+    # 5. Restore numFmt formatCode in <c:dLbls>
+```
 
-Diese Mechanik wurde experimentell entwickelt und ist robust gegen Vorlagen-Eigenheiten.
+Vollständige Implementierung siehe `pptx_export.py` und Transferwissen #12.
 
-### 10.7 Positionen-Verteilung auf Slides 7+8
+### 10.7 Performance-Daten-Befüllung (Phase 2, Juni 2026)
 
-Slide 7 (asymmetrisch groß): max 34 Datenzeilen
-Slide 8 (kleiner): max 12 Datenzeilen
+`compute_performance_data(timeseries_df, fee_dec)` in `pptx_export.py`:
 
-Eine Gruppe (z.B. AKTIEN) darf über die Slide-Grenze fließen. Bei Aufteilung wird der Gruppen-Header auf Slide 8 wiederholt.
+**Eingaben:**
+- `timeseries_df`: DataFrame mit Spalten `ret_port`, `ret_bm`, `rf` (Tagessätze)
+- `fee_dec`: Honorarsatz dezimal (z.B. 0,012 für 1,2% p.a.)
 
-**Wichtige Regel — Tabellen-Struktur unverändert lassen:** Frühere Versuche, leere Tabellenzeilen zu entfernen, haben dazu geführt dass LibreOffice die Zeilenhöhen automatisch vergrößert und die Tabelle den Footer überlappt. Daher: leere Zeilen bleiben sichtbar leer (mit NBSP gefüllt), die Vorlagen-Höhen sind exakt auf die Slide-Höhe kalibriert.
+**Berechnete Ausgaben (Dict):**
+```python
+{
+    "kennzahlen": {
+        "performance_pa": (ref_dec, bench_dec),     # CAGR nach Kosten
+        "volatilitaet":   (ref_dec, bench_dec),     # std×√365
+        "sharpe":         (ref_val, bench_val),     # Sharpe nach Sharpe (1994)
+        "max_drawdown":   (ref_dec, bench_dec),     # min(idx/cummax - 1)
+    },
+    "performance_pa": {
+        "jahre":     [2021, 2022, 2023, 2024, 2025],
+        "referenz":  [0.054, -0.018, 0.082, ...],   # dezimal pro Kalenderjahr
+        "benchmark": [...],
+    },
+    "wertentwicklung": {
+        "dates":     [date(2020,1,1), date(2020,1,2), ...],
+        "referenz":  [1.0, 1.0023, 1.0011, ...],    # Index (Start=1.0)
+        "benchmark": [...],
+    },
+}
+```
 
-### 10.8 Kritische Compliance-Anforderungen für PowerPoint-Export
+**Architektur:**
+- `_fill_performance_slide(prs, slide_idx, strategy_name, performance_data)` orchestriert
+- `_fill_kennzahlen_table(table, kz)` füllt die 4 Metric-Rows
+- `_replace_chart_data_safe()` (zwei mal) für Säulen + Linien-Chart
+
+### 10.8 Compliance-Anforderungen
 
 Die PPTX wird an Kunden weitergegeben — alle nachfolgenden Regeln sind **nicht verhandelbar**:
 
 | Anforderung | Umsetzung |
 |---|---|
-| **Anti-Cherry-Picking** | Performance-Folien zeigen **die gesamte verfügbare Historie**, nicht den Berater-Custom-Zeitraum |
-| **Benchmark wenn gemappt** | Bei Portfolios mit gemappter Benchmark wird die BM **immer** angezeigt (UI-Schalter wird im Export ignoriert) |
-| **Nur Nach Kosten** | "Vor Kosten"-Linien werden im Export **nie** gezeigt, auch wenn UI-Checkbox aktiv |
-| **Strategieentwurf-Hinweis** | Folie 7 hat Überschrift "Strategieentwurf im Rahmen einer Vermögensverwaltung" statt "Anlagevorschlag" (Email-Anforderung Juni 2026) |
+| **Anti-Cherry-Picking** | Performance-Folien zeigen **die gesamte verfügbare Historie** |
+| **Benchmark wenn gemappt** | BM **immer** angezeigt (UI-Schalter ignoriert) |
+| **Nur Nach Kosten** | "Vor Kosten"-Linien werden im Export **nie** gezeigt |
+| **Strategieentwurf-Hinweis** | Folie 7 hat Überschrift "Strategieentwurf im Rahmen einer Vermögensverwaltung" |
 | **Disclaimer auf jeder Folie** | Standard-Wertentwicklungs-Disclaimer + Quelle + Stand |
 | **Mindestens 5 Jahre Historie** | Durch "gesamte Historie zeigen" implizit erfüllt |
-| **Custom-Zeitraum als separate Folie** | F3 "Berater-Auswahl" — transparent macht welcher Zeitraum tatsächlich vom Berater betrachtet wurde |
-| **Strategienamen-Bereinigung** | `cVV`, `Muster`, `Stiftung` werden vor Anzeige entfernt |
+| **Strategienamen-Bereinigung** | `cVV`, `Muster`, `Stiftung` werden entfernt |
+
+### 10.9 Streamlit-Integration für Performance-Daten
+
+Im Portfolioanalyse-Tab beim PPTX-Erstellen (`portfolioanalyse.py`):
+
+```python
+# Priorität 1: aus session_state
+perf_timeseries = st.session_state.get("perf_timeseries", {})
+perf_d2c = st.session_state.get("perf_d2c", {})
+
+# Priorität 2 (Fallback): direkt laden wenn leer
+if not perf_timeseries:
+    date_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+    files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
+    if files and mapping_pf is not None:
+        perf_timeseries = build_portfolio_timeseries(files, mapping_pf)
+
+# Performance-Inputs zusammenbauen
+performance_inputs = []
+for pf_name, df_pf, _ad, _dur in portfolios:
+    csv_n = perf_d2c.get(pf_name) or display_to_csv_pf.get(pf_name)
+    ts_df = perf_timeseries.get(csv_n) if csv_n else None
+    fee_dec = float(mapping_pf.loc[mapping_pf["Inhaber"] == csv_n,
+                                   "Honorarsatz Standard"].values[0]) * mwst_faktor
+    performance_inputs.append({"timeseries_df": ts_df, "fee_dec": fee_dec})
+
+# An generate_portfolioanalyse_pptx übergeben
+generate_portfolioanalyse_pptx(portfolios, anlagevolumen, 
+                                performance_inputs=performance_inputs)
+```
+
+**MwSt-Faktor:** Sidebar-Checkbox `Bruttohonorar (inkl. 19% MwSt.)` × 1.19 wenn aktiviert.
 
 ---
 
-## 11. Berechnungsformeln
+## 11. PowerPoint-Vorlage Recipe — Neuaufbau aus Quell-PPTX
+
+**Dieser Abschnitt dokumentiert wie die aktuelle Vorlage `Vorlage_FFPB.pptx` (v7) gebaut wurde — als Recipe für zukünftige Vorlagen-Updates oder ähnliche Projekte.**
+
+### 11.1 Wann brauche ich das?
+
+- Eine Master-PPTX enthält eine wichtige Folie (z.B. Performance-Folie), die in eine bestehende Corporate-Vorlage integriert werden soll
+- python-pptx kann keine Slides zwischen Dateien kopieren
+- Eine Vorlage ist über die Sessions "verbastelt" und soll von Grund auf sauber neu gebaut werden
+- Bilder in einer PPTX sollen optimiert werden (PNG → JPEG)
+
+### 11.2 Phase-Übersicht
+
+| Phase | Schritt | Tool |
+|---|---|---|
+| 1 | Basis-PPTX kopieren (alle Files in dict) | `zipfile.ZipFile.read()` |
+| 2 | Performance-Slide aus Master importieren mit Pfad-Mapping | dict + `RENAME` mapping |
+| 3 | Innere Pfade in .rels aktualisieren | String-Replace |
+| 4 | `presentation.xml` + .rels: neue Slide registrieren | `lxml.etree` |
+| 5 | `slideMaster1.xml` + .rels: neues Layout registrieren | `lxml.etree` |
+| 6 | `[Content_Types].xml` erweitern | `lxml.etree` |
+| 7 | PNG → JPEG Konvertierung (optional) | PIL + ContentType/rels-Update |
+| 8 | ZIP zusammenstellen | `zipfile.ZipFile.writestr()` |
+
+### 11.3 Phase 1 — Basis kopieren
+
+```python
+import zipfile, io, re
+from PIL import Image
+from lxml import etree
+
+ORIG   = "Vorlage_FFPB_original.pptx"           # Corporate-Master ohne Performance-Folie
+MASTER = "Anlagevorschlag_Master_Dynamische_Folien.pptx"  # mit Performance-Folie
+TARGET = "Vorlage_FFPB_v7.pptx"
+
+files_v7 = {}
+with zipfile.ZipFile(ORIG, "r") as z:
+    for info in z.infolist():
+        files_v7[info.filename] = z.read(info.filename)
+```
+
+### 11.4 Phase 2 — Slide-Import mit Pfad-Mapping
+
+```python
+# Dependencies der Master-Slide identifizieren (manuell, einmal):
+#  master/slide8.xml          → enthält Performance-Folie mit Benchmark
+#  master/charts/chart3.xml   → Linien-Chart (Wertentwicklung)
+#  master/charts/chart4.xml   → Säulen-Chart (Performance p.a.)
+#  master/charts/style3.xml, colors3.xml, style4.xml, colors4.xml
+#  master/embeddings/Microsoft_Excel_Worksheet2.xlsx (chart3)
+#  master/embeddings/Microsoft_Excel_Worksheet3.xlsx (chart4)
+#  master/slideLayouts/slideLayout17.xml (Anlagestrategie Wertentwicklung)
+
+# Pfad-Mapping master → v7 (neue freie Indizes)
+RENAME = {
+    "ppt/slides/slide8.xml": "ppt/slides/slide26.xml",
+    "ppt/slides/_rels/slide8.xml.rels": "ppt/slides/_rels/slide26.xml.rels",
+    "ppt/charts/chart3.xml": "ppt/charts/chart8.xml",   # Line → chart8
+    "ppt/charts/_rels/chart3.xml.rels": "ppt/charts/_rels/chart8.xml.rels",
+    "ppt/charts/style3.xml": "ppt/charts/style8.xml",
+    "ppt/charts/colors3.xml": "ppt/charts/colors8.xml",
+    "ppt/charts/chart4.xml": "ppt/charts/chart7.xml",   # Bar → chart7
+    "ppt/charts/_rels/chart4.xml.rels": "ppt/charts/_rels/chart7.xml.rels",
+    "ppt/charts/style4.xml": "ppt/charts/style7.xml",
+    "ppt/charts/colors4.xml": "ppt/charts/colors7.xml",
+    "ppt/embeddings/Microsoft_Excel_Worksheet2.xlsx": "ppt/embeddings/Microsoft_Excel_Worksheet2.xlsx",
+    "ppt/embeddings/Microsoft_Excel_Worksheet3.xlsx": "ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx",
+    "ppt/slideLayouts/slideLayout17.xml": "ppt/slideLayouts/slideLayout29.xml",
+    "ppt/slideLayouts/_rels/slideLayout17.xml.rels": "ppt/slideLayouts/_rels/slideLayout29.xml.rels",
+}
+
+with zipfile.ZipFile(MASTER, "r") as z:
+    for old_path, new_path in RENAME.items():
+        files_v7[new_path] = z.read(old_path)
+```
+
+### 11.5 Phase 3 — Innere Pfade in .rels aktualisieren
+
+```python
+def update_rels(rels_str, mappings):
+    for old, new in mappings.items():
+        rels_str = rels_str.replace(f'Target="{old}"', f'Target="{new}"')
+    return rels_str
+
+# slide26.xml.rels: enthielt master-Pfade
+content_str = files_v7["ppt/slides/_rels/slide26.xml.rels"].decode("utf-8")
+content_str = update_rels(content_str, {
+    "../charts/chart3.xml": "../charts/chart8.xml",
+    "../charts/chart4.xml": "../charts/chart7.xml",
+    "../slideLayouts/slideLayout17.xml": "../slideLayouts/slideLayout29.xml",
+})
+files_v7["ppt/slides/_rels/slide26.xml.rels"] = content_str.encode("utf-8")
+
+# chart8.xml.rels: war chart3.xml.rels
+content_str = files_v7["ppt/charts/_rels/chart8.xml.rels"].decode("utf-8")
+content_str = update_rels(content_str, {
+    "colors3.xml": "colors8.xml",
+    "style3.xml": "style8.xml",
+})
+files_v7["ppt/charts/_rels/chart8.xml.rels"] = content_str.encode("utf-8")
+
+# chart7.xml.rels: war chart4.xml.rels (mit Worksheet-Umnummerierung!)
+content_str = files_v7["ppt/charts/_rels/chart7.xml.rels"].decode("utf-8")
+content_str = update_rels(content_str, {
+    "../embeddings/Microsoft_Excel_Worksheet3.xlsx": "../embeddings/Microsoft_Excel_Worksheet1.xlsx",
+    "colors4.xml": "colors7.xml",
+    "style4.xml": "style7.xml",
+})
+files_v7["ppt/charts/_rels/chart7.xml.rels"] = content_str.encode("utf-8")
+```
+
+### 11.6 Phase 4 — Slide in presentation.xml registrieren
+
+```python
+NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+NS_PKG = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+# presentation.xml.rels: neue Slide-Relationship
+pres_rels = etree.fromstring(files_v7["ppt/_rels/presentation.xml.rels"])
+existing_rids = [r.get("Id") for r in pres_rels.findall(f"{{{NS_PKG}}}Relationship")]
+new_rid = f"rId{max(int(r[3:]) for r in existing_rids if r.startswith('rId')) + 1}"
+
+new_rel = etree.SubElement(pres_rels, f"{{{NS_PKG}}}Relationship")
+new_rel.set("Id", new_rid)
+new_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide")
+new_rel.set("Target", "slides/slide26.xml")
+
+# presentation.xml: sldIdLst erweitern an Position 9 (= Slide 10 in UI)
+pres = etree.fromstring(files_v7["ppt/presentation.xml"])
+sld_ids = pres.findall(f".//{{{NS_P}}}sldIdLst/{{{NS_P}}}sldId")
+new_sld_id = max(int(s.get("id")) for s in sld_ids) + 1
+
+new_sld = etree.Element(f"{{{NS_P}}}sldId")
+new_sld.set("id", str(new_sld_id))
+new_sld.set(f"{{{NS_R}}}id", new_rid)
+pres.find(f"{{{NS_P}}}sldIdLst").insert(9, new_sld)  # Position 9 = Slide 10
+
+files_v7["ppt/presentation.xml"] = etree.tostring(
+    pres, xml_declaration=True, encoding="UTF-8", standalone=True
+)
+files_v7["ppt/_rels/presentation.xml.rels"] = etree.tostring(
+    pres_rels, xml_declaration=True, encoding="UTF-8", standalone=True
+)
+```
+
+### 11.7 Phase 5 — Layout im slideMaster registrieren
+
+```python
+# slideMaster1.xml.rels: slideLayout29 als neue Relationship
+sm_rels = etree.fromstring(files_v7["ppt/slideMasters/_rels/slideMaster1.xml.rels"])
+existing_sm_rids = [r.get("Id") for r in sm_rels.findall(f"{{{NS_PKG}}}Relationship")]
+new_layout_rid = f"rId{max(int(r[3:]) for r in existing_sm_rids if r.startswith('rId')) + 1}"
+
+new_layout_rel = etree.SubElement(sm_rels, f"{{{NS_PKG}}}Relationship")
+new_layout_rel.set("Id", new_layout_rid)
+new_layout_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout")
+new_layout_rel.set("Target", "../slideLayouts/slideLayout29.xml")
+
+# slideMaster1.xml: sldLayoutIdLst erweitern
+sm = etree.fromstring(files_v7["ppt/slideMasters/slideMaster1.xml"])
+layout_lst = sm.find(f"{{{NS_P}}}sldLayoutIdLst")
+existing_ids = [int(e.get("id")) for e in layout_lst.findall(f"{{{NS_P}}}sldLayoutId")]
+new_layout_entry = etree.SubElement(layout_lst, f"{{{NS_P}}}sldLayoutId")
+new_layout_entry.set("id", str(max(existing_ids) + 1))
+new_layout_entry.set(f"{{{NS_R}}}id", new_layout_rid)
+
+files_v7["ppt/slideMasters/slideMaster1.xml"] = etree.tostring(sm, ...)
+files_v7["ppt/slideMasters/_rels/slideMaster1.xml.rels"] = etree.tostring(sm_rels, ...)
+```
+
+### 11.8 Phase 6 — ContentTypes erweitern
+
+```python
+NS_CT = "http://schemas.openxmlformats.org/package/2006/content-types"
+ct = etree.fromstring(files_v7["[Content_Types].xml"])
+
+NEW_OVERRIDES = [
+    ("/ppt/slides/slide26.xml", "application/vnd.openxmlformats-officedocument.presentationml.slide+xml"),
+    ("/ppt/charts/chart7.xml", "application/vnd.openxmlformats-officedocument.drawingml.chart+xml"),
+    ("/ppt/charts/chart8.xml", "application/vnd.openxmlformats-officedocument.drawingml.chart+xml"),
+    ("/ppt/charts/style7.xml", "application/vnd.ms-office.chartstyle+xml"),
+    ("/ppt/charts/style8.xml", "application/vnd.ms-office.chartstyle+xml"),
+    ("/ppt/charts/colors7.xml", "application/vnd.ms-office.chartcolorstyle+xml"),
+    ("/ppt/charts/colors8.xml", "application/vnd.ms-office.chartcolorstyle+xml"),
+    ("/ppt/slideLayouts/slideLayout29.xml", "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"),
+]
+for partname, ct_type in NEW_OVERRIDES:
+    ov = etree.SubElement(ct, f"{{{NS_CT}}}Override")
+    ov.set("PartName", partname)
+    ov.set("ContentType", ct_type)
+
+files_v7["[Content_Types].xml"] = etree.tostring(ct, ...)
+```
+
+### 11.9 Phase 7 — PNG → JPEG Optimierung (siehe Transferwissen #13)
+
+```python
+TO_JPEG = ["image4.png", "image7.png", "image8.png", "image11.png", "image12.png",
+           "image13.png", "image14.png", "image15.png", "image16.png", "image18.png",
+           "image20.png", "image25.png", "image26.png", "image27.png", "image28.png",
+           "image29.png", "image30.png", "image31.png", "image32.png"]
+
+def png_to_jpeg(png_bytes, quality=85):
+    img = Image.open(io.BytesIO(png_bytes))
+    if img.mode == "RGBA":
+        white_bg = Image.new("RGB", img.size, (255, 255, 255))
+        white_bg.paste(img, mask=img.split()[-1])
+        img = white_bg
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
+
+# Files konvertieren
+files_v7_new = {}
+for path, content in files_v7.items():
+    if path.startswith("ppt/media/"):
+        bn = path.split("/")[-1]
+        if bn in TO_JPEG:
+            jpeg = png_to_jpeg(content)
+            new_path = path.replace(".png", ".jpeg")
+            files_v7_new[new_path] = jpeg
+            continue
+    files_v7_new[path] = content
+files_v7 = files_v7_new
+
+# Pfade in ContentTypes + rels aktualisieren
+for path in list(files_v7.keys()):
+    if path == "[Content_Types].xml" or path.endswith(".rels"):
+        s = files_v7[path].decode("utf-8")
+        for img in TO_JPEG:
+            jpeg_img = img.replace(".png", ".jpeg")
+            s = s.replace(f"media/{img}", f"media/{jpeg_img}")
+            s = s.replace(f"/ppt/media/{img}", f"/ppt/media/{jpeg_img}")
+        files_v7[path] = s.encode("utf-8")
+```
+
+### 11.10 Phase 8 — ZIP zusammenstellen + Validieren
+
+```python
+with zipfile.ZipFile(TARGET, "w", zipfile.ZIP_DEFLATED) as zout:
+    for path, content in files_v7.items():
+        zout.writestr(path, content)
+
+# Validierung (Transferwissen #16)
+from pptx import Presentation
+prs = Presentation(TARGET)
+print(f"✓ {len(prs.slides)} Slides, {os.path.getsize(TARGET)/1024/1024:.2f} MB")
+```
+
+### 11.11 Layout-Anpassungen (Post-Build)
+
+Nach dem Neuaufbau wurden noch drei Layout-Mods angewendet:
+
+```python
+# 1. "ASSETKLASSEN" → "AKTUELLE STRUKTUR" in drawing1.xml + slideLayout26.xml
+# 2. Tabellen-Header "Rating" → "Marktrisikowert" in slide8.xml (UI Slide 7)
+# 3. "Linie links" Y-Position: 5240797 EMU → 5848626 EMU (auf gleiche Höhe wie "Linie rechts")
+```
+
+EMU = English Metric Unit, 914400 EMU = 1 Zoll.
+
+### 11.12 Resultat
+
+- **Vorher:** Vorlage v5/v6 mit Altlasten, 8.4 MB, gelegentliche Reparieren-Dialoge
+- **Nachher (v7):** Vorlage 4.14 MB, 25 Slides, 0 XML-Fehler, sauber neu gebaut, generierte PPTX 4.22 MB
+- **Generierungs-Zeit:** 0.6s (vorher ~2s)
+- **Streamlit-Cloud:** kein progress.html-Timeout mehr
+
+---
+
+## 12. Berechnungsformeln
 
 ```
 daily_drag      = (1 + fee_pa)^(1/365) - 1
@@ -586,263 +1447,189 @@ gew_duration    = Σ(gewicht × duration) / Σ(gewichte_anleihen)
 
 ### Sharpe Ratio – wissenschaftlich saubere Variante nach Sharpe (1994)
 
-Wir nutzen NICHT die häufige Approximation `(CAGR − rf_pa) / Vola_pa`, sondern die mathematisch korrekte Variante auf Basis täglicher Excess Returns:
-
 ```
-# 1. Annualisierten rf pro Tag in Tagessatz wandeln
 daily_rf[t]   = (1 + rf_annual[t])^(1/365) - 1
-
-# 2. Tägliche Überrendite des Portfolios
 excess[t]     = ret_port_nachKosten[t] - daily_rf[t]
-
-# 3. Sharpe auf Tagesbasis
 sharpe_daily  = mean(excess) / std(excess, ddof=1)
-
-# 4. Annualisierung
 sharpe_p.a.   = sharpe_daily × √365
 ```
 
-**Warum diese Variante:** Zähler (Mittelwert) und Nenner (Standardabweichung) basieren auf **derselben** Excess-Return-Zeitreihe. Das entspricht Sharpe's eigener Definition (1994, "The Sharpe Ratio", JPM) und ist robust bei stark schwankenden rf-Zeitreihen (z.B. Zinswende-Phasen).
+Implementiert in `calc_sharpe_excess(draf, df["rf"])` in `streamlit_app.py` und in `compute_performance_data()` in `pptx_export.py`.
 
-**Unterschied zur p.a.-Approximation:** Bei konstantem rf liegen beide Varianten dicht beieinander (Differenz < 0,02), bei stark variablem rf wird der Unterschied spürbar. Beispiel-Validierung (3-Jahres-Zeitreihe, rf von 0 → 4%): klassisch 1,04 vs. Excess-Variante 1,02.
-
-**Validierung mit echten Daten (Mai 2026):** Mit einer 17-Jahres-rf-Zeitreihe (2008-2026, ~6300 Tageswerte) getestet. Die Zeitreihe enthält Niedrigzinsphase, Negativzinsphase (rf bis -0,33%) und Zinswende (rf bis +3,99%). Alle Helper-Funktionen liefern plausible Werte. Negative rf-Werte werden mathematisch korrekt verarbeitet (siehe Transferwissen #9).
-
-Implementiert in `calc_sharpe_excess(draf, df["rf"])` in `streamlit_app.py`.
-
-### Risikofreier Zins – Aggregation (geometrisch, nur für Anzeige)
-
-Wird **nur** für die Caption-Anzeige `Ø Risikofreier Zins p.a. (Zeitraum)` und die PDF-Meta-Zeile verwendet — NICHT für die Sharpe-Berechnung. Die Sharpe nutzt die tägliche rf-Zeitreihe direkt (siehe oben).
-
-Eingabe: Zeitreihe annualisierter rf-Werte (z.B. 0,03928 = 3,928% p.a.) pro Handelstag.
+### Risikofreier Zins – Aggregation (geometrisch)
 
 ```
-# 1. Tagessatz aus annualisiertem rf
 daily_rf = (1 + rf_annual)^(1/365) - 1
-
-# 2. Alle Tagessätze über den Zeitraum kompoundieren
-growth = Π (1 + daily_rf)
-
-# 3. Zurück auf p.a. annualisieren
-rf_pa = growth^(365 / n_days) - 1
+growth   = Π (1 + daily_rf)
+rf_pa    = growth^(365 / n_days) - 1
 ```
-
-**Validierung:** Konstanter rf von 3,928% kommt nach Aggregation exakt als 3,928% zurück (0 ppm Differenz). Implementiert in `aggregate_rf_geometric()` in `streamlit_app.py`.
 
 ### rf-Index für Chart
 
-Jeder Tag verzinst sich mit seinem eigenen Tagessatz:
 ```
 daily_rf[i] = (1 + rf_annual[i])^(1/365) - 1
 idx[i]      = idx[i-1] * (1 + daily_rf[i])
 ```
-Startwert = Anlagevolumen (wenn gesetzt) oder 100. Implementiert in `make_index_from_rf()`.
 
 ---
 
-## 12. Roadmap — Geplante Implementierungen
+## 13. Roadmap — Geplante Implementierungen
 
-### 12.1 Aktuelle Aufgaben (Juni 2026 — Email-Anforderung Compliance)
+### 13.1 Aktueller Stand (Juni 2026)
 
-Stand: alle Brainstorming-Punkte sind geklärt, Implementierung steht noch aus.
+| Aufgabe | Status |
+|---|---|
+| **Aufgabe A:** Strategieentwurf-Überschrift auf PPTX Folie 7 | ⚠️ Offen |
+| **Aufgabe B:** Seitenzahlen in PDF-Druckversionen | ⚠️ Offen (Position-Spec ausstehend) |
+| **Aufgabe C:** Seitenzahlen in PPTX dynamisch | ⚠️ Offen |
+| **Aufgabe D:** Performance-PPTX-Export | ✅ **ERLEDIGT (Juni 2026)** |
 
-#### Aufgabe A: Strategieentwurf-Überschrift auf PPTX Folie 7
+### 13.2 Aufgabe A: Strategieentwurf-Überschrift
+
 - **Was:** Überschrift "Anlagevorschlag" → "Strategieentwurf im Rahmen einer Vermögensverwaltung"
-- **Wo:** Nur Folie 7 (nicht 8, 9)
-- **Code:** In `pptx_export.py` → `_fill_anlagevorschlag_slides()` → bei Slide 7 den Titel-Shape mit dem festen neuen Text ersetzen, statt mit dem dynamischen "Anlagevorschlag – <Strategie>"
-- **Zusatztext:** Kein Footer-Hinweis (nur Überschrift wird geändert)
+- **Wo:** Nur Folie 7
 - **Aufwand:** Trivial (~10 Min)
 
-#### Aufgabe B: Seitenzahlen in PDF-Druckversionen
-- **Was:** Seitenzahlen einfügen, wie in der PPTX-Vorlage
+### 13.3 Aufgabe B: PDF-Seitenzahlen
+
+- **Was:** Seitenzahlen analog zur PPTX
 - **Wo:** `streamlit_app.py` (Performance-PDF) + `portfolioanalyse.py` (Portfolioanalyse-PDF)
-- **Format:** Nur die Zahl (z.B. "7") — kein "Seite X von Y"
-- **Position:** **NOCH ZU KLÄREN — Anforderer hatte gesagt "ich gebe dir sie", Spec ausstehend**
-  - Default-Annahme falls keine andere Spec: rechts unten (wie in der PPTX-Vorlage)
-- **Technik:** reportlab `onFirstPage` + `onLaterPages` Callback im `SimpleDocTemplate` — zeichnet auf canvas via `canvas.drawRightString()` o.ä.
+- **Position:** NOCH ZU KLÄREN
 - **Aufwand:** Klein (~30 Min)
 
-#### Aufgabe C: Seitenzahlen in PPTX-Export — dynamisch korrekt
-- **Problem:** Die Vorlage hat statische Seitenzahlen (Slides 7-9 zeigen "13"-"15"), Lücke 7-12 für dynamische Slides reserviert
-- **Was:** Bei Export Seitenzahlen dynamisch auf die finale Slide-Position setzen
-- **Logik:** Nach allen Add/Remove-Operationen über alle Slides iterieren, Shape `Foliennummer` finden und mit der korrekten Slide-Position (1-indexed, Cover ausgenommen) befüllen
-- **Aufwand:** Mittel (~1h, weil Edge-Cases beachten: Slides ohne `Foliennummer`-Shape, Cover/Endseiten)
+### 13.4 Aufgabe C: PPTX-Seitenzahlen dynamisch
 
-#### Aufgabe D: Performance-PPTX-Export (großes Feature)
-Komplette neue Funktionalität — alle Spezifikationen aus Brainstorming Juni 2026 (siehe 12.2).
-- **Aufwand:** Groß (~6-8h)
+- **Problem:** Vorlage hat statische Seitenzahlen, aber dynamisches Slide-Reorder beim Export
+- **Lösung:** Über alle Slides iterieren, `Foliennummer`-Shape mit korrekter Position befüllen
+- **Aufwand:** Mittel (~1h)
 
-### 12.2 Spezifikation Performance-PPTX-Export (vollständig geklärt)
+### 13.5 Aufgabe D — ERLEDIGT (Juni 2026)
 
-Alle Punkte sind durch Brainstorming geklärt — kann ohne weitere Klärung implementiert werden.
+**Performance-PPTX-Export** wurde vollständig implementiert. Details:
 
-#### Architektur
-- **B2-Prinzip:** Jeder Tab füllt nur eigene Folien
-- **Position:** Performance-Folien NACH Anlagevorschlag — Slides 10-12 in der Vorlage (nach Entfernung Slide 10 alt = Währungen)
-- **TOC** (Slide 2): "3. Wertentwicklung" neu, "3. Honorar" wird zu "4. Honorar" etc.
-- **Button:** In `streamlit_app.py` neben "PDF erstellen" — analog zum Portfolioanalyse-Tab
-- **Dateiname:** `<Strategie>_Performance_<Datum>.pptx`
+- ✅ `_fill_performance_slide()` in `pptx_export.py`
+- ✅ `compute_performance_data()` mit allen Kennzahlen + Chart-Daten
+- ✅ `_replace_chart_data_safe()` mit Workaround für 3 python-pptx-Bugs
+- ✅ Streamlit-Integration: session_state + Fallback-Loader
+- ✅ MwSt-Checkbox in Portfolioanalyse-Sidebar
+- ✅ Sauber neu aufgebaute Vorlage v7 mit Performance-Folie an Slide 10
+- ✅ 4.14 MB Vorlage (statt 22.7 MB), löst Streamlit-Cloud progress.html
 
-#### Folien
-Aus EINER Master-Vorlagen-Folie (in `Anlagevorschlag_Master_Dynamische_Folien.pptx` als Slide 8 angelegt) werden bis zu 3 Folien generiert:
+**Architektur abweichend von ursprünglicher Spec:**
+- Performance-Folie wurde Teil des **Portfolioanalyse-Tabs** (nicht separater Performance-Tab-Button), weil sie strukturell mit Slide 7-9 zusammengehört
+- Nur EINE Performance-Folie statt der ursprünglich geplanten F1/F2/F3-Variante (kann später erweitert werden)
 
-| Folie | Überschrift | Zeitraum | Benchmark |
-|---|---|---|---|
-| F1 | `<Strategie>\| Wertentwicklung (ohne Benchmark)` | Gesamte verfügbare Historie | — |
-| F2 | `<Strategie>\| Wertentwicklung (mit Benchmark)` | Gesamte verfügbare Historie | nur wenn gemappt |
-| F3 | `<Strategie>\| Wertentwicklung (Berater-Auswahl)` | Berater-Custom-Zeitraum aus UI | wie F2 (mit BM wenn gemappt) |
+### 13.6 Sonstige Pflege-Punkte
 
-**Skip-Regeln:**
-- F2: übersprungen wenn keine Benchmark im Mapping
-- F3: übersprungen wenn UI-Zeitraum = volle Historie (±5 Tage Toleranz)
-
-**Bei Vergleich** (2 Portfolios im UI): V1 = je 3 Folien sequentiell (analog Portfolioanalyse-Vergleich), 6 Folien total.
-
-#### Folien-Inhalt pro Folie
-- **Überschrift** oben links: `<Strategie>\| Wertentwicklung (...)`
-- **Kennzahlen-Tabelle** links oben: 4 Zeilen × 2 Spalten (Referenz / Benchmark)
-  - Performance p.a.
-  - Volatilität
-  - Sharpe Ratio
-  - Max Drawdown
-- **Linien-Chart** rechts oben: Wertentwicklung (Index, Start=100), immer normalisiert (egal ob Anlagevolumen im UI gesetzt)
-- **Balken-Chart** links unten: Performance p.a. nach Kalenderjahren (nach Kosten)
-- **Disclaimer** rechts unten: *"Die angegebenen Werte beziehen sich auf die historische Wertentwicklung. Der Wert sowie die Erträge einer Kapitalanlage können sowohl steigen als auch fallen. Eine positive Wertentwicklung in der Vergangenheit stellt keine Garantie für zukünftige Entwicklungen dar. Die Wertentwicklung wird in Euro (€) gemessen. Die ausgewiesene Performance wird auf täglicher Basis berechnet. Der jährliche Honorarsatz wird dabei in eine äquivalente tägliche Belastung umgerechnet und unter Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; eine halbjährliche Berücksichtigung erfolgt nicht."*
-- **Footer:** Logo links, "Quelle: Eigene Berechnung, Stand <heutiges Datum>" rechts neben Seitenzahl
-
-#### Compliance-Regeln (siehe auch Abschnitt 10.8)
-- **Nur Nach Kosten** im Export (UI-Schalter "Vor Kosten" ignoriert)
-- **Strategiename gereinigt** (via `clean_strategy_name`)
-- **Heutiges Datum** im Footer (Erstellungsdatum)
-- **Benchmark immer wenn gemappt** — UI-Checkbox ignoriert
-
-#### Shape-Namen in der neuen Vorlagen-Folie
-Bereits angelegt in `Anlagevorschlag_Master_Dynamische_Folien.pptx` Slide 8:
-
-| Name | Typ | Zweck |
-|---|---|---|
-| `Titel` | Placeholder | Folien-Headline |
-| `Tabelle` | Tabelle (4×2) | Kennzahlen (Referenz/Benchmark) |
-| `Diagramm links` | Chart | Balken Performance p.a. |
-| `Diagramm rechts` | Chart | Linien Wertentwicklung |
-| `Header Diagramm links` | Textbox | "PERFORMANCE P.A. (NACH KOSTEN)" |
-| `Header Diagramm rechts` | Textbox | "WERTENTWICKLUNG" |
-| `Legende Diagramm links` | Textbox | Balken-Legende (Referenz/Benchmark) |
-| `Fußnote` | Placeholder | Disclaimer-Text |
-| `Quelle` | Textbox | "Quelle: Eigene Berechnung, Stand DD.MM.YYYY" |
-| `Foliennummer` | Placeholder | Seitenzahl |
-
-### 12.3 Implementierungs-Reihenfolge (Vorschlag)
-
-1. **Aufgabe A** (Strategieentwurf-Überschrift) — trivial, schneller Win
-2. **Aufgabe B** (PDF-Seitenzahlen) — wartet auf Position-Spec vom Anforderer
-3. **Aufgabe C** (PPTX-Seitenzahlen dynamisch)
-4. **Aufgabe D** (Performance-PPTX-Export) — größtes Feature, in Teilschritten:
-   - 4.1 Vorlage Performance-Folie in `Vorlage_FFPB.pptx` integrieren (Slides 10-12)
-   - 4.2 `generate_performance_pptx()` in `pptx_export.py` neu anlegen
-   - 4.3 Streamlit-Button in `streamlit_app.py` einbauen
-   - 4.4 End-to-End-Test mit echten Daten
-
-### 12.4 Sonstige Pflege-Punkte (langfristig)
-
-- Ggf. Sharpe + rf-Linie auch in Portfolioanalyse-Tab (aktuell nur Tab 1)
-- Compliance-Feedback weiter beobachten → Disclaimer ggf. anpassen
-- Bei Bedarf: Portfolio-Builder-Reaktivierung (siehe Abschnitt 1, deaktiviert seit Juni 2026)
+- Ggf. F2/F3-Varianten (ohne BM / Berater-Zeitraum) als zusätzliche Slides
+- Sharpe + rf-Linie auch in Portfolioanalyse-Tab
+- Bei Bedarf: Portfolio-Builder-Reaktivierung
 
 ---
 
-## 13. Changelog
+## 14. Changelog
 
-### Juni 2026 – Brainstorming PowerPoint-Export-Erweiterung (Spezifikation komplett, Implementierung steht aus)
-- **Email-Anforderung mit 3 Compliance-Punkten:** Seitenzahlen in Druckversionen, Mindest-Historie 5 Jahre, Strategieentwurf-Hinweis auf PPTX
-- **Bestehender PPTX-Export** (`pptx_export.py`) erstmals in Doku dokumentiert (Abschnitt 10 "PowerPoint-Export-System")
-- **Performance-PPTX-Export** als neues großes Feature spezifiziert:
-  - Architektur **B2:** jeder Tab füllt nur seine eigenen Folien
-  - Position: Performance nach Anlagevorschlag in der Vorlage (Slides 10-12)
-  - Inhalts-VZ-Eintrag "3. Wertentwicklung" wird neu in TOC eingefügt
-  - 3 Folien-Varianten F1 (ohne BM), F2 (mit BM), F3 (Berater-Auswahl)
-  - F2 wird übersprungen wenn keine BM gemappt; F3 wenn Custom-Zeitraum = volle Historie
-  - Vergleichsportfolio: V1 = je 3 Folien sequentiell (analog Portfolioanalyse-Vergleich)
-  - Nur "Nach Kosten" im Export, UI-Schalter ignoriert
-  - Heutiges Datum im Footer (nicht Auswertungsdatum)
-  - Linien-Chart immer normalisiert (Start=100), Anlagevolumen ignoriert
-  - Kennzahlen: Performance p.a., Volatilität, Sharpe, Max Drawdown (4 Zeilen)
-  - Charts: Linien + Balken; KEIN Drawdown, KEINE rollierende Tabelle
-- **Master-Vorlage** mit Performance-Folie wurde vom Anforderer geliefert (`Anlagevorschlag_Master_Dynamische_Folien.pptx` Slide 8, Shape-Namen extrahiert und dokumentiert)
-- **Disclaimer-Text für Performance-Folien** finalisiert (siehe Abschnitt 12.2)
-- **"Strategieentwurf im Rahmen einer Vermögensverwaltung"** ersetzt die Überschrift "Anlagevorschlag" auf PPTX-Folie 7 (nur Überschrift, kein zusätzlicher Footer-Text, nur Slide 7 nicht 8/9)
-- Detailfragen zu Folien-Layout, Strategienamen-Bereinigung, Compliance-Anforderungen alle geklärt — siehe Abschnitt 10 und 12
+### Juni 2026 (Phase 2) – Performance-PPTX-Export implementiert + Vorlage-Neuaufbau
+
+**Phase 2.1 — Performance-Daten-Berechnung (`pptx_export.py`)**
+- `compute_performance_data(timeseries_df, fee_dec)` neu: berechnet alle Kennzahlen, Säulen-Chart-Daten (5 Kalenderjahre) und Linien-Chart-Daten (gesamte Historie) aus einer Zeitreihe
+- `_fill_performance_slide(prs, slide_idx, strategy_name, performance_data=None)` befüllt Titel + Tabelle + 2 Charts; bei `performance_data=None` werden nur Titel gesetzt (Phase-1-Verhalten)
+- Berechnungs-Funktionen aus `streamlit_app.py` dupliziert: `_calc_cagr`, `_calc_vola`, `_calc_sharpe_excess`, `_calc_max_drawdown`, `_make_index_after_fee`
+- `_fmt_pct()`, `_fmt_ratio()` für deutsche Zahlenformatierung in der Tabelle
+
+**Phase 2.2 — python-pptx Bug-Workaround (`_replace_chart_data_safe`)**
+- 3 Bugs in `chart.replace_data()` identifiziert und gefixt (siehe Transferwissen #12):
+  - Bug 1: embedded Excel nicht aktualisiert → `<c:externalData>` entfernen
+  - Bug 2: `style*.xml` mit ZIP-Header überschrieben → Backup-Restore Pattern
+  - Bug 3: Format-Codes auf "General" → `_restore_data_label_format()`
+- Vollständige Diagnose dokumentiert (siehe `WISSENSBASIS.md` im Workspace)
+
+**Phase 2.3 — Streamlit-Integration (`portfolioanalyse.py`)**
+- Sidebar-Checkbox `pf_brutto_mwst` für Bruttohonorar (×1.19)
+- PPTX-Button-Block baut `performance_inputs` aus session_state + load_mapping + mwst_faktor
+- **Fallback-Loader** (Transferwissen #15): wenn session_state leer → direkt aus `Daten/`-Ordner laden
+- Diagnose-Warnung wenn ein gewähltes Portfolio nicht in den Performance-Daten gefunden wird
+
+**Phase 2.4 — shared.py erweitert**
+- CSV-Loading-Helpers verschoben aus `streamlit_app.py`: `to_decimal_interval`, `read_one_csv`, `parse_dates_col`, `extract_benchmark_name`, `load_all_csvs`, `build_portfolio_timeseries`
+- Damit können sowohl Performance-Tab als auch Portfolioanalyse-Tab die Daten laden
+
+**Phase 2.5 — streamlit_app.py erweitert**
+- Im Performance-Tab nach Daten-Load: `st.session_state["perf_timeseries"] = data` + `st.session_state["perf_d2c"] = d2c`
+- Damit kann Portfolioanalyse-Tab die Daten direkt nutzen (mit Fallback wenn leer)
+
+**Phase 2.6 — Vorlage komplett neu aufgebaut (v5/v6 → v7)**
+- Problem: v5 hatte Altlasten aus mehreren Modifikations-Sessions, gelegentliche PowerPoint-Reparieren-Dialoge
+- Lösung: Sauberer Neuaufbau aus Original (22.7 MB, ohne Performance-Folie) + Master (mit Performance-Folie)
+- **`build_v7.py` Skript** (siehe Abschnitt 11 für Details):
+  1. Original-Vorlage als Basis (alle 181 Files)
+  2. Performance-Slide aus Master importiert mit Umnummerierung (slide8→26, chart3/4→7/8, etc.)
+  3. presentation.xml + slideMaster.xml + ContentTypes synchron erweitert
+  4. 19 PNGs zu JPEG q=85 konvertiert (alle hatten fake-Alpha min=255)
+- **Layout-Mods auf v7**: "AKTUELLE STRUKTUR", "Marktrisikowert"-Header, Linien-Y-Alignment
+- **Resultat:** Vorlage 4.14 MB (statt 22.7 MB), 25 Slides, 0 XML-Fehler, sauber
+
+**Phase 2.7 — Transferwissen erweitert**
+- Transferwissen #12: python-pptx `chart.replace_data()` Bug-Trio
+- Transferwissen #13: PNG → JPEG mit Alpha-Check für PPTX-Optimierung
+- Transferwissen #14: Slide-Copy zwischen PPTX-Dateien (ZIP-Workflow)
+- Transferwissen #15: Streamlit Cross-Tab Daten-Sharing mit Fallback-Strategie
+- Transferwissen #16: PPTX-Validierung Multi-Layer-Toolchain
+- Transferwissen #17: Office-Dokumente sind ZIPs (Manipulation-Recipe)
+
+**Performance-Test Phase 2 (Endzustand):**
+- Generation: 0.60s (mit 5-Jahres-Zeitreihe)
+- PPTX-Größe: 4.22 MB
+- 0 XML-Fehler in Validation
+- 0 PK-Header in XML-Files (kein style-corruption)
+- `<c:externalData>` korrekt entfernt aus chart7 und chart8
+
+### Juni 2026 – Brainstorming PowerPoint-Export-Erweiterung
+- Email-Anforderung mit 3 Compliance-Punkten dokumentiert
+- Bestehender PPTX-Export erstmals in Doku dokumentiert
+- Performance-PPTX-Export als großes Feature spezifiziert (→ dann in Phase 2 implementiert)
+- Master-Vorlage `Anlagevorschlag_Master_Dynamische_Folien.pptx` als Quelle für Performance-Folie identifiziert
 
 ### Juni 2026 – Performance-Tab auf Corporate Colors umgestellt
-- **Strategie A:** Konstanten in `shared.py` direkt umdefiniert (single source of truth)
-- `FFPB_DARK`: `#1B3A5C` → `#003460` (Fuggerblau)
-- `FFPB_GOLD`: `#B8973A` → `#C3A069` (Fuggergold)
-- `FFPB_LIGHT`: `#A8CBE8` → `#7FABC8` (Hellblau)
-- `FFPB_BLUE2`: `#2C5F8A` → `#4A7FAA` (Mittelblau)
-- Neue Konstanten: `FFPB_SAND = "#D4BD8A"` und `FFPB_PALETTE` (15-Farben-Sequenz analog zu Portfolioanalyse `RING_COLORS`)
-- `streamlit_app.py`: Plotly-Balken-Chart (BG + 4 Balkenfarben + Achsen-Linien) auf Konstanten; PDF-Linien/Drawdown/Bar-Charts auf neue Konstanten + neue Spines/Grid-Werte (`#1A4880`/`#0A4576`)
-- **Plotly-Linien-Charts** (Hauptchart Performance, Drawdown Euro/%): nutzen jetzt `fig.update_layout(colorway=FFPB_PALETTE)` — siehe Transferwissen #10
-- **PDF-Linien-Chart** matplotlib: `colors=FFPB_PALETTE[1:]` (Skip Index 0 weil = Hintergrund-Farbe Fuggerblau)
-- Portfolioanalyse-PDF-Header/Tabellenkopfzeilen profitieren automatisch (nutzen `FFPB_DARK` aus shared.py)
-- Doku: Abschnitt 4 (Corporate Design) komplett neu — Hauptfarben-Tabelle + Palette + Spines/Grid + historischer Kontext
-- Transferwissen #10 (Plotly `colorway`) und #11 (Import-Pärchen-Deployment) ergänzt
+- Strategie A: Konstanten in `shared.py` direkt umdefiniert (single source of truth)
+- `FFPB_DARK`, `FFPB_GOLD`, `FFPB_LIGHT`, `FFPB_BLUE2` auf Fürst-Fugger-Hex-Werte
+- Neue Konstanten: `FFPB_SAND`, `FFPB_PALETTE` (15 Farben)
+- Plotly-Linien-Charts nutzen `colorway=FFPB_PALETTE` (Transferwissen #10)
 
 ### Juni 2026 – Disclaimer-Wording auf Vermögensverwaltung
-- **Compliance-Abstimmung:** "im Beratungsgespräch" → "der Vermögensverwaltungsstrategien im Kundengespräch"
-- 4 Stellen geändert: `streamlit_app.py` Performance UI + PDF, `portfolioanalyse.py` UI + PDF
-- Doku: Abschnitt 7 (Performance), 8 (Portfolioanalyse), 9 (Disclaimers-Tabelle) auf neues Wording
+- Compliance-Abstimmung: "im Beratungsgespräch" → "der Vermögensverwaltungsstrategien im Kundengespräch"
 
 ### Juni 2026 – Tab "Portfolio zusammenstellen" deaktiviert
-- **Compliance-Entscheidung:** Berater dürfen den freien Portfolio-Builder nicht nutzen
-- `streamlit_app.py`: Import von `render_portfolio_builder` entfernt, Tab-Tuple von 3 auf 2 Tabs reduziert, Tab-3-Block komplett raus
-- Docstring angepasst mit Hinweis warum
-- `modules/portfolio_builder.py` bleibt im Repo (nicht gelöscht, nicht verschoben) — kann bei späterer Compliance-Klärung wieder aktiviert werden indem Import + Tab wieder hinzugefügt werden
-- `modules/portfolioanalyse.py` unverändert (importierte nie aus dem Builder)
-- Doku: Abschnitt "Tab 3" komplett entfernt, Nummerierung von 14 auf 13 Abschnitte reduziert, Abhängigkeits-Diagramm und Disclaimers-Tabelle aktualisiert
+- Compliance-Entscheidung
 
 ### Mai 2026 (Validierung) – Echtdaten-Test mit 17-Jahres-Zeitreihe
 - Sharpe-Berechnung und rf-Verarbeitung mit echter Zeitreihe (31.12.2008 – 12.05.2026, ~6300 Tageswerte) validiert
-- Zeitreihe enthält alle drei relevanten Zins-Regime: Niedrigzins (2008-2014), Negativzins (2015-2022, bis -0,33%), Zinswende (2022-2024, bis +3,99%)
-- Bestätigt: Auto-Format-Erkennung greift korrekt (Median ≈ 0,014 → als Dezimal erkannt, keine Fehl-Division)
-- Bestätigt: Negative rf-Werte mathematisch korrekt verarbeitet — rf-Index sinkt bei negativem rf, was visuell der wirtschaftlichen Realität entspricht
-- Bestätigt: Sharpe Ratio mit Excess-Return-Variante über kompletten Zeitraum plausibel
-- Transferwissen #9 (Negative Werte in Finanzzeitreihen) ergänzt
 
-### Mai 2026 (Update) – Sharpe Ratio auf Excess-Return-Variante
-- `calc_sharpe(cagr, rf_pa, vola)` ersetzt durch `calc_sharpe_excess(draf, rf_series)`
-- Sharpe nun nach Sharpe (1994): Mittelwert und Standardabweichung auf täglicher Excess-Return-Zeitreihe, anschließend × √365
-- Vorher: p.a.-Approximation `(CAGR − rf_pa) / Vola_pa`
-- Tooltips, PDF-Glossar und Doku-Formeln entsprechend aktualisiert
-- `aggregate_rf_geometric()` bleibt erhalten — wird nur noch für die Caption- und PDF-Meta-Anzeige des Ø rf verwendet, nicht mehr für die Sharpe-Berechnung
-- Defensive Bedingung: Sharpe nur berechnet wenn `df["rf"]` existiert UND mindestens einen Nicht-NaN-Wert enthält
+### Mai 2026 – Sharpe Ratio auf Excess-Return-Variante
 
 ### Mai 2026 – Risikofreier Zins & Sharpe Ratio (Erstimplementierung)
-- CSV-Spalte 8 `Währung` (ungenutzt) ersetzt durch `Risiko freier Zins` (annualisiert, dezimal)
-- `build_portfolio_timeseries` liest neue Spalte ein, mit Fallback `NaN` für alte CSVs
-- Auto-Format-Erkennung (Dezimal vs. Prozent) via Median > 1
-- Neue Helper: `aggregate_rf_geometric()`, `calc_sharpe()`, `make_index_from_rf()`
-- Kennzahlen-Layout auf 2 Reihen umgestellt (Reihe 2: Calmar / Sharpe / Endwert)
-- Caption mit `Ø Risikofreier Zins p.a. (Zeitraum)` unter den Kacheln
-- Neue Sidebar-Checkbox `Risikofreier Zins` (Default aus) für Chart-Linie
-- Join-Logik bei Vergleichsportfolio: rf-Spalte wird mitgezogen
-- PDF erweitert: rf in Meta, Sharpe in Kennzahlen, rf-Linie im Chart, 2 neue Glossar-Einträge
-- Transferwissen #7 (Cache leeren bei Daten-Struktur-Änderungen) ergänzt
-- Transferwissen #8 (Dezimal-/Prozent-Auto-Erkennung) ergänzt
 
 ### April 2026 – Initiale Doku-Version
-- 6 Transferwissen-Einträge
-- 3 Tabs strukturiert dokumentiert
-- Corporate Design + Schriftarten festgehalten
 
 ---
 
-## 14. Für den nächsten Chat / Kollegen
+## 15. Für den nächsten Chat / Kollegen
 
-**Hochladen:** Diese MD + 3 aktive Code-Dateien (`streamlit_app.py`, `modules/shared.py`, `modules/portfolioanalyse.py`).
-`modules/portfolio_builder.py` ist deaktiviert und muss nicht mitgegeben werden — nur falls es um eine Reaktivierung geht.
-**Sagen:** "Lies die PROJEKT_DOKUMENTATION.md zuerst komplett. Dann [Aufgabe]."
-**Bei Problemen:** Screenshot + erwartetes Verhalten
+**Hochladen:** Diese MD + 4 aktive Code-Dateien (`streamlit_app.py`, `modules/shared.py`, `modules/portfolioanalyse.py`, `modules/pptx_export.py`).  
+**Sagen:** "Lies die PROJEKT_DOKUMENTATION.md zuerst komplett. Dann [Aufgabe]."  
+**Bei Problemen:** Screenshot + erwartetes Verhalten + welche Dateien aktuell deployed sind.
 
 **Wichtig bei CSV-Änderungen:** Nach Deploy IMMER Cache leeren (Transferwissen #7).
 
-*Stand: Juni 2026*
+**Wichtig bei PPTX-Änderungen:** 
+- Nach jedem Code-Update einmal lokal mit echten Daten testen, in PowerPoint öffnen
+- python-pptx `chart.replace_data()` NIE direkt nutzen — immer durch `_replace_chart_data_safe()` (Transferwissen #12)
+- Bei Datei-Größe > 9 MB: PNG-Optimierung prüfen (Transferwissen #13)
+- Bei "Reparieren"-Dialog: Multi-Layer-Validierung laufen lassen (Transferwissen #16)
+
+**Wichtig bei Vorlage-Updates:**
+- Original-Vorlage immer als Master behalten (`/mnt/user-data/uploads/` oder eigenes Archiv)
+- Bei "Vorlage scheint kaputt": lieber neu aufbauen (Recipe in Abschnitt 11) statt zu reparieren
+- Shape-Namen müssen exakt übereinstimmen (`Titel`, `Tabelle`, `Diagramm links`, `Diagramm rechts`, ...)
+
+*Stand: Juni 2026 (Phase 2 abgeschlossen)*
