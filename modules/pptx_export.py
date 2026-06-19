@@ -930,19 +930,22 @@ def _fill_performance_slide(prs, slide_idx: int, strategy_name: str,
 def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
                               data_label_format: Optional[str] = None):
     """
-    Ersetzt Chart-Daten via chart.replace_data() — synchronisiert XML UND embedded
-    Excel-Workbook (verhindert "PowerPoint-Reparieren"-Dialog).
+    Ersetzt Chart-Daten — workaround für python-pptx Bugs:
 
-    Zusätzlich wird das <c:externalData>-Element aus der Chart-XML entfernt.
-    Hintergrund: python-pptx's `replace_data()` aktualisiert das embedded
-    Excel-Workbook NICHT, sodass PowerPoint beim Öffnen eine Diskrepanz zwischen
-    Chart-XML und embedded Daten erkennt und einen "Reparieren"-Dialog zeigt.
-    Durch das Entfernen der externalData-Referenz nutzt PowerPoint nur noch die
-    Chart-XML — kein Konflikt mehr.
+    Bug 1: `chart.replace_data()` updated das embedded Excel-Workbook NICHT
+    → Diskrepanz → PowerPoint-Reparieren-Dialog.
+    Fix: Nach replace_data() das <c:externalData>-Element entfernen, sodass
+    PowerPoint nur die Chart-XML nutzt.
 
-    Nach replace_data() werden auch die Format-Codes der Daten-Labels von "0.00%"
-    auf "General" zurückgesetzt. Wenn `data_label_format` angegeben ist, wird er
-    nach dem Replace wiederhergestellt.
+    Bug 2: `chart.replace_data()` überschreibt die Chart-style.xml-Datei mit
+    einem ZIP-Header (style7.xml wird zu Binärmüll) → PowerPoint-Reparieren-
+    Dialog auch hier.
+    Fix: Vor replace_data() ALLE Style/Color-Parts der Chart-Part sichern und
+    nach replace_data() wieder zurücksetzen.
+
+    Bug 3: `chart.replace_data()` setzt Format-Codes auf "General" zurück
+    → Daten-Labels zeigen "0.05" statt "5,00%".
+    Fix: Nach replace_data() den ursprünglichen Format-Code wiederherstellen.
 
     Args:
         chart_shape: Chart-Shape mit has_chart=True
@@ -952,21 +955,49 @@ def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
     """
     from pptx.chart.data import CategoryChartData
 
+    chart = chart_shape.chart
+    chart_part = chart.part
+
+    # ─── BUG 2 FIX: Sichere alle "Hilfs-Parts" der Chart (style, colors) ───
+    # Diese Parts sind in den Chart-Rels referenziert und können von python-pptx
+    # versehentlich überschrieben werden.
+    backup_parts = {}  # partname -> (part_obj, blob)
+    for rel_id, rel in chart_part.rels.items():
+        try:
+            reltype = rel.reltype
+        except Exception:
+            continue
+        # Wir backuppen alles außer dem Chart selbst und externen OLE-Objekten
+        if 'chartStyle' in reltype or 'chartColorStyle' in reltype:
+            try:
+                target = rel.target_part
+                backup_parts[str(target.partname)] = (target, bytes(target.blob))
+            except Exception:
+                pass
+
+    # ─── replace_data ausführen ───
     cd = CategoryChartData()
     cd.categories = categories
     for name, vals in series_data:
         cd.add_series(name, vals)
-    chart_shape.chart.replace_data(cd)
+    chart.replace_data(cd)
 
-    # ⚠️ KRITISCH: <c:externalData> entfernen, sonst zeigt PowerPoint Reparieren-Dialog
+    # ─── BUG 2 FIX: Style/Color-Parts aus Backup wiederherstellen ───
+    for partname, (part_obj, blob) in backup_parts.items():
+        try:
+            part_obj._blob = blob
+        except Exception:
+            pass
+
+    # ─── BUG 1 FIX: <c:externalData> entfernen ───
     ns_uri = "http://schemas.openxmlformats.org/drawingml/2006/chart"
     ns = {"c": ns_uri}
-    chart_xml = chart_shape.chart._chartSpace
+    chart_xml = chart._chartSpace
     ext_data = chart_xml.find(".//c:externalData", ns)
     if ext_data is not None:
         ext_data.getparent().remove(ext_data)
 
-    # Format-Codes der Daten-Labels wiederherstellen
+    # ─── BUG 3 FIX: Format-Codes wiederherstellen ───
     if data_label_format:
         _restore_data_label_format(chart_shape, data_label_format)
 
