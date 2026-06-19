@@ -650,34 +650,22 @@ SLIDE_8_DATA_ROWS = 12   # Zeilen 1-12, Zeile 13 = Summe
 
 def _distribute_positions_to_slides(groups: dict) -> list:
     """
-    Verteilt gruppierte Positionen flexibel auf 2 Slides (Slide 7 und Slide 8).
+    Verteilt gruppierte Positionen auf Slide 7 (Anlagevorschlag).
 
-    Spec:
-    - Slide 7 (asymmetrisch groß): max SLIDE_7_DATA_ROWS (34) Datenzeilen
-    - Slide 8 (klein): max SLIDE_8_DATA_ROWS (12) Datenzeilen
-    - Gruppen nach Gewicht absteigend, LIQUIDITÄT IMMER am Ende
-    - Gruppen dürfen über Slide-Grenzen fließen
-    - Bei aufgeteilter Gruppe: Gruppen-Header auf Slide 8 doppelt wiederholen
-      (KEIN "(Fortsetzung)"-Suffix — das ist die alte Logik)
-    - LIQUIDITÄT erzeugt genau EINE Zeile (Header mit Wert, keine separaten Positionen)
-    - Summen-Zeile kommt immer auf Slide 8 (die letzte Zeile der Vorlage)
-    - Bei Überlauf auf Slide 8: Fallback — Slide 7 voll machen, Slide 8 abschneiden
+    Seit Juni 2026 (Performance-Folie als neue Slide 8):
+    - Alle Positionen kommen auf Slide 7
+    - Slide 8 ist jetzt die Performance-Folie (kein Überlauf von Anlagevorschlag mehr)
+    - Bei mehr als SLIDE_7_DATA_ROWS (34) Positionen werden die Überschüssigen
+      in _fill_table_with_positions automatisch abgeschnitten (Edge-Case)
 
-    Strategie (split-based):
-    1. Alle nicht-LIQUIDITÄT-Gruppen zu flacher Zeilen-Liste `all_rows` expandieren:
-       [H_A, a1..an, H_B, b1..bm, ...]
-    2. Größten möglichen `split_at` finden, sodass:
-       - Slide 7 bekommt all_rows[:split_at] (max SLIDE_7_DATA_ROWS)
-       - Slide 8 bekommt all_rows[split_at:] + ggf. wiederholten Gruppen-Header
-         (wenn Split eine Gruppe aufteilt) + Liquiditäts-Zeile
-       - Slide 8 Zeilen ≤ SLIDE_8_DATA_ROWS
-    3. Falls kein solcher split_at existiert (split_at auf 0 runtergelaufen):
-       → Fallback: split_at = max_split (Slide 7 voll, Slide 8 wird abgeschnitten)
+    Reihenfolge der Zeilen:
+    - Asset-Gruppen nach Gewicht absteigend (AKTIEN, RENTEN, EDELMETALLE, ...)
+    - LIQUIDITÄT IMMER am Ende als eigene Zeile
 
-    Returns: Liste mit 2 Einträgen (je eine Slide-Definition):
+    Returns: Liste mit 2 Einträgen (Slide 7 voll, Slide 8 leer):
         [
-            {"rows": [...], "is_last_slide": False},  # Slide 7
-            {"rows": [...], "is_last_slide": True},   # Slide 8 mit Summen-Zeile
+            {"rows": [...alle Positionen...], "is_last_slide": True},
+            {"rows": [], "is_last_slide": False},
         ]
     """
     # 1. Gruppen nach Gewicht sortieren, LIQUIDITÄT explizit ans Ende
@@ -693,115 +681,30 @@ def _distribute_positions_to_slides(groups: dict) -> list:
 
     if not non_liq and not has_liq:
         return [
-            {"rows": [], "is_last_slide": False},
             {"rows": [], "is_last_slide": True},
+            {"rows": [], "is_last_slide": False},
         ]
 
-    # 2. Alle nicht-Liq-Gruppen in flache Zeilen-Liste expandieren.
-    #    Parallel row_group_idx tracken, damit wir wissen welche Zeile zu welcher
-    #    Gruppe gehört (für Header-Wiederholung bei Split).
+    # 2. Alle nicht-LIQ-Gruppen in flache Zeilen-Liste expandieren
     all_rows = []
-    row_group_idx = []  # parallel zu all_rows: Index in non_liq, bei dem die Zeile steht
-    for g_idx, (group_name, positions) in enumerate(non_liq):
+    for group_name, positions in non_liq:
         all_rows.append({"type": "group_header", "data": {"name": group_name}})
-        row_group_idx.append(g_idx)
         for pos in positions:
             all_rows.append({"type": "position", "data": pos})
-            row_group_idx.append(g_idx)
 
-    # 3. Liquidität als EIGENE Zeile ganz am Ende an all_rows anhängen.
-    #    Sie bekommt einen eigenen row_group_idx und den Typ "liquidity" (nicht
-    #    "group_header"), damit sie von der Pull-Back-Logik (die verhindert, dass
-    #    Slide 7 mit einem nackten Gruppen-Header endet) NICHT zurückgezogen wird.
-    #    Dadurch landet Liquidität automatisch auf Slide 7, wenn dort Platz ist,
-    #    und nur bei Überlauf auf Slide 8.
+    # 3. LIQUIDITÄT als EIGENE Zeile am Ende
     if has_liq:
         total_liq = sum(_safe_float(p["gewicht"], 0.0) for p in liq_positions)
-        liq_group_idx = len(non_liq)  # eigener Index, unterscheidet sich von allen non_liq
         all_rows.append({
             "type": "liquidity",
             "data": {"name": GROUP_LIQUIDITAET, "liq_value": total_liq},
         })
-        row_group_idx.append(liq_group_idx)
 
-    def _rows_needed_on_slide_8(split_at: int) -> int:
-        """Zeilenbedarf auf Slide 8. Wenn bei split_at eine Gruppe aufgeteilt
-        wird (Zeile links und rechts vom Split gehören zur selben Gruppe UND
-        die rechte Zeile ist eine Position), muss auf Slide 8 der Gruppen-Header
-        wiederholt werden → +1 extra Zeile.
-        """
-        tail = len(all_rows) - split_at
-        if tail <= 0:
-            return 0
-        # Header-Wiederholung nötig?
-        if (
-            0 < split_at < len(all_rows)
-            and row_group_idx[split_at - 1] == row_group_idx[split_at]
-            and all_rows[split_at]["type"] == "position"
-        ):
-            return tail + 1
-        return tail
-
-    # 4. Split-Punkt finden. Liquidität ist jetzt in all_rows enthalten, deshalb
-    #    wird sie automatisch auf Slide 7 gepackt, wenn sie dort reinpasst.
-    max_split = min(SLIDE_7_DATA_ROWS, len(all_rows))
-    split_at = max_split
-    while split_at > 0 and _rows_needed_on_slide_8(split_at) > SLIDE_8_DATA_ROWS:
-        split_at -= 1
-
-    # Fallback: keine Aufteilung gefunden bei der Slide 8 nicht überläuft
-    # → Slide 7 voll packen, Slide 8 nimmt was passt, Rest wird in
-    #   _fill_table_with_positions abgeschnitten (dort gibt es ein break bei max_data_rows)
-    if split_at == 0 and max_split > 0:
-        split_at = max_split
-
-    # Kosmetik-Korrektur: Slide 7 darf nicht mit einem nackten Gruppen-Header enden
-    # (würde zu redundantem doppeltem Header auf Slide 8 führen). In dem Fall den
-    # Header ganz auf Slide 8 wandern lassen, indem wir split_at zurückziehen.
-    # ACHTUNG: Liquidität ist kein group_header, also greift dieser Check für sie
-    # korrekterweise NICHT, und sie bleibt als letzte Zeile auf Slide 7 wenn sie
-    # dort hinpasst.
-    while (
-        split_at > 0
-        and split_at < len(all_rows)
-        and all_rows[split_at - 1]["type"] == "group_header"
-    ):
-        split_at -= 1
-
-    # 5. Slides zusammenbauen
-    slide_7_rows = all_rows[:split_at]
-    slide_8_rows = []
-
-    # Wiederholter Gruppen-Header auf Slide 8 wenn Gruppe bei split_at aufgeteilt wird
-    # (d.h. Slide 7 endet mit einer Position und Slide 8 beginnt mit einer Position
-    # derselben Gruppe — dann muss der Gruppen-Header auf Slide 8 wiederholt werden)
-    if (
-        0 < split_at < len(all_rows)
-        and all_rows[split_at]["type"] == "position"
-        and row_group_idx[split_at - 1] == row_group_idx[split_at]
-    ):
-        split_group_name = non_liq[row_group_idx[split_at]][0]
-        slide_8_rows.append(
-            {"type": "group_header", "data": {"name": split_group_name}}
-        )
-
-    slide_8_rows.extend(all_rows[split_at:])
-
-    # Wenn Slide 8 leer bleibt, wandert die Summenzeile zu Slide 7
-    # (sonst wäre die 100,00%-Zeile unsichtbar)
-    slide_8_is_empty = len(slide_8_rows) == 0
-    if slide_8_is_empty:
-        return [
-            {"rows": slide_7_rows, "is_last_slide": True},   # Slide 7 zeigt die Summe
-            {"rows": [], "is_last_slide": False},            # Slide 8 bleibt komplett leer
-        ]
-
+    # Alles auf Slide 7, Slide 8 (Performance) bleibt unangetastet
     return [
-        {"rows": slide_7_rows, "is_last_slide": False},
-        {"rows": slide_8_rows, "is_last_slide": True},
+        {"rows": all_rows, "is_last_slide": True},   # Slide 7: alle Positionen + Summe
+        {"rows": [], "is_last_slide": False},        # Slide 8: leer (= Performance-Folie)
     ]
-
-
 # ---------------------------------------------------------------------------
 # Tabellen-Befüllung
 # ---------------------------------------------------------------------------
@@ -910,19 +813,19 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
 # ---------------------------------------------------------------------------
 # Slide-Befüllung – Anlagevorschlag (Slides 7+8)
 # ---------------------------------------------------------------------------
-def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
+def _fill_anlagevorschlag_slides(prs, slide_7_idx: int,
                                   df: pd.DataFrame, strategy_name: str):
     """
-    Befüllt Slide 7 und Slide 8 (Anlagevorschlag) mit Portfolio-Daten.
-    Positionen werden über `_distribute_positions_to_slides` flexibel verteilt;
-    Gruppen dürfen über die Slide-Grenze fließen und Header werden ggf.
-    wiederholt.
+    Befüllt Slide 7 (Anlagevorschlag/Strategieentwurf) mit Portfolio-Daten.
+
+    Seit Juni 2026 (Performance-Folie als Slide 8): Es gibt nur noch EINE
+    Anlagevorschlag-Slide. Alle Positionen kommen auf Slide 7, dynamisch
+    geschrumpft durch _remove_empty_table_rows + _fit_shape_to_table.
 
     Args:
         prs: Presentation
-        slide_7_idx: 0-indexed Index der ersten Anlagevorschlag-Slide
-        slide_8_idx: 0-indexed Index der zweiten Anlagevorschlag-Slide
-        df: DataFrame mit Positionen (Wertpapier, WKN, Gewicht, Gattung, Kupon, Fälligkeit_parsed)
+        slide_7_idx: 0-indexed Index der Anlagevorschlag-Slide
+        df: DataFrame mit Positionen (Wertpapier, WKN, Gewicht, Gattung, Kupon, Fälligkeit_parsed, Marktrisikowert)
         strategy_name: Name der Strategie für den Titel (schon konvertiert)
     """
     # 1. Daten vorbereiten
@@ -945,7 +848,6 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     # 3. Slide 7 befüllen
     slide_7 = prs.slides[slide_7_idx]
     # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance)
-    # WICHTIG: Nur auf Slide 7 — Slide 8 behält den dynamischen "Anlagevorschlag – <Strategie>"-Titel.
     # Format: "Strategieentwurf im Rahmen einer Vermögensverwaltung - <Strategiename>"
     # Schriftgröße wird dynamisch angepasst, damit der Titel auf eine Zeile passt.
     title = _find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or _find_shape_by_name(slide_7, SHAPE_TITLE)
@@ -955,7 +857,7 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
     chart = _find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
     if chart:
         _replace_chart_data(chart, alloc_labels, alloc_values)
-    # Tabelle befüllen (mit ursprünglicher Shape-Höhe als Referenz für _optimize_table_layout)
+    # Tabelle befüllen
     table_shape = _find_shape_by_name(slide_7, SHAPE_TABLE)
     if table_shape:
         _fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
@@ -965,23 +867,415 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, slide_8_idx: int,
         # NACH dem Befüllen + Bereinigen: Shape-Höhe an verbleibende Zeilen anpassen
         _fit_shape_to_table(table_shape)
 
-    # 4. Slide 8 befüllen
-    slide_8 = prs.slides[slide_8_idx]
-    # Titel
-    title = _find_shape_by_name(slide_8, SHAPE_TITLE_ALT) or _find_shape_by_name(slide_8, SHAPE_TITLE)
-    if title:
-        _replace_text_in_shape(title, f"Anlagevorschlag – {strategy_name}")
-    # Ring-Chart (identisch wie Slide 7)
-    chart = _find_shape_by_name(slide_8, SHAPE_CHART_ALLOCATION)
-    if chart:
-        _replace_chart_data(chart, alloc_labels, alloc_values)
-    # Tabelle - ggf. Shape-Höhe vergrößern wenn viele Positionen
-    table_shape = _find_shape_by_name(slide_8, SHAPE_TABLE)
-    if table_shape:
-        _fill_table_with_positions(table_shape.table, slide_distribution[1], total_weight,
-                                   shape_height=table_shape.height)
-        _remove_empty_table_rows(table_shape.table)
-        _fit_shape_to_table(table_shape)
+
+def _fill_performance_slide(prs, slide_idx: int, strategy_name: str,
+                             performance_data: Optional[dict] = None):
+    """
+    Befüllt die Performance-Slide (Slide 8: Anlagestrategie Wertentwicklung).
+
+    Args:
+        prs: Presentation
+        slide_idx: 0-indexed Index der Performance-Slide
+        strategy_name: Name der Strategie für den Titel
+        performance_data: Dict mit Performance-Daten (siehe `_compute_performance_data`).
+                          Wenn None: Nur Titel wird gesetzt, Charts/Tabelle bleiben mit
+                          Vorlagen-Platzhaltern (Phase-1-Verhalten).
+    """
+    slide = prs.slides[slide_idx]
+
+    # Titel anpassen: "{Strategy} | Wertentwicklung (mit Benchmark)"
+    title = _find_shape_by_name(slide, "Titel")
+    if title and title.has_text_frame:
+        new_title = f"{strategy_name} | Wertentwicklung (mit Benchmark)"
+        _replace_text_in_shape(title, new_title)
+
+    if performance_data is None:
+        return  # Phase 1: nur Titel setzen
+
+    # ── KENNZAHLEN-Tabelle befüllen ──
+    kz = performance_data.get("kennzahlen", {})
+    tab = _find_shape_by_name(slide, "Tabelle")
+    if tab and tab.has_table:
+        _fill_kennzahlen_table(tab.table, kz)
+
+    # ── PERFORMANCE P.A. Chart (Säulen) ──
+    pa = performance_data.get("performance_pa", {})
+    chart_links = _find_shape_by_name(slide, "Diagramm links")
+    if chart_links and chart_links.has_chart and pa.get("jahre"):
+        _update_chart_values_inplace(
+            chart_links,
+            categories=[str(y) for y in pa["jahre"]],
+            series_data=[
+                ("Referenzportfolio", pa.get("referenz", [])),
+                ("Benchmark", pa.get("benchmark", [])),
+            ],
+        )
+
+    # ── WERTENTWICKLUNG Chart (Linien) ──
+    we = performance_data.get("wertentwicklung", {})
+    chart_rechts = _find_shape_by_name(slide, "Diagramm rechts")
+    if chart_rechts and chart_rechts.has_chart and we.get("dates"):
+        # Für den Linien-Chart nutzen wir replace_data, weil die Datenmenge stark variiert.
+        # Format-Codes der Y-Achse bleiben erhalten ("0%").
+        from pptx.chart.data import CategoryChartData
+        cd = CategoryChartData()
+        cd.categories = we["dates"]
+        cd.add_series("Referenzportfolio", we.get("referenz", []))
+        cd.add_series("Benchmark", we.get("benchmark", []))
+        chart_rechts.chart.replace_data(cd)
+
+
+def _fill_kennzahlen_table(table, kz: dict):
+    """
+    Befüllt die KENNZAHLEN-Tabelle auf der Performance-Folie.
+
+    Tabellen-Layout (7 rows × 5 cols, aber Spacer-Spalten dazwischen):
+      Row 0: Header   (KENNZAHLEN | _ | REFERENZ | _ | BENCHMARK)
+      Row 1: Performance p.a.
+      Row 2: Volatilität
+      Row 3: Sharpe Ratio
+      Row 4: Max Drawdown
+      Rows 5-6: ggf. leer/Spacer
+
+    Wert-Spalten: 2 (REFERENZ), 4 (BENCHMARK)
+    """
+    metric_rows = [
+        ("performance_pa_ref",  "performance_pa_bench",   2, True),   # row 2, Prozent-Format
+        ("volatilitaet_ref",    "volatilitaet_bench",     3, True),   # row 3, Prozent
+        ("sharpe_ref",          "sharpe_bench",           4, False),  # row 4, Dezimal
+        ("max_drawdown_ref",    "max_drawdown_bench",     5, True),   # row 5, Prozent
+    ]
+    for ref_key, bench_key, row_idx, is_pct in metric_rows:
+        if row_idx >= len(table.rows):
+            continue
+        row = table.rows[row_idx]
+        ref_val = kz.get(ref_key)
+        bench_val = kz.get(bench_key)
+        if is_pct:
+            ref_str = _fmt_pct(ref_val)
+            bench_str = _fmt_pct(bench_val)
+        else:
+            ref_str = _fmt_ratio(ref_val)
+            bench_str = _fmt_ratio(bench_val)
+        # Spalte 2 = REFERENZ, Spalte 4 = BENCHMARK
+        _set_cell_text_preserve_format(row.cells[2], ref_str)
+        _set_cell_text_preserve_format(row.cells[4], bench_str)
+
+
+def _fmt_pct(val) -> str:
+    """Formatiert einen dezimalen Wert (z.B. 0.0523) als Prozent (5,23 %)."""
+    if val is None:
+        return "–"
+    try:
+        v = float(val)
+        if v != v:  # NaN check
+            return "–"
+        return f"{v*100:.2f}%".replace(".", ",")
+    except (TypeError, ValueError):
+        return "–"
+
+
+def _fmt_ratio(val) -> str:
+    """Formatiert einen Ratio-Wert (z.B. Sharpe 0.43) als Dezimalzahl (0,43)."""
+    if val is None:
+        return "–"
+    try:
+        v = float(val)
+        if v != v:
+            return "–"
+        return f"{v:.2f}".replace(".", ",")
+    except (TypeError, ValueError):
+        return "–"
+
+
+def _set_cell_text_preserve_format(cell, text: str):
+    """
+    Setzt den Text einer Tabellen-Zelle und erhält das Format des ersten Runs.
+
+    Im Gegensatz zu `_set_cell_text` (das alle Runs durch einen neuen leeren Run
+    ersetzt) bleibt hier die Font-Formatierung (Größe, Farbe, Bold) erhalten —
+    wichtig für die KENNZAHLEN-Tabelle wo das Vorlagen-Styling (z.B. fett, weiß
+    auf blauem Header) nicht überschrieben werden soll.
+    """
+    if not cell.text_frame.paragraphs:
+        # Fallback: kein Paragraph → normales _set_cell_text Verhalten
+        _set_cell_text(cell, text)
+        return
+    para = cell.text_frame.paragraphs[0]
+    # Erste Run finden — wenn keine da, lege eine an
+    if not para.runs:
+        _set_cell_text(cell, text)
+        return
+    # Erste Run behält ihr Format, alle weiteren Runs löschen
+    runs = list(para.runs)
+    runs[0].text = text
+    for r in runs[1:]:
+        r._r.getparent().remove(r._r)
+    # Weitere Paragraphs löschen
+    for p in cell.text_frame.paragraphs[1:]:
+        p._p.getparent().remove(p._p)
+
+
+def _update_chart_values_inplace(chart_shape, categories: list, series_data: list):
+    """
+    Aktualisiert Categories und Values aller Series direkt in der Chart-XML.
+
+    Im Gegensatz zu `chart.replace_data()` bleiben die Format-Codes (z.B. "0.00%"
+    für Daten-Labels) erhalten. Wird verwendet für den Säulen-Chart in der
+    Performance-Folie wo die Daten-Labels prozent-formatiert sein müssen.
+
+    Anzahl der Series und Datenpunkte muss zum Chart-Template passen
+    (5 Jahre × 2 Series für Performance p.a.).
+
+    Args:
+        chart_shape: Das Chart-Shape
+        categories: Liste der Kategorien (Strings), z.B. ["2021", ..., "2025"]
+        series_data: Liste von (series_name, values) Tupeln
+    """
+    chart = chart_shape.chart
+    chart_xml = chart._chartSpace
+    ns = _NS_CHART
+
+    ser_elements = chart_xml.findall(".//c:ser", ns)
+    if len(ser_elements) != len(series_data):
+        # Anzahl Series stimmt nicht überein → fallback auf replace_data
+        from pptx.chart.data import CategoryChartData
+        cd = CategoryChartData()
+        cd.categories = categories
+        for name, vals in series_data:
+            cd.add_series(name, vals)
+        chart.replace_data(cd)
+        return
+
+    for ser_elem, (series_name, values) in zip(ser_elements, series_data):
+        # Series-Name (c:tx//c:v) setzen
+        tx_v = ser_elem.find(".//c:tx//c:v", ns)
+        if tx_v is not None:
+            tx_v.text = series_name
+        # Categories (c:cat//c:pt/c:v) und Values (c:val//c:pt/c:v) updaten
+        cat_pts = ser_elem.findall(".//c:cat//c:pt/c:v", ns)
+        val_pts = ser_elem.findall(".//c:val//c:pt/c:v", ns)
+        for i, cat in enumerate(categories):
+            if i < len(cat_pts):
+                cat_pts[i].text = str(cat)
+        for i, val in enumerate(values):
+            if i < len(val_pts):
+                try:
+                    val_pts[i].text = f"{float(val):.6f}"
+                except (TypeError, ValueError):
+                    val_pts[i].text = "0"
+        # ptCount aktualisieren (falls vorhanden)
+        for tag in ("cat", "val"):
+            pt_count = ser_elem.find(f".//c:{tag}//c:ptCount", ns)
+            if pt_count is not None:
+                pt_count.set("val", str(len(values) if tag == "val" else len(categories)))
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Performance-Berechnungs-Funktionen (Duplikate aus streamlit_app.py)
+# Werden hier dupliziert, damit pptx_export.py unabhängig vom Streamlit-Code
+# ist. Wenn die Funktionen in streamlit_app.py angepasst werden, müssen sie
+# hier nachgezogen werden.
+# ─────────────────────────────────────────────────────────────────────────
+import numpy as _np
+
+def _annual_fee_to_daily_drag(fee_pa_decimal):
+    return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
+
+
+def _make_index_from_returns(d_returns_decimal, startwert=100.0):
+    idx = _np.empty(len(d_returns_decimal) + 1, dtype=float)
+    idx[0] = startwert
+    for i, d in enumerate(d_returns_decimal, start=1):
+        idx[i] = idx[i-1] * (1.0 + d)
+    return idx
+
+
+def _make_index_after_fee(d_returns_decimal, fee_pa_decimal, startwert=100.0):
+    e = _annual_fee_to_daily_drag(fee_pa_decimal)
+    idx = _np.empty(len(d_returns_decimal) + 1, dtype=float)
+    idx[0] = startwert
+    for i, d in enumerate(d_returns_decimal, start=1):
+        idx[i] = idx[i-1] * (1.0 + (d - e))
+    return idx
+
+
+def _calc_daily_returns_after_fee(d_returns_decimal, fee_pa_decimal):
+    return d_returns_decimal - _annual_fee_to_daily_drag(fee_pa_decimal)
+
+
+def _calc_cagr(idx_after, n_days):
+    if n_days <= 0 or idx_after[0] == 0:
+        return None
+    return (idx_after[-1] / idx_after[0]) ** (365.0 / n_days) - 1.0
+
+
+def _calc_vola(daily_returns_after_fee):
+    if len(daily_returns_after_fee) < 2:
+        return None
+    return float(_np.std(daily_returns_after_fee, ddof=1) * _np.sqrt(365))
+
+
+def _drawdown_from_index(idx):
+    peak = _np.maximum.accumulate(idx)
+    return (idx / peak) - 1.0
+
+
+def _calc_max_drawdown(idx_after):
+    dd = _drawdown_from_index(idx_after)
+    return float(_np.min(dd))
+
+
+def _calc_sharpe_excess(daily_returns_after_fee, rf_annual_series):
+    """Sharpe Ratio nach Sharpe (1994), tägliche Excess Returns."""
+    rp = pd.Series(daily_returns_after_fee).to_numpy(dtype=float)
+    if rp.size < 2:
+        return None
+    rf_ser = pd.Series(rf_annual_series).reset_index(drop=True)
+    if len(rf_ser) != len(rp):
+        if len(rf_ser) > len(rp):
+            rf_ser = rf_ser.iloc[:len(rp)]
+        else:
+            rf_ser = rf_ser.reindex(range(len(rp)))
+    rf_ann = rf_ser.fillna(0.0).to_numpy(dtype=float)
+    daily_rf = (1.0 + rf_ann) ** (1.0/365.0) - 1.0
+    mask = ~_np.isnan(rp)
+    if mask.sum() < 2:
+        return None
+    excess = rp[mask] - daily_rf[mask]
+    mu = float(_np.mean(excess))
+    sd = float(_np.std(excess, ddof=1))
+    if sd == 0:
+        return None
+    return (mu / sd) * _np.sqrt(365.0)
+
+
+def _calc_period_return(returns):
+    return float(_np.prod(1.0 + returns) - 1.0)
+
+
+def _calc_period_return_after_fee(returns, fee_pa_decimal):
+    e = _annual_fee_to_daily_drag(fee_pa_decimal)
+    return float(_np.prod(1.0 + (returns - e)) - 1.0)
+
+
+def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,
+                             n_years_bar_chart: int = 5) -> dict:
+    """
+    Berechnet alle Performance-Daten die für die Performance-Folie (Slide 8) benötigt werden.
+
+    Args:
+        timeseries_df: DataFrame mit Spalten 'ret_port' (Tagesrendite Portfolio),
+                       'ret_bm' (Tagesrendite Benchmark), 'rf' (annualisierter risikofreier
+                       Zins). Index = Datum.
+        fee_dec: Effektiver Honorarsatz pro Jahr als Dezimalzahl (z.B. 0.01023 für
+                 1,023% inkl MwSt).
+        n_years_bar_chart: Anzahl Jahre für den Säulen-Chart (Default: 5 = letzte 5
+                           vollständige Kalenderjahre).
+
+    Returns: Dict im Format das `_fill_performance_slide` erwartet:
+        {
+            "kennzahlen": {"performance_pa_ref", "performance_pa_bench", ...},
+            "performance_pa": {"jahre": [...], "referenz": [...], "benchmark": [...]},
+            "wertentwicklung": {"dates": [...], "referenz": [...], "benchmark": [...]},
+        }
+    """
+    df = timeseries_df.copy()
+    if df.empty:
+        return {"kennzahlen": {}, "performance_pa": {}, "wertentwicklung": {}}
+
+    rp = df["ret_port"].to_numpy(float)
+    has_bm = "ret_bm" in df.columns and df["ret_bm"].notna().any()
+    rb = df["ret_bm"].fillna(0.0).to_numpy(float) if has_bm else None
+    has_rf = "rf" in df.columns and df["rf"].notna().any()
+    rf = df["rf"] if has_rf else pd.Series([0.0] * len(rp))
+
+    # ── KENNZAHLEN ──
+    n_days = len(rp)
+    ia_ref = _make_index_after_fee(rp, fee_dec, 100.0)
+    draf_ref = _calc_daily_returns_after_fee(rp, fee_dec)
+    cagr_ref = _calc_cagr(ia_ref, n_days)
+    vola_ref = _calc_vola(draf_ref)
+    sharpe_ref = _calc_sharpe_excess(draf_ref, rf) if has_rf else None
+    mdd_ref = _calc_max_drawdown(ia_ref)
+
+    if has_bm:
+        ib_bench = _make_index_from_returns(rb, 100.0)
+        cagr_bench = _calc_cagr(ib_bench, n_days)
+        vola_bench = _calc_vola(rb)
+        sharpe_bench = _calc_sharpe_excess(rb, rf) if has_rf else None
+        mdd_bench = _calc_max_drawdown(ib_bench)
+    else:
+        cagr_bench = vola_bench = sharpe_bench = mdd_bench = None
+
+    kennzahlen = {
+        "performance_pa_ref":   cagr_ref,
+        "performance_pa_bench": cagr_bench,
+        "volatilitaet_ref":     vola_ref,
+        "volatilitaet_bench":   vola_bench,
+        "sharpe_ref":           sharpe_ref,
+        "sharpe_bench":         sharpe_bench,
+        "max_drawdown_ref":     mdd_ref,
+        "max_drawdown_bench":   mdd_bench,
+    }
+
+    # ── PERFORMANCE P.A. (Säulen-Chart, letzte n_years vollständige Jahre) ──
+    end_date = df.index.max()
+    # Aktuelles Jahr ist evtl. unvollständig — wir nehmen das LETZTE vollständige Jahr
+    # als oberste Grenze. "Vollständig" = mindestens bis 31.12. Daten vorhanden.
+    current_year = end_date.year
+    # Wenn Daten bis Ende des aktuellen Jahres vorhanden → current_year inkludieren
+    # Sonst: bis current_year - 1
+    last_full_year = current_year if (end_date.month == 12 and end_date.day >= 28) else current_year - 1
+    target_years = list(range(last_full_year - n_years_bar_chart + 1, last_full_year + 1))
+
+    jahre = []
+    pa_ref = []
+    pa_bench = []
+    for year in target_years:
+        sub = df[df.index.year == year]
+        if sub.empty:
+            continue
+        rp_y = sub["ret_port"].fillna(0.0).to_numpy(float)
+        ref_year = _calc_period_return_after_fee(rp_y, fee_dec)
+        jahre.append(year)
+        pa_ref.append(ref_year)
+        if has_bm:
+            rb_y = sub["ret_bm"].fillna(0.0).to_numpy(float)
+            pa_bench.append(_calc_period_return(rb_y))
+        else:
+            pa_bench.append(0.0)
+
+    performance_pa = {
+        "jahre": jahre,
+        "referenz": pa_ref,
+        "benchmark": pa_bench,
+    }
+
+    # ── WERTENTWICKLUNG (Linien-Chart, gesamte Zeitreihe) ──
+    # Index startet bei 100% (=1.00) zum Auflagedatum (= erster Tag - 1).
+    # Werte als Dezimal (Format "0%" in der Vorlage rendert 1.05 als "105%").
+    start_date = df.index.min() - pd.Timedelta(days=1)
+    dates = [start_date.date()] + [d.date() for d in df.index]
+    # Index startet bei 1.0 (=100%) — Format "0%" multipliziert mit 100
+    wert_ref = list((ia_ref / 100.0).astype(float))  # 1.0 → 100%, 1.05 → 105%
+    if has_bm:
+        ib_bench_norm = _make_index_from_returns(rb, 100.0) / 100.0
+        wert_bench = list(ib_bench_norm.astype(float))
+    else:
+        wert_bench = [1.0] * len(dates)
+
+    wertentwicklung = {
+        "dates": dates,
+        "referenz": wert_ref,
+        "benchmark": wert_bench,
+    }
+
+    return {
+        "kennzahlen": kennzahlen,
+        "performance_pa": performance_pa,
+        "wertentwicklung": wertentwicklung,
+    }
 
 
 def _remove_empty_table_rows(table):
@@ -1312,6 +1606,28 @@ def _update_slide_numbers(prs):
 # ---------------------------------------------------------------------------
 # Slide entfernen (Slide 10 Währungen wird weggelassen)
 # ---------------------------------------------------------------------------
+def _move_slide(prs, from_idx: int, to_idx: int):
+    """
+    Verschiebt eine Slide innerhalb der Präsentation von from_idx zu to_idx.
+
+    Args:
+        prs: Presentation-Objekt
+        from_idx: 0-basierte Position der Slide, die verschoben werden soll
+        to_idx: 0-basierte Ziel-Position (vor Reordering)
+
+    Realisiert via direkter Manipulation von <p:sldIdLst> in presentation.xml.
+    """
+    xml_slides = prs.slides._sldIdLst
+    slides = list(xml_slides)
+    if from_idx < 0 or from_idx >= len(slides):
+        raise IndexError(f"_move_slide: from_idx {from_idx} out of range (max {len(slides)-1})")
+    if to_idx < 0 or to_idx >= len(slides):
+        raise IndexError(f"_move_slide: to_idx {to_idx} out of range (max {len(slides)-1})")
+    target = slides[from_idx]
+    xml_slides.remove(target)
+    xml_slides.insert(to_idx, target)
+
+
 def _remove_slide(prs, slide_idx: int):
     """Entfernt eine Slide an gegebener Position (0-indexed)."""
     xml_slides = prs.slides._sldIdLst
@@ -1336,97 +1652,142 @@ def _save_and_reload(prs) -> Presentation:
 # ---------------------------------------------------------------------------
 # Portfolioanalyse-Export (Hauptfunktion)
 # ---------------------------------------------------------------------------
+def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
+    """
+    Helfer: Berechnet performance_data Dict aus performance_inputs[idx].
+
+    Returns None wenn keine Daten oder ungültige Eingabe — dann zeigt die
+    Performance-Folie die Vorlagen-Platzhalter.
+    """
+    if not performance_inputs or idx >= len(performance_inputs):
+        return None
+    pi = performance_inputs[idx]
+    if pi is None:
+        return None
+    ts = pi.get("timeseries_df")
+    fee = pi.get("fee_dec", 0.0)
+    if ts is None or len(ts) == 0:
+        return None
+    try:
+        return compute_performance_data(ts, fee)
+    except Exception:
+        return None
+
+
 def generate_portfolioanalyse_pptx(
     portfolios: list,   # Liste von (display_name, df, auswertungsdatum, dur_info)
     anlagevolumen: float = 0.0,
+    performance_inputs: Optional[list] = None,
 ) -> bytes:
     """
     Erstellt eine PPTX mit der Corporate-Vorlage und befüllt die Slides 7-9
     (bzw. 7-9 + Duplikate bei Vergleichsportfolio) mit den Portfolio-Daten.
 
-    Struktur:
-    - 1 Portfolio: Slides 1-9 (+ Slide 10 entfernt, + Slides 11-24)
-    - 2 Portfolios: Slides 1-6, dann je 3 Slides pro Portfolio (= 7 Slides),
-      dann Slides 11-24
+    Slide-Layout (seit Juni 2026):
+    - Slide 7: Anlagevorschlag/Strategieentwurf
+    - Slide 8: Performance/Wertentwicklung
+    - Slide 9: Aktuelle Portfoliozusammenstellung
+    - Bei 2 Portfolios: Duplikate dieser drei Slides für Portfolio 2
 
     Args:
         portfolios: Liste von Tupeln (display_name, df, auswertungsdatum, duration_info)
         anlagevolumen: Aktuell nicht verwendet, ggf. für Zukunftsfeatures
+        performance_inputs: Optional Liste mit Performance-Daten (eine Dict pro Portfolio
+                            in gleicher Reihenfolge wie `portfolios`). Format pro Eintrag:
+                            {
+                                "timeseries_df": pd.DataFrame,  # ret_port, ret_bm, rf
+                                "fee_dec": 0.01023,             # effektiver Honorar inkl MwSt
+                            }
+                            Wenn None oder ein Eintrag None ist: Slide 8 zeigt die
+                            Vorlagen-Platzhalter (nur Titel wird gesetzt).
 
     Returns:
         PPTX-Bytes
     """
     prs = _load_template()
 
-    # In der Vorlage_FFPB.pptx (v2) gibt es nach Slide 9 (Zusammenstellung) zwei
-    # Slides, die für den Portfolioanalyse-Export NICHT relevant sind:
-    #   Slide 10 (Index 9):  Performance-Vorlage (für Performance-Tab — B2-Prinzip)
-    #   Slide 11 (Index 10): Währungen (keine Daten dafür)
-    # Beide entfernen. Erst Performance-Vorlage (Index 9), dann rutscht
-    # die Währungen-Slide auf Index 9 → nochmal entfernen.
-    _remove_slide(prs, 9)  # Performance-Vorlage entfernen
-    _remove_slide(prs, 9)  # Währungen entfernen (jetzt an Index 9)
-    # Nach dem Entfernen: Save/Load-Zyklus um interne Slide-IDs aufzuräumen
-    # (verhindert 'Duplicate name' Warnungen beim späteren Speichern)
-    prs = _save_and_reload(prs)
-    # Nach Reload: Slides 7, 8, 9 sind Portfolioanalyse-Slides (wie vorher)
+    # ════════════════════════════════════════════════════════════════════════
+    # NEUER SLIDE-LAYOUT (Juni 2026):
+    #   Slide 7 = Anlagevorschlag/Strategieentwurf (Index 6)
+    #   Slide 8 = Performance/Wertentwicklung (Index 7)     ← NEU (war Slide 10)
+    #   Slide 9 = Aktuelle Portfoliozusammenstellung (Index 8)
+    # ════════════════════════════════════════════════════════════════════════
+    # Vorlage v5 hat 25 Slides mit dieser Original-Reihenfolge:
+    #   Index 6: Slide 7  (Anlagevorschlag)
+    #   Index 7: Slide 8  (Anlagevorschlag-Teil-2)  ← wird ENTFERNT
+    #   Index 8: Slide 9  (Portfoliozusammenstellung)
+    #   Index 9: Slide 10 (Performance/Wertentwicklung) ← wird zur NEUEN Slide 8
+    #   Index 10: Slide 11 (Währungen)  ← wird ENTFERNT
+    #
+    # Operationen (in dieser Reihenfolge):
+    #   1. Index 7 entfernen (alte Anlagevorschlag-Teil-2)
+    #      → Performance rutscht von Index 9 → 8, Währungen von 10 → 9
+    #   2. Index 9 entfernen (Währungen)
+    #      → Reihenfolge: 6=Anlagevorschlag, 7=Portfolio, 8=Performance
+    #   3. Move Index 8 (Performance) → Index 7 (vor Portfolio)
+    #      → Endreihenfolge: 6=Anlagevorschlag, 7=Performance, 8=Portfolio
+    _remove_slide(prs, 7)         # alte Anlagevorschlag-Teil-2 entfernen
+    _remove_slide(prs, 9)         # Währungen entfernen (war Index 10, jetzt 9)
+    _move_slide(prs, 8, 7)        # Performance vor Portfolio verschieben
+    prs = _save_and_reload(prs)   # IDs aufräumen
 
     # Portfolio(s) befüllen
     if len(portfolios) == 1:
-        # Einzelnes Portfolio: Slides 7, 8, 9 befüllen
+        # Einzelnes Portfolio:
+        #   Slide 7 (Index 6) = Anlagevorschlag (mit Strategieentwurf-Titel)
+        #   Slide 8 (Index 7) = Performance (mit Strategy-Name im Titel)
+        #   Slide 9 (Index 8) = Portfolio-Zusammenstellung
         display_name, df, _, _ = portfolios[0]
         strategy_name = clean_strategy_name(display_name)
-        _fill_anlagevorschlag_slides(prs, 6, 7, df, strategy_name)
+        perf_data = _build_perf_data(performance_inputs, 0)
+        _fill_anlagevorschlag_slides(prs, 6, df, strategy_name)
+        _fill_performance_slide(prs, 7, strategy_name, performance_data=perf_data)
         _fill_zusammenstellung_slide(prs, 8, df, strategy_name)
 
     elif len(portfolios) == 2:
-        # ========================================================
-        # Vergleichsportfolio: 
-        # Ziel-Reihenfolge der Slides: 
-        #   1-6 = Intro (statisch)
-        #   7-9 = Portfolio 1 (Anlagevorschlag1, Anlagevorschlag2, Zusammenstellung)
-        #   10-12 = Portfolio 2 (Duplikate, befüllt mit P2)
-        #   13-25 = Honorar, Bank etc. (statisch)
-        # ========================================================
+        # Vergleichsportfolio: Portfolio 1 in Index 6-8, Portfolio 2 als Duplikate
+        # an Index 9-11. Endreihenfolge: Anlagevorschlag, Performance, Zusammenstellung
+        # pro Portfolio.
         display_name_1, df_1, _, _ = portfolios[0]
         display_name_2, df_2, _, _ = portfolios[1]
         strategy_name_1 = clean_strategy_name(display_name_1)
         strategy_name_2 = clean_strategy_name(display_name_2)
+        perf_data_1 = _build_perf_data(performance_inputs, 0)
+        perf_data_2 = _build_perf_data(performance_inputs, 1)
 
-        # Schritt 1: Portfolio 1 in Originale (Slides 7, 8, 9 = Index 6, 7, 8)
-        _fill_anlagevorschlag_slides(prs, 6, 7, df_1, strategy_name_1)
+        # Schritt 1: Portfolio 1 in Original-Slides (Index 6, 7, 8)
+        _fill_anlagevorschlag_slides(prs, 6, df_1, strategy_name_1)
+        _fill_performance_slide(prs, 7, strategy_name_1, performance_data=perf_data_1)
         _fill_zusammenstellung_slide(prs, 8, df_1, strategy_name_1)
 
-        # Schritt 2: Drei Duplikate von Slides 7, 8, 9 anlegen
-        # _duplicate_slide fügt direkt hinter der Quelle ein, was die Indizes verschiebt.
-        _duplicate_slide(prs, 6)   # Slide 7' an Index 7, alle weiteren +1
-        _duplicate_slide(prs, 8)   # Slide 8 ist jetzt 8, Duplikat an Index 9
-        _duplicate_slide(prs, 10)  # Slide 9 ist jetzt 10, Duplikat an Index 11
-        # Aktuelle Reihenfolge: [0..5]=Intro, 6=S7, 7=NEW_7, 8=S8, 9=NEW_8, 10=S9, 11=NEW_9, 12..=Rest
+        # Schritt 2: Drei Duplikate von Slides 7, 8, 9 (Index 6, 7, 8) anlegen
+        _duplicate_slide(prs, 6)
+        _duplicate_slide(prs, 8)
+        _duplicate_slide(prs, 10)
 
-        # Schritt 3: Save/Load-Zyklus nach Duplikation
-        # (stellt sicher dass alle internen Slide-IDs konsistent sind)
+        # Schritt 3: Save/Load nach Duplikation
         prs = _save_and_reload(prs)
 
-        # Schritt 4: Umsortieren zu: [0..5]=Intro, 6=S7, 7=S8, 8=S9, 9=NEW_7, 10=NEW_8, 11=NEW_9, 12..=Rest
+        # Schritt 4: Umsortieren
         xml_slides = prs.slides._sldIdLst
         slide_elements = list(xml_slides)
 
-        new_order = list(range(6))        # 0..5 (Intro, unverändert)
-        new_order += [6, 8, 10]           # S7, S8, S9 (P1)
-        new_order += [7, 9, 11]           # NEW_7, NEW_8, NEW_9 (werden zu P2)
-        new_order += list(range(12, len(slide_elements)))  # Rest
+        new_order = list(range(6))
+        new_order += [6, 8, 10]
+        new_order += [7, 9, 11]
+        new_order += list(range(12, len(slide_elements)))
 
         for elem in slide_elements:
             xml_slides.remove(elem)
         for idx in new_order:
             xml_slides.append(slide_elements[idx])
 
-        # Schritt 5: Nach Umsortierung nochmal Save/Load für saubere IDs
+        # Schritt 5: Save/Load nach Reorder
         prs = _save_and_reload(prs)
 
-        # Schritt 6: Portfolio 2 in Duplikate befüllen (jetzt an Indizes 9, 10, 11)
-        _fill_anlagevorschlag_slides(prs, 9, 10, df_2, strategy_name_2)
+        # Schritt 6: Portfolio 2 in Duplikate (Index 9, 10, 11)
+        _fill_anlagevorschlag_slides(prs, 9, df_2, strategy_name_2)
+        _fill_performance_slide(prs, 10, strategy_name_2, performance_data=perf_data_2)
         _fill_zusammenstellung_slide(prs, 11, df_2, strategy_name_2)
 
     else:
