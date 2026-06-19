@@ -1250,6 +1250,42 @@ def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy
 # ---------------------------------------------------------------------------
 # Foliennummern dynamisch setzen
 # ---------------------------------------------------------------------------
+def _update_quelle_datum(prs, datum_str: str):
+    """
+    Aktualisiert das 'Quelle: Eigene Berechnung Stand: XX.XX.XXXX' Datum in allen
+    Chart-Annotationen (drawing*.xml parts) auf das aktuelle Auswertungsdatum.
+
+    Die Quelle-Zeile steht statisch in den drawing-Parts der Vorlage (im Chart-
+    Annotation-Layer der Ring-Charts). Diese können nicht über die normale
+    python-pptx-Slide-API erreicht werden — wir müssen über prs.part.package
+    iterieren und direkt das _blob setzen.
+
+    Args:
+        prs: Presentation-Objekt
+        datum_str: Datum im Format 'DD.MM.YYYY' (z.B. '17.06.2026')
+    """
+    if not datum_str:
+        return
+    package = prs.part.package
+    for part in package.iter_parts():
+        pn = str(part.partname)
+        if not pn.startswith("/ppt/drawings/drawing"):
+            continue
+        try:
+            xml = part.blob.decode('utf-8')
+        except Exception:
+            continue
+        if 'Quelle: Eigene Berechnung Stand:' not in xml:
+            continue
+        new_xml = re.sub(
+            r'(Quelle: Eigene Berechnung Stand: )\d{2}\.\d{2}\.\d{4}',
+            f'\\g<1>{datum_str}',
+            xml
+        )
+        if new_xml != xml:
+            part._blob = new_xml.encode('utf-8')
+
+
 def _update_slide_numbers(prs):
     """
     Setzt die Foliennummer auf jeder Slide auf die korrekte 1-indexed Position.
@@ -1395,6 +1431,19 @@ def generate_portfolioanalyse_pptx(
 
     else:
         raise ValueError(f"Erwarte 1 oder 2 Portfolios, erhalten: {len(portfolios)}")
+
+    # Quelle-Datum aktualisieren auf das Auswertungsdatum des ersten Portfolios.
+    # Steht statisch in den Chart-Annotationen (drawing*.xml) der Vorlage als
+    # "Quelle: Eigene Berechnung Stand: 12.02.2026" — muss auf das echte
+    # Auswertungsdatum aktualisiert werden.
+    if portfolios and portfolios[0][2] is not None:
+        datum_obj = portfolios[0][2]
+        try:
+            if hasattr(datum_obj, 'strftime'):
+                datum_str = datum_obj.strftime("%d.%m.%Y")
+                _update_quelle_datum(prs, datum_str)
+        except Exception:
+            pass
 
     # Foliennummern dynamisch setzen (NACH allen Add/Remove/Duplicate-Operationen,
     # VOR dem Speichern). Korrigiert die statischen Werte aus der Vorlage
