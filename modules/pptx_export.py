@@ -902,27 +902,102 @@ def _fill_performance_slide(prs, slide_idx: int, strategy_name: str,
     pa = performance_data.get("performance_pa", {})
     chart_links = _find_shape_by_name(slide, "Diagramm links")
     if chart_links and chart_links.has_chart and pa.get("jahre"):
-        _update_chart_values_inplace(
+        _replace_chart_data_safe(
             chart_links,
             categories=[str(y) for y in pa["jahre"]],
             series_data=[
                 ("Referenzportfolio", pa.get("referenz", [])),
                 ("Benchmark", pa.get("benchmark", [])),
             ],
+            data_label_format="0.00%",
         )
 
     # ── WERTENTWICKLUNG Chart (Linien) ──
     we = performance_data.get("wertentwicklung", {})
     chart_rechts = _find_shape_by_name(slide, "Diagramm rechts")
     if chart_rechts and chart_rechts.has_chart and we.get("dates"):
-        # Für den Linien-Chart nutzen wir replace_data, weil die Datenmenge stark variiert.
-        # Format-Codes der Y-Achse bleiben erhalten ("0%").
-        from pptx.chart.data import CategoryChartData
-        cd = CategoryChartData()
-        cd.categories = we["dates"]
-        cd.add_series("Referenzportfolio", we.get("referenz", []))
-        cd.add_series("Benchmark", we.get("benchmark", []))
-        chart_rechts.chart.replace_data(cd)
+        _replace_chart_data_safe(
+            chart_rechts,
+            categories=we["dates"],
+            series_data=[
+                ("Referenzportfolio", we.get("referenz", [])),
+                ("Benchmark", we.get("benchmark", [])),
+            ],
+            data_label_format=None,  # Linien-Chart hat keine Daten-Labels
+        )
+
+
+def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
+                              data_label_format: Optional[str] = None):
+    """
+    Ersetzt Chart-Daten via chart.replace_data() — synchronisiert XML UND embedded
+    Excel-Workbook (verhindert "PowerPoint-Reparieren"-Dialog).
+
+    Zusätzlich wird das <c:externalData>-Element aus der Chart-XML entfernt.
+    Hintergrund: python-pptx's `replace_data()` aktualisiert das embedded
+    Excel-Workbook NICHT, sodass PowerPoint beim Öffnen eine Diskrepanz zwischen
+    Chart-XML und embedded Daten erkennt und einen "Reparieren"-Dialog zeigt.
+    Durch das Entfernen der externalData-Referenz nutzt PowerPoint nur noch die
+    Chart-XML — kein Konflikt mehr.
+
+    Nach replace_data() werden auch die Format-Codes der Daten-Labels von "0.00%"
+    auf "General" zurückgesetzt. Wenn `data_label_format` angegeben ist, wird er
+    nach dem Replace wiederhergestellt.
+
+    Args:
+        chart_shape: Chart-Shape mit has_chart=True
+        categories: Liste der Kategorien (Strings oder Datumangaben)
+        series_data: Liste von (series_name, values) Tupeln
+        data_label_format: Format-Code für Daten-Labels (z.B. "0.00%"). None = nicht ändern.
+    """
+    from pptx.chart.data import CategoryChartData
+
+    cd = CategoryChartData()
+    cd.categories = categories
+    for name, vals in series_data:
+        cd.add_series(name, vals)
+    chart_shape.chart.replace_data(cd)
+
+    # ⚠️ KRITISCH: <c:externalData> entfernen, sonst zeigt PowerPoint Reparieren-Dialog
+    ns_uri = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+    ns = {"c": ns_uri}
+    chart_xml = chart_shape.chart._chartSpace
+    ext_data = chart_xml.find(".//c:externalData", ns)
+    if ext_data is not None:
+        ext_data.getparent().remove(ext_data)
+
+    # Format-Codes der Daten-Labels wiederherstellen
+    if data_label_format:
+        _restore_data_label_format(chart_shape, data_label_format)
+
+
+def _restore_data_label_format(chart_shape, format_code: str):
+    """
+    Setzt den Format-Code der Daten-Labels in allen Series eines Charts.
+
+    `chart.replace_data()` setzt Format-Codes auf "General" zurück, was dazu führt
+    dass z.B. der Wert 0.05 als "0.05" statt "5,00%" angezeigt wird. Diese Funktion
+    stellt den ursprünglichen Format-Code wieder her.
+    """
+    from lxml import etree
+    ns_uri = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+    ns = {"c": ns_uri}
+    chart_xml = chart_shape.chart._chartSpace
+
+    for ser in chart_xml.findall(".//c:ser", ns):
+        # <c:dLbls> Element finden oder anlegen
+        dlbls = ser.find("c:dLbls", ns)
+        if dlbls is None:
+            continue  # Keine Daten-Labels in dieser Series
+
+        # <c:numFmt> innerhalb dLbls finden oder anlegen
+        num_fmt = dlbls.find("c:numFmt", ns)
+        if num_fmt is None:
+            num_fmt = etree.SubElement(dlbls, f"{{{ns_uri}}}numFmt")
+            # numFmt muss am Anfang von dLbls stehen (vor anderen Properties)
+            dlbls.insert(0, num_fmt)
+        num_fmt.set("formatCode", format_code)
+        num_fmt.set("sourceLinked", "0")
 
 
 def _fill_kennzahlen_table(table, kz: dict):
