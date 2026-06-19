@@ -25,11 +25,12 @@ from reportlab.lib.colors import HexColor, white
 
 from modules.shared import (
     FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
-    DATA_FOLDER_PF, DURATION_FOLDER, EXCLUDE_SUBSTRINGS,
+    DATA_FOLDER, DATA_FOLDER_PF, DURATION_FOLDER, EXCLUDE_SUBSTRINGS,
     PDF_FONT, PDF_FONT_BOLD,
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, get_logo_aspect, get_logo_path,
-    csv_name_to_display,
+    csv_name_to_display, load_mapping,
+    load_all_csvs, build_portfolio_timeseries,
 )
 
 
@@ -432,6 +433,8 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         st.markdown("---")
         st.subheader("📊 Portfolioanalyse")
         show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd")
+        pf_brutto_mwst = st.checkbox("Bruttohonorar (inkl. 19% MwSt.)", value=False, key="pf_mwst",
+            help="Aktiviert MwSt für die Performance-Kennzahlen auf Slide 8 der PowerPoint.")
         show_adv_pf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_pf")
         if show_adv_pf:
             date_tag_pf = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
@@ -522,7 +525,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
     # Cache-Key aus aktueller Auswahl (ändert sich → Cache ungültig → Download-Button verschwindet)
     compare_key = pf_sel_2 if (show_compare_pf and df_pf_2 is not None) else "single"
-    current_key = f"{pf_sel_1}|{compare_key}|{date_tag_pf}|{anlagevolumen}|{show_ytd}"
+    current_key = f"{pf_sel_1}|{compare_key}|{date_tag_pf}|{anlagevolumen}|{show_ytd}|{pf_brutto_mwst}"
 
     # Cache invalidieren wenn Auswahl geändert wurde
     if st.session_state.get("pf_export_key") != current_key:
@@ -565,11 +568,67 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
                 if show_compare_pf and df_pf_2 is not None:
                     portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
+
+                # ── Performance-Inputs für Slide 8 zusammenbauen ──
+                # Priorität 1: aus session_state (gefüllt vom Performance-Tab)
+                # Priorität 2 (Fallback): direkt aus CSV laden, falls User den
+                # Performance-Tab nie geöffnet hat oder dort kein passendes
+                # Portfolio drin ist.
+                perf_timeseries = st.session_state.get("perf_timeseries", {})
+                perf_d2c = st.session_state.get("perf_d2c", {})
+                mwst_faktor_pf = 1.19 if pf_brutto_mwst else 1.0
+                try:
+                    mapping_pf = load_mapping()
+                except Exception:
+                    mapping_pf = None
+
+                # Fallback-Loader: wenn session_state leer ist, lade Performance-CSVs direkt
+                fallback_loaded = False
+                if not perf_timeseries:
+                    try:
+                        perf_date_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+                        perf_files = load_all_csvs(DATA_FOLDER, perf_date_tag, EXCLUDE_SUBSTRINGS)
+                        if perf_files and mapping_pf is not None:
+                            perf_timeseries = build_portfolio_timeseries(perf_files, mapping_pf)
+                            fallback_loaded = True
+                    except Exception as ex:
+                        st.warning(f"Performance-Daten konnten nicht geladen werden: {ex}")
+
+                performance_inputs = []
+                missing_csv_names = []
+                for pf_name, df_pf, _ad, _dur in portfolios:
+                    # csv_name auflösen: erst über perf_d2c (vom Performance-Tab),
+                    # fallback auf display_to_csv_pf (lokales Mapping)
+                    csv_n = perf_d2c.get(pf_name) or display_to_csv_pf.get(pf_name)
+                    ts_df = perf_timeseries.get(csv_n) if csv_n else None
+                    if ts_df is None or len(ts_df) == 0:
+                        missing_csv_names.append((pf_name, csv_n))
+                    # Honorarsatz aus mapping (Default, dezimal) × MwSt-Faktor
+                    fee_dec = 0.0
+                    if mapping_pf is not None and csv_n is not None:
+                        try:
+                            fee_dec = float(mapping_pf.loc[mapping_pf["Inhaber"] == csv_n,
+                                                          "Honorarsatz Standard"].values[0]) * mwst_faktor_pf
+                        except Exception:
+                            fee_dec = 0.0
+                    performance_inputs.append({"timeseries_df": ts_df, "fee_dec": fee_dec})
+
+                # Wenn Daten fehlen, zeige eine sichtbare Warnung im UI
+                if missing_csv_names:
+                    diag = ", ".join([f"'{pn}' → '{cn}'" for pn, cn in missing_csv_names])
+                    st.warning(
+                        f"⚠️ Performance-Daten für {diag} fehlen — "
+                        f"Folie 8 zeigt Platzhalter. "
+                        f"Verfügbar in session_state: {len(perf_timeseries)} Portfolios, "
+                        f"davon: {list(perf_timeseries.keys())[:5]}{'…' if len(perf_timeseries) > 5 else ''}. "
+                        f"Fallback-Load aktiv: {fallback_loaded}."
+                    )
+
                 try:
                     with st.spinner("PowerPoint wird erstellt..."):
                         from modules.pptx_export import generate_portfolioanalyse_pptx
                         st.session_state["pf_pptx_bytes"] = generate_portfolioanalyse_pptx(
-                            portfolios, anlagevolumen
+                            portfolios, anlagevolumen, performance_inputs=performance_inputs
                         )
                     st.rerun()
                 except FileNotFoundError as e:
