@@ -6,6 +6,7 @@ import re
 import glob
 import io
 import datetime as dt
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -198,3 +199,86 @@ def get_logo_aspect(logo_path: str = None) -> float:
 
 def get_logo_path() -> str:
     return LOGO_FILENAME if os.path.exists(LOGO_FILENAME) else None
+
+
+# ---------------------------------------------------------------------------
+# Performance-CSV Loading & Timeseries-Build (für Performance-Tab + PPTX-Export)
+# ---------------------------------------------------------------------------
+def to_decimal_interval(series_float):
+    """Interval-Performance zu Dezimal: 1.5 → 0.015 (wenn >1.0); 0.015 bleibt."""
+    x = series_float.to_numpy(dtype=float)
+    ax = np.nan_to_num(np.abs(x), nan=0.0)
+    if ax.max() > 1.0 or np.median(ax) > 0.2:
+        x = x / 100.0
+    return x
+
+
+def read_one_csv(path):
+    """Liest eine FFPB-Portfolio-CSV (ISO-8859-1, semicolon, German decimals)."""
+    return pd.read_csv(path, comment="#", encoding="ISO-8859-1", delimiter=";",
+                       decimal=",", thousands=".", dtype=str)
+
+
+def parse_dates_col(vv):
+    return pd.to_datetime(vv["Datum"], format="%d.%m.%Y", errors="raise")
+
+
+def extract_benchmark_name(vv):
+    for c in ["Benchmark Name", "Benchmark", "Benchmarkname",
+              "Benchmark Name ", "Benchmark-Bezeichnung"]:
+        if c in vv.columns:
+            v = vv.loc[0, c]
+            if pd.notna(v) and str(v).strip():
+                return str(v).strip()
+    return "Benchmark"
+
+
+@st.cache_data(show_spinner=True)
+def load_all_csvs(data_folder, date_tag, exclude_substrings):
+    """Lädt alle Performance-CSVs für einen date_tag aus dem data_folder."""
+    pattern = os.path.join(data_folder, f"*_{date_tag}_*.CSV")
+    files = glob.glob(pattern)
+    return [p for p in files if not any(sub in os.path.basename(p) for sub in exclude_substrings)]
+
+
+@st.cache_data(show_spinner=True)
+def build_portfolio_timeseries(files, mapping):
+    """Baut Zeitreihen-Dict {csv_name: DataFrame mit ret_port, ret_bm, rf, fee_default} aus den CSVs."""
+    out = {}
+    for path in files:
+        vv = read_one_csv(path)
+        pn = vv.loc[0, "Portfolio Name"]
+        bn = extract_benchmark_name(vv)
+        dates = parse_dates_col(vv)
+        vv["Performance [%] (Intervall)"] = vv["Performance [%] (Intervall)"].astype(str).str.replace(",", ".").astype(float)
+        rp = to_decimal_interval(vv.loc[1:, "Performance [%] (Intervall)"])
+        rb = None
+        if "Benchmark Performance [%] (Intervall)" in vv.columns:
+            vv["Benchmark Performance [%] (Intervall)"] = vv["Benchmark Performance [%] (Intervall)"].astype(str).str.replace(",", ".").astype(float)
+            rb = to_decimal_interval(vv.loc[1:, "Benchmark Performance [%] (Intervall)"])
+        # Risikofreier Zins (annualisiert, dezimal)
+        rf_arr = None
+        if "Risiko freier Zins" in vv.columns:
+            try:
+                vv["Risiko freier Zins"] = vv["Risiko freier Zins"].astype(str).str.replace(",", ".").astype(float)
+                rf_raw = vv.loc[1:, "Risiko freier Zins"].to_numpy(dtype=float)
+                if np.nanmedian(np.abs(rf_raw[~np.isnan(rf_raw)])) > 1.0:
+                    rf_raw = rf_raw / 100.0
+                rf_arr = rf_raw
+            except Exception:
+                rf_arr = None
+        try:
+            fd = float(mapping.loc[mapping["Inhaber"] == pn, "Honorarsatz Standard"].values[0])
+        except Exception:
+            fd = 0.0
+        idx = dates.iloc[1:].reset_index(drop=True)
+        df = pd.DataFrame(index=idx)
+        df.index.name = "Datum"
+        df["ret_port"] = rp
+        df["ret_bm"] = rb if (rb is not None and len(rb) == len(df)) else np.nan
+        df["rf"] = rf_arr if (rf_arr is not None and len(rf_arr) == len(df)) else np.nan
+        df["fee_default"] = fd
+        df = df.sort_index()
+        df.attrs["benchmark_name"] = bn
+        out[pn] = df
+    return out
