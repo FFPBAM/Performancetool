@@ -690,6 +690,10 @@ with tab_perf:
     dn_ordered, d2c, d2b = build_name_lookups(name_mapping, set(data.keys()))
     if not dn_ordered: st.error("Keine Portfolios zugeordnet."); st.stop()
 
+    # Daten an Portfolioanalyse-Tab weitergeben (für PowerPoint-Export der Performance-Folie)
+    st.session_state["perf_timeseries"] = data
+    st.session_state["perf_d2c"] = d2c
+
     with st.sidebar:
         ds1=st.selectbox("Portfolio",dn_ordered,key="p_sel1"); ps1=d2c[ds1]
         sc=st.checkbox("Vergleichsportfolio",value=False,key="p_cmp"); ps2=ds2=None
