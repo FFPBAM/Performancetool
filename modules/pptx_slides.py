@@ -126,9 +126,11 @@ Liquidität wird ggf. NACH dieser Konsolidierung angehängt."""
 def clean_strategy_name(name: str) -> str:
     """Bereinigt einen Strategienamen für die Anzeige in der Broschüre.
 
-    Entfernt die in STRATEGY_PREFIXES definierten Präfixe (z.B. 'cVV',
-    'Muster', 'Stiftung') sowohl am Anfang als auch am Ende. Erste
-    Buchstabe wird groß geschrieben.
+    - Entfernt die in STRATEGY_PREFIXES definierten Präfixe (z.B. 'cVV',
+      'Muster', 'Stiftung') sowohl am Anfang als auch am Ende.
+    - Ersetzt Underscores durch Leerzeichen (Datenquellen-Konvention: 
+      `ETF_Wachstum` → `ETF Wachstum`).
+    - Erster Buchstabe wird großgeschrieben.
 
     Examples:
         >>> clean_strategy_name("cVV Konservativ")
@@ -137,10 +139,13 @@ def clean_strategy_name(name: str) -> str:
         'Konservativ'
         >>> clean_strategy_name("Muster Konservativ cVV")
         'Konservativ'
+        >>> clean_strategy_name("ETF_Wachstum")
+        'ETF Wachstum'
     """
     if not name:
         return ""
-    cleaned = str(name).strip()
+    # Underscores zu Leerzeichen — Datenquellen-Konvention
+    cleaned = str(name).strip().replace("_", " ")
     # Mehrfach iterieren, falls mehrere Präfixe vorhanden sind
     changed = True
     while changed:
@@ -437,19 +442,54 @@ def remove_empty_table_rows(table):
         tbl_elem.remove(tr_to_remove)
 
 
-def fit_shape_to_table(table_shape):
-    """Passt die Höhe der Tabellen-Shape an die Summe der Zeilenhöhen an.
+def fit_shape_to_table(table_shape, max_row_scale: float = 3.0):
+    """Passt die Höhe der Tabellen-Shape an die Zeilenanzahl an.
 
-    Wichtig weil LibreOffice/PowerPoint die Zeilen automatisch vergrößern,
-    wenn die Summe aller Zeilenhöhen kleiner ist als die Shape-Höhe. Wenn
-    wir die Shape auf die korrekte Größe setzen, bleiben die Zeilen in
-    ihrer ursprünglichen Höhe (0.142") und die Tabelle ragt nicht über
-    den Footer.
+    Bei vielen Zeilen (Tabelle füllt den verfügbaren Platz von Natur aus):
+    Shape-Höhe exakt auf Summe der Zeilenhöhen (+ kleiner Puffer).
+
+    Bei wenigen Zeilen (Tabelle wäre sonst klein und oben angeklebt):
+    Zeilenhöhen proportional vergrößern, sodass die Tabelle den verfügbaren
+    Platz besser nutzt. Maximum: `max_row_scale` × Originalhöhe pro Zeile.
+
+    Hintergrund: Sonst stretcht LibreOffice/PowerPoint die Zeilen automatisch
+    wenn Shape-Höhe größer als Zeilensumme ist — wir wollen aber kontrollieren
+    wie das passiert, nicht den Renderer das tun lassen.
+
+    Args:
+        table_shape: Die Tabellen-Shape (mit .table-Property)
+        max_row_scale: Maximaler Skalierungsfaktor pro Zeile (Default 3.0).
+            Bei 0.142" Original = max 0.426" je Zeile. Verhindert übergroße
+            Zeilen bei sehr wenigen Positionen.
     """
     table = table_shape.table
+
+    # Verfügbarer Raum auf dem Slide (bis Footer bei 6.60")
+    MAX_TABLE_BOTTOM_INCH = 6.60
+    SHAPE_PADDING_EMU = 50000  # ~0.05" Puffer für Rahmen
+    shape_top_inch = table_shape.top / 914400
+    max_available_h_emu = int((MAX_TABLE_BOTTOM_INCH - shape_top_inch) * 914400)
+
+    # Aktuelle Summe der Zeilenhöhen
     total_row_h = sum(row.height for row in table.rows)
-    # Shape-Höhe auf diese Summe setzen (+ kleiner Puffer für Rahmen, ~0.02")
-    table_shape.height = total_row_h + 50000
+
+    # Wenn Tabelle deutlich kleiner als verfügbar → Zeilen proportional vergrößern
+    # Schwellwert: nur skalieren wenn aktuell <70% Auslastung der verfügbaren Höhe
+    if total_row_h < max_available_h_emu * 0.7 and total_row_h > 0:
+        # Ziel-Höhe: max verfügbar (minus Puffer), aber max max_row_scale × aktuell
+        target_h = min(
+            max_available_h_emu - SHAPE_PADDING_EMU,
+            int(total_row_h * max_row_scale)
+        )
+        scale = target_h / total_row_h
+        # Jede Zeilenhöhe proportional skalieren
+        for row in table.rows:
+            row.height = int(row.height * scale)
+        # Neue Summe berechnen
+        total_row_h = sum(row.height for row in table.rows)
+
+    # Shape-Höhe auf die (ggf. skalierte) Summe der Zeilenhöhen setzen
+    table_shape.height = total_row_h + SHAPE_PADDING_EMU
 
 
 def adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary: bool):
