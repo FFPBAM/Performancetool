@@ -1268,120 +1268,23 @@ def _calc_period_return_after_fee(returns, fee_pa_decimal):
 def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,
                              n_years_bar_chart: int = 5) -> dict:
     """
-    Berechnet alle Performance-Daten die für die Performance-Folie (Slide 8) benötigt werden.
+    Berechnet alle Performance-Daten für die Performance-Folie (Slide 8).
+
+    Diese Funktion ist seit Juni 2026 ein Wrapper — die eigentliche Berechnungs-Logik
+    lebt jetzt zentral in `modules/analytics.py` und wird auch vom Streamlit-Performance-Tab
+    genutzt. So gibt es nur EINE Stelle für die Mathematik.
 
     Args:
-        timeseries_df: DataFrame mit Spalten 'ret_port' (Tagesrendite Portfolio),
-                       'ret_bm' (Tagesrendite Benchmark), 'rf' (annualisierter risikofreier
-                       Zins). Index = Datum.
-        fee_dec: Effektiver Honorarsatz pro Jahr als Dezimalzahl (z.B. 0.01023 für
-                 1,023% inkl MwSt).
-        n_years_bar_chart: Anzahl Jahre für den Säulen-Chart (Default: 5 = letzte 5
-                           vollständige Kalenderjahre).
+        timeseries_df: DataFrame mit Spalten 'ret_port', 'ret_bm', 'rf'. Index = Datum.
+        fee_dec: Honorarsatz p.a. als Dezimal (z.B. 0.01023 für 1,023% inkl. MwSt).
+        n_years_bar_chart: Anzahl Jahre für Säulen-Chart (Default: 5).
 
-    Returns: Dict im Format das `_fill_performance_slide` erwartet:
-        {
-            "kennzahlen": {"performance_pa_ref", "performance_pa_bench", ...},
-            "performance_pa": {"jahre": [...], "referenz": [...], "benchmark": [...]},
-            "wertentwicklung": {"dates": [...], "referenz": [...], "benchmark": [...]},
-        }
+    Returns: Dict mit Keys 'kennzahlen', 'performance_pa', 'wertentwicklung'.
+             Siehe modules/analytics.py für Details.
     """
-    df = timeseries_df.copy()
-    if df.empty:
-        return {"kennzahlen": {}, "performance_pa": {}, "wertentwicklung": {}}
-
-    rp = df["ret_port"].to_numpy(float)
-    has_bm = "ret_bm" in df.columns and df["ret_bm"].notna().any()
-    rb = df["ret_bm"].fillna(0.0).to_numpy(float) if has_bm else None
-    has_rf = "rf" in df.columns and df["rf"].notna().any()
-    rf = df["rf"] if has_rf else pd.Series([0.0] * len(rp))
-
-    # ── KENNZAHLEN ──
-    n_days = len(rp)
-    ia_ref = _make_index_after_fee(rp, fee_dec, 100.0)
-    draf_ref = _calc_daily_returns_after_fee(rp, fee_dec)
-    cagr_ref = _calc_cagr(ia_ref, n_days)
-    vola_ref = _calc_vola(draf_ref)
-    sharpe_ref = _calc_sharpe_excess(draf_ref, rf) if has_rf else None
-    mdd_ref = _calc_max_drawdown(ia_ref)
-
-    if has_bm:
-        ib_bench = _make_index_from_returns(rb, 100.0)
-        cagr_bench = _calc_cagr(ib_bench, n_days)
-        vola_bench = _calc_vola(rb)
-        sharpe_bench = _calc_sharpe_excess(rb, rf) if has_rf else None
-        mdd_bench = _calc_max_drawdown(ib_bench)
-    else:
-        cagr_bench = vola_bench = sharpe_bench = mdd_bench = None
-
-    kennzahlen = {
-        "performance_pa_ref":   cagr_ref,
-        "performance_pa_bench": cagr_bench,
-        "volatilitaet_ref":     vola_ref,
-        "volatilitaet_bench":   vola_bench,
-        "sharpe_ref":           sharpe_ref,
-        "sharpe_bench":         sharpe_bench,
-        "max_drawdown_ref":     mdd_ref,
-        "max_drawdown_bench":   mdd_bench,
-    }
-
-    # ── PERFORMANCE P.A. (Säulen-Chart, letzte n_years vollständige Jahre) ──
-    end_date = df.index.max()
-    # Aktuelles Jahr ist evtl. unvollständig — wir nehmen das LETZTE vollständige Jahr
-    # als oberste Grenze. "Vollständig" = mindestens bis 31.12. Daten vorhanden.
-    current_year = end_date.year
-    # Wenn Daten bis Ende des aktuellen Jahres vorhanden → current_year inkludieren
-    # Sonst: bis current_year - 1
-    last_full_year = current_year if (end_date.month == 12 and end_date.day >= 28) else current_year - 1
-    target_years = list(range(last_full_year - n_years_bar_chart + 1, last_full_year + 1))
-
-    jahre = []
-    pa_ref = []
-    pa_bench = []
-    for year in target_years:
-        sub = df[df.index.year == year]
-        if sub.empty:
-            continue
-        rp_y = sub["ret_port"].fillna(0.0).to_numpy(float)
-        ref_year = _calc_period_return_after_fee(rp_y, fee_dec)
-        jahre.append(year)
-        pa_ref.append(ref_year)
-        if has_bm:
-            rb_y = sub["ret_bm"].fillna(0.0).to_numpy(float)
-            pa_bench.append(_calc_period_return(rb_y))
-        else:
-            pa_bench.append(0.0)
-
-    performance_pa = {
-        "jahre": jahre,
-        "referenz": pa_ref,
-        "benchmark": pa_bench,
-    }
-
-    # ── WERTENTWICKLUNG (Linien-Chart, gesamte Zeitreihe) ──
-    # Index startet bei 100% (=1.00) zum Auflagedatum (= erster Tag - 1).
-    # Werte als Dezimal (Format "0%" in der Vorlage rendert 1.05 als "105%").
-    start_date = df.index.min() - pd.Timedelta(days=1)
-    dates = [start_date.date()] + [d.date() for d in df.index]
-    # Index startet bei 1.0 (=100%) — Format "0%" multipliziert mit 100
-    wert_ref = list((ia_ref / 100.0).astype(float))  # 1.0 → 100%, 1.05 → 105%
-    if has_bm:
-        ib_bench_norm = _make_index_from_returns(rb, 100.0) / 100.0
-        wert_bench = list(ib_bench_norm.astype(float))
-    else:
-        wert_bench = [1.0] * len(dates)
-
-    wertentwicklung = {
-        "dates": dates,
-        "referenz": wert_ref,
-        "benchmark": wert_bench,
-    }
-
-    return {
-        "kennzahlen": kennzahlen,
-        "performance_pa": performance_pa,
-        "wertentwicklung": wertentwicklung,
-    }
+    # Lazy import: bricht modules/analytics.py weg, schlägt erst hier auf.
+    from modules.analytics import compute_performance_data as _ac
+    return _ac(timeseries_df, fee_dec, n_years_bar_chart)
 
 
 def _remove_empty_table_rows(table):
