@@ -20,6 +20,8 @@ Architektur:
 """
 
 import pandas as pd
+from typing import Optional
+
 from pptx.util import Pt
 
 # Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen)
@@ -35,6 +37,22 @@ except ImportError:
         set_cell_text, set_cell_text_preserve_format,
         clear_table, safe_float,
     )
+
+# Chart-Manipulation (XML-basiert, mit Bug-Workaround)
+try:
+    from modules.pptx_charts import (
+        replace_chart_data, replace_chart_data_safe,
+    )
+except ImportError:
+    from pptx_charts import (
+        replace_chart_data, replace_chart_data_safe,
+    )
+
+# Format-Helpers
+try:
+    from modules.formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
+except ImportError:
+    from formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -547,3 +565,277 @@ def build_ring_series(df: pd.DataFrame, dim_col: str) -> pd.Series:
         agg["Liquidität"] = unclassified_weight
 
     return agg
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SLIDE-BEFÜLLUNG (Hauptfunktionen pro Folie)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0,
+                              shape_height: int = 0):
+    """Befüllt die Anlagevorschlag-Tabelle (Slide 7) mit Positionen.
+
+    Die Tabellen-Struktur der Vorlage bleibt UNVERÄNDERT (keine Zeilen entfernt,
+    keine Höhen geändert). Nicht benötigte Zeilen bleiben leer sichtbar.
+
+    Args:
+        table: Die Tabelle (shape.table)
+        slide_data: {"rows": [...], "is_last_slide": bool}
+        total_weight: Summe aller Gewichte (für Summen-Zeile, default 100%)
+        shape_height: Höhe der Tabellen-Shape in EMU (aus Kompat-Gründen in der
+                      Signatur belassen, wird nicht mehr verwendet)
+    """
+    n_rows_initial = len(table.rows)
+    rows = slide_data["rows"]
+    is_last = slide_data["is_last_slide"]
+
+    # Summen-Zeile ist immer die letzte Zeile in der Vorlage
+    summary_row_idx = n_rows_initial - 1
+    max_data_rows = n_rows_initial - 2
+
+    # Erst alle Datenzeilen leeren (nur Spalten 0, 2, 4, 6, 8, 10 - Spacer bleiben)
+    for row_idx in range(1, n_rows_initial):
+        row = table.rows[row_idx]
+        for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
+            set_cell_text(row.cells[col_idx], "")
+
+    # Zeilen befüllen
+    for i, row_def in enumerate(rows):
+        if i >= max_data_rows:
+            break  # Kein Platz mehr
+
+        target_row_idx = i + 1  # +1 weil Zeile 0 der Tabellen-Header ist
+        row = table.rows[target_row_idx]
+
+        if row_def["type"] in ("group_header", "liquidity"):
+            # Gruppen-Header: Name in Spalte 0, alle anderen leer, fett
+            name = row_def["data"]["name"]
+            set_cell_text(row.cells[COL_WERTPAPIER], name, is_bold=True)
+            # Bei RENTEN: "KUPON" und "FÄLLIGKEIT" als Sub-Header in Spalten 2 und 4
+            if name == GROUP_RENTEN:
+                set_cell_text(row.cells[COL_KUPON], "KUPON", is_bold=True)
+                set_cell_text(row.cells[COL_FAELLIGKEIT], "FÄLLIGKEIT", is_bold=True)
+            # Bei LIQUIDITÄT: Wert direkt in der Header-Zeile
+            if name == GROUP_LIQUIDITAET and "liq_value" in row_def["data"]:
+                set_cell_text(row.cells[COL_ANTEIL], fmt_pct(row_def["data"]["liq_value"]), is_bold=True)
+
+        elif row_def["type"] == "position":
+            data = row_def["data"]
+            # Alle Felder einer Position: explizit NICHT BOLD
+            set_cell_text(row.cells[COL_WERTPAPIER], data["wertpapier"], is_bold=False)
+            set_cell_text(row.cells[COL_WKN], data["wkn"], is_bold=False)
+            set_cell_text(row.cells[COL_ANTEIL], fmt_pct(data["gewicht"]), is_bold=False)
+            set_cell_text(row.cells[COL_RATING], data.get("rating", "-"), is_bold=False)
+            # Kupon (nur wenn vorhanden)
+            if data.get("kupon") is not None and not pd.isna(data["kupon"]) and data["kupon"] != 0:
+                set_cell_text(row.cells[COL_KUPON], fmt_pct(data["kupon"]), is_bold=False)
+            else:
+                set_cell_text(row.cells[COL_KUPON], "", is_bold=False)
+            # Fälligkeit (nur wenn vorhanden)
+            if data.get("faelligkeit") is not None and not pd.isna(data["faelligkeit"]):
+                set_cell_text(row.cells[COL_FAELLIGKEIT], fmt_date_de(data["faelligkeit"]), is_bold=False)
+            else:
+                set_cell_text(row.cells[COL_FAELLIGKEIT], "", is_bold=False)
+
+    # Summen-Zeile: nur auf letzter Slide
+    summary_row = table.rows[summary_row_idx]
+    for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
+        set_cell_text(summary_row.cells[col_idx], "")
+
+    if is_last:
+        set_cell_text(summary_row.cells[COL_ANTEIL], fmt_pct(total_weight))
+
+    # WICHTIG: Tabellen-Struktur der Vorlage bleibt UNVERÄNDERT.
+    # Frühere Versuche, leere Zeilen zu entfernen, haben LibreOffice
+    # zum Vergrößern der Zeilen veranlasst → Überlauf am Slide-Rand.
+
+
+def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
+                                 df: pd.DataFrame, strategy_name: str):
+    """Befüllt Slide 7 (Anlagevorschlag/Strategieentwurf) mit Portfolio-Daten.
+
+    Seit Juni 2026 (Performance-Folie als Slide 8): Es gibt nur noch EINE
+    Anlagevorschlag-Slide. Alle Positionen kommen auf Slide 7, dynamisch
+    geschrumpft durch remove_empty_table_rows + fit_shape_to_table.
+
+    Args:
+        prs: Presentation
+        slide_7_idx: 0-indexed Index der Anlagevorschlag-Slide
+        df: DataFrame mit Positionen (Wertpapier, WKN, Gewicht, Gattung, Kupon,
+            Fälligkeit_parsed, Marktrisikowert)
+        strategy_name: Name der Strategie für den Titel (schon bereinigt)
+    """
+    # 1. Daten vorbereiten
+    groups = group_portfolio_positions(df)
+    slide_distribution = distribute_positions_to_slides(groups)
+
+    # 2. Allokations-Daten für Ring-Chart (nach Gruppen)
+    alloc_labels = []
+    alloc_values = []
+    for g in GROUP_ORDER:
+        if g in groups:
+            total = sum(safe_float(p["gewicht"], 0.0) for p in groups[g])
+            if total > 0.0001:
+                alloc_labels.append(g)
+                alloc_values.append(float(total))
+
+    # Gesamt-Gewicht (für Summen-Zeile)
+    total_weight = sum(alloc_values)
+
+    # 3. Slide 7 befüllen
+    slide_7 = prs.slides[slide_7_idx]
+    # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance)
+    title = find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or find_shape_by_name(slide_7, SHAPE_TITLE)
+    if title:
+        set_title_with_autoscale(title, f"{STRATEGIEENTWURF_TITLE} - {strategy_name}")
+    # Ring-Chart
+    chart = find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
+    if chart:
+        replace_chart_data(chart, alloc_labels, alloc_values)
+    # Tabelle befüllen
+    table_shape = find_shape_by_name(slide_7, SHAPE_TABLE)
+    if table_shape:
+        fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
+                                  shape_height=table_shape.height)
+        # Leere Zeilen entfernen
+        remove_empty_table_rows(table_shape.table)
+        # Shape-Höhe an verbleibende Zeilen anpassen
+        fit_shape_to_table(table_shape)
+
+
+def fill_kennzahlen_table(table, kz: dict):
+    """Befüllt die KENNZAHLEN-Tabelle auf der Performance-Folie.
+
+    Tabellen-Layout (7 rows × 5 cols, mit Spacer-Spalten):
+      Row 0: Header   (KENNZAHLEN | _ | REFERENZ | _ | BENCHMARK)
+      Row 1: leer/Spacer
+      Row 2: Performance p.a.
+      Row 3: Volatilität
+      Row 4: Sharpe Ratio
+      Row 5: Max Drawdown
+      Row 6: leer/Spacer
+
+    Wert-Spalten: 2 (REFERENZ), 4 (BENCHMARK)
+    """
+    metric_rows = [
+        ("performance_pa_ref",  "performance_pa_bench",   2, True),   # row 2, Prozent
+        ("volatilitaet_ref",    "volatilitaet_bench",     3, True),   # row 3, Prozent
+        ("sharpe_ref",          "sharpe_bench",           4, False),  # row 4, Dezimal
+        ("max_drawdown_ref",    "max_drawdown_bench",     5, True),   # row 5, Prozent
+    ]
+    for ref_key, bench_key, row_idx, is_pct in metric_rows:
+        if row_idx >= len(table.rows):
+            continue
+        row = table.rows[row_idx]
+        ref_val = kz.get(ref_key)
+        bench_val = kz.get(bench_key)
+        if is_pct:
+            ref_str = fmt_pct(ref_val)
+            bench_str = fmt_pct(bench_val)
+        else:
+            ref_str = fmt_ratio(ref_val)
+            bench_str = fmt_ratio(bench_val)
+        # Spalte 2 = REFERENZ, Spalte 4 = BENCHMARK
+        set_cell_text_preserve_format(row.cells[2], ref_str)
+        set_cell_text_preserve_format(row.cells[4], bench_str)
+
+
+def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
+                            performance_data: Optional[dict] = None):
+    """Befüllt die Performance-Slide (Slide 8: Anlagestrategie Wertentwicklung).
+
+    Args:
+        prs: Presentation
+        slide_idx: 0-indexed Index der Performance-Slide
+        strategy_name: Name der Strategie für den Titel
+        performance_data: Dict mit Performance-Daten (siehe
+            modules.analytics.compute_performance_data). Wenn None: nur Titel
+            wird gesetzt, Charts/Tabelle bleiben mit Vorlagen-Platzhaltern.
+    """
+    slide = prs.slides[slide_idx]
+
+    # Titel anpassen: "{Strategy} | Wertentwicklung (mit Benchmark)"
+    title = find_shape_by_name(slide, "Titel")
+    if title and title.has_text_frame:
+        new_title = f"{strategy_name} | Wertentwicklung (mit Benchmark)"
+        replace_text_in_shape(title, new_title)
+
+    if performance_data is None:
+        return  # Phase 1: nur Titel setzen
+
+    # ── KENNZAHLEN-Tabelle befüllen ──
+    kz = performance_data.get("kennzahlen", {})
+    tab = find_shape_by_name(slide, "Tabelle")
+    if tab and tab.has_table:
+        fill_kennzahlen_table(tab.table, kz)
+
+    # ── PERFORMANCE P.A. Chart (Säulen) ──
+    pa = performance_data.get("performance_pa", {})
+    chart_links = find_shape_by_name(slide, "Diagramm links")
+    if chart_links and chart_links.has_chart and pa.get("jahre"):
+        replace_chart_data_safe(
+            chart_links,
+            categories=[str(y) for y in pa["jahre"]],
+            series_data=[
+                ("Referenzportfolio", pa.get("referenz", [])),
+                ("Benchmark", pa.get("benchmark", [])),
+            ],
+            data_label_format=PCT_FORMAT_CODE,
+        )
+
+    # ── WERTENTWICKLUNG Chart (Linien) ──
+    we = performance_data.get("wertentwicklung", {})
+    chart_rechts = find_shape_by_name(slide, "Diagramm rechts")
+    if chart_rechts and chart_rechts.has_chart and we.get("dates"):
+        replace_chart_data_safe(
+            chart_rechts,
+            categories=we["dates"],
+            series_data=[
+                ("Referenzportfolio", we.get("referenz", [])),
+                ("Benchmark", we.get("benchmark", [])),
+            ],
+            data_label_format=None,  # Linien-Chart hat keine Daten-Labels
+        )
+
+
+def fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy_name: str):
+    """Befüllt Slide 9 mit 2 Ringen: Regionen (links) + Branchen/Segment (rechts).
+
+    Kleine Kategorien (<3%) werden zu "Sonstige" zusammengefasst, maximal 8
+    Segmente angezeigt. Nicht-klassifizierte Positionen (typischerweise
+    Liquidität) erscheinen als eigenes Segment "Liquidität", damit der Ring
+    auf 100% summiert.
+    """
+    slide = prs.slides[slide_idx]
+
+    # Titel
+    title = find_shape_by_name(slide, SHAPE_TITLE) or find_shape_by_name(slide, SHAPE_TITLE_ALT)
+    if title:
+        replace_text_in_shape(title, f"Aktuelle Portfoliozusammenstellung – {strategy_name}")
+
+    # Defensive Vorbereitung: Gewicht muss sauberer Float sein
+    df_clean = df.copy()
+    if "Gewicht" in df_clean.columns:
+        df_clean["Gewicht"] = pd.to_numeric(df_clean["Gewicht"], errors="coerce").fillna(0.0).astype(float)
+
+    # Regionen (links)
+    region_agg = build_ring_series(df_clean, "Region")
+    if not region_agg.empty:
+        chart_left = find_shape_by_name(slide, SHAPE_CHART_LEFT)
+        if chart_left:
+            replace_chart_data(
+                chart_left,
+                region_agg.index.tolist(),
+                [float(v) for v in region_agg.values]
+            )
+
+    # Segmente/Branchen (rechts)
+    segment_agg = build_ring_series(df_clean, "Segment")
+    if not segment_agg.empty:
+        chart_right = find_shape_by_name(slide, SHAPE_CHART_RIGHT)
+        if chart_right:
+            replace_chart_data(
+                chart_right,
+                segment_agg.index.tolist(),
+                [float(v) for v in segment_agg.values]
+            )
