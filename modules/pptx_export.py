@@ -34,18 +34,22 @@ except ImportError:
     # Fallback für lokalen Skript-Aufruf (ohne modules/-Prefix im sys.path)
     from formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
 
-# Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen, Vorlage)
+# Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen, Vorlage, Slide-Manipulation)
 try:
     from modules.pptx_helpers import (
         find_shape_by_name, replace_text_in_shape,
         set_cell_text, set_cell_text_preserve_format,
         clear_table, safe_float, load_template,
+        duplicate_slide, clone_chart_part, move_slide, remove_slide,
+        save_and_reload, update_quelle_datum, update_slide_numbers,
     )
 except ImportError:
     from pptx_helpers import (
         find_shape_by_name, replace_text_in_shape,
         set_cell_text, set_cell_text_preserve_format,
         clear_table, safe_float, load_template,
+        duplicate_slide, clone_chart_part, move_slide, remove_slide,
+        save_and_reload, update_quelle_datum, update_slide_numbers,
     )
 
 
@@ -144,108 +148,13 @@ def _replace_text_in_shape(shape, new_text: str):
 # Slide-Duplikation (für Vergleichsportfolio)
 # ---------------------------------------------------------------------------
 def _duplicate_slide(prs, source_idx: int):
-    """
-    Dupliziert eine Slide samt Chart-Teilen und Image-Referenzen.
-    Die Charts werden dabei so kopiert, dass Änderungen am Duplikat
-    NICHT das Original überschreiben.
-
-    Fügt die neue Slide direkt hinter die Quelle ein.
-    Returns: Die neue Slide.
-    """
-    from copy import deepcopy
-    from pptx.opc.packuri import PackURI
-
-    source = prs.slides[source_idx]
-
-    # Neue Slide mit gleichem Layout anlegen
-    new_slide = prs.slides.add_slide(source.slide_layout)
-
-    # Alle Shapes entfernen die beim Layout-Add automatisch kamen
-    for shape in list(new_slide.shapes):
-        sp = shape._element
-        sp.getparent().remove(sp)
-
-    # Mapping alte rId → neue rId für Duplikate
-    rid_map = {}
-
-    for rel in list(source.part.rels.values()):
-        if "chart" in rel.reltype:
-            # Chart-Part duplizieren (eigener Part mit neuer Datei-URI)
-            new_chart_part = _clone_chart_part(prs, rel.target_part)
-            new_rel_id = new_slide.part.relate_to(new_chart_part, rel.reltype)
-            rid_map[rel.rId] = new_rel_id
-        elif "image" in rel.reltype:
-            # Image-Part wiederverwenden – Bilder werden nicht modifiziert
-            new_rel_id = new_slide.part.relate_to(rel.target_part, rel.reltype)
-            rid_map[rel.rId] = new_rel_id
-
-    # Shapes kopieren und rId-Referenzen patchen
-    R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
-    for shape in source.shapes:
-        el = shape.element
-        new_el = deepcopy(el)
-
-        # Alle r:id / r:embed / r:link Attribute im XML durchgehen und mappen
-        for attr in ["id", "embed", "link"]:
-            attr_name = R_NS + attr
-            for el_with_rid in new_el.iter():
-                if attr_name in el_with_rid.attrib:
-                    old_rid = el_with_rid.attrib[attr_name]
-                    if old_rid in rid_map:
-                        el_with_rid.attrib[attr_name] = rid_map[old_rid]
-
-        new_slide.shapes._spTree.insert_element_before(new_el, "p:extLst")
-
-    # Die neue Slide ist aktuell am Ende – verschieben hinter die Quelle
-    xml_slides = prs.slides._sldIdLst
-    slides = list(xml_slides)
-    new_slide_element = slides[-1]
-    xml_slides.remove(new_slide_element)
-    xml_slides.insert(source_idx + 1, new_slide_element)
-
-    return new_slide
+    """Wrapper für pptx_helpers.duplicate_slide."""
+    return duplicate_slide(prs, source_idx)
 
 
 def _clone_chart_part(prs, source_chart_part):
-    """
-    Erstellt eine tiefe Kopie eines Chart-Parts mit eigener URI.
-    Kopiert auch die Sub-Relationships (z.B. embeddings zu XLSX).
-    """
-    from copy import deepcopy
-    from pptx.opc.packuri import PackURI
-
-    package = source_chart_part.package
-
-    # Neue URI finden (nächste freie chartN.xml)
-    existing_nums = set()
-    for part in package.iter_parts():
-        partname_str = str(part.partname)
-        m = re.search(r'/ppt/charts/chart(\d+)\.xml$', partname_str)
-        if m:
-            existing_nums.add(int(m.group(1)))
-    n = 1
-    while n in existing_nums:
-        n += 1
-    new_partname = PackURI(f"/ppt/charts/chart{n}.xml")
-
-    # Chart-Part-Klasse nutzen und neuen Part mit neuer URI erstellen
-    # Signatur: Part.load(partname, content_type, package, blob)
-    chart_part_cls = type(source_chart_part)
-    new_chart_part = chart_part_cls.load(
-        new_partname,
-        source_chart_part.content_type,
-        package,
-        source_chart_part.blob,
-    )
-
-    # Sub-Relationships kopieren (z.B. Excel-Embedding)
-    for rel in source_chart_part.rels.values():
-        if rel.is_external:
-            new_chart_part.rels.get_or_add_ext_rel(rel.reltype, rel.target_ref)
-        else:
-            new_chart_part.relate_to(rel.target_part, rel.reltype)
-
-    return new_chart_part
+    """Wrapper für pptx_helpers.clone_chart_part."""
+    return clone_chart_part(prs, source_chart_part)
 
 
 # Re wird in _clone_chart_part benutzt
@@ -1446,111 +1355,32 @@ def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy
 
 
 # ---------------------------------------------------------------------------
-# Foliennummern dynamisch setzen
+# Slide-Manipulation: Wrapper für pptx_helpers
 # ---------------------------------------------------------------------------
 def _update_quelle_datum(prs, datum_str: str):
-    """
-    Aktualisiert das 'Quelle: Eigene Berechnung Stand: XX.XX.XXXX' Datum in allen
-    Chart-Annotationen (drawing*.xml parts) auf das aktuelle Auswertungsdatum.
-
-    Die Quelle-Zeile steht statisch in den drawing-Parts der Vorlage (im Chart-
-    Annotation-Layer der Ring-Charts). Diese können nicht über die normale
-    python-pptx-Slide-API erreicht werden — wir müssen über prs.part.package
-    iterieren und direkt das _blob setzen.
-
-    Args:
-        prs: Presentation-Objekt
-        datum_str: Datum im Format 'DD.MM.YYYY' (z.B. '17.06.2026')
-    """
-    if not datum_str:
-        return
-    package = prs.part.package
-    for part in package.iter_parts():
-        pn = str(part.partname)
-        if not pn.startswith("/ppt/drawings/drawing"):
-            continue
-        try:
-            xml = part.blob.decode('utf-8')
-        except Exception:
-            continue
-        if 'Quelle: Eigene Berechnung Stand:' not in xml:
-            continue
-        new_xml = re.sub(
-            r'(Quelle: Eigene Berechnung Stand: )\d{2}\.\d{2}\.\d{4}',
-            f'\\g<1>{datum_str}',
-            xml
-        )
-        if new_xml != xml:
-            part._blob = new_xml.encode('utf-8')
+    """Wrapper für pptx_helpers.update_quelle_datum."""
+    return update_quelle_datum(prs, datum_str)
 
 
 def _update_slide_numbers(prs):
-    """
-    Setzt die Foliennummer auf jeder Slide auf die korrekte 1-indexed Position.
-
-    HINTERGRUND:
-    Die Vorlage hat statische Seitenzahlen (Slides 7-9 zeigen z.B. "13"-"15",
-    weil der Designer eine Lücke für dynamische Folien angenommen hat). Nach
-    Add/Remove/Duplicate-Operationen stimmen diese Werte nicht mehr — daher
-    nach allen Slide-Manipulationen einmal alle Foliennummern auf die korrekte
-    Position überschreiben.
-
-    Slides ohne Foliennummer-Shape (Cover, Sub-Cover, Impressum) bleiben
-    unverändert — das ist gewollt: solche Slides sollen keine Seitenzahl tragen.
-
-    Sollte als LETZTER Schritt vor `prs.save()` aufgerufen werden.
-    """
-    for idx, slide in enumerate(prs.slides, start=1):
-        for shape in slide.shapes:
-            if shape.name in SHAPE_FOLIENNUMMER_NAMES and shape.has_text_frame:
-                _replace_text_in_shape(shape, str(idx))
-                break
+    """Wrapper für pptx_helpers.update_slide_numbers — übergibt die lokal
+    konfigurierten SHAPE_FOLIENNUMMER_NAMES (Single Source of Truth)."""
+    return update_slide_numbers(prs, SHAPE_FOLIENNUMMER_NAMES)
 
 
-# ---------------------------------------------------------------------------
-# Slide entfernen (Slide 10 Währungen wird weggelassen)
-# ---------------------------------------------------------------------------
 def _move_slide(prs, from_idx: int, to_idx: int):
-    """
-    Verschiebt eine Slide innerhalb der Präsentation von from_idx zu to_idx.
-
-    Args:
-        prs: Presentation-Objekt
-        from_idx: 0-basierte Position der Slide, die verschoben werden soll
-        to_idx: 0-basierte Ziel-Position (vor Reordering)
-
-    Realisiert via direkter Manipulation von <p:sldIdLst> in presentation.xml.
-    """
-    xml_slides = prs.slides._sldIdLst
-    slides = list(xml_slides)
-    if from_idx < 0 or from_idx >= len(slides):
-        raise IndexError(f"_move_slide: from_idx {from_idx} out of range (max {len(slides)-1})")
-    if to_idx < 0 or to_idx >= len(slides):
-        raise IndexError(f"_move_slide: to_idx {to_idx} out of range (max {len(slides)-1})")
-    target = slides[from_idx]
-    xml_slides.remove(target)
-    xml_slides.insert(to_idx, target)
+    """Wrapper für pptx_helpers.move_slide."""
+    return move_slide(prs, from_idx, to_idx)
 
 
 def _remove_slide(prs, slide_idx: int):
-    """Entfernt eine Slide an gegebener Position (0-indexed)."""
-    xml_slides = prs.slides._sldIdLst
-    slides_list = list(xml_slides)
-    slide_elem = slides_list[slide_idx]
-    rId = slide_elem.rId
-    prs.part.drop_rel(rId)
-    xml_slides.remove(slide_elem)
+    """Wrapper für pptx_helpers.remove_slide."""
+    return remove_slide(prs, slide_idx)
 
 
 def _save_and_reload(prs) -> Presentation:
-    """
-    Speichert die Präsentation in Memory und lädt sie neu.
-    Das räumt interne Slide-IDs auf (wichtig nach remove/duplicate Operationen).
-    """
-    buf = io.BytesIO()
-    prs.save(buf)
-    buf.seek(0)
-    return Presentation(buf)
+    """Wrapper für pptx_helpers.save_and_reload."""
+    return save_and_reload(prs)
 
 
 # ---------------------------------------------------------------------------
