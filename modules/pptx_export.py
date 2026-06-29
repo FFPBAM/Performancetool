@@ -34,6 +34,20 @@ except ImportError:
     # Fallback für lokalen Skript-Aufruf (ohne modules/-Prefix im sys.path)
     from formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
 
+# Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen, Vorlage)
+try:
+    from modules.pptx_helpers import (
+        find_shape_by_name, replace_text_in_shape,
+        set_cell_text, set_cell_text_preserve_format,
+        clear_table, safe_float, load_template,
+    )
+except ImportError:
+    from pptx_helpers import (
+        find_shape_by_name, replace_text_in_shape,
+        set_cell_text, set_cell_text_preserve_format,
+        clear_table, safe_float, load_template,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Konstanten
@@ -117,32 +131,13 @@ def clean_strategy_name(name: str) -> str:
 # Shape-Helpers
 # ---------------------------------------------------------------------------
 def _find_shape_by_name(slide, name: str):
-    """Findet ein Shape auf einer Slide anhand seines Namens. Gibt None zurück falls nicht gefunden."""
-    for shape in slide.shapes:
-        if shape.name == name:
-            return shape
-    return None
+    """Wrapper für pptx_helpers.find_shape_by_name."""
+    return find_shape_by_name(slide, name)
 
 
 def _replace_text_in_shape(shape, new_text: str):
-    """Ersetzt den Text in einem Text-Shape. Behält Formatierung des ersten Runs bei."""
-    if not shape.has_text_frame:
-        return
-    tf = shape.text_frame
-    # Alle Paragraphen außer dem ersten löschen
-    while len(tf.paragraphs) > 1:
-        p = tf.paragraphs[-1]._p
-        p.getparent().remove(p)
-    # Im ersten Paragraphen: ersten Run behalten, Text ersetzen, Rest löschen
-    p = tf.paragraphs[0]
-    if len(p.runs) == 0:
-        p.text = new_text
-    else:
-        p.runs[0].text = new_text
-        # Alle weiteren Runs entfernen
-        for run in p.runs[1:]:
-            r = run._r
-            r.getparent().remove(r)
+    """Wrapper für pptx_helpers.replace_text_in_shape."""
+    return replace_text_in_shape(shape, new_text)
 
 
 # ---------------------------------------------------------------------------
@@ -348,64 +343,21 @@ def _update_cache_elements(parent, new_values, is_numeric: bool):
 # Tabellen-Befüllung
 # ---------------------------------------------------------------------------
 def _set_cell_text(cell, text: str, is_bold: bool = None):
-    """
-    Setzt den Text einer Tabellenzelle.
-
-    WICHTIG: Leere Strings werden zu NBSP (U+00A0) konvertiert. Grund:
-    Die Vorlage verwendet in nicht-befüllten Zellen ebenfalls NBSP als
-    Platzhalter. Lässt man die Zelle mit leerem <a:t/> zurück, rendert
-    LibreOffice sie mit Default-Font-Metriken (größere Zeilenhöhe), was
-    die gesamte Tabelle vertikal streckt und zu Überlauf auf Slide 7 führt.
-
-    Args:
-        cell: Die Zelle
-        text: Der neue Text (leer → NBSP)
-        is_bold: Wenn explizit True/False: setzt Bold-Formatierung.
-                 Wenn None: behält vorherige Formatierung bei.
-    """
-    # Leere Zellen auf NBSP setzen (siehe Docstring oben)
-    if text == "":
-        text = "\u00A0"
-
-    tf = cell.text_frame
-    # Alle Paragraphen außer dem ersten löschen
-    while len(tf.paragraphs) > 1:
-        p = tf.paragraphs[-1]._p
-        p.getparent().remove(p)
-    p = tf.paragraphs[0]
-    if len(p.runs) == 0:
-        p.text = text
-        # Bold explizit setzen wenn gewünscht
-        if is_bold is not None and p.runs:
-            p.runs[0].font.bold = is_bold
-    else:
-        p.runs[0].text = text
-        # Bold explizit setzen wenn gewünscht
-        if is_bold is not None:
-            p.runs[0].font.bold = is_bold
-        for run in p.runs[1:]:
-            r = run._r
-            r.getparent().remove(r)
+    """Wrapper für pptx_helpers.set_cell_text."""
+    return set_cell_text(cell, text, is_bold)
 
 
 def _clear_table(table, keep_header_rows: int = 1):
-    """Leert alle Zellen einer Tabelle ab der angegebenen Start-Zeile (Header bleibt)."""
-    for row_idx in range(keep_header_rows, len(table.rows)):
-        for cell in table.rows[row_idx].cells:
-            _set_cell_text(cell, "")
+    """Wrapper für pptx_helpers.clear_table."""
+    return clear_table(table, keep_header_rows)
 
 
 # ---------------------------------------------------------------------------
 # Template laden
 # ---------------------------------------------------------------------------
 def _load_template() -> Presentation:
-    """Lädt die PPTX-Vorlage. Raises FileNotFoundError wenn nicht vorhanden."""
-    if not os.path.exists(TEMPLATE_PATH):
-        raise FileNotFoundError(
-            f"Vorlage nicht gefunden: {TEMPLATE_PATH}\n"
-            f"Bitte 'Vorlage_FFPB.pptx' im Ordner 'Vorlage/' ablegen."
-        )
-    return Presentation(TEMPLATE_PATH)
+    """Wrapper für pptx_helpers.load_template. Nutzt das modul-lokale TEMPLATE_PATH."""
+    return load_template(TEMPLATE_PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -436,21 +388,8 @@ GROUP_ORDER = [GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET,
 
 
 def _safe_float(value, default: float = 0.0) -> float:
-    """
-    Konvertiert einen Wert zu float. NaN, NaT, None, ungültige Werte → default (0.0).
-    Wichtig: Verhindert TypeError beim Vergleich/Sortieren gemischter Typen.
-    """
-    if value is None:
-        return default
-    try:
-        if pd.isna(value):
-            return default
-    except (TypeError, ValueError):
-        pass
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+    """Wrapper für pptx_helpers.safe_float."""
+    return safe_float(value, default)
 
 
 def _set_title_with_autoscale(title_shape, text: str):
@@ -1074,31 +1013,8 @@ def _fmt_ratio(val) -> str:
 
 
 def _set_cell_text_preserve_format(cell, text: str):
-    """
-    Setzt den Text einer Tabellen-Zelle und erhält das Format des ersten Runs.
-
-    Im Gegensatz zu `_set_cell_text` (das alle Runs durch einen neuen leeren Run
-    ersetzt) bleibt hier die Font-Formatierung (Größe, Farbe, Bold) erhalten —
-    wichtig für die KENNZAHLEN-Tabelle wo das Vorlagen-Styling (z.B. fett, weiß
-    auf blauem Header) nicht überschrieben werden soll.
-    """
-    if not cell.text_frame.paragraphs:
-        # Fallback: kein Paragraph → normales _set_cell_text Verhalten
-        _set_cell_text(cell, text)
-        return
-    para = cell.text_frame.paragraphs[0]
-    # Erste Run finden — wenn keine da, lege eine an
-    if not para.runs:
-        _set_cell_text(cell, text)
-        return
-    # Erste Run behält ihr Format, alle weiteren Runs löschen
-    runs = list(para.runs)
-    runs[0].text = text
-    for r in runs[1:]:
-        r._r.getparent().remove(r._r)
-    # Weitere Paragraphs löschen
-    for p in cell.text_frame.paragraphs[1:]:
-        p._p.getparent().remove(p._p)
+    """Wrapper für pptx_helpers.set_cell_text_preserve_format."""
+    return set_cell_text_preserve_format(cell, text)
 
 
 def _update_chart_values_inplace(chart_shape, categories: list, series_data: list):
