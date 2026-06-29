@@ -1,0 +1,331 @@
+"""
+modules/analytics.py — Performance-Berechnungs-Funktionen für die Broschüre.
+
+Eine zentrale Stelle für alle Berechnungen (CAGR, Volatilität, Sharpe Ratio,
+Max Drawdown, Kalenderjahres-Returns, Wertentwicklungs-Index). Beide Konsumenten
+nutzen es:
+- streamlit_app.py: für die UI-Kennzahlen-Anzeige (Tab 1: Performance)
+- pptx_export.py: für die Performance-Folie der Broschüre
+
+Eingabe-Format (überall identisch):
+- Tagesrenditen als DEZIMAL (0.005 = 0,5%) — NICHT als Prozent (0.5)
+- Honorarsätze als DEZIMAL (0.01023 = 1,023%)
+- Risikofreier Zins als ANNUALISIERTER DEZIMAL (0.04 = 4% p.a.)
+
+Diese Datei hat KEINE Imports von Streamlit oder python-pptx.
+Sie kann unverändert in lokalen Python-Skripten genutzt werden.
+
+Mathematische Konventionen:
+- Annualisierungs-Basis: 365 Tage (Kalendertage, nicht Handelstage)
+- Sharpe Ratio: Excess-Return-Variante nach Sharpe (1994) — tägliche Excess Returns
+- Drawdown: (idx / cummax(idx)) - 1 — negativ
+"""
+
+from typing import Optional, Sequence
+
+import numpy as np
+import pandas as pd
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Kosten-Modellierung (Honorarsatz → tägliche Belastung)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def annual_fee_to_daily_drag(fee_pa_decimal: float) -> float:
+    """Wandelt einen jährlichen Honorarsatz in eine äquivalente tägliche Belastung.
+
+    Formel: daily = (1 + fee_pa)^(1/365) - 1
+
+    Args:
+        fee_pa_decimal: Honorarsatz p.a. als Dezimal (z.B. 0.012 für 1,2% p.a.)
+
+    Returns:
+        Tägliche Belastung als Dezimal.
+
+    Examples:
+        >>> round(annual_fee_to_daily_drag(0.012), 8)
+        3.268e-05
+    """
+    return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
+
+
+def calc_daily_returns_after_fee(d_returns_decimal: Sequence[float],
+                                  fee_pa_decimal: float) -> np.ndarray:
+    """Subtrahiert die tägliche Honorar-Belastung von Brutto-Tagesrenditen.
+
+    Returns:
+        Array von Netto-Tagesrenditen (nach Kosten).
+    """
+    arr = np.asarray(d_returns_decimal, dtype=float)
+    return arr - annual_fee_to_daily_drag(fee_pa_decimal)
+
+
+def calc_period_return(returns: Sequence[float]) -> float:
+    """Geometrische Periodenrendite aus Tagesrenditen.
+
+    Formel: Π(1 + r_t) - 1
+
+    Examples:
+        >>> round(calc_period_return([0.01, 0.01, -0.02]), 6)
+        -0.000198
+    """
+    return float(np.prod(1.0 + np.asarray(returns, dtype=float)) - 1.0)
+
+
+def calc_period_return_after_fee(returns: Sequence[float],
+                                  fee_pa_decimal: float) -> float:
+    """Geometrische Periodenrendite nach Kosten."""
+    e = annual_fee_to_daily_drag(fee_pa_decimal)
+    arr = np.asarray(returns, dtype=float)
+    return float(np.prod(1.0 + (arr - e)) - 1.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Index-Aufbau (Performance-Index aus Tagesrenditen)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def make_index_from_returns(d_returns_decimal: Sequence[float],
+                            startwert: float = 100.0) -> np.ndarray:
+    """Baut einen Index aus Tagesrenditen.
+
+    idx[0] = startwert; idx[i] = idx[i-1] * (1 + r[i-1])
+
+    Returns:
+        Array mit len(returns)+1 Werten (inklusive Startwert).
+    """
+    arr = np.asarray(d_returns_decimal, dtype=float)
+    idx = np.empty(len(arr) + 1, dtype=float)
+    idx[0] = startwert
+    for i, d in enumerate(arr, start=1):
+        idx[i] = idx[i-1] * (1.0 + d)
+    return idx
+
+
+def make_index_after_fee(d_returns_decimal: Sequence[float],
+                         fee_pa_decimal: float,
+                         startwert: float = 100.0) -> np.ndarray:
+    """Baut einen Index aus Tagesrenditen NACH Kosten.
+
+    Die tägliche Honorar-Belastung wird täglich vom Brutto-Return abgezogen
+    (Zinseszinseffekt taggenau).
+    """
+    arr = np.asarray(d_returns_decimal, dtype=float)
+    e = annual_fee_to_daily_drag(fee_pa_decimal)
+    idx = np.empty(len(arr) + 1, dtype=float)
+    idx[0] = startwert
+    for i, d in enumerate(arr, start=1):
+        idx[i] = idx[i-1] * (1.0 + (d - e))
+    return idx
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Risiko-/Rendite-Kennzahlen
+# ─────────────────────────────────────────────────────────────────────────────
+
+def calc_cagr(idx_after: Sequence[float], n_days: int) -> Optional[float]:
+    """Compound Annual Growth Rate (CAGR) aus einem Index.
+
+    Formel: (idx[-1] / idx[0])^(365/n_days) - 1
+
+    Args:
+        idx_after: Index-Reihe (z.B. aus `make_index_after_fee`)
+        n_days: Zeitraum in Tagen (Kalendertage)
+
+    Returns:
+        CAGR als Dezimal, oder None bei degeneriertem Input.
+    """
+    if n_days <= 0 or len(idx_after) == 0 or idx_after[0] == 0:
+        return None
+    return (idx_after[-1] / idx_after[0]) ** (365.0 / n_days) - 1.0
+
+
+def calc_vola(daily_returns_after_fee: Sequence[float]) -> Optional[float]:
+    """Annualisierte Volatilität: std(tagesrenditen) × √365.
+
+    Stichproben-Standardabweichung (ddof=1).
+    """
+    arr = np.asarray(daily_returns_after_fee, dtype=float)
+    if len(arr) < 2:
+        return None
+    return float(np.std(arr, ddof=1) * np.sqrt(365))
+
+
+def drawdown_from_index(idx: Sequence[float]) -> np.ndarray:
+    """Drawdown-Serie: (idx / cummax(idx)) - 1. Negative Werte."""
+    arr = np.asarray(idx, dtype=float)
+    peak = np.maximum.accumulate(arr)
+    return (arr / peak) - 1.0
+
+
+def calc_max_drawdown(idx_after: Sequence[float]) -> Optional[float]:
+    """Maximaler Drawdown als negativer Dezimal-Wert (-0.16 = -16%)."""
+    arr = np.asarray(idx_after, dtype=float)
+    if len(arr) == 0:
+        return None
+    dd = drawdown_from_index(arr)
+    return float(np.min(dd))
+
+
+def calc_sharpe_excess(daily_returns_after_fee: Sequence[float],
+                       rf_annual_series: Sequence[float]) -> Optional[float]:
+    """Sharpe Ratio nach Sharpe (1994) — tägliche Excess Returns.
+
+    Schritte:
+        1. Tagessatz aus annualisiertem rf: daily_rf = (1+rf)^(1/365) - 1
+        2. Excess: ret_port_nach_Kosten - daily_rf
+        3. Sharpe_daily = mean(excess) / std(excess, ddof=1)
+        4. Annualisierung: × √365
+
+    Args:
+        daily_returns_after_fee: Netto-Tagesrenditen (nach Kosten)
+        rf_annual_series: Annualisierter rf pro Tag (Series oder Array)
+
+    Returns:
+        Annualisierte Sharpe Ratio als float, oder None bei degeneriertem Input.
+    """
+    rp = pd.Series(daily_returns_after_fee).to_numpy(dtype=float)
+    if rp.size < 2:
+        return None
+    rf_ser = pd.Series(rf_annual_series).reset_index(drop=True)
+    # Längen angleichen
+    if len(rf_ser) != len(rp):
+        if len(rf_ser) > len(rp):
+            rf_ser = rf_ser.iloc[:len(rp)]
+        else:
+            rf_ser = rf_ser.reindex(range(len(rp)))
+    rf_ann = rf_ser.fillna(0.0).to_numpy(dtype=float)
+    daily_rf = (1.0 + rf_ann) ** (1.0/365.0) - 1.0
+    mask = ~np.isnan(rp)
+    if mask.sum() < 2:
+        return None
+    excess = rp[mask] - daily_rf[mask]
+    mu = float(np.mean(excess))
+    sd = float(np.std(excess, ddof=1))
+    if sd == 0:
+        return None
+    return (mu / sd) * np.sqrt(365.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# High-Level: Performance-Daten für die Broschüre
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_performance_data(timeseries_df: pd.DataFrame,
+                             fee_dec: float,
+                             n_years_bar_chart: int = 5) -> dict:
+    """Berechnet alle Performance-Daten für die Performance-Folie der Broschüre.
+
+    Args:
+        timeseries_df: DataFrame mit DatumsIndex und Spalten:
+            - 'ret_port' (Tagesrendite Portfolio, dezimal)
+            - 'ret_bm'   (Tagesrendite Benchmark, dezimal) — optional
+            - 'rf'       (Annualisierter risikofreier Zins, dezimal) — optional
+        fee_dec: Honorarsatz p.a. als Dezimal (z.B. 0.01023 für 1,023% inkl MwSt)
+        n_years_bar_chart: Anzahl Jahre für den Säulen-Chart (Default: 5)
+
+    Returns:
+        Dict im Format das die Performance-Folie erwartet:
+        {
+            "kennzahlen": {
+                "performance_pa_ref", "performance_pa_bench",
+                "volatilitaet_ref", "volatilitaet_bench",
+                "sharpe_ref", "sharpe_bench",
+                "max_drawdown_ref", "max_drawdown_bench",
+            },
+            "performance_pa": {"jahre": [...], "referenz": [...], "benchmark": [...]},
+            "wertentwicklung": {"dates": [...], "referenz": [...], "benchmark": [...]},
+        }
+
+        Bei leerem DataFrame: Dict mit leeren Sub-Dicts.
+    """
+    df = timeseries_df.copy()
+    if df.empty:
+        return {"kennzahlen": {}, "performance_pa": {}, "wertentwicklung": {}}
+
+    rp = df["ret_port"].to_numpy(float)
+    has_bm = "ret_bm" in df.columns and df["ret_bm"].notna().any()
+    rb = df["ret_bm"].fillna(0.0).to_numpy(float) if has_bm else None
+    has_rf = "rf" in df.columns and df["rf"].notna().any()
+    rf = df["rf"] if has_rf else pd.Series([0.0] * len(rp))
+
+    # ── KENNZAHLEN ──
+    n_days = len(rp)
+    ia_ref = make_index_after_fee(rp, fee_dec, 100.0)
+    draf_ref = calc_daily_returns_after_fee(rp, fee_dec)
+    cagr_ref = calc_cagr(ia_ref, n_days)
+    vola_ref = calc_vola(draf_ref)
+    sharpe_ref = calc_sharpe_excess(draf_ref, rf) if has_rf else None
+    mdd_ref = calc_max_drawdown(ia_ref)
+
+    if has_bm:
+        ib_bench = make_index_from_returns(rb, 100.0)
+        cagr_bench = calc_cagr(ib_bench, n_days)
+        vola_bench = calc_vola(rb)
+        sharpe_bench = calc_sharpe_excess(rb, rf) if has_rf else None
+        mdd_bench = calc_max_drawdown(ib_bench)
+    else:
+        cagr_bench = vola_bench = sharpe_bench = mdd_bench = None
+
+    kennzahlen = {
+        "performance_pa_ref":   cagr_ref,
+        "performance_pa_bench": cagr_bench,
+        "volatilitaet_ref":     vola_ref,
+        "volatilitaet_bench":   vola_bench,
+        "sharpe_ref":           sharpe_ref,
+        "sharpe_bench":         sharpe_bench,
+        "max_drawdown_ref":     mdd_ref,
+        "max_drawdown_bench":   mdd_bench,
+    }
+
+    # ── PERFORMANCE P.A. (Säulen-Chart, letzte n_years vollständige Jahre) ──
+    end_date = df.index.max()
+    current_year = end_date.year
+    # "Vollständig" = mindestens bis 28.12. Daten vorhanden
+    last_full_year = current_year if (end_date.month == 12 and end_date.day >= 28) else current_year - 1
+    target_years = list(range(last_full_year - n_years_bar_chart + 1, last_full_year + 1))
+
+    jahre = []
+    pa_ref = []
+    pa_bench = []
+    for year in target_years:
+        sub = df[df.index.year == year]
+        if sub.empty:
+            continue
+        rp_y = sub["ret_port"].fillna(0.0).to_numpy(float)
+        ref_year = calc_period_return_after_fee(rp_y, fee_dec)
+        jahre.append(year)
+        pa_ref.append(ref_year)
+        if has_bm:
+            rb_y = sub["ret_bm"].fillna(0.0).to_numpy(float)
+            pa_bench.append(calc_period_return(rb_y))
+        else:
+            pa_bench.append(0.0)
+
+    performance_pa = {
+        "jahre":    jahre,
+        "referenz": pa_ref,
+        "benchmark": pa_bench,
+    }
+
+    # ── WERTENTWICKLUNG (Linien-Chart, gesamte Zeitreihe) ──
+    # Index startet bei 1.0 (=100%) zum Auflagedatum (= erster Tag - 1)
+    start_date = df.index.min() - pd.Timedelta(days=1)
+    dates = [start_date.date()] + [d.date() for d in df.index]
+    wert_ref = list((ia_ref / 100.0).astype(float))
+    if has_bm:
+        ib_bench_norm = make_index_from_returns(rb, 100.0) / 100.0
+        wert_bench = list(ib_bench_norm.astype(float))
+    else:
+        wert_bench = [1.0] * len(dates)
+
+    wertentwicklung = {
+        "dates":     dates,
+        "referenz":  wert_ref,
+        "benchmark": wert_bench,
+    }
+
+    return {
+        "kennzahlen":      kennzahlen,
+        "performance_pa":  performance_pa,
+        "wertentwicklung": wertentwicklung,
+    }
