@@ -27,6 +27,13 @@ from pptx.util import Pt, Emu
 from pptx.chart.data import CategoryChartData
 from lxml import etree
 
+# Format-Helpers + Konstanten (Single Source of Truth — siehe modules/formats.py)
+try:
+    from modules.formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
+except ImportError:
+    # Fallback für lokalen Skript-Aufruf (ohne modules/-Prefix im sys.path)
+    from formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
+
 
 # ---------------------------------------------------------------------------
 # Konstanten
@@ -402,28 +409,16 @@ def _load_template() -> Presentation:
 
 
 # ---------------------------------------------------------------------------
-# Formatierungs-Helpers
+# Formatierungs-Helpers — Wrapper für modules.formats (Backwards-Compat)
 # ---------------------------------------------------------------------------
 def _fmt_pct(value) -> str:
-    """0.02 → '2,00%', NaN/None → '-'"""
-    if value is None or pd.isna(value):
-        return "-"
-    try:
-        return f"{float(value) * 100:.2f}".replace(".", ",") + "%"
-    except (ValueError, TypeError):
-        return "-"
+    """Wrapper für formats.fmt_pct. Behält die alte Signatur für internen Code bei."""
+    return fmt_pct(value)
 
 
 def _fmt_date_de(value) -> str:
-    """datetime → '01.11.2028', None → '-'"""
-    if value is None or pd.isna(value):
-        return "-"
-    try:
-        if hasattr(value, 'strftime'):
-            return value.strftime("%d.%m.%Y")
-        return str(value)
-    except Exception:
-        return "-"
+    """Wrapper für formats.fmt_date_de."""
+    return fmt_date_de(value)
 
 
 # ---------------------------------------------------------------------------
@@ -909,7 +904,7 @@ def _fill_performance_slide(prs, slide_idx: int, strategy_name: str,
                 ("Referenzportfolio", pa.get("referenz", [])),
                 ("Benchmark", pa.get("benchmark", [])),
             ],
-            data_label_format="0.00%",
+            data_label_format=PCT_FORMAT_CODE,
         )
 
     # ── WERTENTWICKLUNG Chart (Linien) ──
@@ -1069,29 +1064,13 @@ def _fill_kennzahlen_table(table, kz: dict):
 
 
 def _fmt_pct(val) -> str:
-    """Formatiert einen dezimalen Wert (z.B. 0.0523) als Prozent (5,23 %)."""
-    if val is None:
-        return "–"
-    try:
-        v = float(val)
-        if v != v:  # NaN check
-            return "–"
-        return f"{v*100:.2f}%".replace(".", ",")
-    except (TypeError, ValueError):
-        return "–"
+    """Wrapper für formats.fmt_pct (zweite Definition — überschrieb historisch die erste)."""
+    return fmt_pct(val)
 
 
 def _fmt_ratio(val) -> str:
-    """Formatiert einen Ratio-Wert (z.B. Sharpe 0.43) als Dezimalzahl (0,43)."""
-    if val is None:
-        return "–"
-    try:
-        v = float(val)
-        if v != v:
-            return "–"
-        return f"{v:.2f}".replace(".", ",")
-    except (TypeError, ValueError):
-        return "–"
+    """Wrapper für formats.fmt_ratio."""
+    return fmt_ratio(val)
 
 
 def _set_cell_text_preserve_format(cell, text: str):
