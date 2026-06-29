@@ -38,63 +38,79 @@ from modules.shared import (
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping, load_name_mapping,
     build_name_lookups, get_logo_aspect, get_logo_path,
+    to_decimal_interval,
+)
+# Performance-Berechnungs-Funktionen (Single Source of Truth — siehe modules/analytics.py)
+from modules.analytics import (
+    annual_fee_to_daily_drag as _ana_annual_fee_to_daily_drag,
+    make_index_from_returns as _ana_make_index_from_returns,
+    make_index_after_fee as _ana_make_index_after_fee,
+    drawdown_from_index as _ana_drawdown_from_index,
+    calc_cagr as _ana_calc_cagr,
+    calc_vola as _ana_calc_vola,
+    calc_daily_returns_after_fee as _ana_calc_daily_returns_after_fee,
+    calc_sharpe_excess as _ana_calc_sharpe_excess,
+    calc_period_return as _ana_calc_period_return,
+    calc_period_return_after_fee as _ana_calc_period_return_after_fee,
 )
 from modules.portfolioanalyse import render_portfolioanalyse
 
 
 # ==========================================================================
-# PERFORMANCE HELPERS (bewährter Code, inline)
+# PERFORMANCE HELPERS — Wrapper für modules.analytics (Backwards-Compat)
 # ==========================================================================
+# Die zentrale Berechnungs-Logik lebt in modules/analytics.py und wird auch
+# vom PPTX-Export (modules/pptx_export.py) genutzt. Diese Wrapper behalten
+# die Signatur und delegieren weiter — UI-Code bleibt unverändert.
+# UI-spezifische Erweiterungen (Euro-Drawdown, Calmar, DD-Dauer, rf-Index)
+# bleiben weiterhin lokal definiert.
 
-def annual_fee_to_daily_drag(fee_pa_decimal): return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
+def annual_fee_to_daily_drag(fee_pa_decimal):
+    return _ana_annual_fee_to_daily_drag(fee_pa_decimal)
 
 def make_index_from_returns(d_returns_decimal, startwert=100.0):
-    idx = np.empty(len(d_returns_decimal) + 1, dtype=float); idx[0] = startwert
-    for i, d in enumerate(d_returns_decimal, start=1): idx[i] = idx[i-1] * (1.0 + d)
-    return idx
+    return _ana_make_index_from_returns(d_returns_decimal, startwert)
 
 def make_index_after_fee(d_returns_decimal, fee_pa_decimal, startwert=100.0):
-    e = annual_fee_to_daily_drag(fee_pa_decimal)
-    idx = np.empty(len(d_returns_decimal) + 1, dtype=float); idx[0] = startwert
-    for i, d in enumerate(d_returns_decimal, start=1): idx[i] = idx[i-1] * (1.0 + (d - e))
-    return idx
+    return _ana_make_index_after_fee(d_returns_decimal, fee_pa_decimal, startwert)
 
 def drawdown_from_index(idx):
-    peak = np.maximum.accumulate(idx); return (idx / peak) - 1.0
+    return _ana_drawdown_from_index(idx)
 
 def drawdown_euro_from_index(idx):
+    """UI-spezifisch: Euro-Drawdown (idx - peak), bleibt lokal."""
     peak = np.maximum.accumulate(idx); return idx - peak
 
-def to_decimal_interval(series_float):
-    x = series_float.to_numpy(dtype=float); ax = np.nan_to_num(np.abs(x), nan=0.0)
-    if ax.max() > 1.0 or np.median(ax) > 0.2: x = x / 100.0
-    return x
+# to_decimal_interval kommt jetzt aus modules.shared (siehe Import oben)
 
 def calc_cagr(idx_after, n_days):
-    if n_days <= 0 or idx_after[0] == 0: return None
-    return (idx_after[-1] / idx_after[0]) ** (365.0 / n_days) - 1.0
+    return _ana_calc_cagr(idx_after, n_days)
 
 def calc_vola(daily_returns_after_fee):
-    if len(daily_returns_after_fee) < 2: return None
-    return float(np.std(daily_returns_after_fee, ddof=1) * np.sqrt(365))
+    return _ana_calc_vola(daily_returns_after_fee)
 
 def calc_daily_returns_after_fee(d_returns_decimal, fee_pa_decimal):
-    return d_returns_decimal - annual_fee_to_daily_drag(fee_pa_decimal)
+    return _ana_calc_daily_returns_after_fee(d_returns_decimal, fee_pa_decimal)
 
 def calc_max_drawdown(idx_after, dates_list):
-    dd = drawdown_from_index(idx_after); mi = np.argmin(dd)
+    """UI-Variante: gibt (mdd_wert, datum) Tupel zurück — wird auf der UI angezeigt.
+    Nutzt intern analytics.drawdown_from_index für die Mathematik."""
+    dd = _ana_drawdown_from_index(idx_after); mi = np.argmin(dd)
     return float(dd[mi]), dates_list[mi]
 
 def calc_max_drawdown_euro(idx_after, dates_list):
+    """UI-spezifisch: Euro-Variante mit Datum. Bleibt lokal."""
     dd = drawdown_euro_from_index(idx_after); mi = np.argmin(dd)
     return float(dd[mi]), dates_list[mi]
 
 def calc_calmar_ratio(cagr, max_dd):
+    """UI-spezifisch: Calmar = CAGR / |MDD|. Bleibt lokal."""
     if cagr is None or max_dd is None or max_dd == 0: return None
     return cagr / abs(max_dd)
 
 def calc_drawdown_recovery(idx_after, dates_list):
-    dd = drawdown_from_index(idx_after); mi = np.argmin(dd)
+    """UI-spezifisch: Erholungs-Dauer nach maximalem DD. Bleibt lokal."""
+    dd = _ana_drawdown_from_index(idx_after); mi = np.argmin(dd)
     for i in range(mi+1, len(dd)):
         if dd[i] >= 0.0:
             rd = dates_list[i]; td = dates_list[mi]
@@ -102,7 +118,8 @@ def calc_drawdown_recovery(idx_after, dates_list):
     return None, None
 
 def calc_max_drawdown_duration(idx_after, dates_list):
-    dd = drawdown_from_index(idx_after)
+    """UI-spezifisch: längste DD-Phase. Bleibt lokal."""
+    dd = _ana_drawdown_from_index(idx_after)
     max_dur = 0; max_start = 0; max_end = 0; current_start = None
     for i in range(len(dd)):
         if dd[i] < 0:
@@ -137,44 +154,12 @@ def aggregate_rf_geometric(rf_annual_series, n_days):
     return growth ** (365.0 / n_days) - 1.0
 
 def calc_sharpe_excess(daily_returns_after_fee, rf_annual_series):
-    """Sharpe Ratio nach Sharpe (1994) – wissenschaftlich saubere Variante.
-
-    Berechnung direkt auf den täglichen Excess Returns:
-      1. rf_annual[t] → daily_rf[t] = (1 + rf_annual[t])^(1/365) - 1
-      2. excess[t]    = ret_port_nachKosten[t] - daily_rf[t]
-      3. Sharpe_daily = mean(excess) / std(excess, ddof=1)
-      4. Sharpe_p.a.  = Sharpe_daily * sqrt(365)
-
-    Zähler und Nenner basieren auf derselben Excess-Return-Zeitreihe.
-    Robust bei stark schwankendem rf (z.B. Zinswende-Phasen).
-    """
-    rp = pd.Series(daily_returns_after_fee).to_numpy(dtype=float)
-    if rp.size < 2:
-        return None
-    # rf-Serie auf Länge der Renditen bringen
-    rf_ser = pd.Series(rf_annual_series).reset_index(drop=True)
-    if len(rf_ser) != len(rp):
-        # Längenangleich: kürzen oder mit NaN auffüllen
-        if len(rf_ser) > len(rp):
-            rf_ser = rf_ser.iloc[:len(rp)]
-        else:
-            rf_ser = rf_ser.reindex(range(len(rp)))
-    rf_ann = rf_ser.fillna(0.0).to_numpy(dtype=float)
-    daily_rf = (1.0 + rf_ann) ** (1.0/365.0) - 1.0
-    # NaN-Werte in Portfolio-Renditen rausfiltern
-    mask = ~np.isnan(rp)
-    if mask.sum() < 2:
-        return None
-    excess = rp[mask] - daily_rf[mask]
-    mu = float(np.mean(excess))
-    sd = float(np.std(excess, ddof=1))
-    if sd == 0:
-        return None
-    return (mu / sd) * np.sqrt(365.0)
+    """Sharpe Ratio nach Sharpe (1994) — Wrapper für modules.analytics."""
+    return _ana_calc_sharpe_excess(daily_returns_after_fee, rf_annual_series)
 
 def make_index_from_rf(rf_annual_series, startwert=100.0):
-    """Baut einen Index aus täglich variablen annualisierten rf-Werten.
-    Jeder Tag verzinst sich mit seinem eigenen Tagessatz."""
+    """UI-spezifisch: Baut einen Index aus täglich variablen rf-Werten.
+    Jeder Tag verzinst sich mit seinem eigenen Tagessatz. Bleibt lokal."""
     rf = pd.Series(rf_annual_series).fillna(0).to_numpy(dtype=float)
     daily = (1.0 + rf) ** (1.0/365.0) - 1.0
     return make_index_from_returns(daily, startwert)
@@ -216,9 +201,11 @@ def build_rolling_table(idx_before_1, idx_after_1, label_1, idx_before_2=None, i
     for c in multi: df[c] = df[c].apply(fmt)
     return df
 
-def calc_period_return(returns): return float(np.prod(1.0 + returns) - 1.0)
+def calc_period_return(returns):
+    return _ana_calc_period_return(returns)
+
 def calc_period_return_after_fee(returns, fee_pa_decimal):
-    e = annual_fee_to_daily_drag(fee_pa_decimal); return float(np.prod(1.0 + (returns - e)) - 1.0)
+    return _ana_calc_period_return_after_fee(returns, fee_pa_decimal)
 
 def compute_bar_data(df, fee_dec, mode, label, custom_start=None, custom_end=None):
     rows = []
