@@ -21,11 +21,15 @@ Diese Datei hat KEINE Imports von Streamlit.
 Sie kann unverändert in lokalen Python-Skripten genutzt werden.
 """
 
+import io
 import os
-from typing import Optional
+import re
+from copy import deepcopy
+from typing import Optional, Sequence
 
 import pandas as pd
 from pptx import Presentation
+from pptx.opc.packuri import PackURI
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -231,3 +235,250 @@ def load_template(path: Optional[str] = None) -> Presentation:
             f"Bitte 'Vorlage_FFPB.pptx' im Ordner 'Vorlage/' ablegen."
         )
     return Presentation(template_path)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Slide-Manipulation: Duplikation, Reorder, Remove, Reload
+# ─────────────────────────────────────────────────────────────────────────────
+
+def clone_chart_part(prs, source_chart_part):
+    """Erstellt eine tiefe Kopie eines Chart-Parts mit eigener URI.
+
+    Kopiert auch die Sub-Relationships (z.B. embeddings zu XLSX).
+    Wird von `duplicate_slide` aufgerufen, kann auch standalone genutzt werden.
+
+    Args:
+        prs: Presentation-Objekt
+        source_chart_part: Der zu klonende Chart-Part
+
+    Returns:
+        Der neue Chart-Part (eigene URI, eigene Sub-Relationships).
+    """
+    package = source_chart_part.package
+
+    # Neue URI finden (nächste freie chartN.xml)
+    existing_nums = set()
+    for part in package.iter_parts():
+        partname_str = str(part.partname)
+        m = re.search(r'/ppt/charts/chart(\d+)\.xml$', partname_str)
+        if m:
+            existing_nums.add(int(m.group(1)))
+    n = 1
+    while n in existing_nums:
+        n += 1
+    new_partname = PackURI(f"/ppt/charts/chart{n}.xml")
+
+    # Chart-Part-Klasse nutzen und neuen Part mit neuer URI erstellen
+    chart_part_cls = type(source_chart_part)
+    new_chart_part = chart_part_cls.load(
+        new_partname,
+        source_chart_part.content_type,
+        package,
+        source_chart_part.blob,
+    )
+
+    # Sub-Relationships kopieren (z.B. Excel-Embedding)
+    for rel in source_chart_part.rels.values():
+        if rel.is_external:
+            new_chart_part.rels.get_or_add_ext_rel(rel.reltype, rel.target_ref)
+        else:
+            new_chart_part.relate_to(rel.target_part, rel.reltype)
+
+    return new_chart_part
+
+
+def duplicate_slide(prs, source_idx: int):
+    """Dupliziert eine Slide samt Chart-Teilen und Image-Referenzen.
+
+    Die Charts werden so kopiert, dass Änderungen am Duplikat NICHT das
+    Original überschreiben (eigene Chart-Parts).
+    Image-Parts werden geteilt (Bilder werden nicht modifiziert).
+
+    Fügt die neue Slide direkt hinter die Quelle ein.
+
+    Args:
+        prs: Presentation-Objekt
+        source_idx: 0-basierter Index der Quell-Slide
+
+    Returns:
+        Die neue Slide (an Position source_idx + 1).
+    """
+    source = prs.slides[source_idx]
+
+    # Neue Slide mit gleichem Layout anlegen
+    new_slide = prs.slides.add_slide(source.slide_layout)
+
+    # Alle Shapes entfernen die beim Layout-Add automatisch kamen
+    for shape in list(new_slide.shapes):
+        sp = shape._element
+        sp.getparent().remove(sp)
+
+    # Mapping alte rId → neue rId für Duplikate
+    rid_map = {}
+
+    for rel in list(source.part.rels.values()):
+        if "chart" in rel.reltype:
+            # Chart-Part duplizieren (eigener Part mit neuer Datei-URI)
+            new_chart_part = clone_chart_part(prs, rel.target_part)
+            new_rel_id = new_slide.part.relate_to(new_chart_part, rel.reltype)
+            rid_map[rel.rId] = new_rel_id
+        elif "image" in rel.reltype:
+            # Image-Part wiederverwenden – Bilder werden nicht modifiziert
+            new_rel_id = new_slide.part.relate_to(rel.target_part, rel.reltype)
+            rid_map[rel.rId] = new_rel_id
+
+    # Shapes kopieren und rId-Referenzen patchen
+    R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    for shape in source.shapes:
+        el = shape.element
+        new_el = deepcopy(el)
+
+        # Alle r:id / r:embed / r:link Attribute im XML durchgehen und mappen
+        for attr in ["id", "embed", "link"]:
+            attr_name = R_NS + attr
+            for el_with_rid in new_el.iter():
+                if attr_name in el_with_rid.attrib:
+                    old_rid = el_with_rid.attrib[attr_name]
+                    if old_rid in rid_map:
+                        el_with_rid.attrib[attr_name] = rid_map[old_rid]
+
+        new_slide.shapes._spTree.insert_element_before(new_el, "p:extLst")
+
+    # Die neue Slide ist aktuell am Ende – verschieben hinter die Quelle
+    xml_slides = prs.slides._sldIdLst
+    slides = list(xml_slides)
+    new_slide_element = slides[-1]
+    xml_slides.remove(new_slide_element)
+    xml_slides.insert(source_idx + 1, new_slide_element)
+
+    return new_slide
+
+
+def move_slide(prs, from_idx: int, to_idx: int):
+    """Verschiebt eine Slide innerhalb der Präsentation.
+
+    Args:
+        prs: Presentation-Objekt
+        from_idx: 0-basierte Position der Slide, die verschoben werden soll
+        to_idx: 0-basierte Ziel-Position (vor Reordering)
+
+    Realisiert via direkter Manipulation von <p:sldIdLst> in presentation.xml.
+
+    Raises:
+        IndexError: bei ungültigen Indizes.
+    """
+    xml_slides = prs.slides._sldIdLst
+    slides = list(xml_slides)
+    if from_idx < 0 or from_idx >= len(slides):
+        raise IndexError(f"move_slide: from_idx {from_idx} out of range (max {len(slides)-1})")
+    if to_idx < 0 or to_idx >= len(slides):
+        raise IndexError(f"move_slide: to_idx {to_idx} out of range (max {len(slides)-1})")
+    target = slides[from_idx]
+    xml_slides.remove(target)
+    xml_slides.insert(to_idx, target)
+
+
+def remove_slide(prs, slide_idx: int):
+    """Entfernt eine Slide an gegebener Position (0-indexed).
+
+    Räumt sowohl die <p:sldId>-Referenz als auch die Slide-Part-Relationship auf.
+    """
+    xml_slides = prs.slides._sldIdLst
+    slides_list = list(xml_slides)
+    slide_elem = slides_list[slide_idx]
+    rId = slide_elem.rId
+    prs.part.drop_rel(rId)
+    xml_slides.remove(slide_elem)
+
+
+def save_and_reload(prs) -> Presentation:
+    """Speichert die Präsentation in Memory und lädt sie neu.
+
+    Das räumt interne Slide-IDs auf (wichtig nach remove/duplicate Operationen),
+    sonst können "Duplicate name"-Warnungen beim späteren Speichern auftreten.
+
+    Returns:
+        Frisch geladene Presentation.
+    """
+    buf = io.BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+    return Presentation(buf)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Drawing-XML-Patches (Quelle-Datum, Foliennummern)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def update_quelle_datum(prs, datum_str: str):
+    """Aktualisiert das 'Quelle: Eigene Berechnung Stand: XX.XX.XXXX' Datum.
+
+    Sucht in ALLEN drawing*.xml Parts der PPTX nach dem Quelle-Pattern und
+    ersetzt das Datum. Diese Quelle-Zeile steht statisch in den drawing-Parts
+    der Vorlage (im Chart-Annotation-Layer der Ring-Charts) und kann nicht
+    über die normale python-pptx-Slide-API erreicht werden.
+
+    Args:
+        prs: Presentation-Objekt
+        datum_str: Datum im Format 'DD.MM.YYYY' (z.B. '17.06.2026')
+
+    No-op wenn datum_str leer ist.
+    """
+    if not datum_str:
+        return
+    package = prs.part.package
+    for part in package.iter_parts():
+        pn = str(part.partname)
+        if not pn.startswith("/ppt/drawings/drawing"):
+            continue
+        try:
+            xml = part.blob.decode('utf-8')
+        except Exception:
+            continue
+        if 'Quelle: Eigene Berechnung Stand:' not in xml:
+            continue
+        new_xml = re.sub(
+            r'(Quelle: Eigene Berechnung Stand: )\d{2}\.\d{2}\.\d{4}',
+            f'\\g<1>{datum_str}',
+            xml
+        )
+        if new_xml != xml:
+            part._blob = new_xml.encode('utf-8')
+
+
+# Default-Namen für Foliennummer-Shapes (PowerPoint generiert verschiedene
+# Namen je nach Sprache und Vorlagen-Herkunft)
+DEFAULT_FOLIENNUMMER_NAMES = (
+    "Foliennummer",
+    "Foliennummernplatzhalter 1",
+    "Slide Number",
+    "Folienzahl",
+)
+
+
+def update_slide_numbers(prs, foliennummer_names: Optional[Sequence[str]] = None):
+    """Setzt die Foliennummer auf jeder Slide auf die korrekte 1-indexed Position.
+
+    HINTERGRUND:
+    Die Vorlage hat statische Seitenzahlen (z.B. Slides 7-9 zeigen "13"-"15",
+    weil der Designer eine Lücke für dynamische Folien angenommen hat). Nach
+    Add/Remove/Duplicate-Operationen stimmen diese Werte nicht mehr — daher
+    nach allen Slide-Manipulationen einmal alle Foliennummern auf die korrekte
+    Position überschreiben.
+
+    Slides ohne Foliennummer-Shape (Cover, Sub-Cover, Impressum) bleiben
+    unverändert — das ist gewollt: solche Slides sollen keine Seitenzahl tragen.
+
+    Args:
+        prs: Presentation-Objekt
+        foliennummer_names: Sequenz der Shape-Namen die als Foliennummer
+            erkannt werden sollen. None = DEFAULT_FOLIENNUMMER_NAMES.
+
+    Sollte als LETZTER Schritt vor `prs.save()` aufgerufen werden.
+    """
+    names = foliennummer_names if foliennummer_names is not None else DEFAULT_FOLIENNUMMER_NAMES
+    for idx, slide in enumerate(prs.slides, start=1):
+        for shape in slide.shapes:
+            if shape.name in names and shape.has_text_frame:
+                replace_text_in_shape(shape, str(idx))
+                break
