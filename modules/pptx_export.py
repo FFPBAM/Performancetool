@@ -68,14 +68,56 @@ except ImportError:
         update_chart_values_inplace,
     )
 
+# Slide-Befüllungs-Logik (Domain: Anlagevorschlag, Performance, Portfoliozusammenstellung)
+try:
+    from modules.pptx_slides import (
+        # Konstanten
+        STRATEGY_PREFIXES, STRATEGIEENTWURF_TITLE,
+        SHAPE_CHART_ALLOCATION, SHAPE_TABLE, SHAPE_CHART_LEFT, SHAPE_CHART_RIGHT,
+        SHAPE_TITLE, SHAPE_TITLE_ALT,
+        GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET,
+        GROUP_SONSTIGE, GROUP_ORDER,
+        COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL,
+        COL_RATING, COL_SPACERS,
+        SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS,
+        SMALL_SEGMENT_THRESHOLD, MAX_SEGMENTS_IN_CHART,
+        # Public API: clean_strategy_name (kein Underscore-Prefix)
+        clean_strategy_name,
+        # Funktionen (werden über Wrapper unten weiterhin als _xxx exponiert)
+        set_title_with_autoscale, safe_marktrisikowert, classify_gattung,
+        group_portfolio_positions, distribute_positions_to_slides,
+        remove_empty_table_rows, fit_shape_to_table, adjust_table_shape_height,
+        consolidate_small_segments, build_ring_series,
+        fill_table_with_positions, fill_anlagevorschlag_slides,
+        fill_kennzahlen_table, fill_performance_slide,
+        fill_zusammenstellung_slide,
+    )
+except ImportError:
+    from pptx_slides import (
+        STRATEGY_PREFIXES, STRATEGIEENTWURF_TITLE,
+        SHAPE_CHART_ALLOCATION, SHAPE_TABLE, SHAPE_CHART_LEFT, SHAPE_CHART_RIGHT,
+        SHAPE_TITLE, SHAPE_TITLE_ALT,
+        GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET,
+        GROUP_SONSTIGE, GROUP_ORDER,
+        COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL,
+        COL_RATING, COL_SPACERS,
+        SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS,
+        SMALL_SEGMENT_THRESHOLD, MAX_SEGMENTS_IN_CHART,
+        clean_strategy_name,
+        set_title_with_autoscale, safe_marktrisikowert, classify_gattung,
+        group_portfolio_positions, distribute_positions_to_slides,
+        remove_empty_table_rows, fit_shape_to_table, adjust_table_shape_height,
+        consolidate_small_segments, build_ring_series,
+        fill_table_with_positions, fill_anlagevorschlag_slides,
+        fill_kennzahlen_table, fill_performance_slide,
+        fill_zusammenstellung_slide,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Konstanten
 # ---------------------------------------------------------------------------
 TEMPLATE_PATH = os.path.join("Vorlage", "Vorlage_FFPB.pptx")
-
-# Strategienamen-Präfixe die entfernt werden (am Anfang oder am Ende)
-STRATEGY_PREFIXES = ["cVV", "Muster", "Stiftung"]
 
 # Slide-Positionen in der Vorlage (1-indexed)
 SLIDE_ANLAGEVORSCHLAG_1 = 7    # Aktien + Allokations-Ring
@@ -83,18 +125,13 @@ SLIDE_ANLAGEVORSCHLAG_2 = 8    # Renten/Edelmetalle/Liquidität
 SLIDE_ZUSAMMENSTELLUNG_1 = 9   # Regionen + Branchen (2 Ringe)
 SLIDE_ZUSAMMENSTELLUNG_2 = 10  # Währungen (1 Ring)
 
-# Shape-Namen in der Vorlage
-SHAPE_CHART_ALLOCATION = "C_Kennzahlen"    # Ring-Diagramm (Slides 7, 8)
-SHAPE_TABLE = "T_Kennzahlen"               # Positionen-Tabelle (Slides 7, 8)
-SHAPE_CHART_LEFT = "C_Kennzahlen1"         # Linkes Ring-Diagramm (Slides 9, 10)
-SHAPE_CHART_RIGHT = "C_Kennzahlen2"        # Rechtes Ring-Diagramm (Slide 9)
-SHAPE_TITLE = "Titel"
-SHAPE_TITLE_ALT = "Titel 2"
-
-# Strategieentwurf-Titel für Slide 7 (Email-Anforderung Juni 2026, Compliance)
-# Ersetzt den dynamischen "Anlagevorschlag – <Strategie>"-Titel ausschließlich
-# auf Slide 7. Slide 8 (zweite Anlagevorschlag-Folie) behält den dynamischen Titel.
-STRATEGIEENTWURF_TITLE = "Strategieentwurf im Rahmen einer Vermögensverwaltung"
+# Konstanten kommen aus modules/pptx_slides.py (siehe Import-Block oben):
+# - STRATEGY_PREFIXES, STRATEGIEENTWURF_TITLE
+# - SHAPE_CHART_ALLOCATION, SHAPE_TABLE, SHAPE_CHART_LEFT, SHAPE_CHART_RIGHT, SHAPE_TITLE, SHAPE_TITLE_ALT
+# - GROUP_*, GROUP_ORDER
+# - COL_*, COL_SPACERS
+# - SMALL_SEGMENT_THRESHOLD, MAX_SEGMENTS_IN_CHART
+# - SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS
 
 # Foliennummer-Shape-Namen (uneinheitlich in der Vorlage):
 # - Die meisten Slides nutzen "Foliennummer"
@@ -111,40 +148,8 @@ SHAPE_FOLIENNUMMER_NAMES = (
 # ---------------------------------------------------------------------------
 # Strategienamen-Konvertierung
 # ---------------------------------------------------------------------------
-def clean_strategy_name(name: str) -> str:
-    """
-    Entfernt Präfixe (cVV, Muster, Stiftung) vom Anfang ODER Ende und
-    kapitalisiert den ersten Buchstaben.
-
-    Beispiele:
-        'cVV konservativ'          -> 'Konservativ'
-        'Muster konservativ cVV'   -> 'Konservativ'
-        'Stiftung konservativ'     -> 'Konservativ'
-        'Pro'                      -> 'Pro'
-        'Dividende'                -> 'Dividende'
-    """
-    if not name:
-        return ""
-
-    name = name.strip()
-
-    # Präfixe entfernen (am Anfang UND am Ende, beliebig oft)
-    changed = True
-    while changed:
-        changed = False
-        for prefix in STRATEGY_PREFIXES:
-            if name.startswith(prefix + " "):
-                name = name[len(prefix) + 1:].strip()
-                changed = True
-            if name.endswith(" " + prefix):
-                name = name[:-len(prefix) - 1].strip()
-                changed = True
-
-    if not name:
-        return ""
-
-    # Erster Buchstabe groß, Rest wie ist (oder komplett groß wenn alles groß war)
-    return name[0].upper() + name[1:]
+# clean_strategy_name kommt aus modules/pptx_slides.py (via Import oben).
+# Die Funktion ist Public und wird intern in generate_portfolioanalyse_pptx aufgerufen.
 
 
 # ---------------------------------------------------------------------------
@@ -249,183 +254,23 @@ def _safe_float(value, default: float = 0.0) -> float:
 
 
 def _set_title_with_autoscale(title_shape, text: str):
-    """
-    Setzt den Titel-Text auf Folie 7 und passt die Schriftgröße dynamisch
-    an die Textlänge an, damit der gesamte Titel auf EINE Zeile passt.
-
-    Hintergrund:
-    Die Titel-Box ist nur ~0.39" hoch (1 Zeile) und ~10.67" breit.
-    Bei langem Strategienamen würde der Text in 2 Zeilen umbrechen.
-
-    Strategie (kombiniert):
-    1. Manuelle, aggressive Schwellen (empirisch kalibriert in Juni 2026)
-    2. Auto-Fit als zusätzliche Sicherheit (PowerPoint skaliert ggf. nach)
-
-    Schwellen (für Standard-Bold-Schrift, 10.67" Box-Breite):
-    - ≤ 66 Zeichen → Layout-Default (~32 pt)
-    - 67-72 Zeichen → 26 pt
-    - 73-80 Zeichen → 22 pt
-    - 81-88 Zeichen → 20 pt
-    - 89-96 Zeichen → 18 pt
-    - 97-108 Zeichen → 16 pt
-    - > 108 Zeichen → 14 pt
-    """
-    # Text setzen (existierender Helper)
-    _replace_text_in_shape(title_shape, text)
-
-    # Schriftgröße basierend auf Textlänge
-    char_count = len(text)
-    if char_count <= 66:
-        font_size_pt = None  # Layout-Default beibehalten
-    elif char_count <= 72:
-        font_size_pt = 26
-    elif char_count <= 80:
-        font_size_pt = 22
-    elif char_count <= 88:
-        font_size_pt = 20
-    elif char_count <= 96:
-        font_size_pt = 18
-    elif char_count <= 108:
-        font_size_pt = 16
-    else:
-        font_size_pt = 14
-
-    tf = title_shape.text_frame
-
-    if font_size_pt is not None:
-        for para in tf.paragraphs:
-            for run in para.runs:
-                run.font.size = Pt(font_size_pt)
-
-    # Auto-Fit aktivieren als Sicherheits-Netz
-    # PowerPoint reduziert die Schriftgröße weiter, falls der Text immer noch nicht passt.
-    try:
-        from pptx.enum.text import MSO_AUTO_SIZE
-        tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
-        tf.word_wrap = True
-    except Exception:
-        pass  # Nicht verfügbar in alten python-pptx-Versionen
+    """Wrapper für pptx_slides.set_title_with_autoscale."""
+    return set_title_with_autoscale(title_shape, text)
 
 
-def _safe_marktrisikowert(value) -> str:
-    """
-    Konvertiert einen Wert aus der CSV-Spalte 'Marktrisikowert' zu einem String.
-    Fallback zu '-' wenn None, NaN, leer, oder ungültiger Typ.
-    Float-Werte werden als Integer dargestellt (3.0 → '3'), damit in der
-    Tabelle keine Nachkommastellen erscheinen.
-    """
-    if value is None:
-        return "-"
-    try:
-        if pd.isna(value):
-            return "-"
-    except (TypeError, ValueError):
-        pass
-    # Versuch: als ganze Zahl darstellen (3.0 → '3')
-    try:
-        return str(int(float(value)))
-    except (ValueError, TypeError):
-        # Fallback: String trimmen
-        s = str(value).strip()
-        return s if s else "-"
+def _safe_marktrisikowert(value):
+    """Wrapper für pptx_slides.safe_marktrisikowert."""
+    return safe_marktrisikowert(value)
 
 
-def _classify_gattung(gattung) -> str:
-    """Ordnet eine Gattung einer der 5 Hauptgruppen zu."""
-    if gattung is None:
-        return GROUP_SONSTIGE
-    try:
-        if pd.isna(gattung):
-            return GROUP_SONSTIGE
-    except (TypeError, ValueError):
-        pass
-    g = str(gattung).lower()
-    if "aktie" in g or "equity" in g:
-        return GROUP_AKTIEN
-    if "rente" in g or "anleihe" in g or "bond" in g:
-        return GROUP_RENTEN
-    if "edelmetall" in g or "gold" in g or "silber" in g:
-        return GROUP_EDELMETALLE
-    if "liquid" in g or "cash" in g:
-        return GROUP_LIQUIDITAET
-    return GROUP_SONSTIGE
+def _classify_gattung(gattung):
+    """Wrapper für pptx_slides.classify_gattung."""
+    return classify_gattung(gattung)
 
 
-def _group_portfolio_positions(df: pd.DataFrame) -> dict:
-    """
-    Gruppiert Portfoliopositionen nach GROUP_ORDER.
-    Innerhalb jeder Gruppe sind Positionen nach Gewicht absteigend sortiert.
-
-    Positionen werden ausgefiltert wenn:
-    - Kein Wertpapier-Name vorhanden ist
-    - Gewicht = 0 oder NaN ist
-    - Wertpapier-Name "nan", "NaT", "None" oder leer ist (Müll aus CSV)
-
-    Returns:
-        {
-            "AKTIEN": [{"wertpapier": ..., "wkn": ..., "gewicht": 0.02, ...}, ...],
-            "RENTEN": [...],
-            ...
-        }
-        Leere Gruppen werden weggelassen.
-    """
-    groups = {g: [] for g in GROUP_ORDER}
-
-    # Junk-Strings die wir als "leer" behandeln
-    JUNK_STRINGS = {"", "nan", "NaN", "NaT", "None", "null"}
-
-    for _, row in df.iterrows():
-        wertpapier = str(row.get("Wertpapier", "")).strip()
-        gewicht = _safe_float(row.get("Gewicht", 0.0), 0.0)
-
-        # Müll-Zeilen rausfiltern
-        if wertpapier in JUNK_STRINGS:
-            continue
-        if gewicht <= 0.0001:
-            continue
-
-        gruppe = _classify_gattung(row.get("Gattung"))
-
-        # WKN auch auf Müll checken
-        wkn = str(row.get("WKN", "")).strip()
-        if wkn in JUNK_STRINGS:
-            wkn = ""
-
-        pos = {
-            "wertpapier": wertpapier,
-            "wkn": wkn,
-            "gewicht": gewicht,
-            "kupon": row.get("Kupon"),  # kann NaN sein, wird beim Formatieren behandelt
-            "faelligkeit": row.get("Fälligkeit_parsed") if "Fälligkeit_parsed" in row.index else None,
-            "rating": _safe_marktrisikowert(row.get("Marktrisikowert")),  # CSV-Spalte 'Marktrisikowert' (3-6), Fallback '-'
-        }
-        groups[gruppe].append(pos)
-
-    # Innerhalb jeder Gruppe alphabetisch nach Wertpapier-Name sortieren
-    # (anstelle der früheren Sortierung nach Gewicht — auf Wunsch des Anforderers, Juni 2026)
-    for g in groups:
-        groups[g] = sorted(groups[g], key=lambda p: str(p["wertpapier"]).lower())
-
-    # Liquidität aus Differenz berechnen (falls nicht explizit in Daten)
-    if "Gewicht" in df.columns:
-        # skipna=True ist default, aber explizit zur Sicherheit
-        total_weight = _safe_float(df["Gewicht"].sum(skipna=True), 0.0)
-    else:
-        total_weight = 0.0
-    liq_from_positions = sum(_safe_float(p["gewicht"], 0.0) for p in groups[GROUP_LIQUIDITAET])
-    implicit_liq = max(0.0, 1.0 - total_weight)
-    if implicit_liq > 0.0001 and liq_from_positions < 0.0001:
-        groups[GROUP_LIQUIDITAET].append({
-            "wertpapier": "",  # Liquidität braucht keinen Namen in der Zeile
-            "wkn": "",
-            "gewicht": implicit_liq,
-            "kupon": None,
-            "faelligkeit": None,
-            "rating": "",
-        })
-
-    # Leere Gruppen entfernen
-    return {g: ps for g, ps in groups.items() if ps}
+def _group_portfolio_positions(df: pd.DataFrame):
+    """Wrapper für pptx_slides.group_portfolio_positions."""
+    return group_portfolio_positions(df)
 
 
 # ---------------------------------------------------------------------------
@@ -438,63 +283,9 @@ SLIDE_7_DATA_ROWS = 34   # Zeilen 1-34, Zeile 35 = Summe
 SLIDE_8_DATA_ROWS = 12   # Zeilen 1-12, Zeile 13 = Summe
 
 
-def _distribute_positions_to_slides(groups: dict) -> list:
-    """
-    Verteilt gruppierte Positionen auf Slide 7 (Anlagevorschlag).
-
-    Seit Juni 2026 (Performance-Folie als neue Slide 8):
-    - Alle Positionen kommen auf Slide 7
-    - Slide 8 ist jetzt die Performance-Folie (kein Überlauf von Anlagevorschlag mehr)
-    - Bei mehr als SLIDE_7_DATA_ROWS (34) Positionen werden die Überschüssigen
-      in _fill_table_with_positions automatisch abgeschnitten (Edge-Case)
-
-    Reihenfolge der Zeilen:
-    - Asset-Gruppen nach Gewicht absteigend (AKTIEN, RENTEN, EDELMETALLE, ...)
-    - LIQUIDITÄT IMMER am Ende als eigene Zeile
-
-    Returns: Liste mit 2 Einträgen (Slide 7 voll, Slide 8 leer):
-        [
-            {"rows": [...alle Positionen...], "is_last_slide": True},
-            {"rows": [], "is_last_slide": False},
-        ]
-    """
-    # 1. Gruppen nach Gewicht sortieren, LIQUIDITÄT explizit ans Ende
-    non_liq = [(n, ps) for n, ps in groups.items() if n != GROUP_LIQUIDITAET]
-    non_liq.sort(
-        key=lambda kv: sum(_safe_float(p["gewicht"], 0.0) for p in kv[1]),
-        reverse=True,
-    )
-    liq_positions = groups.get(GROUP_LIQUIDITAET, [])
-    has_liq = bool(liq_positions) and sum(
-        _safe_float(p["gewicht"], 0.0) for p in liq_positions
-    ) > 0.0001
-
-    if not non_liq and not has_liq:
-        return [
-            {"rows": [], "is_last_slide": True},
-            {"rows": [], "is_last_slide": False},
-        ]
-
-    # 2. Alle nicht-LIQ-Gruppen in flache Zeilen-Liste expandieren
-    all_rows = []
-    for group_name, positions in non_liq:
-        all_rows.append({"type": "group_header", "data": {"name": group_name}})
-        for pos in positions:
-            all_rows.append({"type": "position", "data": pos})
-
-    # 3. LIQUIDITÄT als EIGENE Zeile am Ende
-    if has_liq:
-        total_liq = sum(_safe_float(p["gewicht"], 0.0) for p in liq_positions)
-        all_rows.append({
-            "type": "liquidity",
-            "data": {"name": GROUP_LIQUIDITAET, "liq_value": total_liq},
-        })
-
-    # Alles auf Slide 7, Slide 8 (Performance) bleibt unangetastet
-    return [
-        {"rows": all_rows, "is_last_slide": True},   # Slide 7: alle Positionen + Summe
-        {"rows": [], "is_last_slide": False},        # Slide 8: leer (= Performance-Folie)
-    ]
+def _distribute_positions_to_slides(groups: dict):
+    """Wrapper für pptx_slides.distribute_positions_to_slides."""
+    return distribute_positions_to_slides(groups)
 # ---------------------------------------------------------------------------
 # Tabellen-Befüllung
 # ---------------------------------------------------------------------------
@@ -510,85 +301,9 @@ COL_RATING = 10
 COL_SPACERS = [1, 3, 5, 7, 9]
 
 
-def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0,
-                               shape_height: int = 0):
-    """
-    Befüllt eine Tabelle (Slide 7 oder 8) mit Positionen.
-
-    Die Tabellen-Struktur der Vorlage bleibt UNVERÄNDERT (keine Zeilen entfernt,
-    keine Höhen geändert). Nicht benötigte Zeilen bleiben leer sichtbar.
-
-    Args:
-        table: Die Tabelle (shape.table)
-        slide_data: {"rows": [...], "is_last_slide": bool}
-        total_weight: Summe aller Gewichte (für Summen-Zeile, default 100%)
-        shape_height: Höhe der Tabellen-Shape in EMU (wird nicht mehr verwendet,
-                      aus Kompat-Gründen in der Signatur belassen)
-    """
-    n_rows_initial = len(table.rows)
-    rows = slide_data["rows"]
-    is_last = slide_data["is_last_slide"]
-
-    # Summen-Zeile ist immer die letzte Zeile in der Vorlage
-    summary_row_idx = n_rows_initial - 1
-    # Datenzeilen gehen von 1 bis n_rows-2
-    max_data_rows = n_rows_initial - 2
-
-    # Erst alle Datenzeilen leeren (nur Spalten 0, 2, 4, 6, 8, 10 - Spacer bleiben)
-    for row_idx in range(1, n_rows_initial):
-        row = table.rows[row_idx]
-        for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
-            _set_cell_text(row.cells[col_idx], "")
-
-    # Zeilen befüllen
-    for i, row_def in enumerate(rows):
-        if i >= max_data_rows:
-            break  # Kein Platz mehr
-
-        target_row_idx = i + 1  # +1 weil Zeile 0 der Tabellen-Header ist
-        row = table.rows[target_row_idx]
-
-        if row_def["type"] in ("group_header", "liquidity"):
-            # Gruppen-Header: Name in Spalte 0, alle anderen leer
-            # Explizit BOLD für Headers
-            name = row_def["data"]["name"]
-            _set_cell_text(row.cells[COL_WERTPAPIER], name, is_bold=True)
-            # Bei RENTEN: "KUPON" und "FÄLLIGKEIT" als Sub-Header in Spalten 2 und 4
-            if name == GROUP_RENTEN:
-                _set_cell_text(row.cells[COL_KUPON], "KUPON", is_bold=True)
-                _set_cell_text(row.cells[COL_FAELLIGKEIT], "FÄLLIGKEIT", is_bold=True)
-            # Bei LIQUIDITÄT: Wert direkt in der Header-Zeile (nicht als separate Position)
-            if name == GROUP_LIQUIDITAET and "liq_value" in row_def["data"]:
-                _set_cell_text(row.cells[COL_ANTEIL], _fmt_pct(row_def["data"]["liq_value"]), is_bold=True)
-
-        elif row_def["type"] == "position":
-            data = row_def["data"]
-            # Alle Felder einer Position: explizit NICHT BOLD
-            # (verhindert dass bei Zeilen die ursprünglich Header waren, die Formatierung hängen bleibt)
-            _set_cell_text(row.cells[COL_WERTPAPIER], data["wertpapier"], is_bold=False)
-            _set_cell_text(row.cells[COL_WKN], data["wkn"], is_bold=False)
-            _set_cell_text(row.cells[COL_ANTEIL], _fmt_pct(data["gewicht"]), is_bold=False)
-            _set_cell_text(row.cells[COL_RATING], data.get("rating", "-"), is_bold=False)
-            # Kupon (nur wenn vorhanden)
-            if data.get("kupon") is not None and not pd.isna(data["kupon"]) and data["kupon"] != 0:
-                _set_cell_text(row.cells[COL_KUPON], _fmt_pct(data["kupon"]), is_bold=False)
-            else:
-                _set_cell_text(row.cells[COL_KUPON], "", is_bold=False)
-            # Fälligkeit (nur wenn vorhanden)
-            if data.get("faelligkeit") is not None and not pd.isna(data["faelligkeit"]):
-                _set_cell_text(row.cells[COL_FAELLIGKEIT], _fmt_date_de(data["faelligkeit"]), is_bold=False)
-            else:
-                _set_cell_text(row.cells[COL_FAELLIGKEIT], "", is_bold=False)
-
-    # Summen-Zeile: nur auf letzter Slide
-    summary_row = table.rows[summary_row_idx]
-    # Alle Summen-Zellen leeren
-    for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
-        _set_cell_text(summary_row.cells[col_idx], "")
-
-    if is_last:
-        # 100,00% in der Anteil-Spalte der Summen-Zeile
-        _set_cell_text(summary_row.cells[COL_ANTEIL], _fmt_pct(total_weight))
+def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0, shape_height: int = 0):
+    """Wrapper für pptx_slides.fill_table_with_positions."""
+    return fill_table_with_positions(table, slide_data, total_weight, shape_height)
 
     # ── Tabellen-Struktur der Vorlage UNVERÄNDERT lassen ──
     # Früher wurden hier überzählige leere Zeilen entfernt (_optimize_table_layout),
@@ -603,118 +318,14 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
 # ---------------------------------------------------------------------------
 # Slide-Befüllung – Anlagevorschlag (Slides 7+8)
 # ---------------------------------------------------------------------------
-def _fill_anlagevorschlag_slides(prs, slide_7_idx: int,
-                                  df: pd.DataFrame, strategy_name: str):
-    """
-    Befüllt Slide 7 (Anlagevorschlag/Strategieentwurf) mit Portfolio-Daten.
-
-    Seit Juni 2026 (Performance-Folie als Slide 8): Es gibt nur noch EINE
-    Anlagevorschlag-Slide. Alle Positionen kommen auf Slide 7, dynamisch
-    geschrumpft durch _remove_empty_table_rows + _fit_shape_to_table.
-
-    Args:
-        prs: Presentation
-        slide_7_idx: 0-indexed Index der Anlagevorschlag-Slide
-        df: DataFrame mit Positionen (Wertpapier, WKN, Gewicht, Gattung, Kupon, Fälligkeit_parsed, Marktrisikowert)
-        strategy_name: Name der Strategie für den Titel (schon konvertiert)
-    """
-    # 1. Daten vorbereiten
-    groups = _group_portfolio_positions(df)
-    slide_distribution = _distribute_positions_to_slides(groups)
-
-    # 2. Allokations-Daten für Ring-Chart (nach Gruppen)
-    alloc_labels = []
-    alloc_values = []
-    for g in GROUP_ORDER:
-        if g in groups:
-            total = sum(_safe_float(p["gewicht"], 0.0) for p in groups[g])
-            if total > 0.0001:
-                alloc_labels.append(g)
-                alloc_values.append(float(total))
-
-    # Gesamt-Gewicht (für Summen-Zeile)
-    total_weight = sum(alloc_values)
-
-    # 3. Slide 7 befüllen
-    slide_7 = prs.slides[slide_7_idx]
-    # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance)
-    # Format: "Strategieentwurf im Rahmen einer Vermögensverwaltung - <Strategiename>"
-    # Schriftgröße wird dynamisch angepasst, damit der Titel auf eine Zeile passt.
-    title = _find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or _find_shape_by_name(slide_7, SHAPE_TITLE)
-    if title:
-        _set_title_with_autoscale(title, f"{STRATEGIEENTWURF_TITLE} - {strategy_name}")
-    # Ring-Chart
-    chart = _find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
-    if chart:
-        _replace_chart_data(chart, alloc_labels, alloc_values)
-    # Tabelle befüllen
-    table_shape = _find_shape_by_name(slide_7, SHAPE_TABLE)
-    if table_shape:
-        _fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
-                                   shape_height=table_shape.height)
-        # Leere Zeilen entfernen (Striche unter der Tabelle eliminieren)
-        _remove_empty_table_rows(table_shape.table)
-        # NACH dem Befüllen + Bereinigen: Shape-Höhe an verbleibende Zeilen anpassen
-        _fit_shape_to_table(table_shape)
+def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame, strategy_name: str):
+    """Wrapper für pptx_slides.fill_anlagevorschlag_slides."""
+    return fill_anlagevorschlag_slides(prs, slide_7_idx, df, strategy_name)
 
 
-def _fill_performance_slide(prs, slide_idx: int, strategy_name: str,
-                             performance_data: Optional[dict] = None):
-    """
-    Befüllt die Performance-Slide (Slide 8: Anlagestrategie Wertentwicklung).
-
-    Args:
-        prs: Presentation
-        slide_idx: 0-indexed Index der Performance-Slide
-        strategy_name: Name der Strategie für den Titel
-        performance_data: Dict mit Performance-Daten (siehe `_compute_performance_data`).
-                          Wenn None: Nur Titel wird gesetzt, Charts/Tabelle bleiben mit
-                          Vorlagen-Platzhaltern (Phase-1-Verhalten).
-    """
-    slide = prs.slides[slide_idx]
-
-    # Titel anpassen: "{Strategy} | Wertentwicklung (mit Benchmark)"
-    title = _find_shape_by_name(slide, "Titel")
-    if title and title.has_text_frame:
-        new_title = f"{strategy_name} | Wertentwicklung (mit Benchmark)"
-        _replace_text_in_shape(title, new_title)
-
-    if performance_data is None:
-        return  # Phase 1: nur Titel setzen
-
-    # ── KENNZAHLEN-Tabelle befüllen ──
-    kz = performance_data.get("kennzahlen", {})
-    tab = _find_shape_by_name(slide, "Tabelle")
-    if tab and tab.has_table:
-        _fill_kennzahlen_table(tab.table, kz)
-
-    # ── PERFORMANCE P.A. Chart (Säulen) ──
-    pa = performance_data.get("performance_pa", {})
-    chart_links = _find_shape_by_name(slide, "Diagramm links")
-    if chart_links and chart_links.has_chart and pa.get("jahre"):
-        _replace_chart_data_safe(
-            chart_links,
-            categories=[str(y) for y in pa["jahre"]],
-            series_data=[
-                ("Referenzportfolio", pa.get("referenz", [])),
-                ("Benchmark", pa.get("benchmark", [])),
-            ],
-            data_label_format=PCT_FORMAT_CODE,
-        )
-
-    # ── WERTENTWICKLUNG Chart (Linien) ──
-    we = performance_data.get("wertentwicklung", {})
-    chart_rechts = _find_shape_by_name(slide, "Diagramm rechts")
-    if chart_rechts and chart_rechts.has_chart and we.get("dates"):
-        _replace_chart_data_safe(
-            chart_rechts,
-            categories=we["dates"],
-            series_data=[
-                ("Referenzportfolio", we.get("referenz", [])),
-                ("Benchmark", we.get("benchmark", [])),
-            ],
-            data_label_format=None,  # Linien-Chart hat keine Daten-Labels
-        )
+def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance_data=None):
+    """Wrapper für pptx_slides.fill_performance_slide."""
+    return fill_performance_slide(prs, slide_idx, strategy_name, performance_data)
 
 
 def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
@@ -733,40 +344,8 @@ def _restore_data_label_format(chart_shape, format_code: str):
 
 
 def _fill_kennzahlen_table(table, kz: dict):
-    """
-    Befüllt die KENNZAHLEN-Tabelle auf der Performance-Folie.
-
-    Tabellen-Layout (7 rows × 5 cols, aber Spacer-Spalten dazwischen):
-      Row 0: Header   (KENNZAHLEN | _ | REFERENZ | _ | BENCHMARK)
-      Row 1: Performance p.a.
-      Row 2: Volatilität
-      Row 3: Sharpe Ratio
-      Row 4: Max Drawdown
-      Rows 5-6: ggf. leer/Spacer
-
-    Wert-Spalten: 2 (REFERENZ), 4 (BENCHMARK)
-    """
-    metric_rows = [
-        ("performance_pa_ref",  "performance_pa_bench",   2, True),   # row 2, Prozent-Format
-        ("volatilitaet_ref",    "volatilitaet_bench",     3, True),   # row 3, Prozent
-        ("sharpe_ref",          "sharpe_bench",           4, False),  # row 4, Dezimal
-        ("max_drawdown_ref",    "max_drawdown_bench",     5, True),   # row 5, Prozent
-    ]
-    for ref_key, bench_key, row_idx, is_pct in metric_rows:
-        if row_idx >= len(table.rows):
-            continue
-        row = table.rows[row_idx]
-        ref_val = kz.get(ref_key)
-        bench_val = kz.get(bench_key)
-        if is_pct:
-            ref_str = _fmt_pct(ref_val)
-            bench_str = _fmt_pct(bench_val)
-        else:
-            ref_str = _fmt_ratio(ref_val)
-            bench_str = _fmt_ratio(bench_val)
-        # Spalte 2 = REFERENZ, Spalte 4 = BENCHMARK
-        _set_cell_text_preserve_format(row.cells[2], ref_str)
-        _set_cell_text_preserve_format(row.cells[4], bench_str)
+    """Wrapper für pptx_slides.fill_kennzahlen_table."""
+    return fill_kennzahlen_table(table, kz)
 
 
 def _fmt_pct(val) -> str:
@@ -900,117 +479,18 @@ def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,
 
 
 def _remove_empty_table_rows(table):
-    """
-    Entfernt leere Daten-Zeilen aus der Tabelle. Header und gefüllte Zeilen bleiben.
-
-    Eine Zeile gilt als 'leer' wenn alle relevanten Daten-Spalten leer sind
-    (WERTPAPIER, KUPON, FÄLLIGKEIT, WKN, ANTEIL, RATING).
-
-    Wird nach _fill_table_with_positions aufgerufen um die hässlichen Striche
-    unterhalb der echten Positionen zu eliminieren. Die Summenzeile bleibt
-    erhalten wenn sie befüllt ist (enthält "100,00%"), sonst wird auch sie
-    entfernt.
-
-    WICHTIG: Anschließend muss _fit_shape_to_table aufgerufen werden, damit
-    die Tabellen-Shape-Höhe an die jetzt geringere Zeilenanzahl angepasst wird
-    (sonst stretcht LibreOffice die verbleibenden Zeilen).
-    """
-    n_rows = len(table.rows)
-    if n_rows <= 1:
-        return
-
-    indices_to_remove = []
-    for i in range(1, n_rows):  # Header (Zeile 0) immer behalten
-        row = table.rows[i]
-        is_empty = True
-        for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
-            text = row.cells[col_idx].text_frame.text.strip()
-            # NBSP wird auch als leer betrachtet
-            if text and text != "\u00a0":
-                is_empty = False
-                break
-        if is_empty:
-            indices_to_remove.append(i)
-
-    if not indices_to_remove:
-        return
-
-    # Aus dem XML entfernen — rückwärts, damit Indizes vorderer Zeilen stabil bleiben
-    from pptx.oxml.ns import qn
-    tbl_elem = table._tbl
-    tr_elements = tbl_elem.findall(qn('a:tr'))
-
-    for idx in sorted(indices_to_remove, reverse=True):
-        tr_to_remove = tr_elements[idx]
-        tbl_elem.remove(tr_to_remove)
+    """Wrapper für pptx_slides.remove_empty_table_rows."""
+    return remove_empty_table_rows(table)
 
 
 def _fit_shape_to_table(table_shape):
-    """
-    Passt die Höhe der Tabellen-Shape an die Summe der Zeilenhöhen an.
-    
-    Das ist WICHTIG weil LibreOffice/PowerPoint die Zeilen automatisch vergrößern,
-    wenn die Summe aller Zeilenhöhen kleiner ist als die Shape-Höhe. Wenn wir die
-    Shape auf die korrekte Größe setzen, bleiben die Zeilen in ihrer ursprünglichen
-    Höhe (0.142") und die Tabelle ragt nicht über den Footer.
-    """
-    table = table_shape.table
-    # Summe aller Zeilenhöhen berechnen
-    total_row_h = sum(row.height for row in table.rows)
-    
-    # Shape-Höhe auf diese Summe setzen (+ kleiner Puffer für Rahmen)
-    # 0.02" (~50000 EMU) Puffer
-    table_shape.height = total_row_h + 50000
+    """Wrapper für pptx_slides.fit_shape_to_table."""
+    return fit_shape_to_table(table_shape)
 
 
 def _adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary: bool):
-    """
-    Passt die Höhe der Tabellen-Shape an die tatsächlich benötigte Zeilenanzahl an.
-    
-    Das ist WICHTIG weil LibreOffice/PowerPoint die Zeilen automatisch vergrößern,
-    wenn die Summe aller Zeilenhöhen kleiner ist als die Shape-Höhe. Wenn wir die
-    Shape auf die korrekte Größe setzen, bleiben die Zeilen in ihrer ursprünglichen
-    Höhe (0.142").
-    
-    Kann die Shape auch vergrößern (nach unten), aber nur bis max. 6.60" Bottom
-    (vor Footer bei 6.76").
-    
-    Args:
-        prs: Presentation
-        table_shape: Die Tabelle-Shape
-        n_data_rows: Anzahl Datenzeilen die wir tatsächlich befüllen (inkl. Gruppen-Header)
-        needs_summary: True wenn Summen-Zeile benötigt wird
-    """
-    ORIGINAL_HEADER_H = 0.236
-    ORIGINAL_DATA_ROW_H = 0.142
-    ORIGINAL_SUMMARY_H = 0.142
-    MAX_TABLE_BOTTOM = 6.60  # inches - max. Bottom-Position (vor Footer bei 6.76")
-    
-    # Benötigte Höhe berechnen (Summe aller XML-Zeilenhöhen):
-    # Header + (n Datenzeilen) + (ggf. Summen-Zeile)
-    # Nach _optimize_table_layout sind leere Zeilen entfernt, nur noch n_filled + evtl. 1-2 Puffer
-    # Wir brauchen Puffer: auch leere Zeilen bleiben als Buffer übrig
-    
-    n_buffer_rows = 2 if needs_summary else 0
-    xml_rows_estimate = 1 + n_data_rows + n_buffer_rows + (1 if needs_summary else 0)
-    
-    needed_h = ORIGINAL_HEADER_H + (n_data_rows * ORIGINAL_DATA_ROW_H) + (n_buffer_rows * ORIGINAL_DATA_ROW_H)
-    if needs_summary:
-        needed_h += ORIGINAL_SUMMARY_H
-    
-    # Aktuelle Shape-Position
-    shape_top_inch = table_shape.top / 914400
-    shape_current_h_inch = table_shape.height / 914400
-    
-    # Maximal verfügbare Höhe (bis Footer-Margin)
-    max_available_h = MAX_TABLE_BOTTOM - shape_top_inch
-    
-    # Neue Höhe: So groß wie benötigt, aber nie über max_available
-    new_h_inch = min(needed_h, max_available_h)
-    
-    # Nur ändern wenn Änderung signifikant (>0.05" Differenz)
-    if abs(new_h_inch - shape_current_h_inch) > 0.05:
-        table_shape.height = int(new_h_inch * 914400)
+    """Wrapper für pptx_slides.adjust_table_shape_height."""
+    return adjust_table_shape_height(prs, table_shape, n_data_rows, needs_summary)
 
 
 # ---------------------------------------------------------------------------
@@ -1028,138 +508,19 @@ SMALL_SEGMENT_THRESHOLD = 0.03  # 3%
 MAX_SEGMENTS_IN_CHART = 7
 
 
-def _consolidate_small_segments(agg_series: pd.Series, threshold: float = SMALL_SEGMENT_THRESHOLD,
-                                max_segments: int = MAX_SEGMENTS_IN_CHART) -> pd.Series:
-    """
-    Fasst kleine Kategorien zu "Sonstige" zusammen.
-    
-    Regel:
-    - Alle Kategorien unter threshold werden zu "Sonstige" gruppiert
-    - Wenn nach Konsolidierung noch mehr als max_segments Kategorien da sind,
-      werden die kleinsten zusätzlich in Sonstige verschoben bis max_segments erreicht ist
-    
-    Args:
-        agg_series: Pandas Series (Index = Kategorie-Name, Werte = Gewicht)
-        threshold: Schwellwert für "kleine" Kategorie
-        max_segments: Maximale Anzahl Segmente im Chart
-    
-    Returns:
-        Konsolidierte Series, absteigend sortiert
-    """
-    agg = agg_series.sort_values(ascending=False)
-    
-    # Große Kategorien (≥ threshold)
-    big = agg[agg >= threshold]
-    small = agg[agg < threshold]
-    
-    # Maximale Anzahl Segmente beachten
-    if len(big) > max_segments - 1:  # -1 weil wir Platz für "Sonstige" brauchen
-        # Die kleinsten der "big" werden auch zu "Sonstige"
-        keep = big.head(max_segments - 1)
-        move_to_small = big.tail(len(big) - (max_segments - 1))
-        big = keep
-        small = pd.concat([small, move_to_small])
-    
-    # Sonstige zusammenfassen. Falls in den Daten bereits ein Eintrag
-    # "Sonstige" existiert (z.B. Branche "Sonstige" aus dem Portfolio),
-    # wird der kleine-Kategorien-Sammelbetrag AUFADDIERT statt überschrieben.
-    if len(small) > 0:
-        sonstige_sum = small.sum()
-        if sonstige_sum > 0.0001:
-            existing = float(big["Sonstige"]) if "Sonstige" in big.index else 0.0
-            big["Sonstige"] = existing + sonstige_sum
-            # Nach dem Update nochmal sortieren, damit Sonstige an der
-            # richtigen Stelle der Reihenfolge landet
-            big = big.sort_values(ascending=False)
-
-    return big
+def _consolidate_small_segments(agg_series: pd.Series, threshold: float = SMALL_SEGMENT_THRESHOLD, max_segments: int = MAX_SEGMENTS_IN_CHART):
+    """Wrapper für pptx_slides.consolidate_small_segments."""
+    return consolidate_small_segments(agg_series, threshold, max_segments)
 
 
-def _build_ring_series(df: pd.DataFrame, dim_col: str) -> pd.Series:
-    """
-    Baut die Werte-Serie für einen Ring auf Slide 9 (Regionen oder Branchen).
-
-    - Aggregiert `Gewicht` nach `dim_col` (z.B. "Region" oder "Segment")
-    - Positionen ohne Eintrag in `dim_col` werden ignoriert (z.B. Liquidität
-      hat typischerweise keine Region/Branche zugeordnet)
-    - Konsolidiert kleine Kategorien zu "Sonstige"
-    - Hängt anschließend die Summe der NICHT in der Aggregation enthaltenen
-      Gewichte als Kategorie "Liquidität" an — damit der Ring auf 100%
-      summiert und keine Label-Lücke am oberen Rand entsteht.
-      Das greift zuverlässig auch wenn Liquidität (oder andere nicht-
-      klassifizierte Positionen) in der Rohdaten keine Region/Branche haben.
-
-    Liquidität wird nach der Konsolidierung angehängt, damit sie NICHT in
-    "Sonstige" einsortiert wird, auch wenn sie unter dem 3%-Threshold liegt.
-    """
-    if dim_col not in df.columns or "Gewicht" not in df.columns:
-        return pd.Series(dtype=float)
-
-    # Normalisierung: leere/NaN-Strings als Platzhalter
-    col = df[dim_col].astype(str).replace(["nan", "NaT", "None"], "")
-    has_value = col.str.strip() != ""
-    classified = df[has_value]
-    unclassified_weight = float(df.loc[~has_value, "Gewicht"].sum())
-
-    if classified.empty:
-        return pd.Series(dtype=float)
-
-    agg = classified.groupby(col[has_value])["Gewicht"].sum()
-    agg = agg[agg > 0.0001]
-    if agg.empty:
-        return pd.Series(dtype=float)
-
-    agg = _consolidate_small_segments(agg)
-
-    # Liquidität / nicht-klassifiziertes Gewicht als eigenes Segment am Ende
-    if unclassified_weight > 0.0001:
-        agg["Liquidität"] = unclassified_weight
-
-    return agg
+def _build_ring_series(df: pd.DataFrame, dim_col: str):
+    """Wrapper für pptx_slides.build_ring_series."""
+    return build_ring_series(df, dim_col)
 
 
 def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy_name: str):
-    """
-    Befüllt Slide 9 mit 2 Ringen: Regionen (links) + Branchen/Segment (rechts).
-
-    Kleine Kategorien (<3%) werden zu "Sonstige" zusammengefasst, maximal 8 Segmente
-    werden angezeigt. Das verhindert überlappende Labels im Ring-Chart.
-    Nicht-klassifizierte Positionen (typischerweise Liquidität) erscheinen als
-    eigenes Segment "Liquidität", damit der Ring auf 100% summiert.
-    """
-    slide = prs.slides[slide_idx]
-
-    # Titel
-    title = _find_shape_by_name(slide, SHAPE_TITLE) or _find_shape_by_name(slide, SHAPE_TITLE_ALT)
-    if title:
-        _replace_text_in_shape(title, f"Aktuelle Portfoliozusammenstellung – {strategy_name}")
-
-    # Defensive Vorbereitung: Gewicht muss sauberer Float sein, keine NaN, keine NaT
-    df_clean = df.copy()
-    if "Gewicht" in df_clean.columns:
-        df_clean["Gewicht"] = pd.to_numeric(df_clean["Gewicht"], errors="coerce").fillna(0.0).astype(float)
-
-    # Regionen (links)
-    region_agg = _build_ring_series(df_clean, "Region")
-    if not region_agg.empty:
-        chart_left = _find_shape_by_name(slide, SHAPE_CHART_LEFT)
-        if chart_left:
-            _replace_chart_data(
-                chart_left,
-                region_agg.index.tolist(),
-                [float(v) for v in region_agg.values]
-            )
-
-    # Segmente/Branchen (rechts)
-    segment_agg = _build_ring_series(df_clean, "Segment")
-    if not segment_agg.empty:
-        chart_right = _find_shape_by_name(slide, SHAPE_CHART_RIGHT)
-        if chart_right:
-            _replace_chart_data(
-                chart_right,
-                segment_agg.index.tolist(),
-                [float(v) for v in segment_agg.values]
-            )
+    """Wrapper für pptx_slides.fill_zusammenstellung_slide."""
+    return fill_zusammenstellung_slide(prs, slide_idx, df, strategy_name)
 
 
 # ---------------------------------------------------------------------------
