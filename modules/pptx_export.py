@@ -52,6 +52,22 @@ except ImportError:
         save_and_reload, update_quelle_datum, update_slide_numbers,
     )
 
+# Chart-Manipulation (XML-basierte Datenersetzung + python-pptx Bug-Workaround)
+try:
+    from modules.pptx_charts import (
+        NS_CHART,
+        replace_chart_data, update_cache_elements,
+        replace_chart_data_safe, restore_data_label_format,
+        update_chart_values_inplace,
+    )
+except ImportError:
+    from pptx_charts import (
+        NS_CHART,
+        replace_chart_data, update_cache_elements,
+        replace_chart_data_safe, restore_data_label_format,
+        update_chart_values_inplace,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Konstanten
@@ -162,90 +178,21 @@ import re
 
 
 # ---------------------------------------------------------------------------
-# Chart-Befüllung (Ring-Diagramme) – XML-basiert (robust gegen externe Excel-Refs)
+# Chart-Befüllung — Wrapper für pptx_charts (Backwards-Compat)
 # ---------------------------------------------------------------------------
-_NS_CHART = {
-    'c': 'http://schemas.openxmlformats.org/drawingml/2006/chart',
-}
+# _NS_CHART als Alias auf NS_CHART aus pptx_charts (Backwards-Compat,
+# falls anderer Code im Modul es noch direkt referenziert)
+_NS_CHART = NS_CHART
 
 
 def _replace_chart_data(chart_shape, categories: list, values: list, series_name: str = "Anteil"):
-    """
-    Ersetzt die Daten eines bestehenden Charts in der Vorlage.
-    Arbeitet direkt auf der Chart-XML (robust gegen externe Excel-Referenzen).
-
-    Args:
-        chart_shape: Das Chart-Shape (shape.has_chart == True)
-        categories: Liste der Kategorie-Namen (z.B. ["Aktien", "Renten", "Edelmetalle"])
-        values: Liste der zugehörigen Werte (z.B. [0.75, 0.17, 0.05])
-        series_name: Name der Datenreihe (wird in <c:tx> geschrieben falls vorhanden)
-    """
-    if len(categories) != len(values):
-        raise ValueError(f"Kategorien ({len(categories)}) und Werte ({len(values)}) müssen gleiche Länge haben")
-
-    chart = chart_shape.chart
-    chart_xml = chart._chartSpace
-    ns = _NS_CHART
-
-    # Alle Kategorien <c:pt><c:v>...</c:v></c:pt> finden
-    cat_refs = chart_xml.findall('.//c:cat//c:strRef', ns) + chart_xml.findall('.//c:cat//c:strCache', ns)
-    val_refs = chart_xml.findall('.//c:val//c:numRef', ns) + chart_xml.findall('.//c:val//c:numCache', ns)
-
-    # Wir arbeiten auf den *Cache-Einträgen*, da strRef intern einen strCache hat.
-    # Einfacher: wir suchen direkt alle cat/pt und val/pt Elemente.
-
-    # === Kategorien aktualisieren ===
-    cat_elem = chart_xml.find('.//c:cat', ns)
-    if cat_elem is not None:
-        _update_cache_elements(cat_elem, categories, is_numeric=False)
-
-    # === Werte aktualisieren ===
-    val_elem = chart_xml.find('.//c:val', ns)
-    if val_elem is not None:
-        _update_cache_elements(val_elem, values, is_numeric=True)
+    """Wrapper für pptx_charts.replace_chart_data."""
+    return replace_chart_data(chart_shape, categories, values, series_name)
 
 
 def _update_cache_elements(parent, new_values, is_numeric: bool):
-    """
-    Updated die <c:pt>-Elemente im Cache eines <c:cat> oder <c:val> Elements.
-    Fügt bei Bedarf neue Punkte hinzu oder entfernt überzählige.
-    """
-    ns = _NS_CHART
-    c_ns = 'http://schemas.openxmlformats.org/drawingml/2006/chart'
-
-    # Cache-Element finden (strCache oder numCache)
-    if is_numeric:
-        cache = parent.find('.//c:numCache', ns)
-        if cache is None:
-            cache = parent.find('.//c:numRef/c:numCache', ns)
-    else:
-        cache = parent.find('.//c:strCache', ns)
-        if cache is None:
-            cache = parent.find('.//c:strRef/c:strCache', ns)
-
-    if cache is None:
-        # Kein Cache vorhanden – wir müssen ihn ggf. anlegen. Für unseren Use-Case
-        # (Charts aus PPTX-Vorlage) ist der Cache immer vorhanden.
-        return
-
-    # ptCount aktualisieren
-    pt_count = cache.find('c:ptCount', ns)
-    if pt_count is not None:
-        pt_count.set('val', str(len(new_values)))
-
-    # Bestehende <c:pt>-Elemente entfernen
-    for pt in cache.findall('c:pt', ns):
-        cache.remove(pt)
-
-    # Neue <c:pt>-Elemente hinzufügen
-    for idx, val in enumerate(new_values):
-        pt = etree.SubElement(cache, f'{{{c_ns}}}pt')
-        pt.set('idx', str(idx))
-        v_el = etree.SubElement(pt, f'{{{c_ns}}}v')
-        if is_numeric:
-            v_el.text = f"{float(val)}"
-        else:
-            v_el.text = str(val)
+    """Wrapper für pptx_charts.update_cache_elements."""
+    return update_cache_elements(parent, new_values, is_numeric)
 
 
 # ---------------------------------------------------------------------------
@@ -772,106 +719,17 @@ def _fill_performance_slide(prs, slide_idx: int, strategy_name: str,
 
 def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
                               data_label_format: Optional[str] = None):
+    """Wrapper für pptx_charts.replace_chart_data_safe.
+
+    Behält die Signatur des bisherigen Aufrufstellen-Codes. Die volle
+    Bug-Workaround-Logik (3 Bugs!) lebt jetzt in modules/pptx_charts.py.
     """
-    Ersetzt Chart-Daten — workaround für python-pptx Bugs:
-
-    Bug 1: `chart.replace_data()` updated das embedded Excel-Workbook NICHT
-    → Diskrepanz → PowerPoint-Reparieren-Dialog.
-    Fix: Nach replace_data() das <c:externalData>-Element entfernen, sodass
-    PowerPoint nur die Chart-XML nutzt.
-
-    Bug 2: `chart.replace_data()` überschreibt die Chart-style.xml-Datei mit
-    einem ZIP-Header (style7.xml wird zu Binärmüll) → PowerPoint-Reparieren-
-    Dialog auch hier.
-    Fix: Vor replace_data() ALLE Style/Color-Parts der Chart-Part sichern und
-    nach replace_data() wieder zurücksetzen.
-
-    Bug 3: `chart.replace_data()` setzt Format-Codes auf "General" zurück
-    → Daten-Labels zeigen "0.05" statt "5,00%".
-    Fix: Nach replace_data() den ursprünglichen Format-Code wiederherstellen.
-
-    Args:
-        chart_shape: Chart-Shape mit has_chart=True
-        categories: Liste der Kategorien (Strings oder Datumangaben)
-        series_data: Liste von (series_name, values) Tupeln
-        data_label_format: Format-Code für Daten-Labels (z.B. "0.00%"). None = nicht ändern.
-    """
-    from pptx.chart.data import CategoryChartData
-
-    chart = chart_shape.chart
-    chart_part = chart.part
-
-    # ─── BUG 2 FIX: Sichere alle "Hilfs-Parts" der Chart (style, colors) ───
-    # Diese Parts sind in den Chart-Rels referenziert und können von python-pptx
-    # versehentlich überschrieben werden.
-    backup_parts = {}  # partname -> (part_obj, blob)
-    for rel_id, rel in chart_part.rels.items():
-        try:
-            reltype = rel.reltype
-        except Exception:
-            continue
-        # Wir backuppen alles außer dem Chart selbst und externen OLE-Objekten
-        if 'chartStyle' in reltype or 'chartColorStyle' in reltype:
-            try:
-                target = rel.target_part
-                backup_parts[str(target.partname)] = (target, bytes(target.blob))
-            except Exception:
-                pass
-
-    # ─── replace_data ausführen ───
-    cd = CategoryChartData()
-    cd.categories = categories
-    for name, vals in series_data:
-        cd.add_series(name, vals)
-    chart.replace_data(cd)
-
-    # ─── BUG 2 FIX: Style/Color-Parts aus Backup wiederherstellen ───
-    for partname, (part_obj, blob) in backup_parts.items():
-        try:
-            part_obj._blob = blob
-        except Exception:
-            pass
-
-    # ─── BUG 1 FIX: <c:externalData> entfernen ───
-    ns_uri = "http://schemas.openxmlformats.org/drawingml/2006/chart"
-    ns = {"c": ns_uri}
-    chart_xml = chart._chartSpace
-    ext_data = chart_xml.find(".//c:externalData", ns)
-    if ext_data is not None:
-        ext_data.getparent().remove(ext_data)
-
-    # ─── BUG 3 FIX: Format-Codes wiederherstellen ───
-    if data_label_format:
-        _restore_data_label_format(chart_shape, data_label_format)
+    return replace_chart_data_safe(chart_shape, categories, series_data, data_label_format)
 
 
 def _restore_data_label_format(chart_shape, format_code: str):
-    """
-    Setzt den Format-Code der Daten-Labels in allen Series eines Charts.
-
-    `chart.replace_data()` setzt Format-Codes auf "General" zurück, was dazu führt
-    dass z.B. der Wert 0.05 als "0.05" statt "5,00%" angezeigt wird. Diese Funktion
-    stellt den ursprünglichen Format-Code wieder her.
-    """
-    from lxml import etree
-    ns_uri = "http://schemas.openxmlformats.org/drawingml/2006/chart"
-    ns = {"c": ns_uri}
-    chart_xml = chart_shape.chart._chartSpace
-
-    for ser in chart_xml.findall(".//c:ser", ns):
-        # <c:dLbls> Element finden oder anlegen
-        dlbls = ser.find("c:dLbls", ns)
-        if dlbls is None:
-            continue  # Keine Daten-Labels in dieser Series
-
-        # <c:numFmt> innerhalb dLbls finden oder anlegen
-        num_fmt = dlbls.find("c:numFmt", ns)
-        if num_fmt is None:
-            num_fmt = etree.SubElement(dlbls, f"{{{ns_uri}}}numFmt")
-            # numFmt muss am Anfang von dLbls stehen (vor anderen Properties)
-            dlbls.insert(0, num_fmt)
-        num_fmt.set("formatCode", format_code)
-        num_fmt.set("sourceLinked", "0")
+    """Wrapper für pptx_charts.restore_data_label_format."""
+    return restore_data_label_format(chart_shape, format_code)
 
 
 def _fill_kennzahlen_table(table, kz: dict):
@@ -927,58 +785,8 @@ def _set_cell_text_preserve_format(cell, text: str):
 
 
 def _update_chart_values_inplace(chart_shape, categories: list, series_data: list):
-    """
-    Aktualisiert Categories und Values aller Series direkt in der Chart-XML.
-
-    Im Gegensatz zu `chart.replace_data()` bleiben die Format-Codes (z.B. "0.00%"
-    für Daten-Labels) erhalten. Wird verwendet für den Säulen-Chart in der
-    Performance-Folie wo die Daten-Labels prozent-formatiert sein müssen.
-
-    Anzahl der Series und Datenpunkte muss zum Chart-Template passen
-    (5 Jahre × 2 Series für Performance p.a.).
-
-    Args:
-        chart_shape: Das Chart-Shape
-        categories: Liste der Kategorien (Strings), z.B. ["2021", ..., "2025"]
-        series_data: Liste von (series_name, values) Tupeln
-    """
-    chart = chart_shape.chart
-    chart_xml = chart._chartSpace
-    ns = _NS_CHART
-
-    ser_elements = chart_xml.findall(".//c:ser", ns)
-    if len(ser_elements) != len(series_data):
-        # Anzahl Series stimmt nicht überein → fallback auf replace_data
-        from pptx.chart.data import CategoryChartData
-        cd = CategoryChartData()
-        cd.categories = categories
-        for name, vals in series_data:
-            cd.add_series(name, vals)
-        chart.replace_data(cd)
-        return
-
-    for ser_elem, (series_name, values) in zip(ser_elements, series_data):
-        # Series-Name (c:tx//c:v) setzen
-        tx_v = ser_elem.find(".//c:tx//c:v", ns)
-        if tx_v is not None:
-            tx_v.text = series_name
-        # Categories (c:cat//c:pt/c:v) und Values (c:val//c:pt/c:v) updaten
-        cat_pts = ser_elem.findall(".//c:cat//c:pt/c:v", ns)
-        val_pts = ser_elem.findall(".//c:val//c:pt/c:v", ns)
-        for i, cat in enumerate(categories):
-            if i < len(cat_pts):
-                cat_pts[i].text = str(cat)
-        for i, val in enumerate(values):
-            if i < len(val_pts):
-                try:
-                    val_pts[i].text = f"{float(val):.6f}"
-                except (TypeError, ValueError):
-                    val_pts[i].text = "0"
-        # ptCount aktualisieren (falls vorhanden)
-        for tag in ("cat", "val"):
-            pt_count = ser_elem.find(f".//c:{tag}//c:ptCount", ns)
-            if pt_count is not None:
-                pt_count.set("val", str(len(values) if tag == "val" else len(categories)))
+    """Wrapper für pptx_charts.update_chart_values_inplace."""
+    return update_chart_values_inplace(chart_shape, categories, series_data)
 
 
 # ─────────────────────────────────────────────────────────────────────────
