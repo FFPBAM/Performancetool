@@ -318,9 +318,11 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
 # ---------------------------------------------------------------------------
 # Slide-Befüllung – Anlagevorschlag (Slides 7+8)
 # ---------------------------------------------------------------------------
-def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame, strategy_name: str):
+def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame,
+                                  strategy_name: str, eval_date=None):
     """Wrapper für pptx_slides.fill_anlagevorschlag_slides."""
-    return fill_anlagevorschlag_slides(prs, slide_7_idx, df, strategy_name)
+    return fill_anlagevorschlag_slides(prs, slide_7_idx, df, strategy_name,
+                                        eval_date=eval_date)
 
 
 def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance_data=None):
@@ -518,9 +520,11 @@ def _build_ring_series(df: pd.DataFrame, dim_col: str):
     return build_ring_series(df, dim_col)
 
 
-def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame, strategy_name: str):
+def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
+                                  strategy_name: str, eval_date=None):
     """Wrapper für pptx_slides.fill_zusammenstellung_slide."""
-    return fill_zusammenstellung_slide(prs, slide_idx, df, strategy_name)
+    return fill_zusammenstellung_slide(prs, slide_idx, df, strategy_name,
+                                        eval_date=eval_date)
 
 
 # ---------------------------------------------------------------------------
@@ -640,28 +644,28 @@ def generate_portfolioanalyse_pptx(
         #   Slide 7 (Index 6) = Anlagevorschlag (mit Strategieentwurf-Titel)
         #   Slide 8 (Index 7) = Performance (mit Strategy-Name im Titel)
         #   Slide 9 (Index 8) = Portfolio-Zusammenstellung
-        display_name, df, _, _ = portfolios[0]
+        display_name, df, eval_date, _ = portfolios[0]
         strategy_name = clean_strategy_name(display_name)
         perf_data = _build_perf_data(performance_inputs, 0)
-        _fill_anlagevorschlag_slides(prs, 6, df, strategy_name)
+        _fill_anlagevorschlag_slides(prs, 6, df, strategy_name, eval_date=eval_date)
         _fill_performance_slide(prs, 7, strategy_name, performance_data=perf_data)
-        _fill_zusammenstellung_slide(prs, 8, df, strategy_name)
+        _fill_zusammenstellung_slide(prs, 8, df, strategy_name, eval_date=eval_date)
 
     elif len(portfolios) == 2:
         # Vergleichsportfolio: Portfolio 1 in Index 6-8, Portfolio 2 als Duplikate
         # an Index 9-11. Endreihenfolge: Anlagevorschlag, Performance, Zusammenstellung
         # pro Portfolio.
-        display_name_1, df_1, _, _ = portfolios[0]
-        display_name_2, df_2, _, _ = portfolios[1]
+        display_name_1, df_1, eval_date_1, _ = portfolios[0]
+        display_name_2, df_2, eval_date_2, _ = portfolios[1]
         strategy_name_1 = clean_strategy_name(display_name_1)
         strategy_name_2 = clean_strategy_name(display_name_2)
         perf_data_1 = _build_perf_data(performance_inputs, 0)
         perf_data_2 = _build_perf_data(performance_inputs, 1)
 
         # Schritt 1: Portfolio 1 in Original-Slides (Index 6, 7, 8)
-        _fill_anlagevorschlag_slides(prs, 6, df_1, strategy_name_1)
+        _fill_anlagevorschlag_slides(prs, 6, df_1, strategy_name_1, eval_date=eval_date_1)
         _fill_performance_slide(prs, 7, strategy_name_1, performance_data=perf_data_1)
-        _fill_zusammenstellung_slide(prs, 8, df_1, strategy_name_1)
+        _fill_zusammenstellung_slide(prs, 8, df_1, strategy_name_1, eval_date=eval_date_1)
 
         # Schritt 2: Drei Duplikate von Slides 7, 8, 9 (Index 6, 7, 8) anlegen
         _duplicate_slide(prs, 6)
@@ -689,9 +693,9 @@ def generate_portfolioanalyse_pptx(
         prs = _save_and_reload(prs)
 
         # Schritt 6: Portfolio 2 in Duplikate (Index 9, 10, 11)
-        _fill_anlagevorschlag_slides(prs, 9, df_2, strategy_name_2)
+        _fill_anlagevorschlag_slides(prs, 9, df_2, strategy_name_2, eval_date=eval_date_2)
         _fill_performance_slide(prs, 10, strategy_name_2, performance_data=perf_data_2)
-        _fill_zusammenstellung_slide(prs, 11, df_2, strategy_name_2)
+        _fill_zusammenstellung_slide(prs, 11, df_2, strategy_name_2, eval_date=eval_date_2)
 
     else:
         raise ValueError(f"Erwarte 1 oder 2 Portfolios, erhalten: {len(portfolios)}")
