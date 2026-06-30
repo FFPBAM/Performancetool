@@ -53,7 +53,7 @@ def render_donut_png(
     values: Sequence[float],
     labels: Sequence[str],
     colors: Sequence[str] | None = None,
-    dpi: int = 150,
+    dpi: int = 200,
     figsize: tuple[float, float] = (4.5, 4.0),
     label_distance: float = 1.30,
     label_fontsize: int = 10,
@@ -64,14 +64,22 @@ def render_donut_png(
         values: Werte pro Segment (Summe egal — wird relativ berechnet).
         labels: Anzeige-Strings pro Segment (z.B. "57,03%").
         colors: Hex-Farben pro Segment. Default: FFPB_COLORS.
-        dpi: Auflösung. 150 = guter Trade-off zwischen Schärfe und Dateigröße
-            (~30 KB pro PNG).
+        dpi: Auflösung. 200 = scharfes Rendering bei moderater Dateigröße
+            (~45 KB pro PNG). Höher als der bisherige Default 150, weil die
+            PNG auf der Folie mit ~2,9" Breite dargestellt wird und 150 dpi
+            dort sichtbar weich wirkte.
         figsize: matplotlib-Figur-Größe in inches.
         label_distance: Distanz der Labels vom Mittelpunkt (1.0 = Ring-Außenrand).
         label_fontsize: Schriftgröße der Prozent-Labels.
 
     Returns:
         PNG-Bytes (transparenter Hintergrund).
+
+    Hinweis zum Seitenverhältnis: Die zurückgegebene PNG ist breiter als hoch
+    (die Labels brauchen horizontalen Platz links/rechts). Der Donut SELBST ist
+    durch `ax.set_aspect("equal")` exakt kreisrund. Beim Einfügen auf die Folie
+    MUSS das native Pixel-Seitenverhältnis erhalten bleiben (siehe
+    `replace_donut_chart`), sonst wird der Kreis zum Oval verzerrt.
     """
     if colors is None:
         colors = FFPB_COLORS[: len(values)]
@@ -114,6 +122,23 @@ def render_donut_png(
                 bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
     return buf.getvalue()
+
+
+def _png_pixel_size(png_bytes: bytes) -> tuple[int, int]:
+    """Liest die Pixel-Dimensionen (Breite, Höhe) aus dem IHDR-Chunk einer PNG.
+
+    Vermeidet eine zusätzliche PIL-Abhängigkeit an dieser Stelle: Die
+    PNG-Signatur ist 8 Byte lang, danach folgt der IHDR-Chunk
+    (4 Byte Länge + 'IHDR' + 4 Byte Breite + 4 Byte Höhe, jeweils Big-Endian).
+    Breite liegt damit ab Byte 16, Höhe ab Byte 20.
+    """
+    if len(png_bytes) < 24:
+        return (1, 1)
+    width = int.from_bytes(png_bytes[16:20], "big")
+    height = int.from_bytes(png_bytes[20:24], "big")
+    if width <= 0 or height <= 0:
+        return (1, 1)
+    return (width, height)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -221,7 +246,7 @@ def replace_donut_chart(
     2. Entfernt die Chart-Shape (entfernt damit auch native Banner/Source aus drawing*.xml)
     3. Erzeugt das Layout-Equivalent neu:
        - Banner oben (z.B. "REGIONEN", "Branchen")
-       - PNG-Ring rechts (mit Labels außen + Leader-Lines)
+       - PNG-Ring rechts (mit Labels außen + Leader-Lines), SEITENVERHÄLTNIS-ERHALTEND
        - Legende links (vertikal, Rectangle + Text pro Item)
        - Source-Annotation unten rechts
 
@@ -269,14 +294,38 @@ def replace_donut_chart(
     # 1. Banner oben
     _add_banner(slide, cx, cy, cw, BANNER_H, text=banner_text)
 
-    # 2. PNG-Ring (rechts)
+    # 2. PNG-Ring (rechts) — SEITENVERHÄLTNIS-ERHALTEND einpassen + zentrieren
+    #
+    # WICHTIG: Früher wurde die PNG mit fester Breite UND Höhe (RING_W × INNER_H)
+    # eingefügt. Da die Ring-Box hochkant ist (≈0,72) und die PNG quer (≈1,15),
+    # wurde der kreisrunde Donut vertikal gestreckt → sichtbares Oval.
+    # Jetzt: native Pixel-Geometrie auslesen, in die verfügbare Box einpassen
+    # (das kleinere Limit gewinnt) und im Box-Bereich zentrieren.
     png_bytes = render_donut_png(
         values=values, labels=percent_labels, colors=colors,
     )
     ring_left = cx + LEGEND_W
+
+    img_w_px, img_h_px = _png_pixel_size(png_bytes)
+    img_aspect = img_w_px / img_h_px          # Breite / Höhe (nativ)
+    box_aspect = RING_W / INNER_H
+
+    if img_aspect >= box_aspect:
+        # Bild relativ breiter als die Box → Breite ist limitierend
+        draw_w = RING_W
+        draw_h = int(round(RING_W / img_aspect))
+    else:
+        # Bild relativ höher als die Box → Höhe ist limitierend
+        draw_h = INNER_H
+        draw_w = int(round(INNER_H * img_aspect))
+
+    # Im verfügbaren Ring-Bereich horizontal + vertikal zentrieren
+    pic_left = ring_left + (RING_W - draw_w) // 2
+    pic_top = INNER_TOP + (INNER_H - draw_h) // 2
+
     slide.shapes.add_picture(
         io.BytesIO(png_bytes),
-        ring_left, INNER_TOP, RING_W, INNER_H,
+        pic_left, pic_top, draw_w, draw_h,
     )
 
     # 3. Legend links, vertikal mittig
