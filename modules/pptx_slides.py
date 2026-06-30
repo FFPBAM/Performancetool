@@ -17,6 +17,14 @@ Architektur:
     pptx_slides  (DIESE Datei — Domain-Logik)
         ↑
     pptx_export  (Orchestrierung der Broschüre)
+
+Juni 2026 — Rückbau auf native Ring-Charts:
+    Die zwischenzeitliche matplotlib-PNG-Lösung (modules/png_charts.py,
+    replace_donut_chart) wurde wieder entfernt. Die Ringe auf Slide 7 und 9
+    werden wieder über native PowerPoint-Donuts befüllt (replace_chart_data),
+    d.h. das Template-Styling (Banner, Legende, Quelle, Datenlabels) bleibt
+    unverändert und es werden nur die Chart-Daten ausgetauscht.
+    => png_charts.py wird von diesem Modul NICHT mehr importiert/benötigt.
 """
 
 import pandas as pd
@@ -47,13 +55,6 @@ except ImportError:
     from pptx_charts import (
         replace_chart_data, replace_chart_data_safe,
     )
-
-# PNG-Ring-Charts (matplotlib) — Drop-In-Ersatz für native Donuts
-# wo Labels garantiert außen platziert werden müssen (Slides 7+9)
-try:
-    from modules.png_charts import replace_donut_chart, FFPB_COLORS
-except ImportError:
-    from png_charts import replace_donut_chart, FFPB_COLORS
 
 # Format-Helpers
 try:
@@ -713,7 +714,8 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
             Fälligkeit_parsed, Marktrisikowert)
         strategy_name: Name der Strategie für den Titel (schon bereinigt)
         eval_date: Auswertungsdatum (für Source-Annotation im Ring-Chart).
-            Optional — falls None, wird kein Datum gezeigt.
+            Optional — das Quelle-Datum wird zentral über
+            pptx_export._update_quelle_datum gesetzt (steht statisch im Template).
     """
     # 1. Daten vorbereiten
     groups = group_portfolio_positions(df)
@@ -738,30 +740,20 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
     title = find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or find_shape_by_name(slide_7, SHAPE_TITLE)
     if title:
         set_title_with_autoscale(title, f"{STRATEGIEENTWURF_TITLE} - {strategy_name}")
-    # Ring-Chart: matplotlib-PNG mit Labels außen (statt nativer Donut,
-    # weil PowerPoint die Labels bei großen Segmenten innen platziert)
+
+    # Ring-Chart: NATIVER PowerPoint-Donut (Daten ersetzen, Template-Styling
+    # bleibt: Banner, Legende, Quelle, Datenlabels). Werte sind Anteile (0..1);
+    # das Zahlenformat des Charts stellt sie als Prozent dar.
     chart = find_shape_by_name(slide_7, SHAPE_CHART_ALLOCATION)
-    if chart:
-        total = sum(alloc_values)
-        if total > 0:
-            percent_labels = [
-                f"{v/total*100:.2f}%".replace(".", ",")
-                for v in alloc_values
-            ]
-            source_text = (
-                f"Quelle: Eigene Berechnung Stand: {fmt_date_de(eval_date)}"
-                if eval_date is not None
-                else "Quelle: Eigene Berechnung"
-            )
-            replace_donut_chart(
-                slide_7, SHAPE_CHART_ALLOCATION,
+    if chart and getattr(chart, "has_chart", False):
+        if sum(alloc_values) > 0:
+            replace_chart_data(
+                chart,
+                categories=list(alloc_labels),
                 values=list(alloc_values),
-                item_labels=list(alloc_labels),
-                percent_labels=percent_labels,
-                colors=FFPB_COLORS[:len(alloc_values)],
-                banner_text="AKTUELLE STRUKTUR",
-                source_text=source_text,
+                series_name="Anteil",
             )
+
     # Tabelle befüllen
     table_shape = find_shape_by_name(slide_7, SHAPE_TABLE)
     if table_shape:
@@ -877,12 +869,16 @@ def fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
     Liquidität) erscheinen als eigenes Segment "Liquidität", damit der Ring
     auf 100% summiert.
 
+    Die Ringe sind native PowerPoint-Donuts; es werden nur die Chart-Daten
+    ersetzt, das Template-Styling (Banner "REGIONEN"/"Branchen", Legende,
+    Quelle) bleibt erhalten.
+
     Args:
         prs: Presentation
         slide_idx: 0-indexed Slide-Position
         df: Portfolio-DataFrame
         strategy_name: bereinigter Strategiename
-        eval_date: Auswertungsdatum für Source-Annotation. Optional.
+        eval_date: Auswertungsdatum. Optional (Quelle-Datum wird zentral gesetzt).
     """
     slide = prs.slides[slide_idx]
 
@@ -896,47 +892,28 @@ def fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
     if "Gewicht" in df_clean.columns:
         df_clean["Gewicht"] = pd.to_numeric(df_clean["Gewicht"], errors="coerce").fillna(0.0).astype(float)
 
-    # Source-Text einmal vorberechnen (gleich für beide Ringe)
-    source_text = (
-        f"Quelle: Eigene Berechnung Stand: {fmt_date_de(eval_date)}"
-        if eval_date is not None
-        else "Quelle: Eigene Berechnung"
-    )
-
-    # Regionen (links) — matplotlib-PNG-Ring mit Labels außen
+    # Regionen (links) — nativer PowerPoint-Donut (Daten ersetzen)
     region_agg = build_ring_series(df_clean, "Region")
-    if not region_agg.empty and find_shape_by_name(slide, SHAPE_CHART_LEFT):
+    chart_left = find_shape_by_name(slide, SHAPE_CHART_LEFT)
+    if not region_agg.empty and chart_left and getattr(chart_left, "has_chart", False):
         values = [float(v) for v in region_agg.values]
-        total = sum(values)
-        if total > 0:
-            percent_labels = [
-                f"{v/total*100:.2f}%".replace(".", ",") for v in values
-            ]
-            replace_donut_chart(
-                slide, SHAPE_CHART_LEFT,
+        if sum(values) > 0:
+            replace_chart_data(
+                chart_left,
+                categories=region_agg.index.tolist(),
                 values=values,
-                item_labels=region_agg.index.tolist(),
-                percent_labels=percent_labels,
-                colors=FFPB_COLORS[:len(values)],
-                banner_text="REGIONEN",
-                source_text=source_text,
+                series_name="Anteil",
             )
 
-    # Segmente/Branchen (rechts) — matplotlib-PNG-Ring mit Labels außen
+    # Segmente/Branchen (rechts) — nativer PowerPoint-Donut (Daten ersetzen)
     segment_agg = build_ring_series(df_clean, "Segment")
-    if not segment_agg.empty and find_shape_by_name(slide, SHAPE_CHART_RIGHT):
+    chart_right = find_shape_by_name(slide, SHAPE_CHART_RIGHT)
+    if not segment_agg.empty and chart_right and getattr(chart_right, "has_chart", False):
         values = [float(v) for v in segment_agg.values]
-        total = sum(values)
-        if total > 0:
-            percent_labels = [
-                f"{v/total*100:.2f}%".replace(".", ",") for v in values
-            ]
-            replace_donut_chart(
-                slide, SHAPE_CHART_RIGHT,
+        if sum(values) > 0:
+            replace_chart_data(
+                chart_right,
+                categories=segment_agg.index.tolist(),
                 values=values,
-                item_labels=segment_agg.index.tolist(),
-                percent_labels=percent_labels,
-                colors=FFPB_COLORS[:len(values)],
-                banner_text="Branchen",
-                source_text=source_text,
+                series_name="Anteil",
             )
