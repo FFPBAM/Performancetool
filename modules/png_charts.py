@@ -1,16 +1,23 @@
-"""PNG-basierte Ring-Charts mit Labels außen.
+"""PNG-basierte Ring-Charts mit Labels außen — Voll-Komposition.
 
-Dieses Modul ersetzt PowerPoint-native Ring-Charts (Donuts) durch eine
-Kombination aus:
-- Banner-Rectangle (oben) mit Titel
-- PNG-gerenderter Donut-Chart (matplotlib) mit Labels außen + Leader-Lines
-- Legende als python-pptx Shapes (Rectangle + Text pro Item)
-- Source-Annotation unten rechts
+Dieses Modul ersetzt PowerPoint-native Ring-Charts (Donuts) durch EIN einziges,
+in matplotlib gerendertes PNG, das die komplette Komposition enthält:
+- Banner oben (dunkelblau, weißer Titel)
+- großer, mittiger Donut mit Labels außen + Leader-Linien mit Punkten
+- Legende unten links (Farbquadrat + Text pro Item)
+- Quelle unten rechts
 
-Hintergrund: PowerPoint's native Ring-Charts platzieren Datenbeschriftungen
-bei großen Segmenten (>50%) trotz `dLblPos="outEnd"` innen — Microsoft's
+Hintergrund: PowerPoints native Ring-Charts platzieren Datenbeschriftungen bei
+großen Segmenten (>50%) trotz `dLblPos="outEnd"` innen — Microsofts
 "smart auto-placement" lässt sich nicht per Property abschalten. matplotlib
-gibt uns volle Kontrolle über die Label-Positionen.
+gibt uns volle Kontrolle über Label-Positionen UND den Stil (Leader-Punkte).
+
+Designentscheidung (Juni 2026): Die GESAMTE Komposition wird als ein PNG
+gerendert und füllt die Original-Chart-Box passgenau aus. Das PNG-Seiten-
+verhältnis wird exakt auf das Box-Seitenverhältnis gerendert (keine
+`bbox_inches="tight"`-Beschneidung), sodass das Bild verzerrungsfrei die volle
+Box ausfüllt — kein Oval mehr, kein Sub-Layout aus einzelnen Shapes, die
+verrutschen könnten.
 
 Hauptfunktion: `replace_donut_chart(slide, shape_name, ...)`.
 """
@@ -23,11 +30,7 @@ import matplotlib
 matplotlib.use("Agg")  # Headless rendering (Streamlit Cloud)
 import matplotlib.pyplot as plt
 import numpy as np
-
-from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
-from pptx.util import Pt
+from matplotlib.patches import Rectangle
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -47,98 +50,109 @@ FFPB_DARKBLUE = "#1F3A5F"  # Banner-Hintergrund
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# PNG-Rendering
+# PNG-Rendering (Voll-Komposition)
 # ────────────────────────────────────────────────────────────────────────────
-def render_donut_png(
+def _render_donut_png(
     values: Sequence[float],
-    labels: Sequence[str],
-    colors: Sequence[str] | None = None,
+    item_labels: Sequence[str],
+    percent_labels: Sequence[str],
+    colors: Sequence[str],
+    banner_text: str,
+    source_text: str,
+    box_aspect: float = 1.0,
     dpi: int = 200,
-    figsize: tuple[float, float] = (4.5, 4.0),
-    label_distance: float = 1.30,
-    label_fontsize: int = 10,
 ) -> bytes:
-    """Rendert einen Donut-Chart als PNG mit Labels außen + Leader-Lines.
+    """Rendert die komplette Donut-Komposition als ein PNG.
+
+    Die Arrays `values`, `item_labels`, `percent_labels` und `colors` sind
+    PARALLEL: Index i beschreibt dasselbe Segment (Wert, Legenden-Label,
+    Prozent-Label, Farbe).
 
     Args:
-        values: Werte pro Segment (Summe egal — wird relativ berechnet).
-        labels: Anzeige-Strings pro Segment (z.B. "57,03%").
-        colors: Hex-Farben pro Segment. Default: FFPB_COLORS.
-        dpi: Auflösung. 200 = scharfes Rendering bei moderater Dateigröße
-            (~45 KB pro PNG). Höher als der bisherige Default 150, weil die
-            PNG auf der Folie mit ~2,9" Breite dargestellt wird und 150 dpi
-            dort sichtbar weich wirkte.
-        figsize: matplotlib-Figur-Größe in inches.
-        label_distance: Distanz der Labels vom Mittelpunkt (1.0 = Ring-Außenrand).
-        label_fontsize: Schriftgröße der Prozent-Labels.
+        values: Numerische Werte pro Segment (Summe egal, relativ berechnet).
+        item_labels: Legenden-Texte (z.B. "AKTIEN", "RENTEN").
+        percent_labels: Vorformatierte Prozent-Strings (z.B. "38,90%").
+        colors: Hex-Farben pro Segment (parallel zu values/item_labels).
+        banner_text: Titel im Banner oben.
+        source_text: Quellen-Annotation unten rechts.
+        box_aspect: Seitenverhältnis (Breite/Höhe) der Ziel-Chart-Box. Das PNG
+            wird in genau diesem Verhältnis gerendert, damit es die Box
+            verzerrungsfrei ausfüllt.
+        dpi: Render-Auflösung.
 
     Returns:
-        PNG-Bytes (transparenter Hintergrund).
-
-    Hinweis zum Seitenverhältnis: Die zurückgegebene PNG ist breiter als hoch
-    (die Labels brauchen horizontalen Platz links/rechts). Der Donut SELBST ist
-    durch `ax.set_aspect("equal")` exakt kreisrund. Beim Einfügen auf die Folie
-    MUSS das native Pixel-Seitenverhältnis erhalten bleiben (siehe
-    `replace_donut_chart`), sonst wird der Kreis zum Oval verzerrt.
+        PNG-Bytes (transparenter Hintergrund), Seitenverhältnis == box_aspect.
     """
-    if colors is None:
-        colors = FFPB_COLORS[: len(values)]
-    colors = list(colors)[: len(values)]  # zur Sicherheit kürzen
+    n = len(values)
+    colors = list(colors)[:n]
 
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    wedges, _ = ax.pie(
-        list(values),
-        colors=colors,
-        startangle=90,
-        counterclock=False,
-        wedgeprops=dict(width=0.45, edgecolor="white", linewidth=1.5),
-    )
-    for wedge, lbl in zip(wedges, labels):
-        # Mittel-Winkel des Segments
-        ang = (wedge.theta2 + wedge.theta1) / 2
-        x_ring = np.cos(np.deg2rad(ang))
-        y_ring = np.sin(np.deg2rad(ang))
-        x_label = label_distance * x_ring
-        y_label = label_distance * y_ring
-        ha = "left" if x_ring > 0 else "right"
-        ax.annotate(
-            lbl,
-            xy=(x_ring, y_ring),       # Leader-Line-Spitze: am Ring-Rand
-            xytext=(x_label, y_label),  # Label-Position: weiter außen
-            ha=ha, va="center",
-            fontsize=label_fontsize, fontweight="bold",
-            arrowprops=dict(arrowstyle="-", color="#333333", lw=0.7,
-                            connectionstyle="arc3,rad=0"),
-        )
+    base_h = 5.0
+    fig_w = base_h * max(0.45, float(box_aspect))  # Schutz gegen extreme Hochformate
+    fig_h = base_h
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=dpi)
+    fig.patch.set_alpha(0)
+
+    # ── Banner oben (volle Breite) ──
+    banner_h = 0.085  # Anteil der Figurhöhe
+    fig.patches.append(Rectangle(
+        (0, 1 - banner_h), 1, banner_h, transform=fig.transFigure,
+        facecolor=FFPB_DARKBLUE, edgecolor="none", zorder=1,
+    ))
+    fig.text(0.028, 1 - banner_h / 2, banner_text, ha="left", va="center",
+             color="white", fontsize=13, fontweight="bold", zorder=2)
+
+    # ── Donut-Achse: volle Breite, zwischen Banner und Legenden-Zone ──
+    legend_zone = 0.20  # unterer Anteil für Legende + Quelle
+    ax = fig.add_axes([0.0, legend_zone, 1.0, 1 - banner_h - legend_zone], zorder=1)
     ax.set_aspect("equal")
-    # Padding für Labels (sonst werden sie abgeschnitten)
-    ax.set_xlim(-1.65, 1.65)
-    ax.set_ylim(-1.50, 1.50)
     ax.axis("off")
-    fig.patch.set_alpha(0)  # transparenter Hintergrund
+    wedges, _ = ax.pie(
+        list(values), colors=colors, startangle=90, counterclock=False,
+        radius=1.0, wedgeprops=dict(width=0.42, edgecolor="white", linewidth=1.5),
+    )
+
+    # Labels außen mit Leader-Linie + Punkt
+    r_ring, r_dot = 1.02, 1.22
+    for wedge, lbl in zip(wedges, percent_labels):
+        ang = np.deg2rad((wedge.theta1 + wedge.theta2) / 2)
+        c, s = np.cos(ang), np.sin(ang)
+        ax.plot([r_ring * c, r_dot * c], [r_ring * s, r_dot * s],
+                color="black", lw=1.1, zorder=3)
+        ax.plot([r_dot * c], [r_dot * s], marker="o", color="black",
+                markersize=4, zorder=4)
+        ha = "left" if c >= 0 else "right"
+        x_text = r_dot * c + (0.05 if c >= 0 else -0.05)
+        ax.text(x_text, r_dot * s, lbl, ha=ha, va="center",
+                fontsize=12, fontweight="bold", color="#1A1A1A", zorder=4)
+
+    # Datengrenzen mit Rand für die Labels (Donut bleibt durch 'equal' rund)
+    ax.set_xlim(-1.78, 1.78)
+    ax.set_ylim(-1.45, 1.45)
+
+    # ── Legende unten links ──
+    row_h = 0.05
+    sq_h = 0.032
+    sq_w = sq_h * fig_h / fig_w  # in Figur-Koordinaten quadratisch halten
+    leg_bottom = 0.025
+    for i, (lbl, col) in enumerate(zip(item_labels, colors)):
+        y = leg_bottom + (n - 1 - i) * row_h  # erstes Item oben
+        fig.patches.append(Rectangle(
+            (0.03, y), sq_w, sq_h, transform=fig.transFigure,
+            facecolor=col, edgecolor="none", zorder=2,
+        ))
+        fig.text(0.03 + sq_w + 0.012, y + sq_h / 2, lbl, ha="left", va="center",
+                 fontsize=10.5, fontweight="bold", color="black", zorder=2)
+
+    # ── Quelle unten rechts ──
+    fig.text(0.975, 0.04, source_text, ha="right", va="center",
+             fontsize=8, color="#555555", zorder=2)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi, transparent=True,
-                bbox_inches="tight", pad_inches=0.02)
+    # WICHTIG: KEIN bbox_inches="tight" — sonst würde das PNG beschnitten und
+    # das Seitenverhältnis verändert. Wir wollen exakt fig_w:fig_h = box_aspect.
+    fig.savefig(buf, format="png", dpi=dpi, transparent=True)
     plt.close(fig)
     return buf.getvalue()
-
-
-def _png_pixel_size(png_bytes: bytes) -> tuple[int, int]:
-    """Liest die Pixel-Dimensionen (Breite, Höhe) aus dem IHDR-Chunk einer PNG.
-
-    Vermeidet eine zusätzliche PIL-Abhängigkeit an dieser Stelle: Die
-    PNG-Signatur ist 8 Byte lang, danach folgt der IHDR-Chunk
-    (4 Byte Länge + 'IHDR' + 4 Byte Breite + 4 Byte Höhe, jeweils Big-Endian).
-    Breite liegt damit ab Byte 16, Höhe ab Byte 20.
-    """
-    if len(png_bytes) < 24:
-        return (1, 1)
-    width = int.from_bytes(png_bytes[16:20], "big")
-    height = int.from_bytes(png_bytes[20:24], "big")
-    if width <= 0 or height <= 0:
-        return (1, 1)
-    return (width, height)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -148,80 +162,6 @@ def _remove_shape(slide, shape) -> None:
     """Entfernt eine Shape vom Slide."""
     sp = shape._element
     sp.getparent().remove(sp)
-
-
-def _add_banner(slide, left, top, width, height, *, text, bg_color=FFPB_DARKBLUE):
-    """Banner-Rectangle mit dunkelblauer Füllung + weißer Schrift (wie nativ)."""
-    rect = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, width, height)
-    rect.fill.solid()
-    rect.fill.fore_color.rgb = RGBColor.from_string(bg_color.lstrip("#"))
-    rect.line.fill.background()  # Kein Rahmen
-    tf = rect.text_frame
-    tf.margin_left = Pt(8); tf.margin_right = Pt(8)
-    tf.margin_top = Pt(2); tf.margin_bottom = Pt(2)
-    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]
-    p.alignment = PP_ALIGN.LEFT
-    p.text = text
-    for run in p.runs:
-        run.font.size = Pt(11)
-        run.font.bold = True
-        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-        run.font.name = "Calibri"
-
-
-def _add_legend(slide, left, top, width, items, *, font_size_pt=10, line_h_pt=22):
-    """Vertikale Legende: Farb-Rectangle + Text pro Item.
-
-    Args:
-        items: Liste von (label, hex_color) Tupeln.
-    """
-    rect_size = Pt(10)
-    text_indent = Pt(16)
-    line_h_emu = Pt(line_h_pt)
-    for i, (label, color) in enumerate(items):
-        item_top = top + i * line_h_emu
-        # Farb-Indikator (Rectangle)
-        rect = slide.shapes.add_shape(
-            MSO_SHAPE.RECTANGLE,
-            left,
-            item_top + (line_h_emu - rect_size) // 2,  # vertikal zentriert
-            rect_size, rect_size,
-        )
-        rect.fill.solid()
-        rect.fill.fore_color.rgb = RGBColor.from_string(color.lstrip("#"))
-        rect.line.fill.background()
-        # Text-Box rechts neben Indikator
-        tb = slide.shapes.add_textbox(
-            left + text_indent, item_top, width - text_indent, line_h_emu
-        )
-        tf = tb.text_frame
-        tf.margin_left = 0; tf.margin_right = 0
-        tf.margin_top = 0; tf.margin_bottom = 0
-        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-        tf.word_wrap = False
-        p = tf.paragraphs[0]
-        p.text = label
-        for run in p.runs:
-            run.font.size = Pt(font_size_pt)
-            run.font.bold = True
-            run.font.name = "Calibri"
-            run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
-
-
-def _add_source_text(slide, left, top, width, height, *, text):
-    """Kleine Quelle-Annotation rechts unten."""
-    tb = slide.shapes.add_textbox(left, top, width, height)
-    tf = tb.text_frame
-    tf.margin_left = Pt(2); tf.margin_right = Pt(2)
-    tf.margin_top = 0; tf.margin_bottom = 0
-    p = tf.paragraphs[0]
-    p.alignment = PP_ALIGN.RIGHT
-    p.text = text
-    for run in p.runs:
-        run.font.size = Pt(8)
-        run.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
-        run.font.name = "Calibri"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -238,31 +178,29 @@ def replace_donut_chart(
     banner_text: str,
     source_text: str,
 ) -> None:
-    """Ersetzt einen nativen Donut-Chart komplett durch PNG + Banner + Legende + Source.
+    """Ersetzt einen nativen Donut-Chart durch EIN PNG (Voll-Komposition).
 
-    Diese Funktion ist der Drop-In-Ersatz für `replace_chart_data()` bei
-    Ring-Charts. Sie:
-    1. Findet die Chart-Shape, merkt sich Position + Größe
-    2. Entfernt die Chart-Shape (entfernt damit auch native Banner/Source aus drawing*.xml)
-    3. Erzeugt das Layout-Equivalent neu:
-       - Banner oben (z.B. "REGIONEN", "Branchen")
-       - PNG-Ring rechts (mit Labels außen + Leader-Lines), SEITENVERHÄLTNIS-ERHALTEND
-       - Legende links (vertikal, Rectangle + Text pro Item)
-       - Source-Annotation unten rechts
+    Drop-In-Ersatz für die Ring-Charts. Ablauf:
+    1. Chart-Shape finden, Position + Größe merken.
+    2. Chart-Shape entfernen (entfernt damit native Banner/Source mit).
+    3. Komplette Komposition (Banner + Donut + Legende + Quelle) als ein PNG
+       rendern — im Seitenverhältnis der Box.
+    4. PNG passgenau in die Original-Box einfügen (verzerrungsfrei, da
+       PNG-Seitenverhältnis == Box-Seitenverhältnis).
 
     Args:
-        slide: Die Slide
+        slide: Die Slide.
         chart_shape_name: Name der zu ersetzenden Chart-Shape
-            (z.B. "C_Kennzahlen", "C_Kennzahlen1", "C_Kennzahlen2")
-        values: Numerische Werte pro Segment
-        item_labels: Labels für die Legende (z.B. "Global", "Index")
-        percent_labels: Vorformatierte Prozent-Strings (z.B. "57,03%")
+            (z.B. "C_Kennzahlen", "C_Kennzahlen1", "C_Kennzahlen2").
+        values: Numerische Werte pro Segment.
+        item_labels: Legenden-Labels (z.B. "Global", "Index"), parallel zu values.
+        percent_labels: Vorformatierte Prozent-Strings (z.B. "57,03%").
         colors: Hex-Farben pro Segment. Default: FFPB_COLORS.
-        banner_text: Text im Banner oben
-        source_text: Quellen-Annotation unten rechts
+        banner_text: Text im Banner oben.
+        source_text: Quellen-Annotation unten rechts.
 
     Raises:
-        ValueError: Wenn Shape nicht gefunden
+        ValueError: Wenn Shape nicht gefunden.
     """
     # Chart-Shape finden
     chart_shape = None
@@ -277,68 +215,24 @@ def replace_donut_chart(
     cx, cy = chart_shape.left, chart_shape.top
     cw, ch = chart_shape.width, chart_shape.height
 
-    # Layout-Berechnung (alles relativ zur Chart-Shape):
-    BANNER_H = int(ch * 0.06)            # 6%: dünner Banner oben
-    SOURCE_H = int(ch * 0.05)            # 5%: Source-Text unten
-    INNER_TOP = cy + BANNER_H + Pt(4)
-    INNER_BOTTOM = cy + ch - SOURCE_H
-    INNER_H = INNER_BOTTOM - INNER_TOP
+    if colors is None:
+        colors = FFPB_COLORS[: len(values)]
 
-    # Innerhalb des Inner-Bereichs: links Legend (35%), rechts Ring (65%)
-    LEGEND_W = int(cw * 0.35)
-    RING_W = cw - LEGEND_W
+    box_aspect = cw / ch if ch else 1.0
 
-    # 0. Original entfernen
+    # Original entfernen
     _remove_shape(slide, chart_shape)
 
-    # 1. Banner oben
-    _add_banner(slide, cx, cy, cw, BANNER_H, text=banner_text)
-
-    # 2. PNG-Ring (rechts) — SEITENVERHÄLTNIS-ERHALTEND einpassen + zentrieren
-    #
-    # WICHTIG: Früher wurde die PNG mit fester Breite UND Höhe (RING_W × INNER_H)
-    # eingefügt. Da die Ring-Box hochkant ist (≈0,72) und die PNG quer (≈1,15),
-    # wurde der kreisrunde Donut vertikal gestreckt → sichtbares Oval.
-    # Jetzt: native Pixel-Geometrie auslesen, in die verfügbare Box einpassen
-    # (das kleinere Limit gewinnt) und im Box-Bereich zentrieren.
-    png_bytes = render_donut_png(
-        values=values, labels=percent_labels, colors=colors,
-    )
-    ring_left = cx + LEGEND_W
-
-    img_w_px, img_h_px = _png_pixel_size(png_bytes)
-    img_aspect = img_w_px / img_h_px          # Breite / Höhe (nativ)
-    box_aspect = RING_W / INNER_H
-
-    if img_aspect >= box_aspect:
-        # Bild relativ breiter als die Box → Breite ist limitierend
-        draw_w = RING_W
-        draw_h = int(round(RING_W / img_aspect))
-    else:
-        # Bild relativ höher als die Box → Höhe ist limitierend
-        draw_h = INNER_H
-        draw_w = int(round(INNER_H * img_aspect))
-
-    # Im verfügbaren Ring-Bereich horizontal + vertikal zentrieren
-    pic_left = ring_left + (RING_W - draw_w) // 2
-    pic_top = INNER_TOP + (INNER_H - draw_h) // 2
-
-    slide.shapes.add_picture(
-        io.BytesIO(png_bytes),
-        pic_left, pic_top, draw_w, draw_h,
+    # Voll-Komposition rendern (PNG-Seitenverhältnis == Box-Seitenverhältnis)
+    png_bytes = _render_donut_png(
+        values=values,
+        item_labels=list(item_labels),
+        percent_labels=list(percent_labels),
+        colors=list(colors),
+        banner_text=banner_text,
+        source_text=source_text,
+        box_aspect=box_aspect,
     )
 
-    # 3. Legend links, vertikal mittig
-    if colors is None:
-        colors = FFPB_COLORS[: len(item_labels)]
-    items = list(zip(item_labels, colors))
-    n = len(items)
-    line_h_emu = Pt(22)
-    legend_total_h = n * line_h_emu
-    legend_top = INNER_TOP + (INNER_H - legend_total_h) // 2
-    _add_legend(slide, cx + Pt(12), legend_top, LEGEND_W - Pt(24), items)
-
-    # 4. Source-Annotation unten rechts
-    _add_source_text(
-        slide, cx, cy + ch - SOURCE_H, cw, SOURCE_H, text=source_text,
-    )
+    # PNG passgenau in die Original-Box einfügen (füllt sie komplett, ohne Verzerrung)
+    slide.shapes.add_picture(io.BytesIO(png_bytes), cx, cy, cw, ch)
