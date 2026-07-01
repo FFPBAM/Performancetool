@@ -1023,6 +1023,12 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
                 ("Benchmark", pa.get("benchmark", [])),
             ],
             data_label_format=PCT_FORMAT_CODE,
+            # NEU (Juni 2026, Bug 4): Ohne diesen Parameter zeigte die
+            # Y-Achse Rohwerte (0.05, 0.1, ...) statt Prozent (5%, 10%, ...),
+            # obwohl die Daten-Labels über den Balken korrekt formatiert
+            # waren. Bewiesen an echter Chart-XML: <c:valAx><c:numFmt
+            # formatCode="General" sourceLinked="1"/> statt "0%"/sourceLinked=0.
+            value_axis_format="0%",
         )
 
     # ── WERTENTWICKLUNG Chart (Linien) ──
