@@ -48,7 +48,7 @@ import pandas as pd
 from typing import Optional
 from copy import deepcopy
 
-from pptx.util import Pt
+from pptx.util import Pt, Emu
 from pptx.oxml.ns import qn
 
 # Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen)
@@ -540,6 +540,42 @@ def _set_all_font_sizes(table, font_pt: float):
                     run.font.size = Pt(font_pt)
 
 
+# Kalibriert an echter Vorlage (deck_pro.pptx, T_Kennzahlen-Spaltenbreiten)
+_ORIGINAL_KUPON_W_EMU = 571500
+_ORIGINAL_FAELLIGKEIT_W_EMU = 571500
+_MIN_BOND_COL_W_EMU = 91440  # ~0.1" — schmale, aber sichere Nicht-Null-Breite
+
+
+def maybe_narrow_bond_columns(table_shape, has_renten: bool) -> None:
+    """Macht die KUPON- und FÄLLIGKEIT-Spalten schmal, wenn kein RENTEN-Anteil
+    im Portfolio vorhanden ist, und gibt den freiwerdenden Platz an die
+    WERTPAPIER-Spalte weiter (Juni 2026, auf Wunsch: bei reinen Aktien-/
+    Nicht-Renten-Strategien bleiben diese Spalten sonst komplett leer und
+    wirken wie unnötige Lücken im Tabellenkopf).
+
+    Rührt NUR Spaltenbreiten an (horizontal) — unabhängig von der
+    Zeilen-Kapazitätslogik (fit_shape_to_table, vertikal). Reihenfolge der
+    Aufrufe spielt daher keine Rolle.
+
+    Args:
+        table_shape: Die Tabellen-Shape (mit .table)
+        has_renten: True wenn das Portfolio RENTEN-Positionen enthält.
+            Bei True: Original-Spaltenbreiten bleiben unverändert.
+    """
+    if has_renten:
+        return  # Original-Layout beibehalten — Kupon/Fälligkeit werden gebraucht
+
+    table = table_shape.table
+    freed = (_ORIGINAL_KUPON_W_EMU - _MIN_BOND_COL_W_EMU) + \
+            (_ORIGINAL_FAELLIGKEIT_W_EMU - _MIN_BOND_COL_W_EMU)
+
+    table.columns[COL_KUPON].width = Emu(_MIN_BOND_COL_W_EMU)
+    table.columns[COL_FAELLIGKEIT].width = Emu(_MIN_BOND_COL_W_EMU)
+    table.columns[COL_WERTPAPIER].width = Emu(
+        table.columns[COL_WERTPAPIER].width + freed
+    )
+
+
 
 
 
@@ -892,6 +928,11 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
     table_shape = find_shape_by_name(slide_7, SHAPE_TABLE)
     capacity_warning = None
     if table_shape:
+        # NEU (Juni 2026): Kupon/Fälligkeit-Spalten schmal machen, wenn keine
+        # RENTEN-Positionen vorhanden sind — sonst bleiben sie bei reinen
+        # Aktien-Strategien komplett leer und wirken wie unnötige Lücken.
+        maybe_narrow_bond_columns(table_shape, has_renten=(GROUP_RENTEN in groups))
+
         fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
                                   shape_height=table_shape.height)
         # Leere Zeilen entfernen (nur relevant falls Kapazität > benötigt)
