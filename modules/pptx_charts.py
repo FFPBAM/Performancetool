@@ -7,8 +7,8 @@ echten Daten zu befüllen.
 
 Was hier hingehört:
 - XML-basierte Chart-Datenersetzung (robust gegen externe Excel-Referenzen)
-- Der python-pptx `chart.replace_data()` Bug-Workaround (3 Bugs!)
-- Format-Code-Wiederherstellung für Daten-Labels
+- Der python-pptx `chart.replace_data()` Bug-Workaround (4 Bugs!)
+- Format-Code-Wiederherstellung für Daten-Labels UND Achsen
 
 Was hier NICHT hingehört:
 - Konkrete Charts der Performance-/Anlagevorschlag-/Portfolio-Folie (→ pptx_slides.py)
@@ -21,8 +21,8 @@ Sie kann unverändert in lokalen Python-Skripten genutzt werden.
 WICHTIG: python-pptx `chart.replace_data()` ist VERSEUCHT
 ═══════════════════════════════════════════════════════════════════════════
 Bei Charts mit embedded Excel-Workbook (Standard bei Vorlagen-Charts aus
-PowerPoint) treten drei Bugs auf, die das PPTX beim Öffnen "reparieren"
-lassen (oder Format-Codes ruinieren):
+PowerPoint) treten Bugs auf, die das PPTX beim Öffnen "reparieren" lassen
+(oder Format-Codes ruinieren):
 
 Bug 1: Embedded Excel wird NICHT aktualisiert → Diskrepanz → Reparieren-Dialog.
        Fix: <c:externalData> Element entfernen.
@@ -33,7 +33,18 @@ Bug 2: `style*.xml` der Chart wird mit ZIP-Header überschrieben (Binärmüll
 
 Bug 3: Format-Codes der Daten-Labels werden auf "General" zurückgesetzt
        → 0.05 zeigt sich als "0.05" statt "5,00%".
-       Fix: Format-Code via <c:numFmt> wiederherstellen.
+       Fix: Format-Code via <c:numFmt> in <c:dLbls> wiederherstellen.
+
+Bug 4 (Juni 2026, neu entdeckt): Format-Code der ACHSE (nicht nur der
+       Daten-Labels!) wird ebenfalls auf "General"/sourceLinked=1
+       zurückgesetzt — UNABHÄNGIG von Bug 3. Effekt: Daten-Labels zeigen
+       korrekt "27,63%", die Achsen-Beschriftung daneben aber Rohwerte wie
+       "0.25" statt "25%". Bewiesen an echter kaputter Chart-XML (Slide 8,
+       Performance-p.a.-Säulen-Chart): <c:valAx><c:numFmt
+       formatCode="General" sourceLinked="1"/>, während der danebenliegende
+       (korrekt aussehende) Linien-Chart formatCode="0%" sourceLinked="0"
+       hatte. Fix: Format-Code via <c:numFmt> in <c:valAx>/<c:catAx>
+       wiederherstellen (restore_axis_number_format).
 
 Lösung in EINER Funktion: `replace_chart_data_safe()`. Diese sollte
 *immer* statt `chart.replace_data()` direkt verwendet werden.
@@ -153,8 +164,10 @@ def update_cache_elements(parent, new_values, is_numeric: bool):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def replace_chart_data_safe(chart_shape, categories: list, series_data: list,
-                            data_label_format: Optional[str] = None):
-    """Ersetzt Chart-Daten — Workaround für drei python-pptx Bugs.
+                            data_label_format: Optional[str] = None,
+                            value_axis_format: Optional[str] = None,
+                            category_axis_format: Optional[str] = None):
+    """Ersetzt Chart-Daten — Workaround für die python-pptx Bugs (siehe Modul-Docstring).
 
     Bug 1: `chart.replace_data()` updated das embedded Excel-Workbook NICHT
         → PowerPoint-Reparieren-Dialog.
@@ -166,9 +179,14 @@ def replace_chart_data_safe(chart_shape, categories: list, series_data: list,
         Fix: Style/Color-Parts der Chart vor replace_data sichern, danach
         wiederherstellen.
 
-    Bug 3: `chart.replace_data()` setzt Format-Codes auf "General" zurück
-        → Daten-Labels zeigen 0.05 statt 5,00%.
-        Fix: Format-Code via <c:numFmt> wiederherstellen.
+    Bug 3: `chart.replace_data()` setzt Format-Codes der DATEN-LABELS auf
+        "General" zurück → Daten-Labels zeigen 0.05 statt 5,00%.
+        Fix: Format-Code via <c:numFmt> in <c:dLbls> wiederherstellen.
+
+    Bug 4 (Juni 2026): `chart.replace_data()` kann UNABHÄNGIG davon auch das
+        Format-Code der ACHSE zurücksetzen → Achsen-Beschriftung zeigt 0.25
+        statt 25%, obwohl die Daten-Labels korrekt sind.
+        Fix: Format-Code via <c:numFmt> in <c:valAx>/<c:catAx> wiederherstellen.
 
     Args:
         chart_shape: Chart-Shape mit has_chart=True
@@ -176,6 +194,11 @@ def replace_chart_data_safe(chart_shape, categories: list, series_data: list,
         series_data: Liste von (series_name, values) Tupeln
         data_label_format: Format-Code für Daten-Labels (z.B. "0.00%").
             None = Format-Codes nicht ändern.
+        value_axis_format: Format-Code für die Werteachse (z.B. "0%").
+            None = Achsen-Format nicht ändern (Default — nur explizit setzen
+            wenn das Chart bekanntermaßen betroffen ist, siehe Bug 4).
+        category_axis_format: Format-Code für die Kategorie-Achse.
+            None = nicht ändern (seltener Bedarf, z.B. bei Datums-Achsen).
     """
     chart = chart_shape.chart
     chart_part = chart.part
@@ -214,9 +237,15 @@ def replace_chart_data_safe(chart_shape, categories: list, series_data: list,
     if ext_data is not None:
         ext_data.getparent().remove(ext_data)
 
-    # ─── BUG 3 FIX: Format-Codes wiederherstellen ───
+    # ─── BUG 3 FIX: Format-Codes der Daten-Labels wiederherstellen ───
     if data_label_format:
         restore_data_label_format(chart_shape, data_label_format)
+
+    # ─── BUG 4 FIX: Format-Codes der Achsen wiederherstellen ───
+    if value_axis_format:
+        restore_axis_number_format(chart_shape, value_axis_format, axis="val")
+    if category_axis_format:
+        restore_axis_number_format(chart_shape, category_axis_format, axis="cat")
 
 
 def restore_data_label_format(chart_shape, format_code: str):
@@ -245,6 +274,41 @@ def restore_data_label_format(chart_shape, format_code: str):
             num_fmt = etree.SubElement(dlbls, f"{{{_CHART_NS_URI}}}numFmt")
             # numFmt muss am Anfang von dLbls stehen (vor anderen Properties)
             dlbls.insert(0, num_fmt)
+        num_fmt.set("formatCode", format_code)
+        num_fmt.set("sourceLinked", "0")
+
+
+def restore_axis_number_format(chart_shape, format_code: str, axis: str = "val"):
+    """Setzt den Format-Code einer Chart-Achse (NEU, Juni 2026 — Bug 4 Fix).
+
+    Hintergrund: `chart.replace_data()` kann NICHT NUR das Format der
+    Daten-Labels auf "General"/sourceLinked=1 zurücksetzen (dafür gibt es
+    bereits restore_data_label_format), sondern UNABHÄNGIG davon auch das
+    Format der Werteachse selbst — mit dem Effekt, dass die Daten-Labels
+    korrekt "27,63%" zeigen, die Achsen-Beschriftung daneben aber Rohwerte
+    wie "0.25" statt "25%". Betraf konkret den Performance-p.a.-Säulen-Chart
+    (Slide 8) — bewiesen an echter, kaputter Chart-XML:
+    <c:valAx><c:numFmt formatCode="General" sourceLinked="1"/>, während der
+    danebenliegende (korrekt aussehende) Linien-Chart
+    formatCode="0%" sourceLinked="0" hatte.
+
+    Args:
+        chart_shape: Das Chart-Shape
+        format_code: Format-Code für die Achse (z.B. "0%")
+        axis: "val" für Werteachse (c:valAx, Default), "cat" für
+            Kategorie-Achse (c:catAx)
+    """
+    chart_xml = chart_shape.chart._chartSpace
+    tag = "valAx" if axis == "val" else "catAx"
+    for ax_elem in chart_xml.findall(f".//c:{tag}", NS_CHART):
+        num_fmt = ax_elem.find("c:numFmt", NS_CHART)
+        if num_fmt is None:
+            num_fmt = etree.SubElement(ax_elem, f"{{{_CHART_NS_URI}}}numFmt")
+            # numFmt muss laut OOXML-Schema direkt nach c:axPos stehen
+            # (vor c:majorGridlines/c:title/... ), sonst PowerPoint-Reparieren-Dialog.
+            axpos = ax_elem.find("c:axPos", NS_CHART)
+            if axpos is not None:
+                axpos.addnext(num_fmt)
         num_fmt.set("formatCode", format_code)
         num_fmt.set("sourceLinked", "0")
 
