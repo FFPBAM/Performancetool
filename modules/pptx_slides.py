@@ -25,12 +25,31 @@ Juni 2026 — Rückbau auf native Ring-Charts:
     d.h. das Template-Styling (Banner, Legende, Quelle, Datenlabels) bleibt
     unverändert und es werden nur die Chart-Daten ausgetauscht.
     => png_charts.py wird von diesem Modul NICHT mehr importiert/benötigt.
+
+Juni 2026 — Kapazitäts-Fix Anlagevorschlag-Tabelle (Slide 7):
+    Vorher: Bei mehr als 34 Datenzeilen (Gruppen-Header + Positionen +
+    Liquidität) wurden überschüssige Zeilen in fill_table_with_positions
+    STILL abgeschnitten (`if i >= max_data_rows: break`) — Positionen
+    verschwanden kommentarlos aus dem Compliance-Dokument.
+    Jetzt: ensure_table_capacity() klont bei Bedarf zusätzliche <a:tr>-Zeilen
+    in die Tabellen-XML, fit_shape_to_table() staucht anschließend ALLE
+    Zeilen proportional in den verfügbaren Platz (mit Untergrenze
+    MIN_ROW_H_EMU; wird selbst die nicht mehr eingehalten, schrumpft
+    zusätzlich die Schrift bis MIN_FONT_PT). Kalibriert an einem echten
+    34-Zeilen-Export (Zeilenhöhe 0.1424", Schrift 6pt fix in der Vorlage).
+    Realer Extremfall (35 Titel, 39 Zeilen) braucht dabei KEINE
+    Schriftverkleinerung — nur minimale Zeilenstauchung (~92%).
+    Nur im pathologischen Fall (deutlich >40 Titel, jenseits der Grenze wo
+    selbst MIN_FONT_PT nicht mehr reicht) wird eine Warnung zurückgegeben,
+    NIE mehr still Daten verworfen.
 """
 
 import pandas as pd
 from typing import Optional
+from copy import deepcopy
 
 from pptx.util import Pt
+from pptx.oxml.ns import qn
 
 # Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen)
 try:
@@ -409,6 +428,27 @@ def distribute_positions_to_slides(groups: dict) -> list:
     ]
 
 
+# ─── Tabellen-Kapazität: Zeilen-Klonen + Stauchung (Juni 2026) ──────────────
+# Kalibriert an einem echten Vollkapazitäts-Export (32 Titel, 1 Gruppe,
+# genau 34 Datenzeilen = Kapazitätsgrenze der Original-Vorlage).
+MAX_TABLE_BOTTOM_INCH = 6.60
+SHAPE_PADDING_EMU = 50000  # ~0.05" Puffer für Rahmen
+
+ORIGINAL_DATA_ROW_H_EMU = int(0.1424 * 914400)   # reale Vorlagen-Zeilenhöhe
+ORIGINAL_FONT_PT = 6.0                            # reale Vorlagen-Schriftgröße
+
+MIN_ROW_H_INCH = 0.115
+"""Untergrenze der Zeilenhöhe, bevor zusätzlich die Schrift schrumpft.
+6pt-Text braucht ca. 0.10" Zeilenhöhe (Faktor ~1.2 Line-Height);
+0.115" lässt ~0.015" Puffer, bei Sichtprüfung noch komfortabel lesbar."""
+MIN_ROW_H_EMU = int(MIN_ROW_H_INCH * 914400)
+
+MIN_FONT_PT = 5.5
+"""Absolute Schrift-Untergrenze. Wird selbst hiermit nicht genug Platz frei,
+gibt fit_shape_to_table eine Warnung zurück statt weiter zu schrumpfen oder
+(schlimmer) Positionen abzuschneiden."""
+
+
 def remove_empty_table_rows(table):
     """Entfernt leere Daten-Zeilen aus der Anlagevorschlag-Tabelle.
 
@@ -441,7 +481,6 @@ def remove_empty_table_rows(table):
         return
 
     # Aus dem XML entfernen — rückwärts, damit Indizes vorderer Zeilen stabil bleiben
-    from pptx.oxml.ns import qn
     tbl_elem = table._tbl
     tr_elements = tbl_elem.findall(qn('a:tr'))
 
@@ -450,54 +489,136 @@ def remove_empty_table_rows(table):
         tbl_elem.remove(tr_to_remove)
 
 
-def fit_shape_to_table(table_shape, max_row_scale: float = 3.0):
-    """Passt die Höhe der Tabellen-Shape an die Zeilenanzahl an.
+def _clone_last_data_row(table):
+    """Klont die letzte Datenzeile (direkt vor der Summenzeile) und fügt die
+    Kopie an derselben Stelle ein. Struktur/Zellformatierung bleiben erhalten
+    (Inhalt wird danach von fill_table_with_positions überschrieben — dabei
+    IMMER mit explizitem is_bold, damit geklonte Zeilen keine geerbte
+    Fett-Formatierung vom Quell-Row behalten).
 
-    Bei vielen Zeilen (Tabelle füllt den verfügbaren Platz von Natur aus):
-    Shape-Höhe exakt auf Summe der Zeilenhöhen (+ kleiner Puffer).
+    Returns:
+        Das neu eingefügte <a:tr>-Element.
+    """
+    tbl_elem = table._tbl
+    tr_elements = tbl_elem.findall(qn('a:tr'))
+    template_row = tr_elements[-2]  # letzte Datenzeile (vor Summenzeile)
+    new_row = deepcopy(template_row)
+    summary_row = tr_elements[-1]
+    summary_row.addprevious(new_row)
+    return new_row
 
-    Bei wenigen Zeilen (Tabelle wäre sonst klein und oben angeklebt):
-    Zeilenhöhen proportional vergrößern, sodass die Tabelle den verfügbaren
-    Platz besser nutzt. Maximum: `max_row_scale` × Originalhöhe pro Zeile.
 
-    Hintergrund: Sonst stretcht LibreOffice/PowerPoint die Zeilen automatisch
-    wenn Shape-Höhe größer als Zeilensumme ist — wir wollen aber kontrollieren
-    wie das passiert, nicht den Renderer das tun lassen.
+def ensure_table_capacity(table, n_needed_data_rows: int) -> int:
+    """Stellt sicher, dass die Tabelle genug Datenzeilen für n_needed_data_rows
+    hat. Klont bei Bedarf zusätzliche Zeilen (Struktur/Format der letzten
+    Datenzeile) direkt vor die Summenzeile — ERSETZT das frühere stille
+    Abschneiden überzähliger Positionen.
+
+    Args:
+        table: pptx.table.Table (Header + Datenzeilen + Summenzeile)
+        n_needed_data_rows: Anzahl der benötigten Datenzeilen (ohne Header/Summe)
+
+    Returns:
+        Anzahl der neu hinzugefügten Zeilen (0 wenn Kapazität schon reichte).
+    """
+    n_rows_initial = len(table.rows)
+    current_capacity = n_rows_initial - 2  # minus Header minus Summe
+    n_missing = n_needed_data_rows - current_capacity
+    if n_missing <= 0:
+        return 0
+    for _ in range(n_missing):
+        _clone_last_data_row(table)
+    return n_missing
+
+
+def _set_all_font_sizes(table, font_pt: float):
+    """Setzt die Schriftgröße aller Runs in allen Zellen der Tabelle."""
+    for row in table.rows:
+        for cell in row.cells:
+            for para in cell.text_frame.paragraphs:
+                for run in para.runs:
+                    run.font.size = Pt(font_pt)
+
+
+
+
+
+def fit_shape_to_table(table_shape, max_row_scale: float = 3.0) -> Optional[str]:
+    """Passt die Höhe der Tabellen-Shape UND die Zeilenhöhen an die tatsächlich
+    genutzte Zeilenanzahl an. Symmetrisch:
+
+    - WENIGE Zeilen (< 70% Auslastung): Zeilenhöhen proportional hochskalieren,
+      max. `max_row_scale`× Original (wie bisher — unverändertes Verhalten).
+    - VIELE Zeilen (Summe > verfügbarer Platz): NEU — Zeilenhöhen proportional
+      runterskalieren, bis MIN_ROW_H_EMU. Reicht das nicht, wird zusätzlich
+      die Schrift bis MIN_FONT_PT verkleinert. Reicht selbst das nicht
+      (pathologischer Fall, weit jenseits normaler Portfoliogrößen), wird
+      NICHT mehr still abgeschnitten — stattdessen ein Warnhinweis
+      zurückgegeben, den der Aufrufer (z.B. Streamlit-UI) anzeigen kann.
 
     Args:
         table_shape: Die Tabellen-Shape (mit .table-Property)
-        max_row_scale: Maximaler Skalierungsfaktor pro Zeile (Default 3.0).
-            Bei 0.142" Original = max 0.426" je Zeile. Verhindert übergroße
-            Zeilen bei sehr wenigen Positionen.
+        max_row_scale: Maximaler Hochskalierungsfaktor pro Zeile (Default 3.0)
+
+    Returns:
+        Warnhinweis (str) falls selbst bei Minimalgröße nicht alles passt,
+        sonst None.
     """
     table = table_shape.table
 
-    # Verfügbarer Raum auf dem Slide (bis Footer bei 6.60")
-    MAX_TABLE_BOTTOM_INCH = 6.60
-    SHAPE_PADDING_EMU = 50000  # ~0.05" Puffer für Rahmen
+    MAX_TABLE_BOTTOM_INCH_LOCAL = MAX_TABLE_BOTTOM_INCH
     shape_top_inch = table_shape.top / 914400
-    max_available_h_emu = int((MAX_TABLE_BOTTOM_INCH - shape_top_inch) * 914400)
+    max_available_h_emu = int((MAX_TABLE_BOTTOM_INCH_LOCAL - shape_top_inch) * 914400)
 
-    # Aktuelle Summe der Zeilenhöhen
     total_row_h = sum(row.height for row in table.rows)
+    warning = None
 
-    # Wenn Tabelle deutlich kleiner als verfügbar → Zeilen proportional vergrößern
-    # Schwellwert: nur skalieren wenn aktuell <70% Auslastung der verfügbaren Höhe
     if total_row_h < max_available_h_emu * 0.7 and total_row_h > 0:
-        # Ziel-Höhe: max verfügbar (minus Puffer), aber max max_row_scale × aktuell
+        # ── Wenige Zeilen: hochskalieren (unverändertes Verhalten) ──
         target_h = min(
             max_available_h_emu - SHAPE_PADDING_EMU,
             int(total_row_h * max_row_scale)
         )
         scale = target_h / total_row_h
-        # Jede Zeilenhöhe proportional skalieren
         for row in table.rows:
             row.height = int(row.height * scale)
-        # Neue Summe berechnen
         total_row_h = sum(row.height for row in table.rows)
+
+    elif total_row_h > max_available_h_emu - SHAPE_PADDING_EMU:
+        # ── NEU: viele Zeilen -> proportional stauchen, mit Untergrenze ──
+        target_h = max_available_h_emu - SHAPE_PADDING_EMU
+        scale = target_h / total_row_h
+        implied_data_row_h = ORIGINAL_DATA_ROW_H_EMU * scale
+
+        if implied_data_row_h < MIN_ROW_H_EMU:
+            # An Zeilenhöhen-Untergrenze klemmen statt weiter zu stauchen
+            floor_scale = MIN_ROW_H_EMU / ORIGINAL_DATA_ROW_H_EMU
+            for row in table.rows:
+                row.height = int(row.height * floor_scale)
+            total_row_h = sum(row.height for row in table.rows)
+
+            if total_row_h > max_available_h_emu - SHAPE_PADDING_EMU:
+                # Selbst an der Zeilenhöhen-Untergrenze reicht der Platz nicht:
+                # zusätzlich Schrift verkleinern (bis MIN_FONT_PT).
+                overflow_ratio = total_row_h / (max_available_h_emu - SHAPE_PADDING_EMU)
+                font_pt = max(MIN_FONT_PT, ORIGINAL_FONT_PT / overflow_ratio)
+                _set_all_font_sizes(table, font_pt)
+                if font_pt <= MIN_FONT_PT and overflow_ratio > 1.02:
+                    n_data_rows = len(table.rows) - 2
+                    warning = (
+                        f"Anlagevorschlag-Tabelle hat {n_data_rows} Zeilen — selbst "
+                        f"bei minimaler Zeilenhöhe/Schrift ({MIN_FONT_PT}pt) reicht "
+                        f"der Platz nicht ganz. Geringer optischer Überlauf über den "
+                        f"Footer möglich. Bitte Folie 7 manuell prüfen."
+                    )
+        else:
+            for row in table.rows:
+                row.height = int(row.height * scale)
+            total_row_h = sum(row.height for row in table.rows)
 
     # Shape-Höhe auf die (ggf. skalierte) Summe der Zeilenhöhen setzen
     table_shape.height = total_row_h + SHAPE_PADDING_EMU
+    return warning
 
 
 def adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary: bool):
@@ -637,6 +758,12 @@ def fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0
     rows = slide_data["rows"]
     is_last = slide_data["is_last_slide"]
 
+    # NEU (Juni 2026): Tabelle bei Bedarf erweitern statt still abzuschneiden.
+    # Vorher wurde hier über max_data_rows = n_rows_initial - 2 hart begrenzt
+    # und überzählige Positionen mit `if i >= max_data_rows: break` verworfen.
+    ensure_table_capacity(table, len(rows))
+    n_rows_initial = len(table.rows)  # ggf. jetzt größer
+
     # Summen-Zeile ist immer die letzte Zeile in der Vorlage
     summary_row_idx = n_rows_initial - 1
     max_data_rows = n_rows_initial - 2
@@ -700,12 +827,14 @@ def fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0
 
 def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
                                  df: pd.DataFrame, strategy_name: str,
-                                 eval_date=None):
+                                 eval_date=None) -> Optional[str]:
     """Befüllt Slide 7 (Anlagevorschlag/Strategieentwurf) mit Portfolio-Daten.
 
     Seit Juni 2026 (Performance-Folie als Slide 8): Es gibt nur noch EINE
-    Anlagevorschlag-Slide. Alle Positionen kommen auf Slide 7, dynamisch
-    geschrumpft durch remove_empty_table_rows + fit_shape_to_table.
+    Anlagevorschlag-Slide. Alle Positionen kommen auf Slide 7. Die Tabelle
+    wird bei Bedarf um zusätzliche Zeilen erweitert (ensure_table_capacity)
+    und anschließend proportional in den verfügbaren Platz eingepasst
+    (fit_shape_to_table) — es werden NIE mehr Positionen still abgeschnitten.
 
     Args:
         prs: Presentation
@@ -716,6 +845,11 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
         eval_date: Auswertungsdatum (für Source-Annotation im Ring-Chart).
             Optional — das Quelle-Datum wird zentral über
             pptx_export._update_quelle_datum gesetzt (steht statisch im Template).
+
+    Returns:
+        Warnhinweis (str) falls die Tabelle selbst bei Minimalgröße nicht
+        vollständig passt (sehr seltener Extremfall, siehe fit_shape_to_table),
+        sonst None. Aufrufer (z.B. Streamlit-UI) sollte das dem Nutzer anzeigen.
     """
     # 1. Daten vorbereiten
     groups = group_portfolio_positions(df)
@@ -756,13 +890,18 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
 
     # Tabelle befüllen
     table_shape = find_shape_by_name(slide_7, SHAPE_TABLE)
+    capacity_warning = None
     if table_shape:
         fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
                                   shape_height=table_shape.height)
-        # Leere Zeilen entfernen
+        # Leere Zeilen entfernen (nur relevant falls Kapazität > benötigt)
         remove_empty_table_rows(table_shape.table)
-        # Shape-Höhe an verbleibende Zeilen anpassen
-        fit_shape_to_table(table_shape)
+        # Shape-Höhe an tatsächliche Zeilenanzahl anpassen (staucht/streckt je
+        # nach Bedarf; ensure_table_capacity in fill_table_with_positions hat
+        # vorher bereits ggf. zusätzliche Zeilen geklont)
+        capacity_warning = fit_shape_to_table(table_shape)
+
+    return capacity_warning
 
 
 def fill_kennzahlen_table(table, kz: dict):
