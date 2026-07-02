@@ -531,6 +531,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     if st.session_state.get("pf_export_key") != current_key:
         st.session_state.pop("pf_pdf_bytes", None)
         st.session_state.pop("pf_pptx_bytes", None)
+        st.session_state.pop("pf_pptx_build_errors", None)
         st.session_state["pf_export_key"] = current_key
 
     exp_col1, exp_col2 = st.columns(2)
@@ -564,12 +565,12 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         if "pf_pptx_bytes" not in st.session_state:
             # Button zum Generieren
             if st.button("📊 PowerPoint erstellen", key="pf_pptx_btn", use_container_width=True,
-                         help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Slides 7-9)."):
+                         help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Folien 7-10)."):
                 portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
                 if show_compare_pf and df_pf_2 is not None:
                     portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
 
-                # ── Performance-Inputs für Slide 8 zusammenbauen ──
+                # ── Performance-Inputs für die Folien 8+9 zusammenbauen ──
                 # Priorität 1: aus session_state (gefüllt vom Performance-Tab)
                 # Priorität 2 (Fallback): direkt aus CSV laden, falls User den
                 # Performance-Tab nie geöffnet hat oder dort kein passendes
@@ -581,6 +582,19 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                     mapping_pf = load_mapping()
                 except Exception:
                     mapping_pf = None
+
+                # NEU (Juli 2026): Benchmark-Texte für die ***-Fußnote der
+                # Wertentwicklungs-Folie (Folie 8). Primär aus session_state
+                # (vom Performance-Tab: st.session_state["perf_d2b"] = d2b),
+                # Fallback direkt aus dem Name-Mapping (Spalte D).
+                perf_d2b = st.session_state.get("perf_d2b", {})
+                if not perf_d2b:
+                    try:
+                        nm_cols = name_mapping.columns
+                        if len(nm_cols) >= 4:
+                            perf_d2b = dict(zip(name_mapping[nm_cols[0]], name_mapping[nm_cols[3]]))
+                    except Exception:
+                        perf_d2b = {}
 
                 # Fallback-Loader: wenn session_state leer ist, lade Performance-CSVs direkt
                 fallback_loaded = False
@@ -611,14 +625,35 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                                                           "Honorarsatz Standard"].values[0]) * mwst_faktor_pf
                         except Exception:
                             fee_dec = 0.0
-                    performance_inputs.append({"timeseries_df": ts_df, "fee_dec": fee_dec})
 
-                # Wenn Daten fehlen, zeige eine sichtbare Warnung im UI
+                    # NEU (Juli 2026): Zusatzdaten für die Wertentwicklungs-Folie
+                    # (Folie 8) — beide optional, fehlend → "–" bzw.
+                    # Vorlagen-Fußnote bleibt.
+                    # Duration: dur_info ist das Dict aus load_duration_data
+                    # ({"duration": float|None, "rendite": float|None}).
+                    duration_val = _dur.get("duration") if isinstance(_dur, dict) else None
+                    # Benchmark-Text: Mapping Spalte D; Platzhalter-Werte filtern
+                    bm_text = perf_d2b.get(pf_name)
+                    if bm_text is not None:
+                        bm_text = str(bm_text).strip()
+                        if bm_text.lower() in ("", "nan", "none", "haben keine benchmark"):
+                            bm_text = None
+
+                    performance_inputs.append({
+                        "timeseries_df": ts_df,
+                        "fee_dec": fee_dec,
+                        "duration": duration_val,
+                        "benchmark_text": bm_text,
+                    })
+
+                # Wenn Daten fehlen, Diagnose PERSISTENT machen (NEU Juli 2026):
+                # st.warning direkt vor st.rerun() wird vom Rerun weggewischt —
+                # deshalb in session_state sammeln und nach dem Rerun anzeigen.
+                pptx_diag = []
                 if missing_csv_names:
                     diag = ", ".join([f"'{pn}' → '{cn}'" for pn, cn in missing_csv_names])
-                    st.warning(
-                        f"⚠️ Performance-Daten für {diag} fehlen — "
-                        f"Folie 8 zeigt Platzhalter. "
+                    pptx_diag.append(
+                        f"Performance-Daten für {diag} fehlen — Folien 8+9 zeigen Platzhalter. "
                         f"Verfügbar in session_state: {len(perf_timeseries)} Portfolios, "
                         f"davon: {list(perf_timeseries.keys())[:5]}{'…' if len(perf_timeseries) > 5 else ''}. "
                         f"Fallback-Load aktiv: {fallback_loaded}."
@@ -626,16 +661,26 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
                 try:
                     with st.spinner("PowerPoint wird erstellt..."):
+                        from modules import pptx_export as _pptx_export_mod
                         from modules.pptx_export import generate_portfolioanalyse_pptx
                         st.session_state["pf_pptx_bytes"] = generate_portfolioanalyse_pptx(
                             portfolios, anlagevolumen, performance_inputs=performance_inputs
                         )
+                        # NEU (Juli 2026): Berechnungsfehler aus dem Export
+                        # (z.B. Kennzahlen-Berechnung der Folie 8 geworfen →
+                        # Folie zeigt Platzhalter) sichtbar machen statt still
+                        # zu verschlucken.
+                        pptx_diag.extend(_pptx_export_mod.LAST_BUILD_ERRORS)
+                    st.session_state["pf_pptx_build_errors"] = pptx_diag
                     st.rerun()
                 except FileNotFoundError as e:
                     st.error(f"❌ Vorlage nicht gefunden: {e}\n\nBitte `Vorlage_FFPB.pptx` im Ordner `Vorlage/` im Repo ablegen.")
                 except Exception as e:
                     st.error(f"❌ Fehler beim PowerPoint-Export: {e}")
         else:
+            # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
+            for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
+                st.warning(f"⚠️ {_diag_msg}")
             # Download-Button mit gecachten Bytes
             st.download_button(
                 "⬇️ PowerPoint herunterladen",
