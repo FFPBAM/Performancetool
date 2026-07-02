@@ -12,7 +12,12 @@ mit den Daten aus dem Streamlit-Tool.
 Wichtigste Mechanik:
 - Die Vorlage enthält benannte Shapes (C_Kennzahlen, T_Kennzahlen, C_Kennzahlen1, C_Kennzahlen2)
 - Wir finden diese Shapes per Name und tauschen Inhalte aus
-- Für Vergleichsportfolios werden Slides 7-10 dupliziert
+- Für Vergleichsportfolios werden die 4 dynamischen Slides dupliziert
+
+⚠️ WICHTIG (Juli 2026): Diese Version setzt die NEUE Vorlage mit 26 Slides
+voraus (Wertentwicklungs-Folie aus der alten cVV-Broschüre an Template-
+Position 11). Mit der alten 25-Slide-Vorlage crasht der Export bewusst
+früh mit einer klaren Fehlermeldung (siehe _EXPECTED_TEMPLATE_SLIDES).
 """
 
 import os
@@ -68,7 +73,8 @@ except ImportError:
         update_chart_values_inplace,
     )
 
-# Slide-Befüllungs-Logik (Domain: Anlagevorschlag, Performance, Portfoliozusammenstellung)
+# Slide-Befüllungs-Logik (Domain: Anlagevorschlag, Wertentwicklung, Performance,
+# Portfoliozusammenstellung)
 try:
     from modules.pptx_slides import (
         # Konstanten
@@ -80,7 +86,6 @@ try:
         COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL,
         COL_RATING, COL_SPACERS,
         SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS,
-        SMALL_SEGMENT_THRESHOLD, MAX_SEGMENTS_IN_CHART,
         # Public API: clean_strategy_name (kein Underscore-Prefix)
         clean_strategy_name,
         # Funktionen (werden über Wrapper unten weiterhin als _xxx exponiert)
@@ -90,6 +95,7 @@ try:
         consolidate_small_segments, build_ring_series,
         fill_table_with_positions, fill_anlagevorschlag_slides,
         fill_kennzahlen_table, fill_performance_slide,
+        fill_wertentwicklung_slide,
         fill_zusammenstellung_slide,
     )
 except ImportError:
@@ -102,7 +108,6 @@ except ImportError:
         COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL,
         COL_RATING, COL_SPACERS,
         SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS,
-        SMALL_SEGMENT_THRESHOLD, MAX_SEGMENTS_IN_CHART,
         clean_strategy_name,
         set_title_with_autoscale, safe_marktrisikowert, classify_gattung,
         group_portfolio_positions, distribute_positions_to_slides,
@@ -110,6 +115,7 @@ except ImportError:
         consolidate_small_segments, build_ring_series,
         fill_table_with_positions, fill_anlagevorschlag_slides,
         fill_kennzahlen_table, fill_performance_slide,
+        fill_wertentwicklung_slide,
         fill_zusammenstellung_slide,
     )
 
@@ -119,23 +125,30 @@ except ImportError:
 # ---------------------------------------------------------------------------
 TEMPLATE_PATH = os.path.join("Vorlage", "Vorlage_FFPB.pptx")
 
-# Slide-Positionen in der Vorlage (1-indexed)
-SLIDE_ANLAGEVORSCHLAG_1 = 7    # Aktien + Allokations-Ring
-SLIDE_ANLAGEVORSCHLAG_2 = 8    # Renten/Edelmetalle/Liquidität
-SLIDE_ZUSAMMENSTELLUNG_1 = 9   # Regionen + Branchen (2 Ringe)
-SLIDE_ZUSAMMENSTELLUNG_2 = 10  # Währungen (1 Ring)
+_EXPECTED_TEMPLATE_SLIDES = 26
+"""Erwartete Slide-Anzahl der Vorlage (seit Juli 2026: 26, mit der
+Wertentwicklungs-Folie an Template-Position 11). Schutz gegen den
+klassischen Deploy-Fehler 'Code neu, Vorlage alt' — bei Mismatch würden
+die hartcodierten Indizes unten die FALSCHEN Folien entfernen/befüllen."""
 
-# Konstanten kommen aus modules/pptx_slides.py (siehe Import-Block oben):
-# - STRATEGY_PREFIXES, STRATEGIEENTWURF_TITLE
-# - SHAPE_CHART_ALLOCATION, SHAPE_TABLE, SHAPE_CHART_LEFT, SHAPE_CHART_RIGHT, SHAPE_TITLE, SHAPE_TITLE_ALT
-# - GROUP_*, GROUP_ORDER
-# - COL_*, COL_SPACERS
-# - SMALL_SEGMENT_THRESHOLD, MAX_SEGMENTS_IN_CHART
-# - SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS
+# Slide-Positionen in der Vorlage (1-indexed, Stand Juli 2026 / 26 Slides):
+#   Position 7  = Anlagevorschlag (Aktien + Allokations-Ring)
+#   Position 8  = Anlagevorschlag-Teil-2       ← wird beim Export ENTFERNT
+#   Position 9  = Portfoliozusammenstellung (Regionen + Branchen)
+#   Position 10 = Performance/Wertentwicklung (mit Benchmark)
+#   Position 11 = Wertentwicklung/Kurzübersicht (NEU — alte cVV-Folie)
+#   Position 12 = Währungen                     ← wird beim Export ENTFERNT
+SLIDE_ANLAGEVORSCHLAG_1 = 7
+SLIDE_ANLAGEVORSCHLAG_2 = 8
+SLIDE_ZUSAMMENSTELLUNG_1 = 9
+SLIDE_PERFORMANCE = 10
+SLIDE_WERTENTWICKLUNG = 11
+SLIDE_WAEHRUNGEN = 12
 
 # Foliennummer-Shape-Namen (uneinheitlich in der Vorlage):
 # - Die meisten Slides nutzen "Foliennummer"
 # - Slides 7, 8, 10 nutzen "Foliennummernplatzhalter 1" (anderer Layout-Master)
+# - Die neue Wertentwicklungs-Folie (cVV-Import) nutzt "Foliennummer"
 # Slides ohne eines dieser Shapes (Cover, Sub-Cover, Impressum) behalten keine Seitenzahl.
 SHAPE_FOLIENNUMMER_NAMES = (
     "Foliennummer",
@@ -217,8 +230,23 @@ def _clear_table(table, keep_header_rows: int = 1):
 # Template laden
 # ---------------------------------------------------------------------------
 def _load_template() -> Presentation:
-    """Wrapper für pptx_helpers.load_template. Nutzt das modul-lokale TEMPLATE_PATH."""
-    return load_template(TEMPLATE_PATH)
+    """Wrapper für pptx_helpers.load_template. Nutzt das modul-lokale TEMPLATE_PATH.
+
+    NEU (Juli 2026): prüft die Slide-Anzahl gegen _EXPECTED_TEMPLATE_SLIDES —
+    ein Mismatch bedeutet fast immer 'Code und Vorlage nicht gemeinsam
+    deployed' (der klassische Deploy-Fehler, siehe Projektdoku Transferwissen
+    #11) und würde sonst später still die falschen Folien treffen.
+    """
+    prs = load_template(TEMPLATE_PATH)
+    n = len(prs.slides)
+    if n != _EXPECTED_TEMPLATE_SLIDES:
+        raise ValueError(
+            f"Vorlage hat {n} Slides, erwartet werden {_EXPECTED_TEMPLATE_SLIDES}. "
+            f"Vermutlich wurde die neue Vorlage (mit Wertentwicklungs-Folie an "
+            f"Position 11) nicht zusammen mit diesem Code deployed — bitte "
+            f"Vorlage/Vorlage_FFPB.pptx im Repo aktualisieren."
+        )
+    return prs
 
 
 # ---------------------------------------------------------------------------
@@ -234,28 +262,22 @@ def _fmt_date_de(value) -> str:
     return fmt_date_de(value)
 
 
-# ---------------------------------------------------------------------------
-# Gattungs-Klassifizierung
-# ---------------------------------------------------------------------------
-# Gruppen-Namen wie sie auf den Slides erscheinen sollen (GROSSBUCHSTABEN)
-GROUP_AKTIEN = "AKTIEN"
-GROUP_RENTEN = "RENTEN"
-GROUP_EDELMETALLE = "EDELMETALLE"
-GROUP_LIQUIDITAET = "LIQUIDITÄT"
-GROUP_SONSTIGE = "SONSTIGE"
+def _fmt_ratio(val) -> str:
+    """Wrapper für formats.fmt_ratio."""
+    return fmt_ratio(val)
 
-# Reihenfolge der Gruppen auf den Slides (nach Priorität der Vorlage)
-GROUP_ORDER = [GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET, GROUP_SONSTIGE]
+
+# ---------------------------------------------------------------------------
+# Weitere Wrapper (Backwards-Compat für Alt-Aufrufer)
+# ---------------------------------------------------------------------------
+def _set_title_with_autoscale(title_shape, text: str):
+    """Wrapper für pptx_slides.set_title_with_autoscale."""
+    return set_title_with_autoscale(title_shape, text)
 
 
 def _safe_float(value, default: float = 0.0) -> float:
     """Wrapper für pptx_helpers.safe_float."""
     return safe_float(value, default)
-
-
-def _set_title_with_autoscale(title_shape, text: str):
-    """Wrapper für pptx_slides.set_title_with_autoscale."""
-    return set_title_with_autoscale(title_shape, text)
 
 
 def _safe_marktrisikowert(value):
@@ -273,51 +295,16 @@ def _group_portfolio_positions(df: pd.DataFrame):
     return group_portfolio_positions(df)
 
 
-# ---------------------------------------------------------------------------
-# Positionen-Verteilung auf Slides
-# ---------------------------------------------------------------------------
-# Maximal verfügbare Zeilen pro Slide (ohne Header, ohne Summen-Zeile)
-# Slide 7: 36 Zeilen - 1 Header - 1 Summen-Zeile = 34. 1 davon ist Gruppen-Header = 33 Positionen max
-# Slide 8: 14 Zeilen - 1 Header - 1 Summen-Zeile = 12 Zeilen für Gruppen+Positionen
-SLIDE_7_DATA_ROWS = 34   # Zeilen 1-34, Zeile 35 = Summe
-SLIDE_8_DATA_ROWS = 12   # Zeilen 1-12, Zeile 13 = Summe
-
-
 def _distribute_positions_to_slides(groups: dict):
     """Wrapper für pptx_slides.distribute_positions_to_slides."""
     return distribute_positions_to_slides(groups)
-# ---------------------------------------------------------------------------
-# Tabellen-Befüllung
-# ---------------------------------------------------------------------------
-# Spalten-Mapping (welche Spalte enthält was)
-COL_WERTPAPIER = 0
-COL_KUPON = 2
-COL_FAELLIGKEIT = 4
-COL_WKN = 6
-COL_ANTEIL = 8
-COL_RATING = 10
-
-# Spalten die immer leer bleiben (Layout-Spacer)
-COL_SPACERS = [1, 3, 5, 7, 9]
 
 
 def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0, shape_height: int = 0):
     """Wrapper für pptx_slides.fill_table_with_positions."""
     return fill_table_with_positions(table, slide_data, total_weight, shape_height)
 
-    # ── Tabellen-Struktur der Vorlage UNVERÄNDERT lassen ──
-    # Früher wurden hier überzählige leere Zeilen entfernt (_optimize_table_layout),
-    # das hat aber die Shape-Höhe geschrumpft und LibreOffice zum Vergrößern
-    # der verbleibenden Zeilen gebracht → Überlauf am unteren Slide-Rand.
-    # Die Vorlage ist mit ihren Zeilenhöhen exakt auf die Slide-Höhe kalibriert,
-    # also lassen wir ungefüllte Zeilen einfach leer stehen. Das ergibt zwar
-    # visuell einen leeren Bereich zwischen letztem Eintrag und Summenzeile,
-    # rendert aber korrekt ohne Überlauf.
 
-
-# ---------------------------------------------------------------------------
-# Slide-Befüllung – Anlagevorschlag (Slides 7+8)
-# ---------------------------------------------------------------------------
 def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame,
                                   strategy_name: str, eval_date=None):
     """Wrapper für pptx_slides.fill_anlagevorschlag_slides."""
@@ -330,12 +317,17 @@ def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance
     return fill_performance_slide(prs, slide_idx, strategy_name, performance_data)
 
 
+def _fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str, we_data=None):
+    """Wrapper für pptx_slides.fill_wertentwicklung_slide (NEU Juli 2026)."""
+    return fill_wertentwicklung_slide(prs, slide_idx, strategy_name, we_data)
+
+
 def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
                               data_label_format: Optional[str] = None):
     """Wrapper für pptx_charts.replace_chart_data_safe.
 
     Behält die Signatur des bisherigen Aufrufstellen-Codes. Die volle
-    Bug-Workaround-Logik (3 Bugs!) lebt jetzt in modules/pptx_charts.py.
+    Bug-Workaround-Logik (4 Bugs!) lebt jetzt in modules/pptx_charts.py.
     """
     return replace_chart_data_safe(chart_shape, categories, series_data, data_label_format)
 
@@ -350,16 +342,6 @@ def _fill_kennzahlen_table(table, kz: dict):
     return fill_kennzahlen_table(table, kz)
 
 
-def _fmt_pct(val) -> str:
-    """Wrapper für formats.fmt_pct (zweite Definition — überschrieb historisch die erste)."""
-    return fmt_pct(val)
-
-
-def _fmt_ratio(val) -> str:
-    """Wrapper für formats.fmt_ratio."""
-    return fmt_ratio(val)
-
-
 def _set_cell_text_preserve_format(cell, text: str):
     """Wrapper für pptx_helpers.set_cell_text_preserve_format."""
     return set_cell_text_preserve_format(cell, text)
@@ -370,11 +352,78 @@ def _update_chart_values_inplace(chart_shape, categories: list, series_data: lis
     return update_chart_values_inplace(chart_shape, categories, series_data)
 
 
+def _remove_empty_table_rows(table):
+    """Wrapper für pptx_slides.remove_empty_table_rows."""
+    return remove_empty_table_rows(table)
+
+
+def _fit_shape_to_table(table_shape):
+    """Wrapper für pptx_slides.fit_shape_to_table."""
+    return fit_shape_to_table(table_shape)
+
+
+def _adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary: bool):
+    """Wrapper für pptx_slides.adjust_table_shape_height."""
+    return adjust_table_shape_height(prs, table_shape, n_data_rows, needs_summary)
+
+
+def _consolidate_small_segments(agg_series: pd.Series, threshold: float = None, max_segments: int = None):
+    """Wrapper für pptx_slides.consolidate_small_segments."""
+    kwargs = {}
+    if threshold is not None:
+        kwargs["threshold"] = threshold
+    if max_segments is not None:
+        kwargs["max_segments"] = max_segments
+    return consolidate_small_segments(agg_series, **kwargs)
+
+
+def _build_ring_series(df: pd.DataFrame, dim_col: str):
+    """Wrapper für pptx_slides.build_ring_series."""
+    return build_ring_series(df, dim_col)
+
+
+def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
+                                  strategy_name: str, eval_date=None):
+    """Wrapper für pptx_slides.fill_zusammenstellung_slide."""
+    return fill_zusammenstellung_slide(prs, slide_idx, df, strategy_name,
+                                        eval_date=eval_date)
+
+
+# ---------------------------------------------------------------------------
+# Slide-Manipulation: Wrapper für pptx_helpers
+# ---------------------------------------------------------------------------
+def _update_quelle_datum(prs, datum_str: str):
+    """Wrapper für pptx_helpers.update_quelle_datum."""
+    return update_quelle_datum(prs, datum_str)
+
+
+def _update_slide_numbers(prs):
+    """Wrapper für pptx_helpers.update_slide_numbers — übergibt die lokal
+    konfigurierten SHAPE_FOLIENNUMMER_NAMES (Single Source of Truth)."""
+    return update_slide_numbers(prs, SHAPE_FOLIENNUMMER_NAMES)
+
+
+def _move_slide(prs, from_idx: int, to_idx: int):
+    """Wrapper für pptx_helpers.move_slide."""
+    return move_slide(prs, from_idx, to_idx)
+
+
+def _remove_slide(prs, slide_idx: int):
+    """Wrapper für pptx_helpers.remove_slide."""
+    return remove_slide(prs, slide_idx)
+
+
+def _save_and_reload(prs) -> Presentation:
+    """Wrapper für pptx_helpers.save_and_reload."""
+    return save_and_reload(prs)
+
+
 # ─────────────────────────────────────────────────────────────────────────
-# Performance-Berechnungs-Funktionen (Duplikate aus streamlit_app.py)
-# Werden hier dupliziert, damit pptx_export.py unabhängig vom Streamlit-Code
-# ist. Wenn die Funktionen in streamlit_app.py angepasst werden, müssen sie
-# hier nachgezogen werden.
+# Performance-Berechnungs-Funktionen
+# Historische Duplikate aus streamlit_app.py — die zentrale Mathematik lebt
+# inzwischen in modules/analytics.py (siehe compute_performance_data unten).
+# Die lokalen _calc_*-Helfer bleiben für compute_wertentwicklung_data und
+# als Fallback erhalten.
 # ─────────────────────────────────────────────────────────────────────────
 import numpy as _np
 
@@ -461,7 +510,7 @@ def _calc_period_return_after_fee(returns, fee_pa_decimal):
 def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,
                              n_years_bar_chart: int = 5) -> dict:
     """
-    Berechnet alle Performance-Daten für die Performance-Folie (Slide 8).
+    Berechnet alle Performance-Daten für die Performance-Folie.
 
     Diese Funktion ist seit Juni 2026 ein Wrapper — die eigentliche Berechnungs-Logik
     lebt jetzt zentral in `modules/analytics.py` und wird auch vom Streamlit-Performance-Tab
@@ -480,80 +529,111 @@ def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,
     return _ac(timeseries_df, fee_dec, n_years_bar_chart)
 
 
-def _remove_empty_table_rows(table):
-    """Wrapper für pptx_slides.remove_empty_table_rows."""
-    return remove_empty_table_rows(table)
+def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
+                                 duration: Optional[float] = None,
+                                 benchmark_text: Optional[str] = None) -> dict:
+    """
+    Berechnet die Daten für die Wertentwicklungs-/Kurzübersichts-Folie
+    (NEU Juli 2026 — die aus dem alten VBA-Tool übernommene cVV-Folie).
 
+    HINWEIS ARCHITEKTUR: Die Kennzahlen-Mathematik gehört perspektivisch nach
+    modules/analytics.py (zentrale Berechnungs-Stelle). Sie liegt vorerst
+    hier, weil analytics.py in dieser Session nicht angefasst wurde — beim
+    nächsten analytics-Update bitte umziehen.
 
-def _fit_shape_to_table(table_shape):
-    """Wrapper für pptx_slides.fit_shape_to_table."""
-    return fit_shape_to_table(table_shape)
+    Kennzahlen-Definitionen (abgeleitet aus den Fußnoten der Original-Folie):
 
+    1. "Wertentwicklung seit {Auflagejahr} kumuliert*"
+       Fußnote *: "nach Kosten bis zum 31.12. des Vorjahres"
+       → Kumulierte Rendite NACH Kosten von Auflage bis zum letzten
+         Datenpunkt <= 31.12. des Vorjahres. None wenn die Strategie erst
+         im laufenden Jahr aufgelegt wurde (dann zeigt die Folie "–").
 
-def _adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary: bool):
-    """Wrapper für pptx_slides.adjust_table_shape_height."""
-    return adjust_table_shape_height(prs, table_shape, n_data_rows, needs_summary)
+    2. "Rendite p.a. seit {Auflagejahr} nach Kosten"
+       → Annualisierung (365-Tage-Basis, konsistent zu analytics.py) der
+         Kennzahl 1 über denselben Zeitraum (Auflage → 31.12. Vorjahr).
 
+    3. "Wertentwicklung seit 01.01.{Jahr}**"
+       Fußnote **: "ab 30.06. abzüglich halbjährigen Honorarsatz"
+       → YTD-Rendite VOR Kosten; liegt der letzte Datenpunkt am/nach dem
+         30.06., wird EINMALIG der halbe Jahres-Honorarsatz abgezogen
+         (multiplikativ: (1+ytd_brutto) × (1 − fee/2) − 1).
+       ⚠️ ANNAHME (von Philip 07/2026 als "halber Jahressatz ab Stichtag
+         30.06." bestätigt, aber nicht gegen das alte Tool nachgerechnet):
+         Abzug multiplikativ statt additiv. Differenz im Promille-Bereich —
+         beim ersten Live-Vergleich mit einer alten Broschüre gegenchecken.
 
-# ---------------------------------------------------------------------------
-# Slide-Befüllung – Aktuelle Portfoliozusammenstellung (Slide 9)
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Slide 9: Aktuelle Portfoliozusammenstellung (Regionen + Branchen)
-# ---------------------------------------------------------------------------
+    4. "Duration" — wird NICHT hier berechnet, sondern durchgereicht
+       (kommt aus den Duration-CSVs / dur_info im Portfolioanalyse-Tab).
+       None → Folie zeigt "–" (z.B. reine Aktien-Strategien).
 
-# Kleine Segmente unter diesem Schwellwert werden zu "Sonstige" zusammengefasst
-SMALL_SEGMENT_THRESHOLD = 0.03  # 3%
-# Maximal so viele Kategorien in der klassifizierten Aggregation (alle weiteren
-# → "Sonstige"). Liquidität wird ggf. NACH dieser Konsolidierung angehängt,
-# sodass der Ring am Ende bis zu MAX_SEGMENTS_IN_CHART+1 Segmente haben kann.
-MAX_SEGMENTS_IN_CHART = 7
+    Chart-Daten (Balken + Linie) kommen 1:1 aus compute_performance_data
+    (modules/analytics.py) — identische Datenbasis wie die Performance-Folie:
+    Balken = volle Kalenderjahre nach Kosten (max. 5), Linie = gesamte
+    Historie als Index (Start 1.0) nach Kosten.
 
+    Args:
+        timeseries_df: DataFrame mit Spalten 'ret_port', 'ret_bm', 'rf'
+            (Tagesrenditen dezimal), Index = Datum.
+        fee_dec: Effektiver Honorarsatz p.a. dezimal (ggf. inkl. MwSt —
+            gleiche Konvention wie compute_performance_data).
+        duration: Gewichtete Portfolio-Duration (oder None).
+        benchmark_text: Benchmark-Zusammensetzung für die ***-Fußnote
+            (aus Mapping_Namen.xlsx Spalte D), oder None.
 
-def _consolidate_small_segments(agg_series: pd.Series, threshold: float = SMALL_SEGMENT_THRESHOLD, max_segments: int = MAX_SEGMENTS_IN_CHART):
-    """Wrapper für pptx_slides.consolidate_small_segments."""
-    return consolidate_small_segments(agg_series, threshold, max_segments)
+    Returns:
+        Dict mit Keys: auflage_jahr, laufendes_jahr, kum_nach_kosten,
+        pa_nach_kosten, ytd, duration, benchmark_text, performance_pa,
+        wertentwicklung.
+    """
+    ts = timeseries_df.sort_index()
+    dates = pd.to_datetime(ts.index)
+    r = pd.to_numeric(ts["ret_port"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
 
+    first_date = dates[0]
+    last_date = dates[-1]
+    auflage_jahr = int(first_date.year)
+    laufendes_jahr = int(last_date.year)
 
-def _build_ring_series(df: pd.DataFrame, dim_col: str):
-    """Wrapper für pptx_slides.build_ring_series."""
-    return build_ring_series(df, dim_col)
+    drag = _annual_fee_to_daily_drag(fee_dec)
 
+    # ── Kennzahl 1 + 2: kumuliert / p.a. bis 31.12. des Vorjahres ──
+    cutoff = pd.Timestamp(laufendes_jahr - 1, 12, 31)
+    mask_hist = dates <= cutoff
+    kum_nach_kosten = None
+    pa_nach_kosten = None
+    if mask_hist.any():
+        r_af = r[mask_hist] - drag
+        kum_nach_kosten = float(_np.prod(1.0 + r_af) - 1.0)
+        n_days = int((dates[mask_hist][-1] - first_date).days)
+        if n_days > 0:
+            pa_nach_kosten = (1.0 + kum_nach_kosten) ** (365.0 / n_days) - 1.0
 
-def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
-                                  strategy_name: str, eval_date=None):
-    """Wrapper für pptx_slides.fill_zusammenstellung_slide."""
-    return fill_zusammenstellung_slide(prs, slide_idx, df, strategy_name,
-                                        eval_date=eval_date)
+    # ── Kennzahl 3: YTD, vor Kosten; ab 30.06. abzüglich halbem Jahressatz ──
+    ytd = None
+    ytd_start = pd.Timestamp(laufendes_jahr, 1, 1)
+    mask_ytd = dates >= ytd_start
+    if mask_ytd.any():
+        ytd_brutto = float(_np.prod(1.0 + r[mask_ytd]) - 1.0)
+        if last_date >= pd.Timestamp(laufendes_jahr, 6, 30):
+            ytd = (1.0 + ytd_brutto) * (1.0 - fee_dec / 2.0) - 1.0
+        else:
+            ytd = ytd_brutto
 
+    # ── Chart-Daten: identische Basis wie Performance-Folie ──
+    charts = compute_performance_data(timeseries_df, fee_dec)
 
-# ---------------------------------------------------------------------------
-# Slide-Manipulation: Wrapper für pptx_helpers
-# ---------------------------------------------------------------------------
-def _update_quelle_datum(prs, datum_str: str):
-    """Wrapper für pptx_helpers.update_quelle_datum."""
-    return update_quelle_datum(prs, datum_str)
-
-
-def _update_slide_numbers(prs):
-    """Wrapper für pptx_helpers.update_slide_numbers — übergibt die lokal
-    konfigurierten SHAPE_FOLIENNUMMER_NAMES (Single Source of Truth)."""
-    return update_slide_numbers(prs, SHAPE_FOLIENNUMMER_NAMES)
-
-
-def _move_slide(prs, from_idx: int, to_idx: int):
-    """Wrapper für pptx_helpers.move_slide."""
-    return move_slide(prs, from_idx, to_idx)
-
-
-def _remove_slide(prs, slide_idx: int):
-    """Wrapper für pptx_helpers.remove_slide."""
-    return remove_slide(prs, slide_idx)
-
-
-def _save_and_reload(prs) -> Presentation:
-    """Wrapper für pptx_helpers.save_and_reload."""
-    return save_and_reload(prs)
+    return {
+        "auflage_jahr": auflage_jahr,
+        "laufendes_jahr": laufendes_jahr,
+        "kum_nach_kosten": kum_nach_kosten,
+        "pa_nach_kosten": pa_nach_kosten,
+        "ytd": ytd,
+        "duration": duration,
+        "benchmark_text": benchmark_text,
+        "performance_pa": charts.get("performance_pa", {}),
+        "wertentwicklung": charts.get("wertentwicklung", {}),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -581,32 +661,69 @@ def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
         return None
 
 
+def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
+    """
+    Helfer (NEU Juli 2026): Berechnet das we_data-Dict für die
+    Wertentwicklungs-Folie aus performance_inputs[idx].
+
+    Nutzt dieselbe Zeitreihe/fee wie die Performance-Folie, zusätzlich die
+    OPTIONALEN Keys "duration" und "benchmark_text" im performance_inputs-
+    Eintrag (siehe Snippet für portfolioanalyse.py). Fehlen die Keys, zeigt
+    die Folie an den Stellen "–" bzw. behält die Vorlagen-Fußnote —
+    vollständig rückwärtskompatibel zu Alt-Aufrufern.
+
+    Returns None wenn keine Daten — dann zeigt die Folie Vorlagen-Platzhalter
+    (nur der Titel wird gesetzt).
+    """
+    if not performance_inputs or idx >= len(performance_inputs):
+        return None
+    pi = performance_inputs[idx]
+    if pi is None:
+        return None
+    ts = pi.get("timeseries_df")
+    fee = pi.get("fee_dec", 0.0)
+    if ts is None or len(ts) == 0:
+        return None
+    try:
+        return compute_wertentwicklung_data(
+            ts, fee,
+            duration=pi.get("duration"),
+            benchmark_text=pi.get("benchmark_text"),
+        )
+    except Exception:
+        return None
+
+
 def generate_portfolioanalyse_pptx(
     portfolios: list,   # Liste von (display_name, df, auswertungsdatum, dur_info)
     anlagevolumen: float = 0.0,
     performance_inputs: Optional[list] = None,
 ) -> bytes:
     """
-    Erstellt eine PPTX mit der Corporate-Vorlage und befüllt die Slides 7-9
-    (bzw. 7-9 + Duplikate bei Vergleichsportfolio) mit den Portfolio-Daten.
+    Erstellt eine PPTX mit der Corporate-Vorlage und befüllt die Slides 7-10
+    (bzw. 7-10 + Duplikate bei Vergleichsportfolio) mit den Portfolio-Daten.
 
-    Slide-Layout (seit Juni 2026):
-    - Slide 7: Anlagevorschlag/Strategieentwurf
-    - Slide 8: Performance/Wertentwicklung
-    - Slide 9: Aktuelle Portfoliozusammenstellung
-    - Bei 2 Portfolios: Duplikate dieser drei Slides für Portfolio 2
+    Slide-Layout (seit Juli 2026 — Wertentwicklungs-Folie NEU als Folie 8):
+    - Slide 7:  Anlagevorschlag/Strategieentwurf
+    - Slide 8:  Wertentwicklung/Kurzübersicht (NEU — alte cVV-Folie)
+    - Slide 9:  Performance/Wertentwicklung (mit Benchmark)
+    - Slide 10: Aktuelle Portfoliozusammenstellung
+    - Bei 2 Portfolios: Duplikate dieser VIER Slides für Portfolio 2
 
     Args:
         portfolios: Liste von Tupeln (display_name, df, auswertungsdatum, duration_info)
         anlagevolumen: Aktuell nicht verwendet, ggf. für Zukunftsfeatures
-        performance_inputs: Optional Liste mit Performance-Daten (eine Dict pro Portfolio
+        performance_inputs: Optional Liste mit Performance-Daten (ein Dict pro Portfolio
                             in gleicher Reihenfolge wie `portfolios`). Format pro Eintrag:
                             {
                                 "timeseries_df": pd.DataFrame,  # ret_port, ret_bm, rf
                                 "fee_dec": 0.01023,             # effektiver Honorar inkl MwSt
+                                # NEU Juli 2026 (beide optional):
+                                "duration": 4.24,               # gewichtete Duration oder None
+                                "benchmark_text": "50% iBoxx ...",  # für ***-Fußnote
                             }
-                            Wenn None oder ein Eintrag None ist: Slide 8 zeigt die
-                            Vorlagen-Platzhalter (nur Titel wird gesetzt).
+                            Wenn None oder ein Eintrag None ist: Folie 8+9 zeigen die
+                            Vorlagen-Platzhalter (nur Titel werden gesetzt).
 
     Returns:
         PPTX-Bytes
@@ -614,75 +731,97 @@ def generate_portfolioanalyse_pptx(
     prs = _load_template()
 
     # ════════════════════════════════════════════════════════════════════════
-    # NEUER SLIDE-LAYOUT (Juni 2026):
-    #   Slide 7 = Anlagevorschlag/Strategieentwurf (Index 6)
-    #   Slide 8 = Performance/Wertentwicklung (Index 7)     ← NEU (war Slide 10)
-    #   Slide 9 = Aktuelle Portfoliozusammenstellung (Index 8)
+    # SLIDE-LAYOUT (Juli 2026 — Vorlage hat jetzt 26 Slides):
+    #   Ziel-Reihenfolge im Export:
+    #     Slide 7  = Anlagevorschlag/Strategieentwurf (Index 6)
+    #     Slide 8  = Wertentwicklung/Kurzübersicht (Index 7)   ← NEU (cVV-Folie)
+    #     Slide 9  = Performance/Wertentwicklung mit BM (Index 8)
+    #     Slide 10 = Aktuelle Portfoliozusammenstellung (Index 9)
     # ════════════════════════════════════════════════════════════════════════
-    # Vorlage v5 hat 25 Slides mit dieser Original-Reihenfolge:
-    #   Index 6: Slide 7  (Anlagevorschlag)
-    #   Index 7: Slide 8  (Anlagevorschlag-Teil-2)  ← wird ENTFERNT
-    #   Index 8: Slide 9  (Portfoliozusammenstellung)
-    #   Index 9: Slide 10 (Performance/Wertentwicklung) ← wird zur NEUEN Slide 8
-    #   Index 10: Slide 11 (Währungen)  ← wird ENTFERNT
+    # Vorlage (26 Slides) hat diese Original-Reihenfolge:
+    #   Index 6:  Slide 7  (Anlagevorschlag)
+    #   Index 7:  Slide 8  (Anlagevorschlag-Teil-2)   ← wird ENTFERNT
+    #   Index 8:  Slide 9  (Portfoliozusammenstellung)
+    #   Index 9:  Slide 10 (Performance/Wertentwicklung mit BM)
+    #   Index 10: Slide 11 (Wertentwicklung/Kurzübersicht — NEU)
+    #   Index 11: Slide 12 (Währungen)                ← wird ENTFERNT
     #
     # Operationen (in dieser Reihenfolge):
     #   1. Index 7 entfernen (alte Anlagevorschlag-Teil-2)
-    #      → Performance rutscht von Index 9 → 8, Währungen von 10 → 9
-    #   2. Index 9 entfernen (Währungen)
-    #      → Reihenfolge: 6=Anlagevorschlag, 7=Portfolio, 8=Performance
-    #   3. Move Index 8 (Performance) → Index 7 (vor Portfolio)
-    #      → Endreihenfolge: 6=Anlagevorschlag, 7=Performance, 8=Portfolio
+    #      → [6=AV, 7=Zus, 8=Perf, 9=NEU, 10=Währungen, ...]
+    #   2. Index 10 entfernen (Währungen)
+    #      → [6=AV, 7=Zus, 8=Perf, 9=NEU]
+    #   3. Move Index 9 (NEU) → Index 7
+    #      → [6=AV, 7=NEU, 8=Zus, 9=Perf]
+    #   4. Move Index 9 (Perf) → Index 8
+    #      → [6=AV, 7=NEU, 8=Perf, 9=Zus]   ← Endreihenfolge
     _remove_slide(prs, 7)         # alte Anlagevorschlag-Teil-2 entfernen
-    _remove_slide(prs, 9)         # Währungen entfernen (war Index 10, jetzt 9)
-    _move_slide(prs, 8, 7)        # Performance vor Portfolio verschieben
+    _remove_slide(prs, 10)        # Währungen entfernen (war Index 11, nach Op1 = 10)
+    _move_slide(prs, 9, 7)        # Wertentwicklungs-Folie an Position 8 (Index 7)
+    _move_slide(prs, 9, 8)        # Performance an Position 9 (Index 8), Zus. rutscht auf 9
     prs = _save_and_reload(prs)   # IDs aufräumen
 
     # Portfolio(s) befüllen
     if len(portfolios) == 1:
         # Einzelnes Portfolio:
-        #   Slide 7 (Index 6) = Anlagevorschlag (mit Strategieentwurf-Titel)
-        #   Slide 8 (Index 7) = Performance (mit Strategy-Name im Titel)
-        #   Slide 9 (Index 8) = Portfolio-Zusammenstellung
-        display_name, df, eval_date, _ = portfolios[0]
+        #   Slide 7  (Index 6) = Anlagevorschlag (mit Strategieentwurf-Titel)
+        #   Slide 8  (Index 7) = Wertentwicklung/Kurzübersicht (NEU)
+        #   Slide 9  (Index 8) = Performance (mit Strategy-Name im Titel)
+        #   Slide 10 (Index 9) = Portfolio-Zusammenstellung
+        display_name, df, eval_date, _dur = portfolios[0]
         strategy_name = clean_strategy_name(display_name)
         perf_data = _build_perf_data(performance_inputs, 0)
+        we_data = _build_we_data(performance_inputs, 0)
         _fill_anlagevorschlag_slides(prs, 6, df, strategy_name, eval_date=eval_date)
-        _fill_performance_slide(prs, 7, strategy_name, performance_data=perf_data)
-        _fill_zusammenstellung_slide(prs, 8, df, strategy_name, eval_date=eval_date)
+        _fill_wertentwicklung_slide(prs, 7, strategy_name, we_data=we_data)
+        _fill_performance_slide(prs, 8, strategy_name, performance_data=perf_data)
+        _fill_zusammenstellung_slide(prs, 9, df, strategy_name, eval_date=eval_date)
 
     elif len(portfolios) == 2:
-        # Vergleichsportfolio: Portfolio 1 in Index 6-8, Portfolio 2 als Duplikate
-        # an Index 9-11. Endreihenfolge: Anlagevorschlag, Performance, Zusammenstellung
-        # pro Portfolio.
-        display_name_1, df_1, eval_date_1, _ = portfolios[0]
-        display_name_2, df_2, eval_date_2, _ = portfolios[1]
+        # Vergleichsportfolio: Portfolio 1 in Index 6-9, Portfolio 2 als Duplikate
+        # an Index 10-13. Endreihenfolge: Anlagevorschlag, Wertentwicklung,
+        # Performance, Zusammenstellung pro Portfolio.
+        display_name_1, df_1, eval_date_1, _dur1 = portfolios[0]
+        display_name_2, df_2, eval_date_2, _dur2 = portfolios[1]
         strategy_name_1 = clean_strategy_name(display_name_1)
         strategy_name_2 = clean_strategy_name(display_name_2)
         perf_data_1 = _build_perf_data(performance_inputs, 0)
         perf_data_2 = _build_perf_data(performance_inputs, 1)
+        we_data_1 = _build_we_data(performance_inputs, 0)
+        we_data_2 = _build_we_data(performance_inputs, 1)
 
-        # Schritt 1: Portfolio 1 in Original-Slides (Index 6, 7, 8)
+        # Schritt 1: Portfolio 1 in Original-Slides (Index 6, 7, 8, 9)
         _fill_anlagevorschlag_slides(prs, 6, df_1, strategy_name_1, eval_date=eval_date_1)
-        _fill_performance_slide(prs, 7, strategy_name_1, performance_data=perf_data_1)
-        _fill_zusammenstellung_slide(prs, 8, df_1, strategy_name_1, eval_date=eval_date_1)
+        _fill_wertentwicklung_slide(prs, 7, strategy_name_1, we_data=we_data_1)
+        _fill_performance_slide(prs, 8, strategy_name_1, performance_data=perf_data_1)
+        _fill_zusammenstellung_slide(prs, 9, df_1, strategy_name_1, eval_date=eval_date_1)
 
-        # Schritt 2: Drei Duplikate von Slides 7, 8, 9 (Index 6, 7, 8) anlegen
+        # Schritt 2: VIER Duplikate der Slides an Index 6, 8, 10, 12 anlegen.
+        # duplicate_slide fügt das Duplikat direkt HINTER der Quelle ein,
+        # dadurch verschieben sich die Folge-Indizes nach jedem Aufruf:
+        #   Start:   [6=AV, 7=NEU, 8=Perf, 9=Zus]
+        #   dup(6):  [6=AV, 7=AV', 8=NEU, 9=Perf, 10=Zus]
+        #   dup(8):  [6=AV, 7=AV', 8=NEU, 9=NEU', 10=Perf, 11=Zus]
+        #   dup(10): [6=AV, 7=AV', 8=NEU, 9=NEU', 10=Perf, 11=Perf', 12=Zus]
+        #   dup(12): [..., 12=Zus, 13=Zus']
         _duplicate_slide(prs, 6)
         _duplicate_slide(prs, 8)
         _duplicate_slide(prs, 10)
+        _duplicate_slide(prs, 12)
 
         # Schritt 3: Save/Load nach Duplikation
         prs = _save_and_reload(prs)
 
         # Schritt 4: Umsortieren
+        #   Ist:  [6=AV, 7=AV', 8=NEU, 9=NEU', 10=Perf, 11=Perf', 12=Zus, 13=Zus']
+        #   Soll: [6=AV, 7=NEU, 8=Perf, 9=Zus, 10=AV', 11=NEU', 12=Perf', 13=Zus']
         xml_slides = prs.slides._sldIdLst
         slide_elements = list(xml_slides)
 
         new_order = list(range(6))
-        new_order += [6, 8, 10]
-        new_order += [7, 9, 11]
-        new_order += list(range(12, len(slide_elements)))
+        new_order += [6, 8, 10, 12]     # Portfolio 1: AV, NEU, Perf, Zus
+        new_order += [7, 9, 11, 13]     # Portfolio 2: AV', NEU', Perf', Zus'
+        new_order += list(range(14, len(slide_elements)))
 
         for elem in slide_elements:
             xml_slides.remove(elem)
@@ -692,10 +831,11 @@ def generate_portfolioanalyse_pptx(
         # Schritt 5: Save/Load nach Reorder
         prs = _save_and_reload(prs)
 
-        # Schritt 6: Portfolio 2 in Duplikate (Index 9, 10, 11)
-        _fill_anlagevorschlag_slides(prs, 9, df_2, strategy_name_2, eval_date=eval_date_2)
-        _fill_performance_slide(prs, 10, strategy_name_2, performance_data=perf_data_2)
-        _fill_zusammenstellung_slide(prs, 11, df_2, strategy_name_2, eval_date=eval_date_2)
+        # Schritt 6: Portfolio 2 in Duplikate (Index 10, 11, 12, 13)
+        _fill_anlagevorschlag_slides(prs, 10, df_2, strategy_name_2, eval_date=eval_date_2)
+        _fill_wertentwicklung_slide(prs, 11, strategy_name_2, we_data=we_data_2)
+        _fill_performance_slide(prs, 12, strategy_name_2, performance_data=perf_data_2)
+        _fill_zusammenstellung_slide(prs, 13, df_2, strategy_name_2, eval_date=eval_date_2)
 
     else:
         raise ValueError(f"Erwarte 1 oder 2 Portfolios, erhalten: {len(portfolios)}")
@@ -703,7 +843,8 @@ def generate_portfolioanalyse_pptx(
     # Quelle-Datum aktualisieren auf das Auswertungsdatum des ersten Portfolios.
     # Steht statisch in den Chart-Annotationen (drawing*.xml) der Vorlage als
     # "Quelle: Eigene Berechnung Stand: 12.02.2026" — muss auf das echte
-    # Auswertungsdatum aktualisiert werden.
+    # Auswertungsdatum aktualisiert werden. Deckt auch die "Quelle"-Textbox
+    # der neuen Wertentwicklungs-Folie ab (gleiches "Stand ..."-Muster).
     if portfolios and portfolios[0][2] is not None:
         datum_obj = portfolios[0][2]
         try:
