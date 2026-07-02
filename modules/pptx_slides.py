@@ -1,10 +1,12 @@
 """
 modules/pptx_slides.py — Slide-Befüllungs-Logik für die FFPB-Broschüre.
 
-Domain-spezifische Funktionen für die drei Folien der Broschüre:
-- Slide 7: Anlagevorschlag (Tabelle + Allokations-Ring)
-- Slide 8: Performance (Kennzahlen + 2 Charts)
-- Slide 9: Aktuelle Portfoliozusammenstellung (2 Ring-Charts)
+Domain-spezifische Funktionen für die vier Folien der Broschüre:
+- Slide 7:  Anlagevorschlag (Tabelle + Allokations-Ring)
+- Slide 8:  Wertentwicklung/Kurzübersicht (NEU Juli 2026 — alte cVV-Folie:
+            Kennzahlen-Tabelle + Perf-p.a.-Balken + Wertentwicklungs-Linie)
+- Slide 9:  Performance (Kennzahlen + 2 Charts, mit Benchmark-Vergleich)
+- Slide 10: Aktuelle Portfoliozusammenstellung (2 Ring-Charts)
 
 Dieses Modul kennt die FFPB-Vorlage, die Shape-Namen, die Asset-Klassen-
 Klassifizierung und die Tabellen-Layouts. Es nutzt aber NUR die generischen
@@ -42,6 +44,16 @@ Juni 2026 — Kapazitäts-Fix Anlagevorschlag-Tabelle (Slide 7):
     Nur im pathologischen Fall (deutlich >40 Titel, jenseits der Grenze wo
     selbst MIN_FONT_PT nicht mehr reicht) wird eine Warnung zurückgegeben,
     NIE mehr still Daten verworfen.
+
+Juli 2026 — Wertentwicklungs-Folie (alte cVV-Folie) als neue Slide 8:
+    Die Vorlage enthält jetzt 26 Slides. Die aus dem alten VBA-Tool
+    übernommene Folie "Anlagestrategie {Name} | Wertentwicklung" wurde per
+    ZIP-Slide-Copy in die Vorlage integriert (Template-Position 11, direkt
+    nach der Performance-Folie). fill_wertentwicklung_slide() befüllt:
+    Titel, 4 Kennzahlen (kumulierte WE, Rendite p.a., WE seit 01.01., 
+    Duration), Balken-Chart (Perf p.a. vs. Benchmark, volle Kalenderjahre)
+    und Linien-Chart (gesamte Historie, Index 1.0-basiert), plus die
+    dynamische ***-Benchmark-Fußnote.
 """
 
 import pandas as pd
@@ -68,11 +80,11 @@ except ImportError:
 # Chart-Manipulation (XML-basiert, mit Bug-Workaround)
 try:
     from modules.pptx_charts import (
-        replace_chart_data, replace_chart_data_safe,
+        replace_chart_data, replace_chart_data_safe, set_value_axis_min_auto,
     )
 except ImportError:
     from pptx_charts import (
-        replace_chart_data, replace_chart_data_safe,
+        replace_chart_data, replace_chart_data_safe, set_value_axis_min_auto,
     )
 
 # Format-Helpers
@@ -103,6 +115,24 @@ SHAPE_CHART_RIGHT = "C_Kennzahlen2"        # Rechtes Ring-Diagramm (Slide 9)
 SHAPE_TITLE = "Titel"
 SHAPE_TITLE_ALT = "Titel 2"
 
+# Shape-Namen der Wertentwicklungs-Folie (alte cVV-Folie, NEU Juli 2026).
+# "Tabelle"/"Diagramm links"/"Diagramm rechts" heißen auf der Performance-
+# Folie genauso — die Lookups sind aber immer per-Slide, daher kein Konflikt.
+SHAPE_WE_TABLE = "Tabelle"
+SHAPE_WE_CHART_BAR = "Diagramm links"      # Säulen: Perf p.a. im Benchmarkvergleich
+SHAPE_WE_CHART_LINE = "Diagramm rechts"    # Linie: Wertentwicklung (Index)
+SHAPE_WE_FUSSNOTE = "Fußnote"
+SHAPE_WE_QUELLE = "Quelle"
+
+WE_TITLE_FORMAT = "Anlagestrategie {name} | Wertentwicklung"
+"""Titel-Muster der Wertentwicklungs-Folie (wie in der alten cVV-Broschüre)."""
+
+WE_SERIES_PORTFOLIO = "Musterdepot"
+WE_SERIES_BENCHMARK = "Benchmark"
+"""Series-Namen im Balken-Chart der Wertentwicklungs-Folie. Werden nicht
+angezeigt (die Legende ist eine statische Textbox in der Vorlage), müssen
+aber gesetzt werden."""
+
 
 # ─── Asset-Gruppen (Reihenfolge in Tabelle + Ring) ──────────────────────────
 GROUP_AKTIEN = "AKTIEN"
@@ -128,13 +158,24 @@ COL_SPACERS = [1, 3, 5, 7, 9]
 """Spalten-Indizes der Spacer-Spalten (immer leer)."""
 
 
+# ─── Kennzahlen-Tabelle der Wertentwicklungs-Folie (7×3) ────────────────────
+# Row 0: Header "KENNZAHLEN" | Row 1: Spacer | Rows 2-5: Kennzahlen | Row 6: Spacer
+# Spalte 0 = Label, Spalte 1 = Spacer, Spalte 2 = Wert (hellblaue Box)
+WE_COL_LABEL = 0
+WE_COL_VALUE = 2
+WE_ROW_KUMULIERT = 2
+WE_ROW_PA = 3
+WE_ROW_YTD = 4
+WE_ROW_DURATION = 5
+
+
 # ─── Positionen-Verteilung auf Slides ───────────────────────────────────────
 SLIDE_7_DATA_ROWS = 34
 """Slide 7: 36 Zeilen - 1 Header - 1 Summen-Zeile = 34 Daten-Zeilen."""
 
 SLIDE_8_DATA_ROWS = 12
-"""Slide 8: 14 Zeilen - 1 Header - 1 Summen-Zeile = 12 Daten-Zeilen.
-Aktuell nicht mehr benötigt (Slide 8 ist Performance-Folie seit Juni 2026)."""
+"""Historisch: alte Anlagevorschlag-Teil-2-Folie. Wird nicht mehr genutzt
+(Folie wird beim Export entfernt), Konstante bleibt für Import-Kompatibilität."""
 
 
 # ─── Ring-Chart Konsolidierung (Slide 9: Regionen + Branchen) ───────────────
@@ -243,6 +284,33 @@ def set_title_with_autoscale(title_shape, text: str):
         tf.word_wrap = True
     except Exception:
         pass  # Nicht verfügbar in alten python-pptx-Versionen
+
+
+def replace_paragraph_text_by_prefix(text_frame, prefix: str, new_text: str) -> bool:
+    """Ersetzt den Text GENAU EINES Absatzes in einem Text-Frame — des ersten,
+    dessen Text (getrimmt) mit `prefix` beginnt. Alle anderen Absätze bleiben
+    unangetastet (NEU Juli 2026, für die dynamische ***-Benchmark-Fußnote der
+    Wertentwicklungs-Folie).
+
+    Formaterhaltung: Der neue Text wird in den ERSTEN Run des Absatzes
+    geschrieben (dessen Formatierung — Schriftgröße, Farbe — bleibt erhalten),
+    alle weiteren Runs des Absatzes werden geleert. Bewusst NICHT
+    replace_text_in_shape verwenden — das würde die übrigen Absätze
+    (Disclaimer, Fußnoten * und **) mit plattmachen.
+
+    Returns:
+        True wenn ein passender Absatz gefunden und ersetzt wurde, sonst False.
+    """
+    for para in text_frame.paragraphs:
+        if para.text.strip().startswith(prefix):
+            runs = para.runs
+            if not runs:
+                continue  # Absatz ohne Runs — nicht beschreibbar, weitersuchen
+            runs[0].text = new_text
+            for r in runs[1:]:
+                r.text = ""
+            return True
+    return False
 
 
 def safe_marktrisikowert(value) -> str:
@@ -379,9 +447,8 @@ def distribute_positions_to_slides(groups: dict) -> list:
 
     Seit Juni 2026 (Performance-Folie als neue Slide 8):
     - Alle Positionen kommen auf Slide 7
-    - Slide 8 ist jetzt die Performance-Folie (kein Überlauf von Anlagevorschlag mehr)
-    - Bei mehr als SLIDE_7_DATA_ROWS Positionen werden Überschüssige im
-      fill_table_with_positions automatisch abgeschnitten (Edge-Case)
+    - Bei mehr als SLIDE_7_DATA_ROWS Positionen erweitert
+      fill_table_with_positions die Tabelle (ensure_table_capacity)
 
     Reihenfolge der Zeilen:
     - Asset-Gruppen nach Gewicht absteigend (AKTIEN, RENTEN, EDELMETALLE, ...)
@@ -574,9 +641,6 @@ def maybe_narrow_bond_columns(table_shape, has_renten: bool) -> None:
     table.columns[COL_WERTPAPIER].width = Emu(
         table.columns[COL_WERTPAPIER].width + freed
     )
-
-
-
 
 
 def fit_shape_to_table(table_shape, max_row_scale: float = 3.0) -> Optional[str]:
@@ -984,7 +1048,7 @@ def fill_kennzahlen_table(table, kz: dict):
 
 def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
                             performance_data: Optional[dict] = None):
-    """Befüllt die Performance-Slide (Slide 8: Anlagestrategie Wertentwicklung).
+    """Befüllt die Performance-Slide (Kennzahlen-Vergleich + 2 Charts mit BM).
 
     Args:
         prs: Presentation
@@ -1044,6 +1108,117 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
             ],
             data_label_format=None,  # Linien-Chart hat keine Daten-Labels
         )
+
+
+def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
+                                we_data: Optional[dict] = None):
+    """Befüllt die Wertentwicklungs-/Kurzübersichts-Folie (NEU Juli 2026).
+
+    Das ist die aus dem alten VBA-Tool übernommene Folie
+    "Anlagestrategie {Name} | Wertentwicklung" (cVV-Broschüre), die beim
+    Export als Folie 8 eingereiht wird. Bestandteile:
+
+    - Titel: "Anlagestrategie {Name} | Wertentwicklung"
+    - KENNZAHLEN-Tabelle (7×3): 4 Kennzahlen mit DYNAMISCHEN Labels
+      (Auflagejahr + laufendes Jahr werden in die Label-Texte geschrieben):
+        Row 2: "Wertentwicklung seit {Auflagejahr} kumuliert*"   → Wert %
+        Row 3: "Rendite p.a. seit {Auflagejahr} nach Kosten"     → Wert %
+        Row 4: "Wertentwicklung seit 01.01.{Jahr}**"             → Wert %
+        Row 5: "Duration"                                        → Dezimal
+    - "Diagramm links" (Säulen): Performance p.a. nach Kosten im
+      Benchmarkvergleich, volle Kalenderjahre (identische Datenbasis wie
+      die Performance-Folie, max. 5 Jahre)
+    - "Diagramm rechts" (Linie): Wertentwicklung als Index (Start = 1.0),
+      gesamte Historie, EINE Serie (ohne Benchmark-Linie — so das Original)
+    - Fußnote: die ***-Zeile (Benchmark-Zusammensetzung) wird dynamisch
+      ersetzt, * und ** sowie der Disclaimer bleiben statisch aus der Vorlage
+
+    Args:
+        prs: Presentation
+        slide_idx: 0-indexed Index der Wertentwicklungs-Folie
+        strategy_name: bereinigter Strategiename
+        we_data: Dict aus pptx_export.compute_wertentwicklung_data(). Keys:
+            auflage_jahr, laufendes_jahr, kum_nach_kosten, pa_nach_kosten,
+            ytd, duration, benchmark_text, performance_pa, wertentwicklung.
+            Wenn None: nur Titel wird gesetzt, Rest bleibt Vorlagen-Platzhalter.
+    """
+    slide = prs.slides[slide_idx]
+
+    # ── Titel ──
+    title = find_shape_by_name(slide, SHAPE_TITLE) or find_shape_by_name(slide, SHAPE_TITLE_ALT)
+    if title:
+        set_title_with_autoscale(title, WE_TITLE_FORMAT.format(name=strategy_name))
+
+    if we_data is None:
+        return  # Platzhalter-Modus (analog fill_performance_slide)
+
+    # ── KENNZAHLEN-Tabelle: Labels UND Werte dynamisch ──
+    aj = we_data.get("auflage_jahr")
+    lj = we_data.get("laufendes_jahr")
+    tab = find_shape_by_name(slide, SHAPE_WE_TABLE)
+    if tab and getattr(tab, "has_table", False) and aj is not None:
+        t = tab.table
+        rows_spec = [
+            (WE_ROW_KUMULIERT, f"Wertentwicklung seit {aj} kumuliert*",
+             fmt_pct(we_data.get("kum_nach_kosten"))),
+            (WE_ROW_PA, f"Rendite p.a. seit {aj} nach Kosten",
+             fmt_pct(we_data.get("pa_nach_kosten"))),
+            (WE_ROW_YTD, f"Wertentwicklung seit 01.01.{lj}**",
+             fmt_pct(we_data.get("ytd"))),
+            (WE_ROW_DURATION, "Duration",
+             fmt_ratio(we_data.get("duration"))),
+        ]
+        for row_idx, label, value in rows_spec:
+            if row_idx >= len(t.rows):
+                continue
+            row = t.rows[row_idx]
+            set_cell_text_preserve_format(row.cells[WE_COL_LABEL], label)
+            set_cell_text_preserve_format(row.cells[WE_COL_VALUE], value)
+
+    # ── Säulen-Chart: Performance p.a. im Benchmarkvergleich ──
+    # Datenbasis identisch zur Performance-Folie: nur VOLLE Kalenderjahre
+    # (Fußnote *: "nach Kosten bis zum 31.12. des Vorjahres").
+    pa = we_data.get("performance_pa", {})
+    chart_bar = find_shape_by_name(slide, SHAPE_WE_CHART_BAR)
+    if chart_bar and getattr(chart_bar, "has_chart", False) and pa.get("jahre"):
+        replace_chart_data_safe(
+            chart_bar,
+            categories=[str(y) for y in pa["jahre"]],
+            series_data=[
+                (WE_SERIES_PORTFOLIO, pa.get("referenz", [])),
+                (WE_SERIES_BENCHMARK, pa.get("benchmark", [])),
+            ],
+            # Original-Formate der cVV-Vorlage: Achse UND Labels "0.00%"
+            # (2 Nachkommastellen, z.B. "6,04%"). Bug-3/4-Restore nötig.
+            data_label_format="0.00%",
+            value_axis_format="0.00%",
+        )
+
+    # ── Linien-Chart: Wertentwicklung (Index, EINE Serie) ──
+    we = we_data.get("wertentwicklung", {})
+    chart_line = find_shape_by_name(slide, SHAPE_WE_CHART_LINE)
+    if chart_line and getattr(chart_line, "has_chart", False) and we.get("dates"):
+        replace_chart_data_safe(
+            chart_line,
+            categories=we["dates"],
+            series_data=[
+                ("Wertentwicklung", we.get("referenz", [])),
+            ],
+            data_label_format=None,   # Linie hat keine Daten-Labels
+            value_axis_format="0%",   # Achse als Prozent (100%, 110%, ...)
+        )
+        # Die cVV-Vorlage hat eine FIXE Achsen-Untergrenze von 70% (kalibriert
+        # auf die 17-Jahres-Historie der Konservativ-Strategie). Für dynamisch
+        # befüllte — insbesondere junge — Strategien verschenkt das Platz:
+        # Untergrenze entfernen → PowerPoint skaliert automatisch.
+        set_value_axis_min_auto(chart_line)
+
+    # ── Fußnote: ***-Zeile (Benchmark-Zusammensetzung) dynamisch ersetzen ──
+    bm_text = we_data.get("benchmark_text")
+    if bm_text:
+        fn = find_shape_by_name(slide, SHAPE_WE_FUSSNOTE)
+        if fn and fn.has_text_frame:
+            replace_paragraph_text_by_prefix(fn.text_frame, "***", f"*** {bm_text}")
 
 
 def fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
