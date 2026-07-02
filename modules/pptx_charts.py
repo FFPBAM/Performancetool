@@ -292,25 +292,53 @@ def restore_axis_number_format(chart_shape, format_code: str, axis: str = "val")
     danebenliegende (korrekt aussehende) Linien-Chart
     formatCode="0%" sourceLinked="0" hatte.
 
+    Juli 2026: axis="cat" deckt jetzt auch <c:dateAx> ab (Datums-Achsen bei
+    Linien-Charts sind technisch KEINE catAx — falls replace_data dort je
+    das Format resettet, greift derselbe Restore).
+
     Args:
         chart_shape: Das Chart-Shape
         format_code: Format-Code für die Achse (z.B. "0%")
         axis: "val" für Werteachse (c:valAx, Default), "cat" für
-            Kategorie-Achse (c:catAx)
+            Kategorie-Achse (c:catAx und c:dateAx)
     """
     chart_xml = chart_shape.chart._chartSpace
-    tag = "valAx" if axis == "val" else "catAx"
-    for ax_elem in chart_xml.findall(f".//c:{tag}", NS_CHART):
-        num_fmt = ax_elem.find("c:numFmt", NS_CHART)
-        if num_fmt is None:
-            num_fmt = etree.SubElement(ax_elem, f"{{{_CHART_NS_URI}}}numFmt")
-            # numFmt muss laut OOXML-Schema direkt nach c:axPos stehen
-            # (vor c:majorGridlines/c:title/... ), sonst PowerPoint-Reparieren-Dialog.
-            axpos = ax_elem.find("c:axPos", NS_CHART)
-            if axpos is not None:
-                axpos.addnext(num_fmt)
-        num_fmt.set("formatCode", format_code)
-        num_fmt.set("sourceLinked", "0")
+    tags = ["valAx"] if axis == "val" else ["catAx", "dateAx"]
+    for tag in tags:
+        for ax_elem in chart_xml.findall(f".//c:{tag}", NS_CHART):
+            num_fmt = ax_elem.find("c:numFmt", NS_CHART)
+            if num_fmt is None:
+                num_fmt = etree.SubElement(ax_elem, f"{{{_CHART_NS_URI}}}numFmt")
+                # numFmt muss laut OOXML-Schema direkt nach c:axPos stehen
+                # (vor c:majorGridlines/c:title/... ), sonst PowerPoint-Reparieren-Dialog.
+                axpos = ax_elem.find("c:axPos", NS_CHART)
+                if axpos is not None:
+                    axpos.addnext(num_fmt)
+            num_fmt.set("formatCode", format_code)
+            num_fmt.set("sourceLinked", "0")
+
+
+def set_value_axis_min_auto(chart_shape):
+    """Entfernt eine fixe Untergrenze (<c:min>) der Werteachse → Auto-Skalierung.
+
+    NEU (Juli 2026), für die Wertentwicklungs-Folie (alte cVV-Folie): Deren
+    Linien-Chart hat in der Vorlage eine hartcodierte Achsen-Untergrenze von
+    70% (<c:scaling><c:min val="0.7"/>) — kalibriert auf die 17-Jahres-
+    Historie der Konservativ-Strategie. Für dynamisch befüllte Strategien
+    (insb. junge, deren Index nie unter ~95% fällt) verschenkt die fixe
+    Untergrenze Platz. Ohne <c:min> wählt PowerPoint die Untergrenze
+    automatisch passend zu den Daten.
+
+    Idempotent: kein <c:min> vorhanden → no-op. <c:max> bleibt unangetastet.
+    """
+    chart_xml = chart_shape.chart._chartSpace
+    for ax_elem in chart_xml.findall(".//c:valAx", NS_CHART):
+        scaling = ax_elem.find("c:scaling", NS_CHART)
+        if scaling is None:
+            continue
+        mn = scaling.find("c:min", NS_CHART)
+        if mn is not None:
+            scaling.remove(mn)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
