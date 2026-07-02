@@ -133,6 +133,33 @@ WE_SERIES_BENCHMARK = "Benchmark"
 angezeigt (die Legende ist eine statische Textbox in der Vorlage), müssen
 aber gesetzt werden."""
 
+# ─── Fußnoten-/Disclaimer-Umschreibung der Wertentwicklungs-Folie ───────────
+# Juli 2026: Die YTD-Kennzahl folgt jetzt der Tool-Konvention (nach Kosten,
+# taggenauer Honorarabzug) statt der alten VBA-Regel ("vor Kosten, ab 30.06.
+# abzüglich halbjährigen Honorarsatz"). Die statischen Vorlagen-Texte, die
+# noch die alte Regel beschreiben, werden beim Befüllen ersetzt. Die neue
+# Formulierung übernimmt bewusst den Wortlaut des bereits freigegebenen
+# Tool-Disclaimers ("...in eine äquivalente tägliche Belastung umgerechnet
+# und ... taggenau ... abgezogen; eine halbjährliche Berücksichtigung
+# erfolgt nicht").
+# WICHTIG: Der Disclaimer ist in der Vorlage HART umbrochen (die Sätze
+# verteilen sich mit festen Zeilenumbrüchen über mehrere Absätze). Die
+# Ersetzung arbeitet daher absatzweise über eindeutige Präfixe; die neuen
+# Zeilen sind auf ähnliche Länge kalibriert, damit das Layout hält.
+WE_FOOTNOTE_STAR2_PREFIX = "** "
+WE_FOOTNOTE_STAR2_NEW = "** nach Kosten (taggenauer Honorarabzug)"
+
+WE_DISCLAIMER_REPLACEMENTS = [
+    # (Absatz-Präfix in der Vorlage, neuer Absatz-Text)
+    ("Der unterjährige Performance Ausweis",
+     "Sämtliche Performance Angaben wurden nach Kosten berechnet; der jährliche "
+     "Honorarsatz wird in eine äquivalente tägliche Belastung umgerechnet und "),
+    ("Kosten berechnet.",
+     "taggenau abgezogen (keine halbjährliche Berücksichtigung). Sowohl das VV "
+     "Honorar als auch fremde Spesen und evtl. Produktkosten wurden "
+     "berücksichtigt. Die Inflation kann negative Auswirkun-"),
+]
+
 
 # ─── Asset-Gruppen (Reihenfolge in Tabelle + Ring) ──────────────────────────
 GROUP_AKTIEN = "AKTIEN"
@@ -1213,12 +1240,22 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         # Untergrenze entfernen → PowerPoint skaliert automatisch.
         set_value_axis_min_auto(chart_line)
 
-    # ── Fußnote: ***-Zeile (Benchmark-Zusammensetzung) dynamisch ersetzen ──
-    bm_text = we_data.get("benchmark_text")
-    if bm_text:
-        fn = find_shape_by_name(slide, SHAPE_WE_FUSSNOTE)
-        if fn and fn.has_text_frame:
+    # ── Fußnote: dynamische Zeilen ersetzen ──
+    fn = find_shape_by_name(slide, SHAPE_WE_FUSSNOTE)
+    if fn and fn.has_text_frame:
+        # ***-Zeile: Benchmark-Zusammensetzung der Strategie.
+        # WICHTIG: Reihenfolge — *** VOR ** ersetzen ist nicht nötig, denn
+        # Präfix "** " (mit Leerzeichen) matcht die ***-Zeile NICHT
+        # ("***…" hat an Position 3 einen Stern, kein Leerzeichen).
+        bm_text = we_data.get("benchmark_text")
+        if bm_text:
             replace_paragraph_text_by_prefix(fn.text_frame, "***", f"*** {bm_text}")
+        # **-Zeile + Disclaimer-Satz: alte VBA-Honorarregel → Tool-Konvention
+        # (nach Kosten, taggenauer Abzug). Siehe WE_DISCLAIMER_REPLACEMENTS.
+        replace_paragraph_text_by_prefix(
+            fn.text_frame, WE_FOOTNOTE_STAR2_PREFIX, WE_FOOTNOTE_STAR2_NEW)
+        for prefix, new_text in WE_DISCLAIMER_REPLACEMENTS:
+            replace_paragraph_text_by_prefix(fn.text_frame, prefix, new_text)
 
 
 def fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
