@@ -554,14 +554,14 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
          Kennzahl 1 über denselben Zeitraum (Auflage → 31.12. Vorjahr).
 
     3. "Wertentwicklung seit 01.01.{Jahr}**"
-       Fußnote **: "ab 30.06. abzüglich halbjährigen Honorarsatz"
-       → YTD-Rendite VOR Kosten; liegt der letzte Datenpunkt am/nach dem
-         30.06., wird EINMALIG der halbe Jahres-Honorarsatz abgezogen
-         (multiplikativ: (1+ytd_brutto) × (1 − fee/2) − 1).
-       ⚠️ ANNAHME (von Philip 07/2026 als "halber Jahressatz ab Stichtag
-         30.06." bestätigt, aber nicht gegen das alte Tool nachgerechnet):
-         Abzug multiplikativ statt additiv. Differenz im Promille-Bereich —
-         beim ersten Live-Vergleich mit einer alten Broschüre gegenchecken.
+       → YTD-Rendite NACH Kosten mit taggenauem Honorarabzug — identische
+         Konvention wie alle übrigen Tool-Kennzahlen (Juli 2026, Philip:
+         "die Performance aus dem Tool wird nach Kosten angezeigt und
+         täglich abgezogen"). Die alte VBA-Regel "vor Kosten, ab 30.06.
+         abzüglich halbjährigen Honorarsatz" wurde damit VERWORFEN; die
+         zugehörigen statischen Texte der Vorlage (Fußnote ** und
+         Disclaimer-Satz) werden von fill_wertentwicklung_slide dynamisch
+         auf die Tool-Konvention umgeschrieben.
 
     4. "Duration" — wird NICHT hier berechnet, sondern durchgereicht
        (kommt aus den Duration-CSVs / dur_info im Portfolioanalyse-Tab).
@@ -609,16 +609,13 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
         if n_days > 0:
             pa_nach_kosten = (1.0 + kum_nach_kosten) ** (365.0 / n_days) - 1.0
 
-    # ── Kennzahl 3: YTD, vor Kosten; ab 30.06. abzüglich halbem Jahressatz ──
+    # ── Kennzahl 3: YTD nach Kosten (taggenauer Honorarabzug, Tool-Konvention) ──
     ytd = None
     ytd_start = pd.Timestamp(laufendes_jahr, 1, 1)
     mask_ytd = dates >= ytd_start
     if mask_ytd.any():
-        ytd_brutto = float(_np.prod(1.0 + r[mask_ytd]) - 1.0)
-        if last_date >= pd.Timestamp(laufendes_jahr, 6, 30):
-            ytd = (1.0 + ytd_brutto) * (1.0 - fee_dec / 2.0) - 1.0
-        else:
-            ytd = ytd_brutto
+        r_af_ytd = r[mask_ytd] - drag
+        ytd = float(_np.prod(1.0 + r_af_ytd) - 1.0)
 
     # ── Chart-Daten: identische Basis wie Performance-Folie ──
     charts = compute_performance_data(timeseries_df, fee_dec)
@@ -639,12 +636,33 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
 # ---------------------------------------------------------------------------
 # Portfolioanalyse-Export (Hauptfunktion)
 # ---------------------------------------------------------------------------
+LAST_BUILD_ERRORS: list = []
+"""Diagnose (NEU Juli 2026): Fehler, die beim Berechnen der Folien-Daten
+aufgetreten sind. Wird von generate_portfolioanalyse_pptx zu Beginn geleert.
+Hintergrund: _build_perf_data/_build_we_data fangen Exceptions bewusst ab
+(eine kaputte Kennzahl soll nicht den ganzen Export crashen — die Folie
+zeigt dann Platzhalter). Vorher passierte das STILL und war im UI nicht
+diagnostizierbar ("Folie wird nicht befüllt, aber kein Fehler"). Jetzt
+sammelt diese Liste die Fehlermeldungen; der Aufrufer (portfolioanalyse.py)
+zeigt sie nach dem Export als Warnung an."""
+
+
+def _record_build_error(context: str, exc: Exception):
+    import traceback
+    LAST_BUILD_ERRORS.append(
+        f"{context}: {type(exc).__name__}: {exc}"
+    )
+    # Voller Traceback zusätzlich in die Server-Logs (streamlit-Konsole)
+    traceback.print_exc()
+
+
 def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
     """
     Helfer: Berechnet performance_data Dict aus performance_inputs[idx].
 
     Returns None wenn keine Daten oder ungültige Eingabe — dann zeigt die
-    Performance-Folie die Vorlagen-Platzhalter.
+    Performance-Folie die Vorlagen-Platzhalter. Berechnungsfehler landen
+    in LAST_BUILD_ERRORS (siehe oben) statt still verschluckt zu werden.
     """
     if not performance_inputs or idx >= len(performance_inputs):
         return None
@@ -657,7 +675,8 @@ def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
         return None
     try:
         return compute_performance_data(ts, fee)
-    except Exception:
+    except Exception as exc:
+        _record_build_error(f"Performance-Folie, Portfolio {idx + 1}", exc)
         return None
 
 
@@ -690,7 +709,8 @@ def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
             duration=pi.get("duration"),
             benchmark_text=pi.get("benchmark_text"),
         )
-    except Exception:
+    except Exception as exc:
+        _record_build_error(f"Wertentwicklungs-Folie, Portfolio {idx + 1}", exc)
         return None
 
 
@@ -728,6 +748,7 @@ def generate_portfolioanalyse_pptx(
     Returns:
         PPTX-Bytes
     """
+    LAST_BUILD_ERRORS.clear()  # Diagnose-Liste pro Export frisch (siehe oben)
     prs = _load_template()
 
     # ════════════════════════════════════════════════════════════════════════
