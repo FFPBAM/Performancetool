@@ -1,0 +1,24 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+02.07.2026;Bayer IHS 4,625 % 26.05.33 ;A351U1;4,734%;0,065%;1,354%;26.05.2033;4,6250%;6,0994;3,7278%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;BMW IHS 3,75 % 20.11.34;A4EBBT;4,911%;0,041%;0,818%;20.11.2034;3,7500%;7,2611;3,7847%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Deutsche Börse IHS 3,25 % 24.03.31;A460QR;4,016%;0,072%;1,817%;24.03.2031;3,2500%;4,4258;3,1027%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Deutsche Post IHS 3,0 % 25.11.31;A460PH;4,062%;0,023%;0,545%;25.11.2031;3,0000%;4,9861;3,1613%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Dt. Bahn IHS 1,875 % 24.05.30;A30VH4;4,413%;0,028%;0,609%;24.05.2030;1,8750%;3,7803;2,8764%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Dt. Telekom IHS 1,375 % 05.07.34;A2YNSK;4,009%;0,109%;2,719%;05.07.2034;1,3750%;7,5089;3,2825%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;E.ON Green Bond IHS 3,875 % 12.01.35;A30V8B;3,549%;0,044%;1,187%;12.01.2035;3,8750%;7,3793;3,6390%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;EnBW Green Bond IHS 4,049 % 22.11.29;A3LBKC;4,518%;0,039%;0,841%;22.11.2029;4,0490%;3,1696;3,1112%;Corporates;Europa ohne Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Fraport IHS 1,875 % 31.03.28;A3E5F0;3,570%;0,036%;1,014%;31.03.2028;1,8750%;1,7240;3,0820%;Corporates;Deutschland;Renten;5;Muster konservativ cVV
+02.07.2026;Fresenius IHS 0,5 % 01.10.28;A3KN0S;4,446%;0,038%;0,829%;01.10.2028;0,5000%;2,2312;3,0216%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Goldman Sachs IHS 2 % 01.11.28;A19340;4,658%;0,039%;0,809%;01.11.2028;2,0000%;2,2728;2,8115%;Financials;Nordamerika;Renten;3;Muster konservativ cVV
+02.07.2026;Grenke Finance IHS 5,75 % 06.07.29 ;A3LY39;4,981%;0,092%;1,863%;06.07.2029;5,7500%;2,7143;3,8146%;Financials;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Heidelberg Materials IHS 3,75 % 31.05.32 ;A30V5U;4,261%;0,053%;1,230%;31.05.2032;3,7500%;5,4155;3,3954%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Hochtief IHS 1,25 % 03.09.31;A2YN2V;3,859%;-0,036%;-0,935%;03.09.2031;1,2500%;4,9809;3,6159%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;KfW staatsg. Green Bond IHS 2,875 % 31.03.32;A38J3W;3,659%;0,041%;1,141%;31.03.2032;2,8750%;5,3458;2,8429%;staatsgarantiert;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Knorr Bremse Green Bond IHS 3,25 % 30.09.32;A383RY;3,855%;0,044%;1,109%;30.09.2032;3,2500%;5,6377;3,2273%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;NordLB Green Bond IHS 4,875 % 11.07.28;NLB4RS;4,519%;0,064%;1,403%;11.07.2028;4,8750%;1,8898;2,7925%;Financials;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;Porsche IHS 4,25 % 27.09.30;A351SX;4,582%;0,073%;1,585%;27.09.2030;4,2500%;3,8632;3,7144%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;RCI Banque IHS 4,875 % 02.10.29;A3LNYD;4,540%;0,039%;0,825%;02.10.2029;4,8750%;2,9926;3,5664%;Financials;Europa ohne Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;RWE Green Bond IHS 0,5 % 26.11.28;A3MP70;4,826%;0,059%;1,208%;26.11.2028;0,5000%;2,3847;2,7795%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;VW Green Bond IHS 3,875 % 10.09.30;A383ET;4,817%;0,041%;0,833%;10.09.2030;3,8750%;3,8440;3,5488%;Corporates;Deutschland;Renten;3;Muster konservativ cVV
+02.07.2026;XETRA Gold;A0S9GB;8,140%;-0,244%;-3,597%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Muster konservativ cVV
+;;;;;;;;;;;;;;
