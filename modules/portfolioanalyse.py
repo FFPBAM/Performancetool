@@ -75,7 +75,7 @@ def parse_pf_data(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = df[col].astype(str).str.strip()
             df[col] = df[col].replace("nan", np.nan)
 
-    for col in ["Gewicht", "Performancebeitrag", "WP-Performance", "Kupon"]:
+    for col in ["Gewicht", "Performancebeitrag", "WP-Performance", "Kupon", "Rendite"]:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
             df[col] = pd.to_numeric(df[col], errors="coerce") / 100.0
@@ -83,6 +83,12 @@ def parse_pf_data(df: pd.DataFrame) -> pd.DataFrame:
         df["Auswertungsdatum"] = pd.to_datetime(df["Auswertungsdatum"], format="%d.%m.%Y", errors="coerce")
     if "Fälligkeit" in df.columns:
         df["Fälligkeit_parsed"] = pd.to_datetime(df["Fälligkeit"], format="%d.%m.%Y", errors="coerce")
+    # Duration ist eine JAHRES-Zahl (z.B. 3,96), KEIN Prozentwert → nicht /100.
+    # "-" und leere Werte werden zu NaN (Nicht-Anleihen).
+    if "Duration" in df.columns:
+        df["Duration"] = pd.to_numeric(
+            df["Duration"].astype(str).str.replace(",", ".").str.strip(),
+            errors="coerce")
     return df
 
 
@@ -284,11 +290,26 @@ def get_bond_summary(df: pd.DataFrame) -> dict:
     if bonds.empty:
         return None
     summary = {"count": len(bonds)}
-    if "Kupon" in bonds.columns and bonds["Kupon"].notna().any():
-        w = bonds["Gewicht"].fillna(0); k = bonds["Kupon"].fillna(0)
-        summary["avg_kupon"] = float((w * k).sum() / w.sum()) if w.sum() > 0 else None
-    else:
-        summary["avg_kupon"] = None
+
+    # Anleihe-gewichtete Mittelwerte (Variante B: normiert auf die
+    # Gewichtssumme der Anleihen, NICHT aufs Gesamtdepot). Verifiziert
+    # 03.07.2026 gegen die Tool-Werte "Muster defensiv cVV":
+    # Duration 3,96 ✓, Rendite 3,28 %, Kupon 2,71 %. Nur Titel mit
+    # vorhandenem Wert gehen ein (Gewichtssumme titelweise gebildet),
+    # damit ein einzelner fehlender Wert das Mittel nicht verzerrt.
+    def _gewichtetes_mittel(spalte: str):
+        if spalte not in bonds.columns or not bonds[spalte].notna().any():
+            return None
+        sub = bonds[["Gewicht", spalte]].copy()
+        sub = sub[sub[spalte].notna() & sub["Gewicht"].notna()]
+        w_sum = sub["Gewicht"].sum()
+        if w_sum <= 0:
+            return None
+        return float((sub["Gewicht"] * sub[spalte]).sum() / w_sum)
+
+    summary["avg_kupon"]    = _gewichtetes_mittel("Kupon")
+    summary["avg_duration"] = _gewichtetes_mittel("Duration")
+    summary["avg_rendite"]  = _gewichtetes_mittel("Rendite")
     if "Fälligkeit_parsed" in bonds.columns and bonds["Fälligkeit_parsed"].notna().any():
         faell = bonds[bonds["Fälligkeit_parsed"].notna()].copy()
         faell["Jahr"] = faell["Fälligkeit_parsed"].dt.year
@@ -768,9 +789,20 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
         st.markdown("---")
         st.markdown("**🏦 Anleihen-Detail**")
 
+        # Duration/Rendite bevorzugt aus den TITELN (get_bond_summary, seit
+        # 03.07.2026, anleihe-gewichtet, verifiziert gegen Tool: 3,96 / 3,28%);
+        # duration_info aus dem Duration-Ordner nur als Fallback, falls die
+        # Titel keine Duration/Rendite tragen (Abwärtskompatibilität).
+        dur_val = bond_summary.get("avg_duration")
+        if dur_val is None and duration_info is not None:
+            dur_val = duration_info.get("duration")
+        ren_val = bond_summary.get("avg_rendite")
+        if ren_val is None and duration_info is not None:
+            ren_val = duration_info.get("rendite")
+
         # Anzahl Kennzahlen-Spalten dynamisch
-        has_duration = duration_info is not None and duration_info.get("duration") is not None
-        has_rendite = duration_info is not None and duration_info.get("rendite") is not None
+        has_duration = dur_val is not None
+        has_rendite = ren_val is not None
         n_bond_cols = 3 + (1 if has_duration else 0) + (1 if has_rendite else 0)
 
         bcols = st.columns(n_bond_cols)
@@ -782,23 +814,24 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
         with bcols[col_idx]:
             if bond_summary["avg_kupon"] is not None:
                 st.metric("⌀ Kupon (gewichtet)", fmt_pct_de(bond_summary["avg_kupon"]),
-                    help="Gewichteter Durchschnittskupon aller Anleihen im Portfolio.")
+                    help="Gewichteter Durchschnittskupon aller Anleihen im Portfolio "
+                         "(gewichtet nach Anleihe-Gewicht).")
             else:
                 st.metric("⌀ Kupon", "–")
             col_idx += 1
         if has_duration:
             with bcols[col_idx]:
-                st.metric("Duration (Portfolio)", f"{duration_info['duration']:.2f}".replace(".", ","),
-                    help="Die Duration misst die Zinssensitivität des Anleihenportfolios. "
-                         "Sie gibt an, um wie viel Prozent der Portfoliowert fällt, "
-                         "wenn das Zinsniveau um 1 Prozentpunkt steigt. "
-                         "Einheit: Jahre (modifizierte Duration).")
+                st.metric("Duration (Portfolio)", f"{dur_val:.2f}".replace(".", ","),
+                    help="Anleihe-gewichtete Duration des Rentenportfolios. Misst die "
+                         "Zinssensitivität: Um wie viel Prozent der Rentenwert fällt, "
+                         "wenn das Zinsniveau um 1 Prozentpunkt steigt. Einheit: Jahre.")
                 col_idx += 1
         if has_rendite:
             with bcols[col_idx]:
-                st.metric("Rendite (Portfolio)", fmt_pct_de(duration_info["rendite"]),
-                    help="Die Portfoliorendite (Yield to Maturity) gibt die erwartete jährliche "
-                         "Rendite an, wenn alle Anleihen bis zur Fälligkeit gehalten werden.")
+                st.metric("Rendite (Portfolio)", fmt_pct_de(ren_val),
+                    help="Anleihe-gewichtete Rendite bis Fälligkeit (Yield to Maturity): "
+                         "erwartete jährliche Rendite, wenn alle Anleihen bis zur "
+                         "Fälligkeit gehalten werden.")
 
         if bond_summary["faelligkeit"] is not None and not bond_summary["faelligkeit"].empty:
             st.markdown("**Fälligkeitsstruktur**")
