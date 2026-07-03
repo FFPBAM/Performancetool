@@ -82,11 +82,13 @@ try:
     from modules.pptx_charts import (
         replace_chart_data, replace_chart_data_safe,
         set_value_axis_min_auto, set_value_axis_min,
+        set_date_axis_base_unit, set_series_line_width,
     )
 except ImportError:
     from pptx_charts import (
         replace_chart_data, replace_chart_data_safe,
         set_value_axis_min_auto, set_value_axis_min,
+        set_date_axis_base_unit, set_series_line_width,
     )
 
 # Format-Helpers
@@ -161,6 +163,11 @@ F8 hat 3 Zeichen mehr durch '***')."""
 # verteilen sich mit festen Zeilenumbrüchen über mehrere Absätze). Die
 # Ersetzung arbeitet daher absatzweise über eindeutige Präfixe; die neuen
 # Zeilen sind auf ähnliche Länge kalibriert, damit das Layout hält.
+WE_LINE_WIDTH_PT = 1.5
+"""Linienstärke des F8-Wertentwicklungs-Charts (03.07.2026): angeglichen an
+F9 (Vorlage F8: 0,75pt — für 211 Monatspunkte ausgelegt, bei Tagesdaten
+zu unruhig)."""
+
 WE_FOOTNOTE_STAR2_PREFIX = "** "
 WE_FOOTNOTE_STAR2_NEW = "** nach Kosten (taggenauer Honorarabzug)"
 
@@ -1400,6 +1407,13 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         # 0% als Minimum und staucht die Kurve. Datenbasiert = identisches,
         # vorhersagbares Rendering in PowerPoint und LibreOffice.
         set_value_axis_min(chart_line, _line_axis_min(we.get("referenz", [])))
+        # 03.07.2026: Das cVV-Chart war für MONATS-Daten gebaut —
+        # baseTimeUnit="months" bündelt Tagespunkte monatsweise und die
+        # Linie wirkt in POWERPOINT zerhackt (in LibreOffice unsichtbar!).
+        # Auf Tages-Granularität stellen + Linienstärke an F9 angleichen
+        # (0,75pt → 1,5pt; bei 6000+ Tagespunkten wirkt dünn unruhig).
+        set_date_axis_base_unit(chart_line, "days")
+        set_series_line_width(chart_line, WE_LINE_WIDTH_PT)
 
     # ── Fußnote: dynamische Zeilen ersetzen ──
     fn = find_shape_by_name(slide, SHAPE_WE_FUSSNOTE)
