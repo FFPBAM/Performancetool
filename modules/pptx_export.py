@@ -312,14 +312,18 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame,
                                         eval_date=eval_date)
 
 
-def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance_data=None):
+def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance_data=None,
+                             stand_date_str=None):
     """Wrapper für pptx_slides.fill_performance_slide."""
-    return fill_performance_slide(prs, slide_idx, strategy_name, performance_data)
+    return fill_performance_slide(prs, slide_idx, strategy_name, performance_data,
+                                  stand_date_str=stand_date_str)
 
 
-def _fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str, we_data=None):
+def _fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str, we_data=None,
+                                 stand_date_str=None):
     """Wrapper für pptx_slides.fill_wertentwicklung_slide (NEU Juli 2026)."""
-    return fill_wertentwicklung_slide(prs, slide_idx, strategy_name, we_data)
+    return fill_wertentwicklung_slide(prs, slide_idx, strategy_name, we_data,
+                                      stand_date_str=stand_date_str)
 
 
 def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
@@ -541,17 +545,23 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
     hier, weil analytics.py in dieser Session nicht angefasst wurde — beim
     nächsten analytics-Update bitte umziehen.
 
-    Kennzahlen-Definitionen (abgeleitet aus den Fußnoten der Original-Folie):
+    Kennzahlen-Definitionen:
 
     1. "Wertentwicklung seit {Auflagejahr} kumuliert*"
-       Fußnote *: "nach Kosten bis zum 31.12. des Vorjahres"
-       → Kumulierte Rendite NACH Kosten von Auflage bis zum letzten
-         Datenpunkt <= 31.12. des Vorjahres. None wenn die Strategie erst
-         im laufenden Jahr aufgelegt wurde (dann zeigt die Folie "–").
+       → Kumulierte Rendite NACH Kosten über die GESAMTE Historie
+         (= Endstand des Linien-Charts relativ zu dessen Start — was der
+         Kunde auf der Kurve sieht, ist exakt die Kennzahl).
+         GEÄNDERT 02.07.2026 (Punkt 7): vorher bis
+         31.12. des Vorjahres (Original-cVV-Konvention) — das erzeugte auf
+         F8/F9 zwei verschiedene p.a.-Werte nebeneinander (z.B. 6,16% vs
+         6,19%). Jetzt identische Basis wie F9 und Tool-UI; die *-Fußnote
+         wird von fill_wertentwicklung_slide entsprechend umgeschrieben.
 
     2. "Rendite p.a. seit {Auflagejahr} nach Kosten"
-       → Annualisierung (365-Tage-Basis, konsistent zu analytics.py) der
-         Kennzahl 1 über denselben Zeitraum (Auflage → 31.12. Vorjahr).
+       → Annualisierung (365-Tage-Basis, identische Mathematik wie
+         analytics.calc_cagr) der Kennzahl 1 über die gesamte Historie —
+         ergibt EXAKT den Wert, der auf F9 als "Performance p.a. (Referenz)"
+         steht (Konsistenz-Kriterium, im Test verifiziert).
 
     3. "Wertentwicklung seit 01.01.{Jahr}**"
        → YTD-Rendite NACH Kosten mit taggenauem Honorarabzug — identische
@@ -597,17 +607,20 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
 
     drag = _annual_fee_to_daily_drag(fee_dec)
 
-    # ── Kennzahl 1 + 2: kumuliert / p.a. bis 31.12. des Vorjahres ──
-    cutoff = pd.Timestamp(laufendes_jahr - 1, 12, 31)
-    mask_hist = dates <= cutoff
+    # ── Chart-Daten: identische Basis wie Performance-Folie ──
+    charts = compute_performance_data(timeseries_df, fee_dec)
+
+    # ── Kennzahl 1 + 2: kumuliert / p.a. über die GESAMTE Historie ──
+    # (02.07.2026, Punkt 7 — vorher bis 31.12. Vorjahr, s. Docstring)
+    # BEWUSST direkt aus dem analytics-Ergebnis abgeleitet statt parallel
+    # nachgerechnet: Kennzahl 2 ist damit KONSTRUKTIV identisch mit dem
+    # "Performance p.a. (Referenz)"-Wert der F9 (gleiche Quelle, gleiche
+    # Rundung), Kennzahl 1 ist der Endstand des F9-/F8-Linien-Index.
     kum_nach_kosten = None
-    pa_nach_kosten = None
-    if mask_hist.any():
-        r_af = r[mask_hist] - drag
-        kum_nach_kosten = float(_np.prod(1.0 + r_af) - 1.0)
-        n_days = int((dates[mask_hist][-1] - first_date).days)
-        if n_days > 0:
-            pa_nach_kosten = (1.0 + kum_nach_kosten) ** (365.0 / n_days) - 1.0
+    pa_nach_kosten = charts.get("kennzahlen", {}).get("performance_pa_ref")
+    _idx_ref = charts.get("wertentwicklung", {}).get("referenz") or []
+    if len(_idx_ref) > 0 and float(_idx_ref[0]) != 0.0:
+        kum_nach_kosten = float(_idx_ref[-1]) / float(_idx_ref[0]) - 1.0
 
     # ── Kennzahl 3: YTD nach Kosten (taggenauer Honorarabzug, Tool-Konvention) ──
     ytd = None
@@ -616,9 +629,6 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
     if mask_ytd.any():
         r_af_ytd = r[mask_ytd] - drag
         ytd = float(_np.prod(1.0 + r_af_ytd) - 1.0)
-
-    # ── Chart-Daten: identische Basis wie Performance-Folie ──
-    charts = compute_performance_data(timeseries_df, fee_dec)
 
     return {
         "auflage_jahr": auflage_jahr,
@@ -656,6 +666,52 @@ def _record_build_error(context: str, exc: Exception):
     traceback.print_exc()
 
 
+F9_BAR_INCLUDE_CURRENT_YEAR = True
+"""02.07.2026 (Punkt 4, Redundanz F8/F9-Balken): Der F9-Balken-Chart zeigt
+zusätzlich das LAUFENDE Jahr (YTD nach Kosten vs. Benchmark) als weiteren
+Balken — damit unterscheiden sich F8 (nur volle Kalenderjahre, gemäß
+*-Fußnoten-Logik) und F9 (inkl. aktuellem Jahresverlauf) inhaltlich.
+Entspricht der Darstellung des Streamlit-Tools selbst (Balken-Chart
+"Kalenderjahre" zeigt dort ebenfalls das laufende Jahr mit an).
+False = altes Verhalten (beide Charts identisch)."""
+
+
+def _append_current_year_bar(perf: dict, ts: pd.DataFrame, fee: float) -> dict:
+    """Hängt das laufende Jahr an performance_pa an (siehe
+    F9_BAR_INCLUDE_CURRENT_YEAR). Portfolio nach Kosten (taggenauer Drag,
+    identische Mathematik wie Kennzahl 3 der F8), Benchmark brutto —
+    gleiche Konvention wie die vollen Jahre aus analytics.
+
+    Non-destruktiv: arbeitet auf einer Kopie des performance_pa-Dicts.
+    No-op wenn das laufende Jahr bereits enthalten ist oder keine Daten hat.
+    """
+    pa = perf.get("performance_pa") or {}
+    jahre = list(pa.get("jahre") or [])
+    if not jahre:
+        return perf
+    ts_sorted = ts.sort_index()
+    dates = pd.to_datetime(ts_sorted.index)
+    cur_year = int(dates[-1].year)
+    if any(int(y) == cur_year for y in jahre):
+        return perf  # laufendes Jahr ist (z.B. bei Jahreswechsel) schon drin
+    mask = _np.array([d.year == cur_year for d in dates])
+    if not mask.any():
+        return perf
+    r = pd.to_numeric(ts_sorted["ret_port"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    rb = pd.to_numeric(ts_sorted.get("ret_bm"), errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    drag = _annual_fee_to_daily_drag(fee)
+    ref_ytd = float(_np.prod(1.0 + (r[mask] - drag)) - 1.0)
+    bm_ytd = float(_np.prod(1.0 + rb[mask]) - 1.0)
+    new_pa = {
+        "jahre": jahre + [cur_year],
+        "referenz": list(pa.get("referenz") or []) + [ref_ytd],
+        "benchmark": list(pa.get("benchmark") or []) + [bm_ytd],
+    }
+    out = dict(perf)
+    out["performance_pa"] = new_pa
+    return out
+
+
 def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
     """
     Helfer: Berechnet performance_data Dict aus performance_inputs[idx].
@@ -663,6 +719,9 @@ def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
     Returns None wenn keine Daten oder ungültige Eingabe — dann zeigt die
     Performance-Folie die Vorlagen-Platzhalter. Berechnungsfehler landen
     in LAST_BUILD_ERRORS (siehe oben) statt still verschluckt zu werden.
+
+    02.07.2026 (Punkt 4): hängt optional das laufende Jahr an den
+    Balken-Chart an (F9_BAR_INCLUDE_CURRENT_YEAR).
     """
     if not performance_inputs or idx >= len(performance_inputs):
         return None
@@ -674,7 +733,10 @@ def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
     if ts is None or len(ts) == 0:
         return None
     try:
-        return compute_performance_data(ts, fee)
+        perf = compute_performance_data(ts, fee)
+        if F9_BAR_INCLUDE_CURRENT_YEAR:
+            perf = _append_current_year_bar(perf, ts, fee)
+        return perf
     except Exception as exc:
         _record_build_error(f"Performance-Folie, Portfolio {idx + 1}", exc)
         return None
@@ -712,6 +774,17 @@ def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
     except Exception as exc:
         _record_build_error(f"Wertentwicklungs-Folie, Portfolio {idx + 1}", exc)
         return None
+
+
+def _stand_str(eval_date) -> Optional[str]:
+    """Formatiert das Auswertungsdatum für die statischen 'Quelle'-Zeilen
+    (02.07.2026, Punkt 6). None/ungültig → None (Quelle bleibt unangetastet)."""
+    try:
+        if eval_date is not None and hasattr(eval_date, "strftime"):
+            return eval_date.strftime("%d.%m.%Y")
+    except Exception:
+        pass
+    return None
 
 
 def generate_portfolioanalyse_pptx(
@@ -793,9 +866,12 @@ def generate_portfolioanalyse_pptx(
         strategy_name = clean_strategy_name(display_name)
         perf_data = _build_perf_data(performance_inputs, 0)
         we_data = _build_we_data(performance_inputs, 0)
+        stand = _stand_str(eval_date)
         _fill_anlagevorschlag_slides(prs, 6, df, strategy_name, eval_date=eval_date)
-        _fill_wertentwicklung_slide(prs, 7, strategy_name, we_data=we_data)
-        _fill_performance_slide(prs, 8, strategy_name, performance_data=perf_data)
+        _fill_wertentwicklung_slide(prs, 7, strategy_name, we_data=we_data,
+                                    stand_date_str=stand)
+        _fill_performance_slide(prs, 8, strategy_name, performance_data=perf_data,
+                                stand_date_str=stand)
         _fill_zusammenstellung_slide(prs, 9, df, strategy_name, eval_date=eval_date)
 
     elif len(portfolios) == 2:
@@ -811,10 +887,15 @@ def generate_portfolioanalyse_pptx(
         we_data_1 = _build_we_data(performance_inputs, 0)
         we_data_2 = _build_we_data(performance_inputs, 1)
 
+        stand_1 = _stand_str(eval_date_1)
+        stand_2 = _stand_str(eval_date_2)
+
         # Schritt 1: Portfolio 1 in Original-Slides (Index 6, 7, 8, 9)
         _fill_anlagevorschlag_slides(prs, 6, df_1, strategy_name_1, eval_date=eval_date_1)
-        _fill_wertentwicklung_slide(prs, 7, strategy_name_1, we_data=we_data_1)
-        _fill_performance_slide(prs, 8, strategy_name_1, performance_data=perf_data_1)
+        _fill_wertentwicklung_slide(prs, 7, strategy_name_1, we_data=we_data_1,
+                                    stand_date_str=stand_1)
+        _fill_performance_slide(prs, 8, strategy_name_1, performance_data=perf_data_1,
+                                stand_date_str=stand_1)
         _fill_zusammenstellung_slide(prs, 9, df_1, strategy_name_1, eval_date=eval_date_1)
 
         # Schritt 2: VIER Duplikate der Slides an Index 6, 8, 10, 12 anlegen.
@@ -854,8 +935,10 @@ def generate_portfolioanalyse_pptx(
 
         # Schritt 6: Portfolio 2 in Duplikate (Index 10, 11, 12, 13)
         _fill_anlagevorschlag_slides(prs, 10, df_2, strategy_name_2, eval_date=eval_date_2)
-        _fill_wertentwicklung_slide(prs, 11, strategy_name_2, we_data=we_data_2)
-        _fill_performance_slide(prs, 12, strategy_name_2, performance_data=perf_data_2)
+        _fill_wertentwicklung_slide(prs, 11, strategy_name_2, we_data=we_data_2,
+                                    stand_date_str=stand_2)
+        _fill_performance_slide(prs, 12, strategy_name_2, performance_data=perf_data_2,
+                                stand_date_str=stand_2)
         _fill_zusammenstellung_slide(prs, 13, df_2, strategy_name_2, eval_date=eval_date_2)
 
     else:
