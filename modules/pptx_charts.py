@@ -367,6 +367,65 @@ def set_value_axis_min(chart_shape, min_value: float):
         mn.set("val", repr(float(min_value)))
 
 
+def set_date_axis_base_unit(chart_shape, unit: str = "days"):
+    """Setzt die Basis-Zeiteinheit der Datumsachse (NEU 03.07.2026).
+
+    Hintergrund: Ein Vorlagen-Chart, das mit MONATS-Daten gebaut wurde,
+    trägt <c:dateAx><c:baseTimeUnit val="months"/>. Befüllt man es mit
+    TAGES-Daten, bündelt PowerPoint alle Punkte eines Monats an derselben
+    Achsenposition → die Linie springt vertikal und wirkt "nicht
+    kontinuierlich". TÜCKISCH: LibreOffice ignoriert baseTimeUnit
+    weitgehend — im LO-Render sieht die Linie korrekt aus, der Fehler
+    zeigt sich NUR in PowerPoint (bewiesen 03.07.2026 am Offensiv-Export:
+    F8-Linie zerhackt, F9 mit identischen Daten aber baseTimeUnit="days"
+    kontinuierlich).
+
+    Regel: baseTimeUnit muss zur Granularität der eingefüllten Daten
+    passen — bei Tagesdaten immer "days" setzen.
+
+    Args:
+        chart_shape: Chart-Shape
+        unit: "days" | "months" | "years"
+    """
+    chart_xml = chart_shape.chart._chartSpace
+    for ax_elem in chart_xml.findall(".//c:dateAx", NS_CHART):
+        btu = ax_elem.find("c:baseTimeUnit", NS_CHART)
+        if btu is None:
+            btu = etree.SubElement(ax_elem, f"{{{_CHART_NS_URI}}}baseTimeUnit")
+            # OOXML-Schema: baseTimeUnit steht nach c:lblOffset bzw. c:auto
+            anchor = ax_elem.find("c:lblOffset", NS_CHART)
+            if anchor is None:
+                anchor = ax_elem.find("c:auto", NS_CHART)
+            if anchor is not None:
+                anchor.addnext(btu)
+        btu.set("val", unit)
+
+
+def set_series_line_width(chart_shape, width_pt: float):
+    """Setzt die Linienstärke ALLER Serien eines Charts (NEU 03.07.2026).
+
+    Anlass: Das cVV-Linien-Chart hat 0,75pt (für 211 Monatspunkte
+    ausgelegt), die Performance-Folie 1,5pt — mit 6000+ Tagespunkten
+    wirkt die dünne Linie unruhig und beide Folien sehen bei identischen
+    Daten unterschiedlich aus. Defensive Implementierung: nur vorhandene
+    <a:ln>-Elemente in ser/spPr werden angepasst (keine neuen angelegt —
+    Serien ohne explizite Linie behalten das Theme-Default).
+
+    Args:
+        chart_shape: Chart-Shape
+        width_pt: Linienstärke in Punkt (1 pt = 12700 EMU)
+    """
+    NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    chart_xml = chart_shape.chart._chartSpace
+    for ser in chart_xml.findall(".//c:ser", NS_CHART):
+        sppr = ser.find("c:spPr", NS_CHART)
+        if sppr is None:
+            continue
+        ln = sppr.find(f"{{{NS_A}}}ln")
+        if ln is not None:
+            ln.set("w", str(int(round(width_pt * 12700))))
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Alternative: In-place Chart-Update (behält Format-Codes erhalten)
 # ─────────────────────────────────────────────────────────────────────────────
