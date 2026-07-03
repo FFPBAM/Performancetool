@@ -180,7 +180,16 @@ def build_rolling_table(idx_before_1, idx_after_1, label_1, idx_before_2=None, i
     end_ts = idx_after_1.dropna().index.max()
     if pd.isna(end_ts): return pd.DataFrame()
     first_ts = idx_after_1.dropna().index.min()
-    periods = [("ytd", pd.Timestamp(end_ts.year,1,1)),("1 Jahre", end_ts-pd.DateOffset(years=1)),
+    # YTD ab VORJAHRES-SCHLUSSSTAND (03.07.2026): asof(01.01.) nahm bei
+    # kalendertäglichen Daten den Indexstand NACH dem 01.01. — die Tabelle
+    # verlor damit den ersten Tag des Jahres (Rendite + 1 Tag Honorar-Drag,
+    # ~0,003%-Punkte) und wich von PP-Folie 8 und dem eigenen Balken-Chart
+    # ab (beide rechnen ab 31.12.-Schluss, d.h. Renditen >= 01.01. inklusive).
+    # asof(31.12. Vorjahr) = letzter Schlussstand des Vorjahres → Tabelle,
+    # Balken-Chart und PP sind jetzt bit-identisch. Die rollierenden
+    # Zeiträume (1/3/5/10 Jahre) behalten bewusst ihre Punkt-zu-Punkt-
+    # Konvention (end − n Jahre), dort gibt es keine Jahresgrenzen-Semantik.
+    periods = [("ytd", pd.Timestamp(end_ts.year-1,12,31)),("1 Jahre", end_ts-pd.DateOffset(years=1)),
         ("3 Jahre", end_ts-pd.DateOffset(years=3)),("5 Jahre", end_ts-pd.DateOffset(years=5)),
         ("10 Jahre", end_ts-pd.DateOffset(years=10)),(since_label or f"Seit: {fmt_date_de(first_ts)}", first_ts)]
     rows = []
