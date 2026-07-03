@@ -321,13 +321,12 @@ def restore_axis_number_format(chart_shape, format_code: str, axis: str = "val")
 def set_value_axis_min_auto(chart_shape):
     """Entfernt eine fixe Untergrenze (<c:min>) der Werteachse → Auto-Skalierung.
 
-    NEU (Juli 2026), für die Wertentwicklungs-Folie (alte cVV-Folie): Deren
-    Linien-Chart hat in der Vorlage eine hartcodierte Achsen-Untergrenze von
-    70% (<c:scaling><c:min val="0.7"/>) — kalibriert auf die 17-Jahres-
-    Historie der Konservativ-Strategie. Für dynamisch befüllte Strategien
-    (insb. junge, deren Index nie unter ~95% fällt) verschenkt die fixe
-    Untergrenze Platz. Ohne <c:min> wählt PowerPoint die Untergrenze
-    automatisch passend zu den Daten.
+    ACHTUNG (Erkenntnis 02.07.2026): Auto-Skalierung ist bei Linien-Charts
+    RENDERER-ABHÄNGIG — PowerPoint wählt bei Indizes, die weit über 100%
+    laufen (z.B. 100%→500%), als Auto-Minimum gerne 0% und staucht damit die
+    Kurve. Für deterministisches Verhalten stattdessen set_value_axis_min()
+    mit datenbasiertem Wert nutzen. Diese Funktion bleibt für Fälle erhalten,
+    in denen echtes Auto gewünscht ist.
 
     Idempotent: kein <c:min> vorhanden → no-op. <c:max> bleibt unangetastet.
     """
@@ -339,6 +338,33 @@ def set_value_axis_min_auto(chart_shape):
         mn = scaling.find("c:min", NS_CHART)
         if mn is not None:
             scaling.remove(mn)
+
+
+def set_value_axis_min(chart_shape, min_value: float):
+    """Setzt eine EXPLIZITE Untergrenze der Werteachse (NEU 02.07.2026).
+
+    Hintergrund: Die Linien-Charts der Broschüre zeigen Indizes (Start 1.0).
+    Eine im Template hartcodierte Untergrenze (70%) passt nicht für alle
+    Strategien; PowerPoint-Auto wählt bei großen Spannen dagegen oft 0% und
+    staucht die Kurve. Lösung: Untergrenze DATENBASIERT setzen (Aufrufer
+    berechnet z.B. Datenminimum, abgerundet auf 10%-Schritt) — identisches,
+    vorhersagbares Rendering in PowerPoint UND LibreOffice.
+
+    Args:
+        chart_shape: Chart-Shape
+        min_value: Achsen-Minimum als Dezimalwert (z.B. 0.8 für 80%)
+    """
+    chart_xml = chart_shape.chart._chartSpace
+    for ax_elem in chart_xml.findall(".//c:valAx", NS_CHART):
+        scaling = ax_elem.find("c:scaling", NS_CHART)
+        if scaling is None:
+            continue
+        mn = scaling.find("c:min", NS_CHART)
+        if mn is None:
+            mn = etree.SubElement(scaling, f"{{{_CHART_NS_URI}}}min")
+            # Schema-Reihenfolge in c:scaling: logBase?, orientation?, max?, min?
+            # → min gehört ans ENDE von scaling; SubElement hängt hinten an: ok.
+        mn.set("val", repr(float(min_value)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
