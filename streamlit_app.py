@@ -680,6 +680,7 @@ with tab_perf:
     # Daten an Portfolioanalyse-Tab weitergeben (für PowerPoint-Export der Performance-Folie)
     st.session_state["perf_timeseries"] = data
     st.session_state["perf_d2c"] = d2c
+    st.session_state["perf_d2b"] = d2b  # Benchmark-Texte für ***-Fußnote der WE-Folie (07/2026)
 
     with st.sidebar:
         ds1=st.selectbox("Portfolio",dn_ordered,key="p_sel1"); ps1=d2c[ds1]
@@ -788,6 +789,30 @@ with tab_perf:
     if df2 is not None and "rf" in df2.columns:
         rf_series_2 = df2["rf"]
         rf_pa_2 = aggregate_rf_geometric(rf_series_2, len(r2))
+
+    # ── Konsistenz-Hinweis Tool vs. PowerPoint (03.07.2026) ─────────────────
+    # Fachliche Festlegung (Philip): Die PowerPoint-Broschüre rechnet IMMER
+    # über die volle Historie mit dem Standardsatz aus dem Mapping — sie ist
+    # die kanonische, reproduzierbare Basis. Die Tool-Anzeige darf davon
+    # abweichen (Zeitraum-Filter, Vergleichs-Schnittmenge, editierter Satz),
+    # das ist GEWOLLT — muss aber sichtbar sein, sonst wirken die Zahlen
+    # "inkonsistent". Diese Caption benennt live jede aktive Abweichung.
+    _pp_abweichungen = []
+    if sd > mind or ed < maxd:
+        _pp_abweichungen.append(f"Zeitraum gefiltert ({fmt_date_de(sd)} – {fmt_date_de(ed)})")
+    if df2 is not None:
+        _pp_abweichungen.append("Vergleich aktiv → Berechnung auf gemeinsamem Zeitraum beider Portfolios")
+    _fee_std_1 = float(round(fd1 * 100, 4))
+    if abs(fp1 - _fee_std_1) > 1e-9:
+        _pp_abweichungen.append(f"Kostensatz {ds1} manuell geändert ({fp1:.4f}% statt Standard {_fee_std_1:.4f}%)")
+    if sc and ps2 and fp2 is not None:
+        _fee_std_2 = float(round(fd2 * 100, 4))
+        if abs(fp2 - _fee_std_2) > 1e-9:
+            _pp_abweichungen.append(f"Kostensatz {ds2} manuell geändert ({fp2:.4f}% statt Standard {_fee_std_2:.4f}%)")
+    if _pp_abweichungen:
+        st.info("ℹ️ **Anzeige weicht von der PowerPoint-Basis ab** (die Broschüre rechnet immer: "
+                "volle Historie, Standardsatz aus dem Mapping): " + " · ".join(_pp_abweichungen)
+                + ". MwSt-Häkchen ggf. in beiden Tabs gleich stellen.")
 
     # Kennzahlen
     nd1=len(r1); draf1=calc_daily_returns_after_fee(r1,fdec1); cg1=calc_cagr(ia1,nd1); vo1=calc_vola(draf1)
