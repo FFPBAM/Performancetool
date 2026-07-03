@@ -245,9 +245,35 @@ def get_top_flop(df: pd.DataFrame, col: str, n: int = 5):
 
 
 def get_bond_summary(df: pd.DataFrame) -> dict:
-    bonds = df[df["Gattung"].str.lower().str.contains("rente|anleihe|bond", na=False)].copy()
+    # Gattung robust als normale Strings (Arrow-String-dtype kann bei
+    # verketteten .str-Ops Probleme machen).
+    gattung = df["Gattung"].astype("object").astype(str).str.lower()
+    bonds = df[gattung.str.contains("rente|anleihe|bond", na=False)].copy()
     if bonds.empty:
         return None
+
+    # Alle rechen-relevanten Spalten EINMAL deterministisch in float wandeln
+    # (03.07.2026). Grund: unter Python 3.14 / pandas-Arrow-Backend sind die
+    # Spalten teils Arrow-Strings — dann macht z.B. bonds["Gewicht"].sum()
+    # eine String-VERKETTUNG statt Summe ("Can only string multiply…" bzw.
+    # "could not convert string to float"). Betrifft total_weight,
+    # Fälligkeits-Gewichte UND die gewichteten Mittel.
+    def _to_float_series(col):
+        werte = []
+        for x in col.tolist():
+            if x is None or (isinstance(x, float) and np.isnan(x)):
+                werte.append(np.nan); continue
+            if isinstance(x, (int, float)):
+                werte.append(float(x)); continue
+            t = str(x).replace("%", "").replace(",", ".").strip()
+            werte.append(float(t) if t not in ("", "-", "nan", "None", "<NA>")
+                         else np.nan)
+        return pd.Series(werte, index=col.index, dtype="float64")
+
+    for _c in ("Gewicht", "Kupon", "Rendite", "Duration"):
+        if _c in bonds.columns:
+            bonds[_c] = _to_float_series(bonds[_c])
+
     summary = {"count": len(bonds)}
 
     # Anleihe-gewichtete Mittelwerte (Variante B: normiert auf die
@@ -257,14 +283,17 @@ def get_bond_summary(df: pd.DataFrame) -> dict:
     # vorhandenem Wert gehen ein (Gewichtssumme titelweise gebildet),
     # damit ein einzelner fehlender Wert das Mittel nicht verzerrt.
     def _gewichtetes_mittel(spalte: str):
-        if spalte not in bonds.columns or not bonds[spalte].notna().any():
+        if spalte not in bonds.columns:
             return None
-        sub = bonds[["Gewicht", spalte]].copy()
-        sub = sub[sub[spalte].notna() & sub["Gewicht"].notna()]
-        w_sum = sub["Gewicht"].sum()
+        w = bonds["Gewicht"]
+        v = bonds[spalte]
+        mask = v.notna() & w.notna()
+        if not mask.any():
+            return None
+        w_sum = w[mask].sum()
         if w_sum <= 0:
             return None
-        return float((sub["Gewicht"] * sub[spalte]).sum() / w_sum)
+        return float((w[mask] * v[mask]).sum() / w_sum)
 
     summary["avg_kupon"]    = _gewichtetes_mittel("Kupon")
     summary["avg_duration"] = _gewichtetes_mittel("Duration")
