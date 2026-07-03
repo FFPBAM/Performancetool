@@ -25,7 +25,7 @@ from reportlab.lib.colors import HexColor, white
 
 from modules.shared import (
     FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
-    DATA_FOLDER, DATA_FOLDER_PF, DURATION_FOLDER, EXCLUDE_SUBSTRINGS,
+    DATA_FOLDER, DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
     PDF_FONT, PDF_FONT_BOLD,
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, get_logo_aspect, get_logo_path,
@@ -108,65 +108,24 @@ def build_pf_data(files: list[str]) -> dict:
 # ---------------------------------------------------------------------------
 # Duration Loading
 # ---------------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
-def load_duration_data(duration_folder: str, name_mapping: pd.DataFrame) -> dict:
+def duration_info_aus_bestand(df: pd.DataFrame) -> dict:
+    """Duration + Rendite eines Portfolios anleihe-gewichtet aus den
+    Titeldaten (NEU 03.07.2026 — ersetzt den früheren Duration-Ordner).
+
+    Nutzt get_bond_summary (dieselbe Variante-B-Gewichtung wie ⌀ Kupon:
+    normiert auf die Anleihen-Gewichtssumme). Verifiziert gegen die
+    Tool-Werte "Muster defensiv cVV": Duration 3,96 / Rendite 3,28 %.
+
+    Returns:
+        {"duration": float|None, "rendite": float|None} — gleiches Format
+        wie zuvor der Duration-Ordner, damit Anzeige UND PPTX-Export
+        unverändert damit arbeiten.
     """
-    Lädt die neueste Duration-Datei und gibt ein Dict zurück:
-    {csv_portfolio_name: {"duration": float, "rendite": float}}
-    Zuordnung über Spalte C (Duration-Name) im Mapping.
-    """
-    # Neueste Datei finden
-    all_files = glob.glob(os.path.join(duration_folder, "*.CSV")) + \
-                glob.glob(os.path.join(duration_folder, "*.csv"))
-    if not all_files:
-        return {}
+    bs = get_bond_summary(df)
+    if bs is None:
+        return {"duration": None, "rendite": None}
+    return {"duration": bs.get("avg_duration"), "rendite": bs.get("avg_rendite")}
 
-    # Nach Zeitstempel im Namen sortieren (neueste zuerst)
-    tag_pattern = re.compile(r"_(\d{6})_(\d{4})")
-    def _sort_key(f):
-        m = tag_pattern.search(os.path.basename(f))
-        return m.group(1) + m.group(2) if m else "000000_0000"
-    all_files.sort(key=_sort_key, reverse=True)
-    newest = all_files[0]
-
-    # CSV lesen
-    try:
-        df = pd.read_csv(newest, comment="#", encoding="ISO-8859-1",
-                         delimiter=";", decimal=",", thousands=".", dtype=str)
-    except Exception:
-        # Auch Tab-getrennt oder Excel probieren
-        try:
-            df = pd.read_csv(newest, comment="#", encoding="UTF-8",
-                             delimiter="\t", decimal=",", thousands=".", dtype=str)
-        except Exception:
-            return {}
-
-    if "Wertpapier" not in df.columns or "Duration" not in df.columns:
-        return {}
-
-    # Rendite parsen
-    if "Rendite" in df.columns:
-        df["Rendite"] = df["Rendite"].astype(str).str.replace("%", "").str.replace(",", ".").str.strip()
-        df["Rendite"] = pd.to_numeric(df["Rendite"], errors="coerce") / 100.0
-    df["Duration"] = pd.to_numeric(df["Duration"].astype(str).str.replace(",", "."), errors="coerce")
-
-    # Mapping: Spalte C (Duration-Name) → Spalte B (CSV-Key)
-    col_csv_key = name_mapping.columns[1]   # "Honorarsatz Mapping"
-    col_duration = name_mapping.columns[2]  # "Duration" (Spalte C)
-    duration_to_csv = dict(zip(name_mapping[col_duration], name_mapping[col_csv_key]))
-
-    result = {}
-    for _, row in df.iterrows():
-        dur_name = str(row["Wertpapier"]).strip()
-        csv_name = duration_to_csv.get(dur_name)
-        if csv_name:
-            entry = {"duration": row["Duration"] if pd.notna(row["Duration"]) else None}
-            if "Rendite" in df.columns:
-                entry["rendite"] = row["Rendite"] if pd.notna(row["Rendite"]) else None
-            else:
-                entry["rendite"] = None
-            result[csv_name] = entry
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -475,9 +434,6 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     if not pf_data:
         st.warning("Keine Portfolioanalyse-Daten geladen."); return
 
-    # Duration-Daten laden
-    duration_data = load_duration_data(DURATION_FOLDER, name_mapping)
-
     # Name-Mapping
     available_pf_names = set(pf_data.keys())
     col_display = name_mapping.columns[0]; col_csv_key = name_mapping.columns[1]
@@ -492,14 +448,16 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     # Portfolio-Auswahl
     pf_sel_1 = st.selectbox("Portfolio auswählen", display_names_pf, key="pf_sel_1")
     csv_name_1 = display_to_csv_pf[pf_sel_1]; df_pf_1 = pf_data[csv_name_1]
-    dur_1 = duration_data.get(csv_name_1)
+    # Duration/Rendite anleihe-gewichtet aus den Titeln (Duration-Ordner
+    # entfällt seit 03.07.2026).
+    dur_1 = duration_info_aus_bestand(df_pf_1)
 
     show_compare_pf = st.checkbox("Vergleichsportfolio anzeigen", value=False, key="pf_compare")
     pf_sel_2 = csv_name_2 = df_pf_2 = dur_2 = None
     if show_compare_pf:
         pf_sel_2 = st.selectbox("Vergleichsportfolio auswählen", display_names_pf, key="pf_sel_2")
         csv_name_2 = display_to_csv_pf[pf_sel_2]; df_pf_2 = pf_data[csv_name_2]
-        dur_2 = duration_data.get(csv_name_2)
+        dur_2 = duration_info_aus_bestand(df_pf_2)
 
     # Auswertungsdatum
     ad1 = df_pf_1["Auswertungsdatum"].iloc[0] if "Auswertungsdatum" in df_pf_1.columns and df_pf_1["Auswertungsdatum"].notna().any() else None
@@ -650,8 +608,9 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                     # NEU (Juli 2026): Zusatzdaten für die Wertentwicklungs-Folie
                     # (Folie 8) — beide optional, fehlend → "–" bzw.
                     # Vorlagen-Fußnote bleibt.
-                    # Duration: dur_info ist das Dict aus load_duration_data
-                    # ({"duration": float|None, "rendite": float|None}).
+                    # Duration: dur_info ist das Dict aus
+                    # duration_info_aus_bestand ({"duration", "rendite"},
+                    # anleihe-gewichtet aus den Titeln).
                     duration_val = _dur.get("duration") if isinstance(_dur, dict) else None
                     # Benchmark-Text: Mapping Spalte D; Platzhalter-Werte filtern
                     bm_text = perf_d2b.get(pf_name)
