@@ -80,11 +80,13 @@ except ImportError:
 # Chart-Manipulation (XML-basiert, mit Bug-Workaround)
 try:
     from modules.pptx_charts import (
-        replace_chart_data, replace_chart_data_safe, set_value_axis_min_auto,
+        replace_chart_data, replace_chart_data_safe,
+        set_value_axis_min_auto, set_value_axis_min,
     )
 except ImportError:
     from pptx_charts import (
-        replace_chart_data, replace_chart_data_safe, set_value_axis_min_auto,
+        replace_chart_data, replace_chart_data_safe,
+        set_value_axis_min_auto, set_value_axis_min,
     )
 
 # Format-Helpers
@@ -127,11 +129,24 @@ SHAPE_WE_QUELLE = "Quelle"
 WE_TITLE_FORMAT = "Anlagestrategie {name} | Wertentwicklung"
 """Titel-Muster der Wertentwicklungs-Folie (wie in der alten cVV-Broschüre)."""
 
-WE_SERIES_PORTFOLIO = "Musterdepot"
+WE_SERIES_PORTFOLIO = "Referenzportfolio"
 WE_SERIES_BENCHMARK = "Benchmark"
-"""Series-Namen im Balken-Chart der Wertentwicklungs-Folie. Werden nicht
-angezeigt (die Legende ist eine statische Textbox in der Vorlage), müssen
-aber gesetzt werden."""
+"""Series-Namen im Balken-Chart der Wertentwicklungs-Folie.
+02.07.2026 (Punkt 3, Wording-Vereinheitlichung): 'Musterdepot' →
+'Referenzportfolio', damit F8 und F9 denselben Begriff nutzen. F9 ist die
+etablierte/freigegebene Folie dieser Broschüre → deren Begriff gewinnt.
+Die statische Legenden-Textbox der F8 wird beim Befüllen entsprechend
+umgeschrieben (siehe WE_LEGEND_*)."""
+
+WE_LEGEND_OLD_TERM = "Musterdepot "
+WE_LEGEND_NEW_TERM = "Referenzportfolio "
+WE_LEGEND_GAP_OLD = "     "
+WE_LEGEND_GAP_NEW = "   "
+"""Legenden-Umschreibung F8: Der Begriff wird im Run 'Musterdepot ' ersetzt;
+weil 'Referenzportfolio' 6 Zeichen länger ist und die Box (2,24") mit
+'…Benchmark***' knapp wird, wird der 5-Leerzeichen-Lücken-Run auf 3 gekürzt
+(F9 beweist, dass 'Referenzportfolio      Benchmark' in 2,24" passt —
+F8 hat 3 Zeichen mehr durch '***')."""
 
 # ─── Fußnoten-/Disclaimer-Umschreibung der Wertentwicklungs-Folie ───────────
 # Juli 2026: Die YTD-Kennzahl folgt jetzt der Tool-Konvention (nach Kosten,
@@ -148,6 +163,15 @@ aber gesetzt werden."""
 # Zeilen sind auf ähnliche Länge kalibriert, damit das Layout hält.
 WE_FOOTNOTE_STAR2_PREFIX = "** "
 WE_FOOTNOTE_STAR2_NEW = "** nach Kosten (taggenauer Honorarabzug)"
+
+WE_FOOTNOTE_STAR1_PREFIX = "* "
+WE_FOOTNOTE_STAR1_NEW = ("* nach Kosten; vollständige Performancehistorie kann "
+                         "auf Anfrage eingesehen werden")
+"""02.07.2026 (Punkt 7): Kennzahlen 1+2 laufen jetzt bis zum LETZTEN
+Datenpunkt (volle Historie, identische Basis wie F9/Tool-UI) statt bis
+31.12. des Vorjahres → der Zusatz 'bis zum 31.12. des Vorjahres' in der
+*-Fußnote entfällt. Präfix '* ' matcht NUR die *-Zeile ('**…' hat an
+Position 2 einen Stern, kein Leerzeichen)."""
 
 WE_DISCLAIMER_REPLACEMENTS = [
     # (Absatz-Präfix in der Vorlage, neuer Absatz-Text)
@@ -338,6 +362,68 @@ def replace_paragraph_text_by_prefix(text_frame, prefix: str, new_text: str) -> 
                 r.text = ""
             return True
     return False
+
+
+def replace_substring_in_runs(text_frame, old: str, new: str) -> bool:
+    """Ersetzt einen Teilstring INNERHALB einzelner Runs eines Text-Frames
+    (NEU 02.07.2026, für die Legenden-Textbox der Wertentwicklungs-Folie).
+
+    Rührt nur Runs an, die `old` enthalten — alle übrigen Runs (z.B. die
+    Wingdings-Farbquadrate der Legende) bleiben samt Formatierung unberührt.
+    Voraussetzung: `old` liegt komplett in EINEM Run (in der Vorlage der Fall:
+    'Musterdepot ' ist ein eigener Run).
+
+    Returns:
+        True wenn mindestens ein Run ersetzt wurde.
+    """
+    replaced = False
+    for para in text_frame.paragraphs:
+        for run in para.runs:
+            if old in run.text:
+                run.text = run.text.replace(old, new)
+                replaced = True
+    return replaced
+
+
+# XML-Namespace für DrawingML (für set_shape_text_static)
+_NSA = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+def set_shape_text_static(shape, text: str):
+    """Setzt den Text eines Shapes STATISCH und entfernt dabei dynamische
+    Felder (NEU 02.07.2026, Punkt 6 — 'Quelle … Stand'-Boxen).
+
+    Hintergrund: Die 'Quelle'-Textboxen der Wertentwicklungs- und der
+    Performance-Folie enthalten ein PowerPoint-DATUMSFELD (<a:fld
+    type="datetime1">) — das rendert immer das ÖFFNUNGS-Datum der Datei,
+    nicht den Datenstand. Öffnet der Kunde die Broschüre eine Woche später,
+    steht dort ein anderes Datum. Fix: Feld-Elemente aus dem XML entfernen
+    und den kompletten Text statisch setzen (Format des ersten Runs bleibt
+    erhalten; existiert kein Run, übernimmt der erste Absatz das Format des
+    Feld-Laufs nicht — in der Vorlage ist immer ein Text-Run vorhanden).
+
+    No-op wenn das Shape kein Text-Frame hat.
+    """
+    if not shape.has_text_frame:
+        return
+    tf = shape.text_frame
+    # 1) Alle <a:fld>-Elemente entfernen (Datums-/Foliennummern-Felder)
+    txBody = tf._txBody
+    for fld in txBody.findall(f".//{{{_NSA}}}fld"):
+        fld.getparent().remove(fld)
+    # 2) Text statisch setzen: erster Run behält Format, Rest wird geleert,
+    #    überzählige Absätze entfernt (gleiches Muster wie replace_text_in_shape)
+    while len(tf.paragraphs) > 1:
+        p = tf.paragraphs[-1]._p
+        p.getparent().remove(p)
+    para = tf.paragraphs[0]
+    runs = list(para.runs)
+    if runs:
+        runs[0].text = text
+        for r in runs[1:]:
+            r._r.getparent().remove(r._r)
+    else:
+        para.text = text
 
 
 def safe_marktrisikowert(value) -> str:
@@ -1074,8 +1160,19 @@ def fill_kennzahlen_table(table, kz: dict):
 
 
 def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
-                            performance_data: Optional[dict] = None):
+                            performance_data: Optional[dict] = None,
+                            stand_date_str: Optional[str] = None):
     """Befüllt die Performance-Slide (Kennzahlen-Vergleich + 2 Charts mit BM).
+
+    Änderungen 02.07.2026:
+    - Punkt 2: Linien-Chart bekommt eine DATENBASIERTE Achsen-Untergrenze
+      (Minimum über BEIDE Serien, 10%-Schritt darunter) statt des im Template
+      fixierten 70%-Werts — vorher wurde die Portfoliolinie bei Strategien
+      mit weit gelaufener Benchmark unnötig gestaucht bzw. bei jungen
+      Strategien Platz verschenkt.
+    - Punkt 6: Die 'Quelle'-Box enthielt ein Live-DATUMSFELD (zeigte das
+      Öffnungs-Datum der Datei) → wird durch statischen Text mit dem
+      Datenstand ersetzt.
 
     Args:
         prs: Presentation
@@ -1084,6 +1181,8 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
         performance_data: Dict mit Performance-Daten (siehe
             modules.analytics.compute_performance_data). Wenn None: nur Titel
             wird gesetzt, Charts/Tabelle bleiben mit Vorlagen-Platzhaltern.
+        stand_date_str: Datum ("DD.MM.YYYY") für die statische Quelle-Zeile.
+            None = Quelle-Box unangetastet lassen.
     """
     slide = prs.slides[slide_idx]
 
@@ -1135,10 +1234,42 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
             ],
             data_label_format=None,  # Linien-Chart hat keine Daten-Labels
         )
+        # 02.07.2026 (Punkt 2): datenbasierte Untergrenze über BEIDE Serien
+        # (Template-Fixwert 70% ersetzt; Details siehe _line_axis_min).
+        all_vals = list(we.get("referenz", [])) + list(we.get("benchmark", []))
+        set_value_axis_min(chart_rechts, _line_axis_min(all_vals))
+
+    # ── Quelle (02.07.2026, Punkt 6): Datumsfeld → statischer Datenstand ──
+    if stand_date_str:
+        quelle = find_shape_by_name(slide, "Quelle")
+        if quelle:
+            set_shape_text_static(
+                quelle, f"Quelle: Eigene Berechnung, Stand {stand_date_str}")
+
+
+def _line_axis_min(values) -> float:
+    """Berechnet die Achsen-Untergrenze für einen Index-Linien-Chart
+    (NEU 02.07.2026, Punkt 2): 10%-Schritt UNTER dem Datenminimum,
+    gedeckelt bei 1.0 (Achse beginnt nie über 100%, damit der Startpunkt
+    der Kurve sichtbar bleibt) und nie unter 0.
+
+    Beispiele: min(Daten)=0.94 → 0.9;  min=1.0 (nur steigend) → 0.9
+    (eine Stufe Luft unter dem Start);  min=0.62 → 0.6.
+    """
+    try:
+        data_min = min(float(v) for v in values)
+    except (ValueError, TypeError):
+        return 0.7  # Fallback: bisheriger Template-Wert
+    import math
+    floor10 = math.floor(data_min * 10.0) / 10.0
+    if floor10 >= data_min - 1e-9:      # Datenminimum liegt exakt auf der Stufe
+        floor10 -= 0.1                  # → eine Stufe Luft darunter
+    return max(0.0, min(floor10, 0.9))
 
 
 def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
-                                we_data: Optional[dict] = None):
+                                we_data: Optional[dict] = None,
+                                stand_date_str: Optional[str] = None):
     """Befüllt die Wertentwicklungs-/Kurzübersichts-Folie (NEU Juli 2026).
 
     Das ist die aus dem alten VBA-Tool übernommene Folie
@@ -1153,12 +1284,19 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         Row 4: "Wertentwicklung seit 01.01.{Jahr}**"             → Wert %
         Row 5: "Duration"                                        → Dezimal
     - "Diagramm links" (Säulen): Performance p.a. nach Kosten im
-      Benchmarkvergleich, volle Kalenderjahre (identische Datenbasis wie
-      die Performance-Folie, max. 5 Jahre)
+      Benchmarkvergleich, volle Kalenderjahre (max. 5); Achsenformat "0%"
+      (02.07.2026, Punkt 1 — vereinheitlicht mit F9; Daten-Labels bleiben
+      2-stellig "0.00%")
     - "Diagramm rechts" (Linie): Wertentwicklung als Index (Start = 1.0),
-      gesamte Historie, EINE Serie (ohne Benchmark-Linie — so das Original)
-    - Fußnote: die ***-Zeile (Benchmark-Zusammensetzung) wird dynamisch
-      ersetzt, * und ** sowie der Disclaimer bleiben statisch aus der Vorlage
+      gesamte Historie, EINE Serie; Achsen-Untergrenze DATENBASIERT
+      (02.07.2026, Punkt 2 — 10%-Schritt unter Datenminimum, deterministisch
+      in PowerPoint UND LibreOffice, statt Template-Fixwert/Auto)
+    - Legende: 'Musterdepot' → 'Referenzportfolio' (02.07.2026, Punkt 3 —
+      Wording-Angleich an F9)
+    - Quelle: Datumsfeld → statischer Text mit Datenstand (02.07.2026,
+      Punkt 6 — vorher zeigte die Box das ÖFFNUNGS-Datum der Datei)
+    - Fußnote: *-, **- und ***-Zeilen sowie Disclaimer-Satz dynamisch
+      (siehe WE_FOOTNOTE_* / WE_DISCLAIMER_REPLACEMENTS)
 
     Args:
         prs: Presentation
@@ -1168,6 +1306,8 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
             auflage_jahr, laufendes_jahr, kum_nach_kosten, pa_nach_kosten,
             ytd, duration, benchmark_text, performance_pa, wertentwicklung.
             Wenn None: nur Titel wird gesetzt, Rest bleibt Vorlagen-Platzhalter.
+        stand_date_str: Datum (String "DD.MM.YYYY") für die statische
+            Quelle-Zeile. None = Quelle-Box unangetastet lassen.
     """
     slide = prs.slides[slide_idx]
 
@@ -1215,10 +1355,11 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
                 (WE_SERIES_PORTFOLIO, pa.get("referenz", [])),
                 (WE_SERIES_BENCHMARK, pa.get("benchmark", [])),
             ],
-            # Original-Formate der cVV-Vorlage: Achse UND Labels "0.00%"
-            # (2 Nachkommastellen, z.B. "6,04%"). Bug-3/4-Restore nötig.
+            # Daten-Labels wie cVV-Original 2-stellig ("6,04%"); die ACHSE
+            # dagegen "0%" ("5%, 10%, …") — 02.07.2026 (Punkt 1) angeglichen
+            # an F9, vorher zeigte F8 klobige "5,00%/10,00%"-Achsenticks.
             data_label_format="0.00%",
-            value_axis_format="0.00%",
+            value_axis_format="0%",
         )
 
     # ── Linien-Chart: Wertentwicklung (Index, EINE Serie) ──
@@ -1234,11 +1375,13 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
             data_label_format=None,   # Linie hat keine Daten-Labels
             value_axis_format="0%",   # Achse als Prozent (100%, 110%, ...)
         )
-        # Die cVV-Vorlage hat eine FIXE Achsen-Untergrenze von 70% (kalibriert
-        # auf die 17-Jahres-Historie der Konservativ-Strategie). Für dynamisch
-        # befüllte — insbesondere junge — Strategien verschenkt das Platz:
-        # Untergrenze entfernen → PowerPoint skaliert automatisch.
-        set_value_axis_min_auto(chart_line)
+        # 02.07.2026 (Punkt 2): Achsen-Untergrenze DATENBASIERT setzen —
+        # 10%-Schritt unter dem Datenminimum (max. 100%). Grund: Der
+        # Template-Fixwert (70%) passt nicht für alle Strategien, und
+        # PowerPoint-AUTO wählt bei weit über 100% laufenden Indizes gerne
+        # 0% als Minimum und staucht die Kurve. Datenbasiert = identisches,
+        # vorhersagbares Rendering in PowerPoint und LibreOffice.
+        set_value_axis_min(chart_line, _line_axis_min(we.get("referenz", [])))
 
     # ── Fußnote: dynamische Zeilen ersetzen ──
     fn = find_shape_by_name(slide, SHAPE_WE_FUSSNOTE)
@@ -1250,12 +1393,33 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         bm_text = we_data.get("benchmark_text")
         if bm_text:
             replace_paragraph_text_by_prefix(fn.text_frame, "***", f"*** {bm_text}")
+        # *-Zeile (02.07.2026, Punkt 7): Kennzahlen 1+2 laufen jetzt bis zum
+        # letzten Datenpunkt → "bis zum 31.12. des Vorjahres" entfällt.
+        replace_paragraph_text_by_prefix(
+            fn.text_frame, WE_FOOTNOTE_STAR1_PREFIX, WE_FOOTNOTE_STAR1_NEW)
         # **-Zeile + Disclaimer-Satz: alte VBA-Honorarregel → Tool-Konvention
         # (nach Kosten, taggenauer Abzug). Siehe WE_DISCLAIMER_REPLACEMENTS.
         replace_paragraph_text_by_prefix(
             fn.text_frame, WE_FOOTNOTE_STAR2_PREFIX, WE_FOOTNOTE_STAR2_NEW)
         for prefix, new_text in WE_DISCLAIMER_REPLACEMENTS:
             replace_paragraph_text_by_prefix(fn.text_frame, prefix, new_text)
+
+    # ── Legende (02.07.2026, Punkt 3): 'Musterdepot' → 'Referenzportfolio' ──
+    # Nur der Begriff-Run wird ersetzt (Wingdings-Farbquadrate bleiben);
+    # der Lücken-Run wird gekürzt, damit '…Benchmark***' in die Box passt.
+    legend = find_shape_by_name(slide, "Legende Diagramm links")
+    if legend and legend.has_text_frame:
+        if replace_substring_in_runs(legend.text_frame,
+                                     WE_LEGEND_OLD_TERM, WE_LEGEND_NEW_TERM):
+            replace_substring_in_runs(legend.text_frame,
+                                      WE_LEGEND_GAP_OLD, WE_LEGEND_GAP_NEW)
+
+    # ── Quelle (02.07.2026, Punkt 6): Datumsfeld → statischer Datenstand ──
+    if stand_date_str:
+        quelle = find_shape_by_name(slide, SHAPE_WE_QUELLE)
+        if quelle:
+            set_shape_text_static(
+                quelle, f"Quelle: Eigene Berechnung, Stand {stand_date_str}")
 
 
 def fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
