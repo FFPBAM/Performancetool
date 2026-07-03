@@ -1173,6 +1173,13 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
     - Punkt 6: Die 'Quelle'-Box enthielt ein Live-DATUMSFELD (zeigte das
       Öffnungs-Datum der Datei) → wird durch statischen Text mit dem
       Datenstand ersetzt.
+    - Punkt 5 (nachbeauftragt 03.07.2026): Die Disclaimer-Fußnote der
+      Vorlage enthält denselben veralteten Satz wie die cVV-Folie
+      ("…erfolgt vor Kosten (ab 30.06. abzüglich halbjährigen
+      Honorarsatz)…") — wortidentische Absätze, daher werden dieselben
+      WE_DISCLAIMER_REPLACEMENTS angewendet. Läuft UNABHÄNGIG von
+      performance_data (Textkorrektur gilt auch im Platzhalter-Modus),
+      damit F8 und F9 nie widersprüchliche Kosten-Aussagen zeigen.
 
     Args:
         prs: Presentation
@@ -1191,6 +1198,17 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
     if title and title.has_text_frame:
         new_title = f"{strategy_name} | Wertentwicklung (mit Benchmark)"
         replace_text_in_shape(title, new_title)
+
+    # ── Fußnote (03.07.2026, Punkt 5): veralteten Kosten-Satz ersetzen ──
+    # Die Vorlagen-Fußnote beschreibt noch die alte VBA-Honorarregel
+    # ("vor Kosten, ab 30.06. …") — im Widerspruch zur F8 und zur
+    # tatsächlichen Berechnung (nach Kosten, taggenau). Die Absätze sind
+    # wortidentisch zur cVV-Folie → gleiche Ersetzungs-Konstanten.
+    # BEWUSST vor dem Platzhalter-Return: Textkorrektur ist daten-unabhängig.
+    fn = find_shape_by_name(slide, "Fußnote")
+    if fn and fn.has_text_frame:
+        for prefix, new_text in WE_DISCLAIMER_REPLACEMENTS:
+            replace_paragraph_text_by_prefix(fn.text_frame, prefix, new_text)
 
     if performance_data is None:
         return  # Phase 1: nur Titel setzen
