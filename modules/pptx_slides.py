@@ -534,6 +534,7 @@ def group_portfolio_positions(df: pd.DataFrame) -> dict:
             "kupon": row.get("Kupon"),
             "faelligkeit": row.get("Fälligkeit_parsed") if "Fälligkeit_parsed" in row.index else None,
             "rating": safe_marktrisikowert(row.get("Marktrisikowert")),
+            "waehrung": str(row.get("Währung", "")).strip() if "Währung" in row.index else "",
         }
         groups[gruppe].append(pos)
 
@@ -556,6 +557,7 @@ def group_portfolio_positions(df: pd.DataFrame) -> dict:
             "kupon": None,
             "faelligkeit": None,
             "rating": "",
+            "waehrung": "",
         })
 
     # Leere Gruppen entfernen
@@ -1164,6 +1166,185 @@ def fill_kennzahlen_table(table, kz: dict):
         # Spalte 2 = REFERENZ, Spalte 4 = BENCHMARK
         set_cell_text_preserve_format(row.cells[2], ref_str)
         set_cell_text_preserve_format(row.cells[4], bench_str)
+
+
+def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
+                                   eval_date=None):
+    """Befüllt die Einzeltitel-Folie der THEMEN-Broschüren (NEU 06.07.2026,
+    Pro / Pro Dividende / Offensiv).
+
+    Layout dieser Vorlagen-Tabelle (7 Spalten, abweichend vom Standard-
+    Anlagevorschlag!):
+        Spalte 0: Wertpapier (bzw. Gruppen-Überschrift AKTIEN/RENTEN/…)
+        Spalte 2: Währung
+        Spalte 4: WKN
+        Spalte 6: Anteil %
+        Spalten 1/3/5: schmale Spacer (unverändert lassen)
+    Zeile 0 = Kopf, letzte Zeile = Summe (100,00 %). Gruppen kommen in
+    GROUP_ORDER (AKTIEN, RENTEN, EDELMETALLE, LIQUIDITÄT, SONSTIGE), Titel
+    je Gruppe alphabetisch — dieselbe group_portfolio_positions-Logik wie
+    der Standard, nur anderes Spaltenlayout und mit Währung.
+
+    Anders als der Standard-Anlagevorschlag verteilt diese Funktion NICHT auf
+    mehrere Folien — die Themen-Broschüre hat genau eine Einzeltitel-Folie.
+    Passen nicht alle Positionen, wird die Tabelle erweitert (ensure_table_
+    capacity) und eine Warnung über LAST_BUILD_ERRORS gemeldet (nie stilles
+    Abschneiden).
+    """
+    slide = prs.slides[slide_idx]
+
+    # Titel
+    title = find_shape_by_name(slide, "Titel") or find_shape_by_name(slide, "Titel 2")
+    if title and title.has_text_frame:
+        replace_text_in_shape(title, "Einzeltitel")
+
+    tabelle = (find_shape_by_name(slide, "T_Kennzahlen")
+               or find_shape_by_name(slide, "Tabelle")
+               or find_shape_by_name(slide, "Tabelle 2"))
+    if tabelle is None or not getattr(tabelle, "has_table", False):
+        return
+    t = tabelle.table
+
+    # Spaltenindizes dieses Layouts
+    C_NAME, C_WAEHRUNG, C_WKN, C_ANTEIL = 0, 2, 4, 6
+
+    groups = group_portfolio_positions(df)
+
+    # Flache Zeilenliste bauen: pro Gruppe eine Header-Zeile + Positionen
+    zeilen = []  # (typ, dict)
+    total = 0.0
+    for g in GROUP_ORDER:
+        if g not in groups:
+            continue
+        positionen = groups[g]
+        gruppen_gewicht = sum(safe_float(p["gewicht"], 0.0) for p in positionen)
+        total += gruppen_gewicht
+        if g == GROUP_LIQUIDITAET:
+            # Liquidität: nur Header-Zeile mit Wert (keine Einzelpositionen)
+            zeilen.append(("header_liq", {"name": g, "wert": gruppen_gewicht}))
+        else:
+            zeilen.append(("header", {"name": g}))
+            for p in positionen:
+                zeilen.append(("position", p))
+
+    # Kapazität sicherstellen (Header-Zeile 0 + Zeilen + Summenzeile)
+    benoetigt = len(zeilen) + 2
+    if benoetigt > len(t.rows):
+        try:
+            ensure_table_capacity(t, len(zeilen))
+        except Exception:
+            pass
+    n_rows = len(t.rows)
+    summen_idx = n_rows - 1
+    max_daten = summen_idx - 1  # Zeilen 1 .. summen_idx-1
+
+    if len(zeilen) > max_daten:
+        _record_einzeltitel_warnung(strategy_name, len(zeilen), max_daten)
+
+    # Datenzeilen leeren (nur Daten-Spalten, Spacer unangetastet)
+    for r in range(1, n_rows):
+        for c in (C_NAME, C_WAEHRUNG, C_WKN, C_ANTEIL):
+            if c < len(t.columns):
+                set_cell_text(t.rows[r].cells[c], "")
+
+    # Zeilen schreiben
+    for i, (typ, data) in enumerate(zeilen):
+        if i >= max_daten:
+            break
+        row = t.rows[i + 1]  # +1 wegen Kopfzeile
+        if typ == "header":
+            set_cell_text(row.cells[C_NAME], data["name"], is_bold=True)
+        elif typ == "header_liq":
+            set_cell_text(row.cells[C_NAME], data["name"], is_bold=True)
+            set_cell_text(row.cells[C_ANTEIL], fmt_pct(data["wert"]), is_bold=True)
+        else:  # position
+            set_cell_text(row.cells[C_NAME], data["wertpapier"], is_bold=False)
+            set_cell_text(row.cells[C_WAEHRUNG], data.get("waehrung", ""), is_bold=False)
+            set_cell_text(row.cells[C_WKN], data.get("wkn", ""), is_bold=False)
+            set_cell_text(row.cells[C_ANTEIL], fmt_pct(data["gewicht"]), is_bold=False)
+
+    # Summenzeile
+    if summen_idx >= 1 and C_ANTEIL < len(t.columns):
+        set_cell_text(t.rows[summen_idx].cells[C_ANTEIL],
+                      fmt_pct(total if total > 0 else 1.0), is_bold=True)
+
+
+# Sammelt Kapazitäts-Warnungen der Einzeltitel-Themen-Folie (analog zum
+# LAST_BUILD_ERRORS-Muster in pptx_export). Wird von dort ausgelesen.
+EINZELTITEL_WARNUNGEN = []
+
+
+def _record_einzeltitel_warnung(strategy_name, n_zeilen, kapazitaet):
+    EINZELTITEL_WARNUNGEN.append(
+        f"Einzeltitel {strategy_name}: {n_zeilen} Zeilen, aber nur "
+        f"{kapazitaet} Tabellenzeilen — {n_zeilen - kapazitaet} abgeschnitten. "
+        f"Tabelle in der Vorlage vergrößern.")
+
+
+def fill_rollierend_slide(prs, slide_idx: int, strategy_name: str,
+                          rollierend_data: Optional[dict] = None,
+                          stand_date_str: Optional[str] = None):
+    """Befüllt die rollierende Wertentwicklungs-Tabelle der Themen-Broschüren
+    (NEU 06.07.2026 — "Wertentwicklung der Strategie {Name}", Tabelle 8x7).
+
+    Struktur der Vorlagen-Tabelle (Muster Pro):
+      Zeile 0: Kopf ("Zeitraum" | ... | "Strategie {Name}")
+      Zeile 2: YTD Performance    → Wert in Spalte 4
+      Zeile 3: 1 - Jahres Perf.   → Spalte 4
+      Zeile 4: 3 - Jahres Perf.   → Spalte 4
+      Zeile 5: 5 - Jahres Perf.   → Spalte 4
+      Zeile 6: 10 - Jahres Perf.  → Spalte 4
+    Werte nach Kosten (dieselbe Logik wie die Streamlit-Rolltabelle);
+    fehlende Historie (< n Jahre) → "–". None-Daten → Vorlagen-Platzhalter
+    bleiben (Titel wird dennoch gesetzt).
+
+    Args:
+        rollierend_data: Dict aus compute_rollierend_data
+            {"ytd","1J","3J","5J","10J"} (Dezimal) oder None.
+        stand_date_str: optionales Datum für eine "Quelle"/"Stand"-Box.
+    """
+    slide = prs.slides[slide_idx]
+
+    # Titel: "Wertentwicklung der Strategie {Name}" (Shape "Titel" ODER "Titel 2")
+    title = find_shape_by_name(slide, "Titel") or find_shape_by_name(slide, "Titel 2")
+    if title and title.has_text_frame:
+        replace_text_in_shape(title, f"Wertentwicklung der Strategie {strategy_name}")
+
+    # Kopf-Spaltentitel "Strategie {Name}" aktualisieren (Zeile 0, Spalte 4)
+    tabelle = find_shape_by_name(slide, "Tabelle") or find_shape_by_name(slide, "Tabelle 2")
+    if tabelle is None or not getattr(tabelle, "has_table", False):
+        _record = None  # kein Table-Shape → nichts zu tun
+        return
+    t = tabelle.table
+    WERT_SPALTE = 4
+    if len(t.rows) > 0 and len(t.columns) > WERT_SPALTE:
+        kopf = t.rows[0].cells[WERT_SPALTE]
+        if kopf.text_frame.text.strip():
+            set_cell_text_preserve_format(kopf, f"Strategie {strategy_name}")
+
+    if rollierend_data is None:
+        return  # Platzhalter-Modus: nur Titel/Kopf
+
+    def _fmt(v):
+        if v is None:
+            return "–"
+        return f"{v * 100:.2f}%".replace(".", ",")
+
+    # Zeilen 2-6 = YTD/1/3/5/10 Jahre in Spalte 4
+    zuordnung = [
+        (2, "ytd"), (3, "1J"), (4, "3J"), (5, "5J"), (6, "10J"),
+    ]
+    for row_idx, key in zuordnung:
+        if row_idx < len(t.rows) and len(t.columns) > WERT_SPALTE:
+            zelle = t.rows[row_idx].cells[WERT_SPALTE]
+            set_cell_text_preserve_format(zelle, _fmt(rollierend_data.get(key)))
+
+    # Optionale Quelle/Stand-Box (falls in der Vorlage vorhanden)
+    if stand_date_str:
+        quelle = find_shape_by_name(slide, "Quelle")
+        if quelle:
+            set_shape_text_static(
+                quelle, f"Quelle: Eigene Berechnung, Stand {stand_date_str}")
 
 
 def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
