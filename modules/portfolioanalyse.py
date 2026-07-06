@@ -474,24 +474,47 @@ VORLAGEN_FAMILIEN = {
 }
 
 
+def _finde_familie_spalte(name_mapping):
+    """Findet die 'Powerpoint Familie'-Spalte tolerant (egal ob 'PowerPoint
+    Familie', Extra-/fehlende Leerzeichen, Groß-/Kleinschreibung, Umbrüche).
+    Returns den echten Spaltennamen oder None."""
+    def _norm(s):
+        # alle Whitespaces (auch Umbrüche/doppelte) zu einem Space, klein
+        return " ".join(str(s).split()).strip().lower()
+    ziel = _norm(SPALTE_PP_FAMILIE)  # "powerpoint familie"
+    for col in name_mapping.columns:
+        if _norm(col) == ziel:
+            return col
+    return None
+
+
 def _familie_fuer_strategie(name_mapping, display_name):
     """Liest die 'Powerpoint Familie' einer Strategie aus dem Mapping.
-    Returns den Familien-String (z.B. 'Thema') oder '' wenn leer/nicht
-    vorhanden."""
+    Toleriert abweichende Spalten-Schreibweisen und Wert-Groß/Kleinschreibung.
+    Returns den KANONISCHEN Familien-String (Schlüssel aus VORLAGEN_FAMILIEN,
+    z.B. 'Thema') oder '' wenn leer/nicht vorhanden."""
     try:
-        if SPALTE_PP_FAMILIE not in name_mapping.columns:
+        spalte = _finde_familie_spalte(name_mapping)
+        if spalte is None:
             return ""
         col_display = name_mapping.columns[0]
         treffer = name_mapping.loc[
             name_mapping[col_display].astype(str).str.strip() == str(display_name).strip(),
-            SPALTE_PP_FAMILIE]
+            spalte]
         if treffer.empty:
             return ""
         wert = treffer.iloc[0]
         if wert is None or (isinstance(wert, float) and pd.isna(wert)):
             return ""
-        wert = str(wert).strip()
-        return "" if wert.lower() in ("", "nan", "none") else wert
+        wert = " ".join(str(wert).split()).strip()  # Whitespace normalisieren
+        if wert.lower() in ("", "nan", "none"):
+            return ""
+        # Wert case-insensitiv auf den kanonischen Familien-Schlüssel abbilden
+        # (damit "thema"/"THEMA" den Eintrag "Thema" trifft).
+        for kanon in VORLAGEN_FAMILIEN:
+            if wert.lower() == kanon.lower():
+                return kanon
+        return wert  # unbekannte Familie (z.B. CVV ohne Vorlage) unverändert
     except Exception:
         return ""
 
