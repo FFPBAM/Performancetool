@@ -1263,10 +1263,20 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
             set_cell_text(row.cells[C_WKN], data.get("wkn", ""), is_bold=False)
             set_cell_text(row.cells[C_ANTEIL], fmt_pct(data["gewicht"]), is_bold=False)
 
-    # Summenzeile
-    if summen_idx >= 1 and C_ANTEIL < len(t.columns):
-        set_cell_text(t.rows[summen_idx].cells[C_ANTEIL],
-                      fmt_pct(total if total > 0 else 1.0), is_bold=True)
+    # Summenzeile aufräumen und befüllen:
+    # - "Gesamt"-Label links (C_NAME), 100%-Wert rechts (C_ANTEIL)
+    # - die Vorlagen-Platzhalter "0" in den Spacer-Spalten (1/3/5) UND in
+    #   Währung/WKN entfernen, damit die Zeile sauber aussieht.
+    if summen_idx >= 1:
+        summen_row = t.rows[summen_idx]
+        # alle Zellen der Summenzeile bis auf Label + Wert leeren
+        for c in range(len(t.columns)):
+            if c not in (C_NAME, C_ANTEIL):
+                set_cell_text(summen_row.cells[c], "")
+        set_cell_text(summen_row.cells[C_NAME], "Gesamt", is_bold=True)
+        if C_ANTEIL < len(t.columns):
+            set_cell_text(summen_row.cells[C_ANTEIL],
+                          fmt_pct(total if total > 0 else 1.0), is_bold=True)
 
 
 # Sammelt Kapazitäts-Warnungen der Einzeltitel-Themen-Folie (analog zum
