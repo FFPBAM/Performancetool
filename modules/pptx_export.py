@@ -97,6 +97,8 @@ try:
         fill_kennzahlen_table, fill_performance_slide,
         fill_wertentwicklung_slide,
         fill_zusammenstellung_slide,
+        fill_rollierend_slide,
+        fill_einzeltitel_themen_slide,
     )
 except ImportError:
     from pptx_slides import (
@@ -117,6 +119,8 @@ except ImportError:
         fill_kennzahlen_table, fill_performance_slide,
         fill_wertentwicklung_slide,
         fill_zusammenstellung_slide,
+        fill_rollierend_slide,
+        fill_einzeltitel_themen_slide,
     )
 
 
@@ -126,10 +130,35 @@ except ImportError:
 TEMPLATE_PATH = os.path.join("Vorlage", "Vorlage_FFPB.pptx")
 
 _EXPECTED_TEMPLATE_SLIDES = 26
-"""Erwartete Slide-Anzahl der Vorlage (seit Juli 2026: 26, mit der
-Wertentwicklungs-Folie an Template-Position 11). Schutz gegen den
-klassischen Deploy-Fehler 'Code neu, Vorlage alt' — bei Mismatch würden
-die hartcodierten Indizes unten die FALSCHEN Folien entfernen/befüllen."""
+"""Erwartete Slide-Anzahl der Standard-Vorlage (Streamlit-Pfad). Schutz
+gegen den klassischen Deploy-Fehler 'Code neu, Vorlage alt'."""
+
+# ── Vorlagen-Konfiguration (NEU 03.07.2026, für Vorlagen-Familie) ──────────
+# Der dynamische 4-Folien-Block kann in jeder Vorlage (ESG/CVV/ETF/Themen/…)
+# an anderer Position liegen. Die Konfiguration beschreibt die Vorlage;
+# _normalisiere_vorlage bringt den Block in die kanonische Reihenfolge.
+BLOCK_REIHENFOLGE = ["anlagevorschlag", "wertentwicklung", "performance",
+                     "zusammenstellung"]
+"""Kanonische Reihenfolge des dynamischen Blocks im fertigen Export
+(F: Strategieentwurf → Wertentwicklung → Performance mit BM → Zusammenst.)."""
+
+DEFAULT_TEMPLATE_CONFIG = {
+    # Erwartete Folienzahl der Vorlage (Guard gegen Code/Vorlage-Mismatch)
+    "erwartete_folien": _EXPECTED_TEMPLATE_SLIDES,
+    # 1-indexierte POSITIONEN der Block-Folien in der Vorlage:
+    "block_positionen": {
+        "anlagevorschlag": 7,
+        "zusammenstellung": 9,
+        "performance": 10,
+        "wertentwicklung": 11,
+    },
+    # 1-indexierte Positionen, die beim Export ENTFERNT werden
+    # (Standard-Vorlage: 8 = Anlagevorschlag-Teil-2, 12 = Währungen):
+    "entfernen": [8, 12],
+}
+"""Konfiguration der Standard-Vorlage (Vorlage/Vorlage_FFPB.pptx).
+Für andere Vorlagen der Familie eine analoge Konfiguration an
+generate_portfolioanalyse_pptx(template_config=...) übergeben."""
 
 # Slide-Positionen in der Vorlage (1-indexed, Stand Juli 2026 / 26 Slides):
 #   Position 7  = Anlagevorschlag (Aktien + Allokations-Ring)
@@ -229,22 +258,28 @@ def _clear_table(table, keep_header_rows: int = 1):
 # ---------------------------------------------------------------------------
 # Template laden
 # ---------------------------------------------------------------------------
-def _load_template() -> Presentation:
-    """Wrapper für pptx_helpers.load_template. Nutzt das modul-lokale TEMPLATE_PATH.
+def _load_template(template_path: Optional[str] = None,
+                   erwartete_folien: Optional[int] = None) -> Presentation:
+    """Wrapper für pptx_helpers.load_template mit Folienzahl-Guard.
 
-    NEU (Juli 2026): prüft die Slide-Anzahl gegen _EXPECTED_TEMPLATE_SLIDES —
-    ein Mismatch bedeutet fast immer 'Code und Vorlage nicht gemeinsam
-    deployed' (der klassische Deploy-Fehler, siehe Projektdoku Transferwissen
-    #11) und würde sonst später still die falschen Folien treffen.
+    Ein Folienzahl-Mismatch bedeutet fast immer 'Code/Konfig und Vorlage
+    passen nicht zusammen' (klassischer Deploy-Fehler) und würde sonst
+    später still die falschen Folien treffen.
+
+    Args:
+        template_path: Pfad zur Vorlage. None = modul-lokales TEMPLATE_PATH.
+        erwartete_folien: erwartete Folienzahl. None = Standard-Vorlage (26).
     """
-    prs = load_template(TEMPLATE_PATH)
+    pfad = template_path or TEMPLATE_PATH
+    erwartet = erwartete_folien or _EXPECTED_TEMPLATE_SLIDES
+    prs = load_template(pfad)
     n = len(prs.slides)
-    if n != _EXPECTED_TEMPLATE_SLIDES:
+    if n != erwartet:
         raise ValueError(
-            f"Vorlage hat {n} Slides, erwartet werden {_EXPECTED_TEMPLATE_SLIDES}. "
-            f"Vermutlich wurde die neue Vorlage (mit Wertentwicklungs-Folie an "
-            f"Position 11) nicht zusammen mit diesem Code deployed — bitte "
-            f"Vorlage/Vorlage_FFPB.pptx im Repo aktualisieren."
+            f"Vorlage '{pfad}' hat {n} Folien, erwartet werden {erwartet}. "
+            f"Vermutlich passen Vorlage und Konfiguration/Code nicht zusammen "
+            f"(Vorlage aktualisieren oder 'erwartete_folien' der "
+            f"Vorlagen-Konfiguration korrigieren)."
         )
     return prs
 
@@ -324,6 +359,23 @@ def _fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str, we_data
     """Wrapper für pptx_slides.fill_wertentwicklung_slide (NEU Juli 2026)."""
     return fill_wertentwicklung_slide(prs, slide_idx, strategy_name, we_data,
                                       stand_date_str=stand_date_str)
+
+
+def _fill_rollierend_slide(prs, slide_idx: int, strategy_name: str,
+                            rollierend_data=None, stand_date_str=None):
+    """Wrapper für pptx_slides.fill_rollierend_slide (NEU 06.07.2026 —
+    rollierende Wertentwicklungs-Tabelle der Themen-Broschüren)."""
+    return fill_rollierend_slide(prs, slide_idx, strategy_name,
+                                 rollierend_data=rollierend_data,
+                                 stand_date_str=stand_date_str)
+
+
+def _fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
+                                    eval_date=None):
+    """Wrapper für pptx_slides.fill_einzeltitel_themen_slide (NEU 06.07.2026 —
+    Einzeltitel-Folie der Themen-Broschüren, 7-Spalten-Layout mit Währung)."""
+    return fill_einzeltitel_themen_slide(prs, slide_idx, df, strategy_name,
+                                         eval_date=eval_date)
 
 
 def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
@@ -531,6 +583,61 @@ def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,
     # Lazy import: bricht modules/analytics.py weg, schlägt erst hier auf.
     from modules.analytics import compute_performance_data as _ac
     return _ac(timeseries_df, fee_dec, n_years_bar_chart)
+
+
+def compute_rollierend_data(timeseries_df: pd.DataFrame, fee_dec: float) -> dict:
+    """Rollierende Perioden-Renditen NACH KOSTEN (NEU 06.07.2026, für die
+    Themen-Broschüren-Folie "Wertentwicklung rollierend", Tabelle 8x7).
+
+    Identische Logik wie streamlit_app.build_rolling_table (Konsistenz-
+    Doktrin): Index nach Kosten (taggenauer Drag), Perioden
+      YTD (ab 31.12. Vorjahr — Jahresgrenze!),
+      1 / 3 / 5 / 10 Jahre (Punkt-zu-Punkt: Enddatum minus n Jahre),
+    jeweils als asof-Verhältnis. Fehlt die Historie (z.B. Strategie < 3
+    Jahre), ist der Wert None → in der Folie "-".
+
+    Returns:
+        {"ytd": float|None, "1J": float|None, "3J": float|None,
+         "5J": float|None, "10J": float|None} — Dezimalwerte (0.1589 = 15,89%).
+    """
+    ts = timeseries_df.sort_index()
+    dates = pd.to_datetime(ts.index)
+    r = pd.to_numeric(ts["ret_port"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    if len(r) == 0:
+        return {k: None for k in ("ytd", "1J", "3J", "5J", "10J")}
+
+    # Index nach Kosten mit synthetischem Startpunkt am Vortag (wie Tool:
+    # xd = [erstes_datum - 1 Tag] + dates), damit asof(Startdatum) den
+    # Schlussstand VOR der ersten Rendite trifft. _make_index_after_fee
+    # liefert bereits len(r)+1 Werte inkl. Startwert 100 an Position 0.
+    idx_vals = _make_index_after_fee(r, fee_dec, startwert=100.0)
+    start_stamp = dates[0] - pd.Timedelta(days=1)
+    full_index = pd.DatetimeIndex([start_stamp]).append(pd.DatetimeIndex(dates))
+    index_ser = pd.Series(list(idx_vals), index=full_index).sort_index()
+
+    end_ts = index_ser.index.max()
+
+    def _asof(ts_target):
+        s = index_ser.dropna()
+        if s.empty or ts_target < s.index.min():
+            return None
+        return float(s.asof(ts_target))
+
+    def _period_return(start_ts):
+        v_end = _asof(end_ts)
+        v_start = _asof(start_ts)
+        if v_end is None or v_start is None or v_start == 0:
+            return None
+        return v_end / v_start - 1.0
+
+    perioden = {
+        "ytd": pd.Timestamp(end_ts.year - 1, 12, 31),
+        "1J": end_ts - pd.DateOffset(years=1),
+        "3J": end_ts - pd.DateOffset(years=3),
+        "5J": end_ts - pd.DateOffset(years=5),
+        "10J": end_ts - pd.DateOffset(years=10),
+    }
+    return {k: _period_return(v) for k, v in perioden.items()}
 
 
 def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
@@ -776,6 +883,115 @@ def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
         return None
 
 
+def _build_rollierend_data(performance_inputs, idx: int) -> Optional[dict]:
+    """Helfer (NEU 06.07.2026): rollierende Perioden-Renditen für die
+    Themen-Broschüren-Tabelle aus performance_inputs[idx].
+
+    Nutzt dieselbe Zeitreihe/fee wie die übrigen Folien (Konsistenz).
+    Returns None wenn keine Daten → Folie behält Vorlagen-Platzhalter.
+    """
+    if not performance_inputs or idx >= len(performance_inputs):
+        return None
+    pi = performance_inputs[idx]
+    if pi is None:
+        return None
+    ts = pi.get("timeseries_df")
+    fee = pi.get("fee_dec", 0.0)
+    if ts is None or len(ts) == 0:
+        return None
+    try:
+        return compute_rollierend_data(ts, fee)
+    except Exception as exc:
+        _record_build_error(f"Rollierende Tabelle, Portfolio {idx + 1}", exc)
+        return None
+
+
+def _reorder_slides(prs, new_order: list):
+    """Sortiert die Folien gemäß new_order (Liste aktueller Indizes) um —
+    EIN atomarer Reorder der sldIdLst statt fehleranfälliger Move-Ketten."""
+    xml_slides = prs.slides._sldIdLst
+    elems = list(xml_slides)
+    assert sorted(new_order) == list(range(len(elems))), \
+        "new_order muss eine Permutation aller Folien-Indizes sein"
+    for el in elems:
+        xml_slides.remove(el)
+    for i in new_order:
+        xml_slides.append(elems[i])
+
+
+def _normalisiere_vorlage(prs, template_config: dict) -> int:
+    """Bringt eine Vorlage in die kanonische Export-Grundform
+    (NEU 03.07.2026 — ersetzt die frühere hartcodierte remove/move-Kette):
+
+    1. Entfernt die in template_config["entfernen"] gelisteten Folien
+       (1-indexierte Vorlagen-Positionen).
+    2. Sortiert die vier Block-Folien (template_config["block_positionen"])
+       in die kanonische Reihenfolge BLOCK_REIHENFOLGE und rückt sie als
+       zusammenhängenden Block an die Position der vordersten Block-Folie.
+       Alle übrigen (statischen) Folien behalten ihre relative Reihenfolge.
+
+    Returns:
+        0-indexierter Start-Index des Blocks im normalisierten Deck.
+    """
+    entfernen_idx = sorted([p - 1 for p in template_config.get("entfernen", [])],
+                           reverse=True)
+    for i in entfernen_idx:
+        _remove_slide(prs, i)
+
+    # Block-Positionen um die Entfernungen korrigieren
+    def _nach_entfernung(pos1: int) -> int:
+        i = pos1 - 1
+        return i - sum(1 for r in entfernen_idx if r < i)
+
+    bp = template_config["block_positionen"]
+    reihenfolge = template_config.get("block_reihenfolge", BLOCK_REIHENFOLGE)
+    fehlend = [t for t in reihenfolge if t not in bp]
+    if fehlend:
+        raise ValueError(f"template_config['block_positionen'] unvollständig, "
+                         f"fehlt: {fehlend}")
+    block_in_kanon = [_nach_entfernung(bp[t]) for t in reihenfolge]
+
+    n = len(prs.slides)
+    block_set = set(block_in_kanon)
+    if len(block_set) != len(reihenfolge):
+        raise ValueError("block_positionen zeigen auf dieselbe Folie")
+    nicht_block = [i for i in range(n) if i not in block_set]
+    start = min(block_in_kanon)
+    vor = sum(1 for i in nicht_block if i < start)
+    new_order = nicht_block[:vor] + block_in_kanon + nicht_block[vor:]
+    _reorder_slides(prs, new_order)
+    return vor  # = Block-Start im neuen Deck
+
+
+def _vervielfaeltige_block(prs, block_start: int, n_strategien: int,
+                           block_laenge: Optional[int] = None):
+    """Dupliziert den 4-Folien-Block für n_strategien (NEU 03.07.2026 —
+    generalisiert die frühere 2-Portfolio-Sonderlogik auf beliebiges N).
+
+    Vorgehen (indexstabil):
+    - Jede Block-Folie wird — von der LETZTEN zur ERSTEN — (N−1)-mal
+      dupliziert (duplicate_slide fügt Kopien direkt hinter der Quelle ein;
+      die Reihenfolge unter identischen Kopien ist egal).
+      → Zwischenstand: Folien nach TYP gruppiert ([AV×N][WE×N][Perf×N][Zus×N]).
+    - Ein einziger Reorder gruppiert danach nach STRATEGIE:
+      [AV1,WE1,Perf1,Zus1, AV2,WE2, …].
+    """
+    if n_strategien <= 1:
+        return
+    B = block_laenge if block_laenge is not None else len(BLOCK_REIHENFOLGE)
+    for offset in range(B - 1, -1, -1):
+        src = block_start + offset
+        for _ in range(n_strategien - 1):
+            _duplicate_slide(prs, src)
+    n = len(prs.slides._sldIdLst)
+    new_order = list(range(block_start))
+    for k in range(n_strategien):
+        for t in range(B):
+            new_order.append(block_start + t * n_strategien + k)
+    new_order += list(range(block_start + B * n_strategien, n))
+    _reorder_slides(prs, new_order)
+
+
 def _stand_str(eval_date) -> Optional[str]:
     """Formatiert das Auswertungsdatum für die statischen 'Quelle'-Zeilen
     (02.07.2026, Punkt 6). None/ungültig → None (Quelle bleibt unangetastet)."""
@@ -791,158 +1007,96 @@ def generate_portfolioanalyse_pptx(
     portfolios: list,   # Liste von (display_name, df, auswertungsdatum, dur_info)
     anlagevolumen: float = 0.0,
     performance_inputs: Optional[list] = None,
+    template_path: Optional[str] = None,
+    template_config: Optional[dict] = None,
 ) -> bytes:
     """
-    Erstellt eine PPTX mit der Corporate-Vorlage und befüllt die Slides 7-10
-    (bzw. 7-10 + Duplikate bei Vergleichsportfolio) mit den Portfolio-Daten.
+    Erstellt eine PPTX aus einer Corporate-Vorlage und befüllt den dynamischen
+    4-Folien-Block für BELIEBIG VIELE Strategien (generalisiert 03.07.2026 —
+    vorher nur 1 oder 2; der Streamlit-Aufruf bleibt unverändert kompatibel).
 
-    Slide-Layout (seit Juli 2026 — Wertentwicklungs-Folie NEU als Folie 8):
-    - Slide 7:  Anlagevorschlag/Strategieentwurf
-    - Slide 8:  Wertentwicklung/Kurzübersicht (NEU — alte cVV-Folie)
-    - Slide 9:  Performance/Wertentwicklung (mit Benchmark)
-    - Slide 10: Aktuelle Portfoliozusammenstellung
-    - Bei 2 Portfolios: Duplikate dieser VIER Slides für Portfolio 2
+    Block pro Strategie (kanonische Reihenfolge BLOCK_REIHENFOLGE):
+      Strategieentwurf → Wertentwicklung → Performance (mit BM) → Zusammenst.
+    Bei N Strategien stehen die Blöcke hintereinander (Strategie 1 = F7-10,
+    Strategie 2 = F11-14, …), statische Folien davor/danach unverändert.
 
     Args:
-        portfolios: Liste von Tupeln (display_name, df, auswertungsdatum, duration_info)
-        anlagevolumen: Aktuell nicht verwendet, ggf. für Zukunftsfeatures
-        performance_inputs: Optional Liste mit Performance-Daten (ein Dict pro Portfolio
-                            in gleicher Reihenfolge wie `portfolios`). Format pro Eintrag:
-                            {
-                                "timeseries_df": pd.DataFrame,  # ret_port, ret_bm, rf
-                                "fee_dec": 0.01023,             # effektiver Honorar inkl MwSt
-                                # NEU Juli 2026 (beide optional):
-                                "duration": 4.24,               # gewichtete Duration oder None
-                                "benchmark_text": "50% iBoxx ...",  # für ***-Fußnote
-                            }
-                            Wenn None oder ein Eintrag None ist: Folie 8+9 zeigen die
-                            Vorlagen-Platzhalter (nur Titel werden gesetzt).
+        portfolios: Liste von Tupeln (display_name, df, auswertungsdatum,
+            duration_info) — EIN Eintrag pro Strategie, beliebige Anzahl ≥ 1.
+        anlagevolumen: aktuell ungenutzt (Zukunftsfeature).
+        performance_inputs: Liste in gleicher Reihenfolge wie `portfolios`
+            (oder None). Format pro Eintrag:
+            {"timeseries_df": df(ret_port,ret_bm,rf), "fee_dec": 0.0119,
+             "duration": 4.24|None, "benchmark_text": "50% iBoxx …"|None}
+            None-Einträge → betroffene Folien zeigen Vorlagen-Platzhalter.
+        template_path: Pfad zur Vorlage (NEU 03.07. — für die Vorlagen-
+            Familie ESG/CVV/ETF/Themen). None = Standard TEMPLATE_PATH.
+        template_config: Vorlagen-Beschreibung (erwartete_folien,
+            block_positionen, entfernen) — siehe DEFAULT_TEMPLATE_CONFIG.
+            None = Standard-Vorlage.
 
     Returns:
         PPTX-Bytes
     """
-    LAST_BUILD_ERRORS.clear()  # Diagnose-Liste pro Export frisch (siehe oben)
-    prs = _load_template()
+    if not portfolios:
+        raise ValueError("Mindestens ein Portfolio erforderlich.")
+    cfg = template_config or DEFAULT_TEMPLATE_CONFIG
+    n_strategien = len(portfolios)
 
-    # ════════════════════════════════════════════════════════════════════════
-    # SLIDE-LAYOUT (Juli 2026 — Vorlage hat jetzt 26 Slides):
-    #   Ziel-Reihenfolge im Export:
-    #     Slide 7  = Anlagevorschlag/Strategieentwurf (Index 6)
-    #     Slide 8  = Wertentwicklung/Kurzübersicht (Index 7)   ← NEU (cVV-Folie)
-    #     Slide 9  = Performance/Wertentwicklung mit BM (Index 8)
-    #     Slide 10 = Aktuelle Portfoliozusammenstellung (Index 9)
-    # ════════════════════════════════════════════════════════════════════════
-    # Vorlage (26 Slides) hat diese Original-Reihenfolge:
-    #   Index 6:  Slide 7  (Anlagevorschlag)
-    #   Index 7:  Slide 8  (Anlagevorschlag-Teil-2)   ← wird ENTFERNT
-    #   Index 8:  Slide 9  (Portfoliozusammenstellung)
-    #   Index 9:  Slide 10 (Performance/Wertentwicklung mit BM)
-    #   Index 10: Slide 11 (Wertentwicklung/Kurzübersicht — NEU)
-    #   Index 11: Slide 12 (Währungen)                ← wird ENTFERNT
-    #
-    # Operationen (in dieser Reihenfolge):
-    #   1. Index 7 entfernen (alte Anlagevorschlag-Teil-2)
-    #      → [6=AV, 7=Zus, 8=Perf, 9=NEU, 10=Währungen, ...]
-    #   2. Index 10 entfernen (Währungen)
-    #      → [6=AV, 7=Zus, 8=Perf, 9=NEU]
-    #   3. Move Index 9 (NEU) → Index 7
-    #      → [6=AV, 7=NEU, 8=Zus, 9=Perf]
-    #   4. Move Index 9 (Perf) → Index 8
-    #      → [6=AV, 7=NEU, 8=Perf, 9=Zus]   ← Endreihenfolge
-    _remove_slide(prs, 7)         # alte Anlagevorschlag-Teil-2 entfernen
-    _remove_slide(prs, 10)        # Währungen entfernen (war Index 11, nach Op1 = 10)
-    _move_slide(prs, 9, 7)        # Wertentwicklungs-Folie an Position 8 (Index 7)
-    _move_slide(prs, 9, 8)        # Performance an Position 9 (Index 8), Zus. rutscht auf 9
-    prs = _save_and_reload(prs)   # IDs aufräumen
+    LAST_BUILD_ERRORS.clear()  # Diagnose-Liste pro Export frisch
+    prs = _load_template(template_path, cfg.get("erwartete_folien"))
 
-    # Portfolio(s) befüllen
-    if len(portfolios) == 1:
-        # Einzelnes Portfolio:
-        #   Slide 7  (Index 6) = Anlagevorschlag (mit Strategieentwurf-Titel)
-        #   Slide 8  (Index 7) = Wertentwicklung/Kurzübersicht (NEU)
-        #   Slide 9  (Index 8) = Performance (mit Strategy-Name im Titel)
-        #   Slide 10 (Index 9) = Portfolio-Zusammenstellung
-        display_name, df, eval_date, _dur = portfolios[0]
+    # ── Schritt 1: Vorlage normalisieren (Entfernungen + Block kanonisch) ──
+    block_start = _normalisiere_vorlage(prs, cfg)
+    prs = _save_and_reload(prs)
+
+    # ── Schritt 2: Block auf N Strategien vervielfältigen ──
+    reihenfolge = cfg.get("block_reihenfolge", BLOCK_REIHENFOLGE)
+    B = len(reihenfolge)
+    _vervielfaeltige_block(prs, block_start, n_strategien, block_laenge=B)
+    if n_strategien > 1:
+        prs = _save_and_reload(prs)
+
+    # ── Schritt 3: jede Strategie in ihren Block füllen ──
+    # Dispatch: Rolle → Fill-Aufruf. Der Offset innerhalb des Blocks ergibt
+    # sich aus der Position der Rolle in `reihenfolge` (so kann jede Vorlage
+    # eine andere Folien-Zusammenstellung/-Reihenfolge haben, z.B. die
+    # Themen-Broschüren mit "rollierend" statt "performance").
+    for k, (display_name, df, eval_date, _dur) in enumerate(portfolios):
         strategy_name = clean_strategy_name(display_name)
-        perf_data = _build_perf_data(performance_inputs, 0)
-        we_data = _build_we_data(performance_inputs, 0)
+        perf_data = _build_perf_data(performance_inputs, k)
+        we_data = _build_we_data(performance_inputs, k)
+        roll_data = _build_rollierend_data(performance_inputs, k)
         stand = _stand_str(eval_date)
-        _fill_anlagevorschlag_slides(prs, 6, df, strategy_name, eval_date=eval_date)
-        _fill_wertentwicklung_slide(prs, 7, strategy_name, we_data=we_data,
-                                    stand_date_str=stand)
-        _fill_performance_slide(prs, 8, strategy_name, performance_data=perf_data,
-                                stand_date_str=stand)
-        _fill_zusammenstellung_slide(prs, 9, df, strategy_name, eval_date=eval_date)
+        base = block_start + B * k
 
-    elif len(portfolios) == 2:
-        # Vergleichsportfolio: Portfolio 1 in Index 6-9, Portfolio 2 als Duplikate
-        # an Index 10-13. Endreihenfolge: Anlagevorschlag, Wertentwicklung,
-        # Performance, Zusammenstellung pro Portfolio.
-        display_name_1, df_1, eval_date_1, _dur1 = portfolios[0]
-        display_name_2, df_2, eval_date_2, _dur2 = portfolios[1]
-        strategy_name_1 = clean_strategy_name(display_name_1)
-        strategy_name_2 = clean_strategy_name(display_name_2)
-        perf_data_1 = _build_perf_data(performance_inputs, 0)
-        perf_data_2 = _build_perf_data(performance_inputs, 1)
-        we_data_1 = _build_we_data(performance_inputs, 0)
-        we_data_2 = _build_we_data(performance_inputs, 1)
-
-        stand_1 = _stand_str(eval_date_1)
-        stand_2 = _stand_str(eval_date_2)
-
-        # Schritt 1: Portfolio 1 in Original-Slides (Index 6, 7, 8, 9)
-        _fill_anlagevorschlag_slides(prs, 6, df_1, strategy_name_1, eval_date=eval_date_1)
-        _fill_wertentwicklung_slide(prs, 7, strategy_name_1, we_data=we_data_1,
-                                    stand_date_str=stand_1)
-        _fill_performance_slide(prs, 8, strategy_name_1, performance_data=perf_data_1,
-                                stand_date_str=stand_1)
-        _fill_zusammenstellung_slide(prs, 9, df_1, strategy_name_1, eval_date=eval_date_1)
-
-        # Schritt 2: VIER Duplikate der Slides an Index 6, 8, 10, 12 anlegen.
-        # duplicate_slide fügt das Duplikat direkt HINTER der Quelle ein,
-        # dadurch verschieben sich die Folge-Indizes nach jedem Aufruf:
-        #   Start:   [6=AV, 7=NEU, 8=Perf, 9=Zus]
-        #   dup(6):  [6=AV, 7=AV', 8=NEU, 9=Perf, 10=Zus]
-        #   dup(8):  [6=AV, 7=AV', 8=NEU, 9=NEU', 10=Perf, 11=Zus]
-        #   dup(10): [6=AV, 7=AV', 8=NEU, 9=NEU', 10=Perf, 11=Perf', 12=Zus]
-        #   dup(12): [..., 12=Zus, 13=Zus']
-        _duplicate_slide(prs, 6)
-        _duplicate_slide(prs, 8)
-        _duplicate_slide(prs, 10)
-        _duplicate_slide(prs, 12)
-
-        # Schritt 3: Save/Load nach Duplikation
-        prs = _save_and_reload(prs)
-
-        # Schritt 4: Umsortieren
-        #   Ist:  [6=AV, 7=AV', 8=NEU, 9=NEU', 10=Perf, 11=Perf', 12=Zus, 13=Zus']
-        #   Soll: [6=AV, 7=NEU, 8=Perf, 9=Zus, 10=AV', 11=NEU', 12=Perf', 13=Zus']
-        xml_slides = prs.slides._sldIdLst
-        slide_elements = list(xml_slides)
-
-        new_order = list(range(6))
-        new_order += [6, 8, 10, 12]     # Portfolio 1: AV, NEU, Perf, Zus
-        new_order += [7, 9, 11, 13]     # Portfolio 2: AV', NEU', Perf', Zus'
-        new_order += list(range(14, len(slide_elements)))
-
-        for elem in slide_elements:
-            xml_slides.remove(elem)
-        for idx in new_order:
-            xml_slides.append(slide_elements[idx])
-
-        # Schritt 5: Save/Load nach Reorder
-        prs = _save_and_reload(prs)
-
-        # Schritt 6: Portfolio 2 in Duplikate (Index 10, 11, 12, 13)
-        _fill_anlagevorschlag_slides(prs, 10, df_2, strategy_name_2, eval_date=eval_date_2)
-        _fill_wertentwicklung_slide(prs, 11, strategy_name_2, we_data=we_data_2,
-                                    stand_date_str=stand_2)
-        _fill_performance_slide(prs, 12, strategy_name_2, performance_data=perf_data_2,
-                                stand_date_str=stand_2)
-        _fill_zusammenstellung_slide(prs, 13, df_2, strategy_name_2, eval_date=eval_date_2)
-
-    else:
-        raise ValueError(f"Erwarte 1 oder 2 Portfolios, erhalten: {len(portfolios)}")
+        for offset, rolle in enumerate(reihenfolge):
+            idx = base + offset
+            if rolle == "anlagevorschlag":
+                _fill_anlagevorschlag_slides(prs, idx, df, strategy_name,
+                                             eval_date=eval_date)
+            elif rolle == "wertentwicklung":
+                _fill_wertentwicklung_slide(prs, idx, strategy_name,
+                                            we_data=we_data, stand_date_str=stand)
+            elif rolle == "performance":
+                _fill_performance_slide(prs, idx, strategy_name,
+                                        performance_data=perf_data,
+                                        stand_date_str=stand)
+            elif rolle == "zusammenstellung":
+                _fill_zusammenstellung_slide(prs, idx, df, strategy_name,
+                                             eval_date=eval_date)
+            elif rolle == "rollierend":
+                _fill_rollierend_slide(prs, idx, strategy_name,
+                                       rollierend_data=roll_data,
+                                       stand_date_str=stand)
+            elif rolle == "einzeltitel_themen":
+                _fill_einzeltitel_themen_slide(prs, idx, df, strategy_name,
+                                               eval_date=eval_date)
+            else:
+                _record_build_error(
+                    f"Portfolio {k + 1}",
+                    ValueError(f"Unbekannte Block-Rolle '{rolle}' in "
+                               f"block_reihenfolge"))
 
     # Quelle-Datum aktualisieren auf das Auswertungsdatum des ersten Portfolios.
     # Steht statisch in den Chart-Annotationen (drawing*.xml) der Vorlage als
