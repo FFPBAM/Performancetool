@@ -432,6 +432,87 @@ def _mpl_ring_chart(alloc_df, group_col, title):
 # ---------------------------------------------------------------------------
 # Streamlit Rendering
 # ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Vorlagen-Familien (NEU 06.07.2026): Steuert, welche PowerPoint-Vorlage +
+# Folienstruktur eine Strategie bekommt. Die Zuordnung kommt aus der
+# Mapping-Spalte "Powerpoint Familie" (leer = Standard-Broschüre).
+#
+# Variante A (familiengesteuert): Der Berater wählt NUR die Strategie; die
+# Familie im Mapping bestimmt automatisch die Vorlage — keine zusätzliche
+# Auswahl, keine Fehlbedienung möglich.
+#
+# WICHTIG für Rückwärtskompatibilität: Ist die Familie leer/unbekannt ODER
+# fehlt die Vorlagen-Datei, wird template_path/template_config = None
+# durchgereicht → exakt der bisherige Standard-Export (Vorlage_FFPB.pptx).
+# ─────────────────────────────────────────────────────────────────────────────
+
+SPALTE_PP_FAMILIE = "Powerpoint Familie"
+
+# Struktur-Block der THEMEN-Broschüren (Pro / Pro Dividende / Offensiv teilen
+# sich diese eine Vorlage + Struktur). Verifiziert an der echten Vorlage:
+# 21 Folien, dynamischer Block F10-F13 mit den Rollen einzeltitel_themen /
+# zusammenstellung / wertentwicklung / rollierend.
+_THEMA_CONFIG = {
+    "block_reihenfolge": ["einzeltitel_themen", "zusammenstellung",
+                          "wertentwicklung", "rollierend"],
+    "block_positionen": {
+        "einzeltitel_themen": 10,
+        "zusammenstellung": 11,
+        "wertentwicklung": 12,
+        "rollierend": 13,
+    },
+    "erwartete_folien": 21,
+    "entfernen": [],
+}
+
+# Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
+# Nur Familien mit EIGENER Vorlage hier eintragen. Familien ohne Eintrag
+# (oder leere Familie) → Standard-Vorlage (Vorlage_FFPB.pptx, config None).
+# CVV / ETF / ESG bekommen ihre Einträge, sobald ihre Vorlagen existieren.
+VORLAGEN_FAMILIEN = {
+    "Thema": ("Vorlage_Thema.pptx", _THEMA_CONFIG),
+}
+
+
+def _familie_fuer_strategie(name_mapping, display_name):
+    """Liest die 'Powerpoint Familie' einer Strategie aus dem Mapping.
+    Returns den Familien-String (z.B. 'Thema') oder '' wenn leer/nicht
+    vorhanden."""
+    try:
+        if SPALTE_PP_FAMILIE not in name_mapping.columns:
+            return ""
+        col_display = name_mapping.columns[0]
+        treffer = name_mapping.loc[
+            name_mapping[col_display].astype(str).str.strip() == str(display_name).strip(),
+            SPALTE_PP_FAMILIE]
+        if treffer.empty:
+            return ""
+        wert = treffer.iloc[0]
+        if wert is None or (isinstance(wert, float) and pd.isna(wert)):
+            return ""
+        wert = str(wert).strip()
+        return "" if wert.lower() in ("", "nan", "none") else wert
+    except Exception:
+        return ""
+
+
+def _vorlage_fuer_familie(familie):
+    """Familie → (template_path|None, template_config|None).
+
+    Gibt (None, None) zurück, wenn die Familie leer/unbekannt ist ODER die
+    Vorlagen-Datei nicht existiert → Standard-Export (voll rückwärtskompatibel).
+    """
+    if not familie or familie not in VORLAGEN_FAMILIEN:
+        return None, None
+    dateiname, config = VORLAGEN_FAMILIEN[familie]
+    # Vorlage/ liegt neben der Standard-Vorlage; Pfad relativ zum App-Root.
+    import os as _os
+    pfad = _os.path.join("Vorlage", dateiname)
+    if not _os.path.exists(pfad):
+        return None, None  # Datei fehlt → sicher auf Standard zurückfallen
+    return pfad, config
+
+
 def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
     use_volume = anlagevolumen > 0
 
@@ -533,7 +614,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
     # Cache-Key aus aktueller Auswahl (ändert sich → Cache ungültig → Download-Button verschwindet)
     compare_key = pf_sel_2 if (show_compare_pf and df_pf_2 is not None) else "single"
-    current_key = f"{pf_sel_1}|{compare_key}|{date_tag_pf}|{anlagevolumen}|{show_ytd}|{pf_brutto_mwst}"
+    current_key = f"{pf_sel_1}|{compare_key}|{date_tag_pf}|{anlagevolumen}|{show_ytd}|{pf_brutto_mwst}|{_familie_fuer_strategie(name_mapping, pf_sel_1)}"
 
     # Cache invalidieren wenn Auswahl geändert wurde
     if st.session_state.get("pf_export_key") != current_key:
@@ -672,8 +753,22 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                     with st.spinner("PowerPoint wird erstellt..."):
                         from modules import pptx_export as _pptx_export_mod
                         from modules.pptx_export import generate_portfolioanalyse_pptx
+                        # Familie der gewählten Strategie bestimmt die Vorlage
+                        # (Variante A). Leere/unbekannte Familie oder fehlende
+                        # Vorlagen-Datei → (None, None) = Standard-Export.
+                        _familie = _familie_fuer_strategie(name_mapping, pf_sel_1)
+                        _tpl_path, _tpl_cfg = _vorlage_fuer_familie(_familie)
+                        if _familie and _tpl_path:
+                            pptx_diag.append(
+                                f"Vorlage: {_familie} ({_tpl_path}).")
+                        elif _familie and not _tpl_path:
+                            pptx_diag.append(
+                                f"Familie '{_familie}' hat (noch) keine Vorlage "
+                                f"im Ordner Vorlage/ — Standard-Broschüre verwendet.")
                         st.session_state["pf_pptx_bytes"] = generate_portfolioanalyse_pptx(
-                            portfolios, anlagevolumen, performance_inputs=performance_inputs
+                            portfolios, anlagevolumen,
+                            performance_inputs=performance_inputs,
+                            template_path=_tpl_path, template_config=_tpl_cfg,
                         )
                         # NEU (Juli 2026): Berechnungsfehler aus dem Export
                         # (z.B. Kennzahlen-Berechnung der Folie 8 geworfen →
