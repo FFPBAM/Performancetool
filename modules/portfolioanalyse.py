@@ -661,39 +661,12 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
     # Cache invalidieren wenn Auswahl geändert wurde
     if st.session_state.get("pf_export_key") != current_key:
-        st.session_state.pop("pf_pdf_bytes", None)
         st.session_state.pop("pf_pptx_bytes", None)
         st.session_state.pop("pf_pptx_build_errors", None)
         st.session_state["pf_export_key"] = current_key
 
-    exp_col1, exp_col2 = st.columns(2)
-
-    # ── PDF Export ──
-    with exp_col1:
-        if "pf_pdf_bytes" not in st.session_state:
-            # Button zum Generieren
-            if st.button("📄 PDF erstellen", key="pf_pdf_btn", use_container_width=True):
-                portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
-                if show_compare_pf and df_pf_2 is not None:
-                    portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
-                with st.spinner("PDF wird erstellt..."):
-                    st.session_state["pf_pdf_bytes"] = generate_pf_pdf(
-                        portfolios, anlagevolumen, use_volume, show_ytd
-                    )
-                st.rerun()
-        else:
-            # Download-Button mit gecachten Bytes
-            st.download_button(
-                "⬇️ PDF herunterladen",
-                data=st.session_state["pf_pdf_bytes"],
-                file_name=f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pdf",
-                mime="application/pdf",
-                key="pf_pdf_dl",
-                use_container_width=True,
-            )
-
-    # ── PowerPoint Export ──
-    with exp_col2:
+    # ── PowerPoint Export (einziger Export) ──
+    if True:
         if "pf_pptx_bytes" not in st.session_state:
             # Button zum Generieren
             if st.button("📊 PowerPoint erstellen", key="pf_pptx_btn", use_container_width=True,
@@ -801,10 +774,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                         # Vorlagen-Datei → (None, None) = Standard-Export.
                         _familie = _familie_fuer_strategie(name_mapping, pf_sel_1)
                         _tpl_path, _tpl_cfg = _vorlage_fuer_familie(_familie)
-                        if _familie and _tpl_path:
-                            pptx_diag.append(
-                                f"Vorlage: {_familie} ({_tpl_path}).")
-                        elif _familie and not _tpl_path:
+                        if _familie and not _tpl_path:
                             pptx_diag.append(
                                 f"Familie '{_familie}' hat (noch) keine Vorlage "
                                 f"im Ordner Vorlage/ — Standard-Broschüre verwendet.")
