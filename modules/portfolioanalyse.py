@@ -523,17 +523,37 @@ def _vorlage_fuer_familie(familie):
     """Familie → (template_path|None, template_config|None).
 
     Gibt (None, None) zurück, wenn die Familie leer/unbekannt ist ODER die
-    Vorlagen-Datei nicht existiert → Standard-Export (voll rückwärtskompatibel).
+    Vorlagen-Datei nicht gefunden wird → Standard-Export (rückwärtskompatibel).
+
+    Der Pfad wird vom funktionierenden Standard-TEMPLATE_PATH abgeleitet
+    (gleiches Verzeichnis wie Vorlage_FFPB.pptx), damit er in JEDER
+    Ausführungsumgebung (Streamlit Cloud, lokal) am selben Ort sucht wie die
+    Standard-Vorlage — statt relativ zum aktuellen Arbeitsverzeichnis.
     """
     if not familie or familie not in VORLAGEN_FAMILIEN:
         return None, None
     dateiname, config = VORLAGEN_FAMILIEN[familie]
-    # Vorlage/ liegt neben der Standard-Vorlage; Pfad relativ zum App-Root.
     import os as _os
-    pfad = _os.path.join("Vorlage", dateiname)
-    if not _os.path.exists(pfad):
-        return None, None  # Datei fehlt → sicher auf Standard zurückfallen
-    return pfad, config
+    kandidaten = []
+    # 1) Neben der Standard-Vorlage (identisches Verzeichnis wie TEMPLATE_PATH)
+    try:
+        from modules.pptx_export import TEMPLATE_PATH as _std
+    except Exception:
+        try:
+            from pptx_export import TEMPLATE_PATH as _std
+        except Exception:
+            _std = _os.path.join("Vorlage", "Vorlage_FFPB.pptx")
+    kandidaten.append(_os.path.join(_os.path.dirname(_std), dateiname))
+    # 2) Relativ zum App-Root (klassisch)
+    kandidaten.append(_os.path.join("Vorlage", dateiname))
+    # 3) Relativ zu diesem Modul (falls CWD abweicht)
+    kandidaten.append(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                    "..", "Vorlage", dateiname))
+    for pfad in kandidaten:
+        if _os.path.exists(pfad):
+            return pfad, config
+    # Keiner existiert → Standard (kein Crash). Der aufrufende Code meldet das.
+    return None, None
 
 
 def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
@@ -803,7 +823,30 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 except FileNotFoundError as e:
                     st.error(f"❌ Vorlage nicht gefunden: {e}\n\nBitte `Vorlage_FFPB.pptx` im Ordner `Vorlage/` im Repo ablegen.")
                 except Exception as e:
-                    st.error(f"❌ Fehler beim PowerPoint-Export: {e}")
+                    # Bei "Package not found" gezielt diagnostizieren: existiert
+                    # die Datei am Ladeort wirklich, wie groß ist sie (ein
+                    # Git-LFS-Zeiger ist nur ~130 Bytes!), was liegt im Ordner?
+                    import os as _osd
+                    diag = [f"❌ Fehler beim PowerPoint-Export: {e}"]
+                    try:
+                        _p = locals().get("_tpl_path")
+                        if _p:
+                            if _osd.path.exists(_p):
+                                _sz = _osd.path.getsize(_p)
+                                diag.append(f"Datei {_p} existiert, Größe {_sz} Bytes.")
+                                if _sz < 5000:
+                                    diag.append("⚠️ Sehr klein — das ist vermutlich ein "
+                                                "Git-LFS-Zeiger statt der echten PPTX. "
+                                                "Die Vorlage muss als normale Binärdatei "
+                                                "(nicht über Git LFS) im Repo liegen.")
+                            else:
+                                _dir = _osd.path.dirname(_p) or "."
+                                vorhanden = _osd.listdir(_dir) if _osd.path.isdir(_dir) else "Ordner fehlt"
+                                diag.append(f"Datei {_p} NICHT am Ladeort. Im Ordner "
+                                            f"'{_dir}' liegt: {vorhanden}")
+                    except Exception:
+                        pass
+                    st.error("\n\n".join(diag))
         else:
             # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
             for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
