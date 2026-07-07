@@ -48,8 +48,7 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
     return (lo, hi)
 
 
-def ring_labels_aussen_dynamisch(chart, radius=0.17, x_scale=1.25,
-                                 min_abstand=0.055):
+def ring_labels_aussen_dynamisch(chart, radius=0.06, aspect=1.0):
     """Positioniert die Datenlabels eines Doughnut-Rings radial außen —
     berechnet aus dem tatsächlichen Segment-Mittelwinkel, damit die Zahlen
     IMMER am richtigen Segment sitzen (unabhängig von den Anteilen).
@@ -57,6 +56,10 @@ def ring_labels_aussen_dynamisch(chart, radius=0.17, x_scale=1.25,
     zu dicht, werden sie leicht auseinandergeschoben.
     """
     from lxml import etree
+    # x_scale = H/B: manualLayout-x ist Bruchteil der BREITE, y der HÖHE.
+    # Bei breiterem Rahmen (aspect>1) muss x gestaucht werden, sonst
+    # schießen die seitlichen Labels zu weit raus.
+    x_scale = 1.0 / aspect if aspect else 1.0
     root = _root(chart)
     val_block = root.find(".//" + _q("val"))
     if val_block is None:
@@ -73,18 +76,42 @@ def ring_labels_aussen_dynamisch(chart, radius=0.17, x_scale=1.25,
         mids.append(fsa + (kum + frac / 2.0) * 360.0)
         kum += frac
 
-    # Positionen berechnen
+    # Positionen berechnen (Offset vom Default = Segment-Mittelpunkt am Ring)
     pos = []
     for theta in mids:
         r = math.radians(theta)
         pos.append([radius * x_scale * math.sin(r), -radius * math.cos(r)])
 
-    # simple Kollisionsvermeidung: dicht beieinanderliegende Labels spreizen
-    for i in range(1, len(pos)):
-        dx = pos[i][0] - pos[i-1][0]; dy = pos[i][1] - pos[i-1][1]
-        if (dx*dx + dy*dy) ** 0.5 < min_abstand:
-            pos[i][1] += min_abstand   # nach unten/außen nudgen
-            pos[i-1][1] -= min_abstand
+    # ── Überlappungs-Auflösung (damit ALLE Zahlen sichtbar bleiben) ──
+    # Labels sind waagerechter Text; Überlappung ist v.a. VERTIKAL. Wir
+    # drängen zu dicht stehende Labels iterativ in y auseinander. min_v/min_h
+    # ~ halbe Label-Höhe/-Breite als Bruchteil des Rahmens (5.24x4.55in).
+    min_v, min_h = 0.052, 0.135
+    for _ in range(80):
+        bewegt = False
+        reihenfolge = sorted(range(len(pos)), key=lambda i: pos[i][1])
+        for a in range(len(reihenfolge)):
+            for b in range(a + 1, len(reihenfolge)):
+                i, j = reihenfolge[a], reihenfolge[b]
+                dy = pos[j][1] - pos[i][1]
+                dx = pos[j][0] - pos[i][0]
+                if abs(dy) < min_v and abs(dx) < min_h:
+                    schub = (min_v - abs(dy)) / 2.0 + 0.002
+                    if pos[i][1] <= pos[j][1]:
+                        pos[i][1] -= schub; pos[j][1] += schub
+                    else:
+                        pos[i][1] += schub; pos[j][1] -= schub
+                    bewegt = True
+        if not bewegt:
+            break
+
+    # Offsets begrenzen, damit KEIN Label über den Rahmenrand geschoben wird
+    # (sonst schneidet PowerPoint es ab → "Label verschwindet"). Grenzen als
+    # Bruchteil des Rahmens, konservativ.
+    MAX_X, MAX_Y = 0.145, 0.115
+    for p in pos:
+        p[0] = max(-MAX_X, min(MAX_X, p[0]))
+        p[1] = max(-MAX_Y, min(MAX_Y, p[1]))
 
     # in die dLbl schreiben (nur vorhandene idx = echte Segmente)
     dlbls = {int(d.find(_q("idx")).get("val")): d
@@ -128,7 +155,7 @@ def _hat_dateax(chart):
     return _root(chart).find(".//" + _q("dateAx")) is not None
 
 
-def nachbearbeiten(prs, hole_size=79, ring_label_radius=0.17):
+def nachbearbeiten(prs, hole_size=79, ring_label_radius=0.06):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
@@ -152,7 +179,9 @@ def nachbearbeiten(prs, hole_size=79, ring_label_radius=0.17):
             try:
                 if "DOUGHNUT" in typ:
                     ring_holesize(chart, hole_size)
-                    ring_labels_aussen_dynamisch(chart, radius=ring_label_radius)
+                    # aspect = Breite/Höhe des Chart-Rahmens → korrekte x-Stauchung
+                    _asp = (shape.width / shape.height) if shape.height else 1.0
+                    ring_labels_aussen_dynamisch(chart, radius=ring_label_radius, aspect=_asp)
                     stat["ringe"] += 1
                 elif "LINE" in typ and _hat_dateax(chart):
                     datumsachse_an_daten(chart)
