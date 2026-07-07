@@ -1023,4 +1023,5 @@ with tab_perf:
 # TAB 2: PORTFOLIOANALYSE
 # ===========================================================================
 with tab_pf:
+    st.success("🟢 HIER BEGINNT PORTFOLIOANALYSE-TAB")
     render_portfolioanalyse(name_mapping, anlagevolumen)
