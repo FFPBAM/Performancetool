@@ -646,7 +646,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not check_login(): st.stop()
-st.title("Fürst Fugger Privatbank – Vermögensverwaltung")
+st.title("Fürst Fugger Privatbank – Vermögensverwaltung 128347348957456 larhwejhrfksjf")
 
 # ── Gemeinsame Sidebar ──
 mapping = load_mapping()
