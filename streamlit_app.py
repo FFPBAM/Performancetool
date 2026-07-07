@@ -646,7 +646,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not check_login(): st.stop()
-st.title("Fürst Fugger Privatbank – Vermögensverwaltung 128347348957456 larhwejhrfksjf")
+st.title("Fürst Fugger Privatbank – Vermögensverwaltung")
 
 # ── Gemeinsame Sidebar ──
 mapping = load_mapping()
@@ -661,367 +661,357 @@ with st.sidebar:
         help="Gilt für beide Tabs. Wenn > 0: Werte in Euro.")
     use_volume = anlagevolumen > 0
 
-class _PerfSkip(Exception):
-    """Bricht NUR den Performance-Tab ab (statt st.stop(), das die ganze
-    App anhalten und den Portfolioanalyse-Tab blockieren würde)."""
-    pass
-
 # ── TABS ──
-tab_perf, tab_pf = st.tabs(["📈 Performance", "📊 Portfolioanalyse"])
+tab_perf, tab_pf = st.tabs(["📈 Performance", "📊 Portfolioanalyse"],
+                           key="active_tab", on_change="rerun")
 
 
 # ===========================================================================
 # TAB 1: PERFORMANCE
 # ===========================================================================
 with tab_perf:
-    try:
-        auto_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
-        date_tag = auto_tag
+    auto_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+    date_tag = auto_tag
 
-        with st.sidebar:
-            st.markdown("---")
-            st.subheader("📈 Performance")
-            show_adv_perf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_perf")
-            if show_adv_perf:
-                date_tag = st.text_input("Date-Tag (yyMMdd)", value=auto_tag,
-                    help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="perf_tag")
+    with st.sidebar:
+        st.markdown("---")
+        st.subheader("📈 Performance")
+        show_adv_perf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_perf")
+        if show_adv_perf:
+            date_tag = st.text_input("Date-Tag (yyMMdd)", value=auto_tag,
+                help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="perf_tag")
 
-        files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
-        if not files: st.error(f"Keine Dateien für Tag {date_tag}."); raise _PerfSkip()
-        data = build_portfolio_timeseries(files, mapping)
-        dn_ordered, d2c, d2b = build_name_lookups(name_mapping, set(data.keys()))
-        if not dn_ordered: st.error("Keine Portfolios zugeordnet."); raise _PerfSkip()
+    files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
+    if not files: st.error(f"Keine Dateien für Tag {date_tag}."); st.stop()
+    data = build_portfolio_timeseries(files, mapping)
+    dn_ordered, d2c, d2b = build_name_lookups(name_mapping, set(data.keys()))
+    if not dn_ordered: st.error("Keine Portfolios zugeordnet."); st.stop()
 
-        # Daten an Portfolioanalyse-Tab weitergeben (für PowerPoint-Export der Performance-Folie)
-        st.session_state["perf_timeseries"] = data
-        st.session_state["perf_d2c"] = d2c
-        st.session_state["perf_d2b"] = d2b  # Benchmark-Texte für ***-Fußnote der WE-Folie (07/2026)
+    # Daten an Portfolioanalyse-Tab weitergeben (für PowerPoint-Export der Performance-Folie)
+    st.session_state["perf_timeseries"] = data
+    st.session_state["perf_d2c"] = d2c
+    st.session_state["perf_d2b"] = d2b  # Benchmark-Texte für ***-Fußnote der WE-Folie (07/2026)
 
-        with st.sidebar:
-            ds1=st.selectbox("Portfolio",dn_ordered,key="p_sel1"); ps1=d2c[ds1]
-            sc=st.checkbox("Vergleichsportfolio",value=False,key="p_cmp"); ps2=ds2=None
-            if sc: ds2=st.selectbox("Vergleichsportfolio",dn_ordered,key="p_sel2"); ps2=d2c[ds2]
-            sv=st.checkbox("Vor Kosten",value=True,key="p_vk"); sb=st.checkbox("Benchmark",value=True,key="p_bm")
-            sb_rf=st.checkbox("Risikofreier Zins",value=False,key="p_rf",
-                help="Zeigt den risikofreien Zins als zusätzliche Linie im Performance-Chart (kompoundiert aus den täglichen Werten).")
-            sdd=st.checkbox("Drawdown (nach Kosten)",value=False,key="p_dd")
-            stbl=st.checkbox("Tabelle rollierend",value=True,key="p_tbl"); sbar=st.checkbox("Balken-Chart",value=True,key="p_bar")
-            st.markdown("---")
-            fd1=float(data[ps1]["fee_default"].iloc[0]) if len(data[ps1]) else 0.0
-            # Dynamischer Key: wenn Portfolio wechselt, wird der Default neu geladen
-            fee_key_1 = f"p_fee1_{ps1}"
-            if fee_key_1 not in st.session_state:
-                st.session_state[fee_key_1] = float(round(fd1*100, 4))
-            fp1=st.number_input(f"Kosten % – {ds1}",0.0,20.0,step=0.05,key=fee_key_1)
-            fdec2=fp2=None
-            if sc and ps2:
-                fd2=float(data[ps2]["fee_default"].iloc[0]) if len(data[ps2]) else 0.0
-                fee_key_2 = f"p_fee2_{ps2}"
-                if fee_key_2 not in st.session_state:
-                    st.session_state[fee_key_2] = float(round(fd2*100, 4))
-                fp2=st.number_input(f"Kosten % – {ds2}",0.0,20.0,step=0.05,key=fee_key_2)
-
-            # MwSt-Option
-            st.markdown("---")
-            brutto_mwst = st.checkbox("Bruttohonorar (inkl. 19% MwSt.)", value=False, key="p_mwst",
-                help="Wenn aktiviert, wird auf das eingegebene Nettohonorar 19% MwSt. aufgeschlagen.")
-            mwst_faktor = 1.19 if brutto_mwst else 1.0
-            mwst_suffix = " (inkl. 19% MwSt.)" if brutto_mwst else " (exkl. MwSt.)"
-
-            fdec1 = (fp1 * mwst_faktor) / 100.0
-            if brutto_mwst:
-                st.caption(f"Effektive Kosten {ds1}: {fp1 * mwst_faktor:.4f}% p.a. (inkl. MwSt.)")
-            if fp2 is not None:
-                fdec2 = (fp2 * mwst_faktor) / 100.0
-                if brutto_mwst:
-                    st.caption(f"Effektive Kosten {ds2}: {fp2 * mwst_faktor:.4f}% p.a. (inkl. MwSt.)")
-
-        l1=ds1; l2=ds2 if sc and ds2 else None
-        ad1=data[ps1].index.min().date(); ad2=data[ps2].index.min().date() if sc and ps2 else None
-        rm1=data[ps1].index.min().date(); rx1=data[ps1].index.max().date()
-        if sc and ps2: rm2=data[ps2].index.min().date(); rx2=data[ps2].index.max().date(); mind=max(rm1,rm2); maxd=min(rx1,rx2)
-        else: mind=rm1; maxd=rx1
-
-        # Hinweis + Quelle oben
-        st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
-        st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
-
-        st.markdown("#### Zeitraum auswählen")
-        # Reset-Logik: Counter ändert den Widget-Key, sodass das Widget frisch mit Default rendert
-        if "p_sd_reset" not in st.session_state: st.session_state.p_sd_reset = 0
-        if "p_ed_reset" not in st.session_state: st.session_state.p_ed_reset = 0
-
-        c1,c2=st.columns(2)
-        with c1: sd=st.date_input("Start",value=mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_sd_{st.session_state.p_sd_reset}")
-        with c2: ed=st.date_input("Ende",value=maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_ed_{st.session_state.p_ed_reset}")
-
-        rc1,rc2=st.columns(2)
-        with rc1:
-            if st.button(f"↩️ Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", use_container_width=True):
-                st.session_state.p_sd_reset += 1
-                st.rerun()
-        with rc2:
-            if st.button(f"↩️ Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", use_container_width=True):
-                st.session_state.p_ed_reset += 1
-                st.rerun()
-
-        if sd>ed: st.error("Start > Ende."); raise _PerfSkip()
-
-        df1=data[ps1].copy(); df1=df1.loc[(df1.index.date>=sd)&(df1.index.date<=ed)].copy(); df2=None
+    with st.sidebar:
+        ds1=st.selectbox("Portfolio",dn_ordered,key="p_sel1"); ps1=d2c[ds1]
+        sc=st.checkbox("Vergleichsportfolio",value=False,key="p_cmp"); ps2=ds2=None
+        if sc: ds2=st.selectbox("Vergleichsportfolio",dn_ordered,key="p_sel2"); ps2=d2c[ds2]
+        sv=st.checkbox("Vor Kosten",value=True,key="p_vk"); sb=st.checkbox("Benchmark",value=True,key="p_bm")
+        sb_rf=st.checkbox("Risikofreier Zins",value=False,key="p_rf",
+            help="Zeigt den risikofreien Zins als zusätzliche Linie im Performance-Chart (kompoundiert aus den täglichen Werten).")
+        sdd=st.checkbox("Drawdown (nach Kosten)",value=False,key="p_dd")
+        stbl=st.checkbox("Tabelle rollierend",value=True,key="p_tbl"); sbar=st.checkbox("Balken-Chart",value=True,key="p_bar")
+        st.markdown("---")
+        fd1=float(data[ps1]["fee_default"].iloc[0]) if len(data[ps1]) else 0.0
+        # Dynamischer Key: wenn Portfolio wechselt, wird der Default neu geladen
+        fee_key_1 = f"p_fee1_{ps1}"
+        if fee_key_1 not in st.session_state:
+            st.session_state[fee_key_1] = float(round(fd1*100, 4))
+        fp1=st.number_input(f"Kosten % – {ds1}",0.0,20.0,step=0.05,key=fee_key_1)
+        fdec2=fp2=None
         if sc and ps2:
-            d2r=data[ps2].copy(); d2r=d2r.loc[(d2r.index.date>=sd)&(d2r.index.date<=ed)].copy()
-            # rf mitziehen damit es nach dem Join verfügbar bleibt
-            cols1 = ["ret_port","ret_bm","rf"] if "rf" in df1.columns else ["ret_port","ret_bm"]
-            cols2 = ["ret_port","ret_bm","rf"] if "rf" in d2r.columns else ["ret_port","ret_bm"]
-            ren1 = {"ret_port":"rp1","ret_bm":"rb1","rf":"rf1"}
-            ren2 = {"ret_port":"rp2","ret_bm":"rb2","rf":"rf2"}
-            j = df1[cols1].rename(columns=ren1).join(d2r[cols2].rename(columns=ren2), how="inner")
-            if j.empty: st.error("Kein gemeinsamer Zeitraum."); raise _PerfSkip()
-            df1 = j[["rp1","rb1"] + (["rf1"] if "rf1" in j.columns else [])].rename(columns={"rp1":"ret_port","rb1":"ret_bm","rf1":"rf"})
-            df2 = j[["rp2","rb2"] + (["rf2"] if "rf2" in j.columns else [])].rename(columns={"rp2":"ret_port","rb2":"ret_bm","rf2":"rf"})
+            fd2=float(data[ps2]["fee_default"].iloc[0]) if len(data[ps2]) else 0.0
+            fee_key_2 = f"p_fee2_{ps2}"
+            if fee_key_2 not in st.session_state:
+                st.session_state[fee_key_2] = float(round(fd2*100, 4))
+            fp2=st.number_input(f"Kosten % – {ds2}",0.0,20.0,step=0.05,key=fee_key_2)
 
-        sw=anlagevolumen if use_volume else 100.0
-        r1=df1["ret_port"].to_numpy(float); ia1=make_index_after_fee(r1,fdec1,sw); ib1=make_index_from_returns(r1,sw)
-        ia2=ib2=None
-        if df2 is not None: r2=df2["ret_port"].to_numpy(float); ia2=make_index_after_fee(r2,float(fdec2),sw); ib2=make_index_from_returns(r2,sw)
-        xd=[df1.index.min()-pd.Timedelta(days=1)]+list(df1.index)
-        r1t=df1["ret_port"].to_numpy(float)
-        sb1t=pd.Series(make_index_from_returns(r1t,100.0),index=pd.to_datetime(xd))
-        sa1t=pd.Series(make_index_after_fee(r1t,fdec1,100.0),index=pd.to_datetime(xd))
-        sb2t=sa2t=None
-        if df2 is not None:
-            r2t=df2["ret_port"].to_numpy(float)
-            sb2t=pd.Series(make_index_from_returns(r2t,100.0),index=pd.to_datetime(xd))
-            sa2t=pd.Series(make_index_after_fee(r2t,float(fdec2),100.0),index=pd.to_datetime(xd))
-        bn1=data[ps1].attrs.get("benchmark_name","Benchmark"); bn2=data[ps2].attrs.get("benchmark_name","Benchmark") if sc and ps2 else None
-        bt1=d2b.get(ds1,""); bt2=d2b.get(ds2,"") if ds2 else ""
+        # MwSt-Option
+        st.markdown("---")
+        brutto_mwst = st.checkbox("Bruttohonorar (inkl. 19% MwSt.)", value=False, key="p_mwst",
+            help="Wenn aktiviert, wird auf das eingegebene Nettohonorar 19% MwSt. aufgeschlagen.")
+        mwst_faktor = 1.19 if brutto_mwst else 1.0
+        mwst_suffix = " (inkl. 19% MwSt.)" if brutto_mwst else " (exkl. MwSt.)"
 
-        # ── rf aggregieren und rf-Index für Chart bauen ──
-        rf_series_1 = df1["rf"] if "rf" in df1.columns else pd.Series(dtype=float)
-        rf_pa_1 = aggregate_rf_geometric(rf_series_1, len(r1)) if not rf_series_1.empty else None
-        rf_pa_2 = None
-        rf_series_2 = pd.Series(dtype=float)
-        if df2 is not None and "rf" in df2.columns:
-            rf_series_2 = df2["rf"]
-            rf_pa_2 = aggregate_rf_geometric(rf_series_2, len(r2))
+        fdec1 = (fp1 * mwst_faktor) / 100.0
+        if brutto_mwst:
+            st.caption(f"Effektive Kosten {ds1}: {fp1 * mwst_faktor:.4f}% p.a. (inkl. MwSt.)")
+        if fp2 is not None:
+            fdec2 = (fp2 * mwst_faktor) / 100.0
+            if brutto_mwst:
+                st.caption(f"Effektive Kosten {ds2}: {fp2 * mwst_faktor:.4f}% p.a. (inkl. MwSt.)")
 
-        # ── Konsistenz-Hinweis Tool vs. PowerPoint (03.07.2026) ─────────────────
-        # Fachliche Festlegung (Philip): Die PowerPoint-Broschüre rechnet IMMER
-        # über die volle Historie mit dem Standardsatz aus dem Mapping — sie ist
-        # die kanonische, reproduzierbare Basis. Die Tool-Anzeige darf davon
-        # abweichen (Zeitraum-Filter, Vergleichs-Schnittmenge, editierter Satz),
-        # das ist GEWOLLT — muss aber sichtbar sein, sonst wirken die Zahlen
-        # "inkonsistent". Diese Caption benennt live jede aktive Abweichung.
-        _pp_abweichungen = []
-        if sd > mind or ed < maxd:
-            _pp_abweichungen.append(f"Zeitraum gefiltert ({fmt_date_de(sd)} – {fmt_date_de(ed)})")
-        if df2 is not None:
-            _pp_abweichungen.append("Vergleich aktiv → Berechnung auf gemeinsamem Zeitraum beider Portfolios")
-        _fee_std_1 = float(round(fd1 * 100, 4))
-        if abs(fp1 - _fee_std_1) > 1e-9:
-            _pp_abweichungen.append(f"Kostensatz {ds1} manuell geändert ({fp1:.4f}% statt Standard {_fee_std_1:.4f}%)")
-        if sc and ps2 and fp2 is not None:
-            _fee_std_2 = float(round(fd2 * 100, 4))
-            if abs(fp2 - _fee_std_2) > 1e-9:
-                _pp_abweichungen.append(f"Kostensatz {ds2} manuell geändert ({fp2:.4f}% statt Standard {_fee_std_2:.4f}%)")
-        if _pp_abweichungen:
-            st.info("ℹ️ **Anzeige weicht von der PowerPoint-Basis ab** (die Broschüre rechnet immer: "
-                    "volle Historie, Standardsatz aus dem Mapping): " + " · ".join(_pp_abweichungen)
-                    + ". MwSt-Häkchen ggf. in beiden Tabs gleich stellen.")
+    l1=ds1; l2=ds2 if sc and ds2 else None
+    ad1=data[ps1].index.min().date(); ad2=data[ps2].index.min().date() if sc and ps2 else None
+    rm1=data[ps1].index.min().date(); rx1=data[ps1].index.max().date()
+    if sc and ps2: rm2=data[ps2].index.min().date(); rx2=data[ps2].index.max().date(); mind=max(rm1,rm2); maxd=min(rx1,rx2)
+    else: mind=rm1; maxd=rx1
 
-        # Kennzahlen
-        nd1=len(r1); draf1=calc_daily_returns_after_fee(r1,fdec1); cg1=calc_cagr(ia1,nd1); vo1=calc_vola(draf1)
-        ew1=float(ia1[-1]) if use_volume else None
-        ia1_100=make_index_after_fee(r1,fdec1,100.0); mddv1,mddd1=calc_max_drawdown(ia1_100,xd)
-        mdde1=calc_max_drawdown_euro(ia1,xd)[0] if use_volume else None
-        cm1=calc_calmar_ratio(cg1,mddv1)
-        sh1=calc_sharpe_excess(draf1, df1["rf"]) if ("rf" in df1.columns and df1["rf"].notna().any()) else None
-        rd1,rdt1=calc_drawdown_recovery(ia1_100,xd); dur1,ds1_,de1_=calc_max_drawdown_duration(ia1_100,xd)
-        cg2=vo2=ew2=mddv2=mddd2=mdde2=cm2=sh2=rd2=rdt2=dur2=ds2_=de2_=None
-        if df2 is not None:
-            nd2=len(r2); draf2=calc_daily_returns_after_fee(r2,float(fdec2)); cg2=calc_cagr(ia2,nd2); vo2=calc_vola(draf2)
-            ew2=float(ia2[-1]) if use_volume else None
-            ia2_100=make_index_after_fee(r2,float(fdec2),100.0); mddv2,mddd2=calc_max_drawdown(ia2_100,xd)
-            mdde2=calc_max_drawdown_euro(ia2,xd)[0] if use_volume else None
-            cm2=calc_calmar_ratio(cg2,mddv2)
-            sh2=calc_sharpe_excess(draf2, df2["rf"]) if ("rf" in df2.columns and df2["rf"].notna().any()) else None
-            rd2,rdt2=calc_drawdown_recovery(ia2_100,xd); dur2,ds2_,de2_=calc_max_drawdown_duration(ia2_100,xd)
+    # Hinweis + Quelle oben
+    st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
+    st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
 
-        md=[{"label":l1,"auflagedatum":ad1,"cagr":cg1,"vola":vo1,"endwert":ew1,"calmar":cm1,"sharpe":sh1,"rf_pa":rf_pa_1,
-            "max_dd_val":mddv1 if sdd else None,"max_dd_date":mddd1 if sdd else None,"max_dd_eur":mdde1 if sdd else None,
-            "recovery_days":rd1 if sdd else None,"recovery_date":rdt1 if sdd else None,"max_dd_dur":dur1 if sdd else None}]
-        if df2 is not None and l2:
-            md.append({"label":l2,"auflagedatum":ad2,"cagr":cg2,"vola":vo2,"endwert":ew2,"calmar":cm2,"sharpe":sh2,"rf_pa":rf_pa_2,
-                "max_dd_val":mddv2 if sdd else None,"max_dd_date":mddd2 if sdd else None,"max_dd_eur":mdde2 if sdd else None,
-                "recovery_days":rd2 if sdd else None,"recovery_date":rdt2 if sdd else None,"max_dd_dur":dur2 if sdd else None})
+    st.markdown("#### Zeitraum auswählen")
+    # Reset-Logik: Counter ändert den Widget-Key, sodass das Widget frisch mit Default rendert
+    if "p_sd_reset" not in st.session_state: st.session_state.p_sd_reset = 0
+    if "p_ed_reset" not in st.session_state: st.session_state.p_ed_reset = 0
 
-        nk_label = f"nach Kosten{mwst_suffix}"
-        st.subheader(f"📊 Kennzahlen ({nk_label})")
-        display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix)
-        if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix)
+    c1,c2=st.columns(2)
+    with c1: sd=st.date_input("Start",value=mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_sd_{st.session_state.p_sd_reset}")
+    with c2: ed=st.date_input("Ende",value=maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_ed_{st.session_state.p_ed_reset}")
 
-        eff_fee_1 = fp1 * mwst_faktor  # effektive Kosten in %
-        eff_fee_2 = (fp2 * mwst_faktor) if fp2 is not None else 0.0
-        if use_volume: st.subheader(f"📈 Wertentwicklung in Euro ({fmt_eur_de(anlagevolumen)})"); yl="Wert in €"
-        else: st.subheader("📈 Performance-Index (Start = 100)"); yl="Index (Start 100)"
-        fig=go.Figure()
+    rc1,rc2=st.columns(2)
+    with rc1:
+        if st.button(f"↩️ Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", use_container_width=True):
+            st.session_state.p_sd_reset += 1
+            st.rerun()
+    with rc2:
+        if st.button(f"↩️ Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", use_container_width=True):
+            st.session_state.p_ed_reset += 1
+            st.rerun()
 
-        def _add_line(x, y, name):
-            """Fügt Linie + Endwert-Label hinzu. Label verschwindet mit der Linie."""
-            end_val = float(y[-1])
-            if use_volume:
-                pct_change = (end_val / sw - 1.0) * 100
-                label = f"{pct_change:+.2f}%".replace(".",",")
-            else:
-                label = f"{end_val:.2f}".replace(".",",")
-            # Hauptlinie
-            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=name, legendgroup=name))
-            # Endwert-Label (nur letzter Punkt, gleiche legendgroup → verschwindet zusammen)
-            fig.add_trace(go.Scatter(
-                x=[x[-1]], y=[end_val], mode="text", text=[f"<b>{label}</b>"],
-                textposition="middle right", textfont=dict(size=10),
-                legendgroup=name, showlegend=False, hoverinfo="skip"))
+    if sd>ed: st.error("Start > Ende."); st.stop()
 
-        _add_line(xd, ia1, f"{l1} – {nk_label} ({eff_fee_1:.2f}%)")
-        if ia2 is not None: _add_line(xd, ia2, f"{l2} – {nk_label} ({eff_fee_2:.2f}%)")
-        if sv:
-            _add_line(xd, ib1, f"{l1} – vor Kosten")
-            if ib2 is not None: _add_line(xd, ib2, f"{l2} – vor Kosten")
-        if sb and df1["ret_bm"].notna().any():
-            rbm1=df1["ret_bm"].fillna(0).to_numpy(float); ibm1=make_index_from_returns(rbm1,sw)
-            _add_line(xd, ibm1, f"BM {l1}: {bn1}")
-            if df2 is not None and df2["ret_bm"].notna().any():
-                rbm2=df2["ret_bm"].fillna(0).to_numpy(float); ibm2=make_index_from_returns(rbm2,sw)
-                _add_line(xd, ibm2, f"BM {l2}: {bn2}")
-        # rf-Linie (nur eine, da für gleichen Zeitraum identisch)
-        rf_idx = None
-        if sb_rf and not rf_series_1.empty and rf_series_1.notna().any():
-            irf = make_index_from_rf(rf_series_1.fillna(0).to_numpy(float), sw)
-            _add_line(xd, irf, "Risikofreier Zins")
-            rf_idx = irf
-        elif sb_rf:
-            st.caption("ℹ️ Keine Daten zum risikofreien Zins für den gewählten Zeitraum verfügbar.")
+    df1=data[ps1].copy(); df1=df1.loc[(df1.index.date>=sd)&(df1.index.date<=ed)].copy(); df2=None
+    if sc and ps2:
+        d2r=data[ps2].copy(); d2r=d2r.loc[(d2r.index.date>=sd)&(d2r.index.date<=ed)].copy()
+        # rf mitziehen damit es nach dem Join verfügbar bleibt
+        cols1 = ["ret_port","ret_bm","rf"] if "rf" in df1.columns else ["ret_port","ret_bm"]
+        cols2 = ["ret_port","ret_bm","rf"] if "rf" in d2r.columns else ["ret_port","ret_bm"]
+        ren1 = {"ret_port":"rp1","ret_bm":"rb1","rf":"rf1"}
+        ren2 = {"ret_port":"rp2","ret_bm":"rb2","rf":"rf2"}
+        j = df1[cols1].rename(columns=ren1).join(d2r[cols2].rename(columns=ren2), how="inner")
+        if j.empty: st.error("Kein gemeinsamer Zeitraum."); st.stop()
+        df1 = j[["rp1","rb1"] + (["rf1"] if "rf1" in j.columns else [])].rename(columns={"rp1":"ret_port","rb1":"ret_bm","rf1":"rf"})
+        df2 = j[["rp2","rb2"] + (["rf2"] if "rf2" in j.columns else [])].rename(columns={"rp2":"ret_port","rb2":"ret_bm","rf2":"rf"})
 
-        fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
-            yaxis=dict(tickformat=",.0f" if use_volume else None, separatethousands=True),
-            legend=dict(title_text="Strategie", x=1.02, y=1, xanchor="left"),
-            showlegend=True, hovermode="x unified",
-            colorway=FFPB_PALETTE,
-            margin=dict(r=120))
+    sw=anlagevolumen if use_volume else 100.0
+    r1=df1["ret_port"].to_numpy(float); ia1=make_index_after_fee(r1,fdec1,sw); ib1=make_index_from_returns(r1,sw)
+    ia2=ib2=None
+    if df2 is not None: r2=df2["ret_port"].to_numpy(float); ia2=make_index_after_fee(r2,float(fdec2),sw); ib2=make_index_from_returns(r2,sw)
+    xd=[df1.index.min()-pd.Timedelta(days=1)]+list(df1.index)
+    r1t=df1["ret_port"].to_numpy(float)
+    sb1t=pd.Series(make_index_from_returns(r1t,100.0),index=pd.to_datetime(xd))
+    sa1t=pd.Series(make_index_after_fee(r1t,fdec1,100.0),index=pd.to_datetime(xd))
+    sb2t=sa2t=None
+    if df2 is not None:
+        r2t=df2["ret_port"].to_numpy(float)
+        sb2t=pd.Series(make_index_from_returns(r2t,100.0),index=pd.to_datetime(xd))
+        sa2t=pd.Series(make_index_after_fee(r2t,float(fdec2),100.0),index=pd.to_datetime(xd))
+    bn1=data[ps1].attrs.get("benchmark_name","Benchmark"); bn2=data[ps2].attrs.get("benchmark_name","Benchmark") if sc and ps2 else None
+    bt1=d2b.get(ds1,""); bt2=d2b.get(ds2,"") if ds2 else ""
 
-        # Deutsche Tausender-Formatierung auf Y-Achse bei Volumen
+    # ── rf aggregieren und rf-Index für Chart bauen ──
+    rf_series_1 = df1["rf"] if "rf" in df1.columns else pd.Series(dtype=float)
+    rf_pa_1 = aggregate_rf_geometric(rf_series_1, len(r1)) if not rf_series_1.empty else None
+    rf_pa_2 = None
+    rf_series_2 = pd.Series(dtype=float)
+    if df2 is not None and "rf" in df2.columns:
+        rf_series_2 = df2["rf"]
+        rf_pa_2 = aggregate_rf_geometric(rf_series_2, len(r2))
+
+    # ── Konsistenz-Hinweis Tool vs. PowerPoint (03.07.2026) ─────────────────
+    # Fachliche Festlegung (Philip): Die PowerPoint-Broschüre rechnet IMMER
+    # über die volle Historie mit dem Standardsatz aus dem Mapping — sie ist
+    # die kanonische, reproduzierbare Basis. Die Tool-Anzeige darf davon
+    # abweichen (Zeitraum-Filter, Vergleichs-Schnittmenge, editierter Satz),
+    # das ist GEWOLLT — muss aber sichtbar sein, sonst wirken die Zahlen
+    # "inkonsistent". Diese Caption benennt live jede aktive Abweichung.
+    _pp_abweichungen = []
+    if sd > mind or ed < maxd:
+        _pp_abweichungen.append(f"Zeitraum gefiltert ({fmt_date_de(sd)} – {fmt_date_de(ed)})")
+    if df2 is not None:
+        _pp_abweichungen.append("Vergleich aktiv → Berechnung auf gemeinsamem Zeitraum beider Portfolios")
+    _fee_std_1 = float(round(fd1 * 100, 4))
+    if abs(fp1 - _fee_std_1) > 1e-9:
+        _pp_abweichungen.append(f"Kostensatz {ds1} manuell geändert ({fp1:.4f}% statt Standard {_fee_std_1:.4f}%)")
+    if sc and ps2 and fp2 is not None:
+        _fee_std_2 = float(round(fd2 * 100, 4))
+        if abs(fp2 - _fee_std_2) > 1e-9:
+            _pp_abweichungen.append(f"Kostensatz {ds2} manuell geändert ({fp2:.4f}% statt Standard {_fee_std_2:.4f}%)")
+    if _pp_abweichungen:
+        st.info("ℹ️ **Anzeige weicht von der PowerPoint-Basis ab** (die Broschüre rechnet immer: "
+                "volle Historie, Standardsatz aus dem Mapping): " + " · ".join(_pp_abweichungen)
+                + ". MwSt-Häkchen ggf. in beiden Tabs gleich stellen.")
+
+    # Kennzahlen
+    nd1=len(r1); draf1=calc_daily_returns_after_fee(r1,fdec1); cg1=calc_cagr(ia1,nd1); vo1=calc_vola(draf1)
+    ew1=float(ia1[-1]) if use_volume else None
+    ia1_100=make_index_after_fee(r1,fdec1,100.0); mddv1,mddd1=calc_max_drawdown(ia1_100,xd)
+    mdde1=calc_max_drawdown_euro(ia1,xd)[0] if use_volume else None
+    cm1=calc_calmar_ratio(cg1,mddv1)
+    sh1=calc_sharpe_excess(draf1, df1["rf"]) if ("rf" in df1.columns and df1["rf"].notna().any()) else None
+    rd1,rdt1=calc_drawdown_recovery(ia1_100,xd); dur1,ds1_,de1_=calc_max_drawdown_duration(ia1_100,xd)
+    cg2=vo2=ew2=mddv2=mddd2=mdde2=cm2=sh2=rd2=rdt2=dur2=ds2_=de2_=None
+    if df2 is not None:
+        nd2=len(r2); draf2=calc_daily_returns_after_fee(r2,float(fdec2)); cg2=calc_cagr(ia2,nd2); vo2=calc_vola(draf2)
+        ew2=float(ia2[-1]) if use_volume else None
+        ia2_100=make_index_after_fee(r2,float(fdec2),100.0); mddv2,mddd2=calc_max_drawdown(ia2_100,xd)
+        mdde2=calc_max_drawdown_euro(ia2,xd)[0] if use_volume else None
+        cm2=calc_calmar_ratio(cg2,mddv2)
+        sh2=calc_sharpe_excess(draf2, df2["rf"]) if ("rf" in df2.columns and df2["rf"].notna().any()) else None
+        rd2,rdt2=calc_drawdown_recovery(ia2_100,xd); dur2,ds2_,de2_=calc_max_drawdown_duration(ia2_100,xd)
+
+    md=[{"label":l1,"auflagedatum":ad1,"cagr":cg1,"vola":vo1,"endwert":ew1,"calmar":cm1,"sharpe":sh1,"rf_pa":rf_pa_1,
+        "max_dd_val":mddv1 if sdd else None,"max_dd_date":mddd1 if sdd else None,"max_dd_eur":mdde1 if sdd else None,
+        "recovery_days":rd1 if sdd else None,"recovery_date":rdt1 if sdd else None,"max_dd_dur":dur1 if sdd else None}]
+    if df2 is not None and l2:
+        md.append({"label":l2,"auflagedatum":ad2,"cagr":cg2,"vola":vo2,"endwert":ew2,"calmar":cm2,"sharpe":sh2,"rf_pa":rf_pa_2,
+            "max_dd_val":mddv2 if sdd else None,"max_dd_date":mddd2 if sdd else None,"max_dd_eur":mdde2 if sdd else None,
+            "recovery_days":rd2 if sdd else None,"recovery_date":rdt2 if sdd else None,"max_dd_dur":dur2 if sdd else None})
+
+    nk_label = f"nach Kosten{mwst_suffix}"
+    st.subheader(f"📊 Kennzahlen ({nk_label})")
+    display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix)
+    if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix)
+
+    eff_fee_1 = fp1 * mwst_faktor  # effektive Kosten in %
+    eff_fee_2 = (fp2 * mwst_faktor) if fp2 is not None else 0.0
+    if use_volume: st.subheader(f"📈 Wertentwicklung in Euro ({fmt_eur_de(anlagevolumen)})"); yl="Wert in €"
+    else: st.subheader("📈 Performance-Index (Start = 100)"); yl="Index (Start 100)"
+    fig=go.Figure()
+
+    def _add_line(x, y, name):
+        """Fügt Linie + Endwert-Label hinzu. Label verschwindet mit der Linie."""
+        end_val = float(y[-1])
         if use_volume:
-            fig.update_layout(yaxis=dict(tickformat=",.0f"))
-            # Plotly nutzt Locale – wir überschreiben mit separatethousands
-            fig.update_layout(separators=",.")
+            pct_change = (end_val / sw - 1.0) * 100
+            label = f"{pct_change:+.2f}%".replace(".",",")
+        else:
+            label = f"{end_val:.2f}".replace(".",",")
+        # Hauptlinie
+        fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=name, legendgroup=name))
+        # Endwert-Label (nur letzter Punkt, gleiche legendgroup → verschwindet zusammen)
+        fig.add_trace(go.Scatter(
+            x=[x[-1]], y=[end_val], mode="text", text=[f"<b>{label}</b>"],
+            textposition="middle right", textfont=dict(size=10),
+            legendgroup=name, showlegend=False, hoverinfo="skip"))
 
-        st.plotly_chart(fig,use_container_width=True,config={"displayModeBar": False})
-        if sb: show_benchmark_composition(l1,bt1,l2,bt2)
+    _add_line(xd, ia1, f"{l1} – {nk_label} ({eff_fee_1:.2f}%)")
+    if ia2 is not None: _add_line(xd, ia2, f"{l2} – {nk_label} ({eff_fee_2:.2f}%)")
+    if sv:
+        _add_line(xd, ib1, f"{l1} – vor Kosten")
+        if ib2 is not None: _add_line(xd, ib2, f"{l2} – vor Kosten")
+    if sb and df1["ret_bm"].notna().any():
+        rbm1=df1["ret_bm"].fillna(0).to_numpy(float); ibm1=make_index_from_returns(rbm1,sw)
+        _add_line(xd, ibm1, f"BM {l1}: {bn1}")
+        if df2 is not None and df2["ret_bm"].notna().any():
+            rbm2=df2["ret_bm"].fillna(0).to_numpy(float); ibm2=make_index_from_returns(rbm2,sw)
+            _add_line(xd, ibm2, f"BM {l2}: {bn2}")
+    # rf-Linie (nur eine, da für gleichen Zeitraum identisch)
+    rf_idx = None
+    if sb_rf and not rf_series_1.empty and rf_series_1.notna().any():
+        irf = make_index_from_rf(rf_series_1.fillna(0).to_numpy(float), sw)
+        _add_line(xd, irf, "Risikofreier Zins")
+        rf_idx = irf
+    elif sb_rf:
+        st.caption("ℹ️ Keine Daten zum risikofreien Zins für den gewählten Zeitraum verfügbar.")
 
-        if sdd:
-            st.markdown("---")
-            display_drawdown_metrics(l1,mddv1,mddd1,mdde1,use_volume,rd1,rdt1,dur1,ds1_,de1_,mwst_suffix)
-            if df2 is not None and l2: display_drawdown_metrics(l2,mddv2,mddd2,mdde2,use_volume,rd2,rdt2,dur2,ds2_,de2_,mwst_suffix)
-            fdd=go.Figure()
-            if use_volume:
-                fdd.add_trace(go.Scatter(x=xd,y=drawdown_euro_from_index(ia1),mode="lines",name=f"{l1} – DD € (nK)"))
-                if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_euro_from_index(ia2),mode="lines",name=f"{l2} – DD € (nK)"))
-                fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="DD in €",yaxis=dict(tickformat=",.0f"),hovermode="x unified",colorway=FFPB_PALETTE)
-            else:
-                fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia1_100),mode="lines",name=f"{l1} – DD (nK)"))
-                if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia2_100),mode="lines",name=f"{l2} – DD (nK)"))
-                fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="Drawdown",hovermode="x unified",colorway=FFPB_PALETTE)
-            st.plotly_chart(fdd,use_container_width=True,config={"displayModeBar": False})
+    fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
+        yaxis=dict(tickformat=",.0f" if use_volume else None, separatethousands=True),
+        legend=dict(title_text="Strategie", x=1.02, y=1, xanchor="left"),
+        showlegend=True, hovermode="x unified",
+        colorway=FFPB_PALETTE,
+        margin=dict(r=120))
 
-        dfr=None
-        if stbl:
-            sl=f"Seit: {fmt_date_de(df1.index.min())}"
-            dfr=build_rolling_table(sb1t,sa1t,l1,sb2t,sa2t,l2,sl)
-            st.subheader("📋 Wertentwicklung rollierend"); st.dataframe(dfr,use_container_width=True)
+    # Deutsche Tausender-Formatierung auf Y-Achse bei Volumen
+    if use_volume:
+        fig.update_layout(yaxis=dict(tickformat=",.0f"))
+        # Plotly nutzt Locale – wir überschreiben mit separatethousands
+        fig.update_layout(separators=",.")
 
-        bdl=[]
-        if sbar:
-            st.markdown("---"); st.subheader("📊 Performance blockweise")
-            bl,br=st.columns([1,3])
-            with bl:
-                bm=st.radio("Zeitraum",["Kalenderjahre","Quartale","Benutzerdefiniert"],key="p_bm_r")
-                csb=ceb=None
-                if bm=="Benutzerdefiniert":
-                    csb=st.date_input("Von",value=sd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bv")
-                    ceb=st.date_input("Bis",value=ed,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bb")
-            tm={"Kalenderjahre":"PERFORMANCE P.A. (NACH KOSTEN)","Quartale":"PERFORMANCE QUARTALE (NACH KOSTEN)","Benutzerdefiniert":"PERFORMANCE (NACH KOSTEN) – BENUTZERDEFINIERT"}
-            def _rb(dfs,fee,lab,bname,btxt,cont,suffix="1"):
-                bd=compute_bar_data(dfs,fee,bm,lab,csb,ceb)
-                if bd.empty: cont.info(f"Keine Daten für {lab}."); return
-                btt=f"{tm[bm]} – {lab}"; bdl.append((bd,lab,bname,btt,btxt))
-                cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True,config={"displayModeBar": False},key=f"bar_chart_{suffix}")
-                show_tbl = cont.checkbox(f"🔢 Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}_{suffix}")
-                if show_tbl:
-                    cp=f"{lab} (nach Kosten)"; dp=bd[["label",cp,"ret_bm_raw"]].copy()
-                    dp[cp]=dp[cp].map(lambda x:f"{x:+.2f}%"); dp["ret_bm_raw"]=dp["ret_bm_raw"].map(lambda x:f"{x:+.2f}%" if pd.notna(x) else "–")
-                    dp.columns=["Zeitraum",f"{lab} nK",bname]; cont.dataframe(dp,use_container_width=True,hide_index=True)
-            with br:
-                _rb(df1,fdec1,l1,bn1,bt1,st.container(),suffix="p1")
-                show_benchmark_composition(l1,bt1)
-                if df2 is not None and fdec2 is not None and ps2:
-                    st.markdown("---"); _rb(df2,fdec2,l2,bn2 or "BM",bt2 or "",st.container(),suffix="p2")
-                    show_benchmark_composition(l2,bt2)
+    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar": False})
+    if sb: show_benchmark_composition(l1,bt1,l2,bt2)
 
-        # Disclaimer
+    if sdd:
         st.markdown("---")
-        st.markdown("##### Disclaimer")
-        st.markdown(
-            "Die angegebenen Werte beziehen sich auf die historische Wertentwicklung. "
-            "Der Wert sowie die Erträge einer Kapitalanlage können sowohl steigen als auch fallen. "
-            "Eine positive Wertentwicklung in der Vergangenheit stellt keine Garantie für zukünftige Entwicklungen dar. "
-            "Die Wertentwicklung wird in Euro (€) gemessen."
-        )
-        st.markdown(
-            "Die ausgewiesene Performance wird auf täglicher Basis berechnet. "
-            "Der jährliche Honorarsatz wird dabei in eine äquivalente tägliche Belastung umgerechnet und unter "
-            "Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; "
-            "eine halbjährliche Berücksichtigung erfolgt nicht."
-        )
-        st.markdown(
-            "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. "
-            "Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr."
-        )
-        st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
-        st.markdown("**Ansprechpartner:** PBAM")
+        display_drawdown_metrics(l1,mddv1,mddd1,mdde1,use_volume,rd1,rdt1,dur1,ds1_,de1_,mwst_suffix)
+        if df2 is not None and l2: display_drawdown_metrics(l2,mddv2,mddd2,mdde2,use_volume,rd2,rdt2,dur2,ds2_,de2_,mwst_suffix)
+        fdd=go.Figure()
+        if use_volume:
+            fdd.add_trace(go.Scatter(x=xd,y=drawdown_euro_from_index(ia1),mode="lines",name=f"{l1} – DD € (nK)"))
+            if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_euro_from_index(ia2),mode="lines",name=f"{l2} – DD € (nK)"))
+            fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="DD in €",yaxis=dict(tickformat=",.0f"),hovermode="x unified",colorway=FFPB_PALETTE)
+        else:
+            fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia1_100),mode="lines",name=f"{l1} – DD (nK)"))
+            if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia2_100),mode="lines",name=f"{l2} – DD (nK)"))
+            fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="Drawdown",hovermode="x unified",colorway=FFPB_PALETTE)
+        st.plotly_chart(fdd,use_container_width=True,config={"displayModeBar": False})
 
-        # PDF Performance
-        st.markdown("---")
-        plt_=[(f"{l1} – {nk_label} ({eff_fee_1:.2f}%)",ia1)]
-        if ia2 is not None: plt_.append((f"{l2} – {nk_label} ({eff_fee_2:.2f}%)",ia2))
-        if sv: plt_.append((f"{l1} – vK",ib1));
-        if sv and ib2 is not None: plt_.append((f"{l2} – vK",ib2))
-        if sb and df1["ret_bm"].notna().any():
-            plt_.append((f"BM {l1}: {bn1}",make_index_from_returns(df1["ret_bm"].fillna(0).to_numpy(float),sw)))
-            if df2 is not None and df2["ret_bm"].notna().any():
-                plt_.append((f"BM {l2}: {bn2}",make_index_from_returns(df2["ret_bm"].fillna(0).to_numpy(float),sw)))
-        # rf-Linie ins PDF wenn aktiv UND Daten vorhanden
-        if sb_rf and rf_idx is not None:
-            plt_.append(("Risikofreier Zins", rf_idx))
-        pdd=[]
-        if sdd:
-            if use_volume: pdd.append((f"{l1} DD €",drawdown_euro_from_index(ia1)));
-            else: pdd.append((f"{l1} DD",drawdown_from_index(ia1_100)))
-            if df2 is not None:
-                if use_volume: pdd.append((f"{l2} DD €",drawdown_euro_from_index(ia2)))
-                else: pdd.append((f"{l2} DD",drawdown_from_index(ia2_100)))
-        lp=get_logo_path()
-        if st.button("📄 PDF Performance",key="perf_pdf"):
-            with st.spinner("PDF..."): pb=generate_perf_pdf(lp,l1,l2,bn1,bn2,bt1,bt2,eff_fee_1,eff_fee_2 if fp2 is not None else None,anlagevolumen,use_volume,sd,ed,xd,plt_,yl,sdd,pdd,stbl,dfr,sbar,bdl,md,mwst_suffix)
-            st.download_button("⬇️ PDF",pb,f"Performance_{l1}_{fmt_date_de(sd)}-{fmt_date_de(ed)}.pdf","application/pdf",key="perf_dl")
+    dfr=None
+    if stbl:
+        sl=f"Seit: {fmt_date_de(df1.index.min())}"
+        dfr=build_rolling_table(sb1t,sa1t,l1,sb2t,sa2t,l2,sl)
+        st.subheader("📋 Wertentwicklung rollierend"); st.dataframe(dfr,use_container_width=True)
 
+    bdl=[]
+    if sbar:
+        st.markdown("---"); st.subheader("📊 Performance blockweise")
+        bl,br=st.columns([1,3])
+        with bl:
+            bm=st.radio("Zeitraum",["Kalenderjahre","Quartale","Benutzerdefiniert"],key="p_bm_r")
+            csb=ceb=None
+            if bm=="Benutzerdefiniert":
+                csb=st.date_input("Von",value=sd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bv")
+                ceb=st.date_input("Bis",value=ed,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bb")
+        tm={"Kalenderjahre":"PERFORMANCE P.A. (NACH KOSTEN)","Quartale":"PERFORMANCE QUARTALE (NACH KOSTEN)","Benutzerdefiniert":"PERFORMANCE (NACH KOSTEN) – BENUTZERDEFINIERT"}
+        def _rb(dfs,fee,lab,bname,btxt,cont,suffix="1"):
+            bd=compute_bar_data(dfs,fee,bm,lab,csb,ceb)
+            if bd.empty: cont.info(f"Keine Daten für {lab}."); return
+            btt=f"{tm[bm]} – {lab}"; bdl.append((bd,lab,bname,btt,btxt))
+            cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True,config={"displayModeBar": False},key=f"bar_chart_{suffix}")
+            show_tbl = cont.checkbox(f"🔢 Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}_{suffix}")
+            if show_tbl:
+                cp=f"{lab} (nach Kosten)"; dp=bd[["label",cp,"ret_bm_raw"]].copy()
+                dp[cp]=dp[cp].map(lambda x:f"{x:+.2f}%"); dp["ret_bm_raw"]=dp["ret_bm_raw"].map(lambda x:f"{x:+.2f}%" if pd.notna(x) else "–")
+                dp.columns=["Zeitraum",f"{lab} nK",bname]; cont.dataframe(dp,use_container_width=True,hide_index=True)
+        with br:
+            _rb(df1,fdec1,l1,bn1,bt1,st.container(),suffix="p1")
+            show_benchmark_composition(l1,bt1)
+            if df2 is not None and fdec2 is not None and ps2:
+                st.markdown("---"); _rb(df2,fdec2,l2,bn2 or "BM",bt2 or "",st.container(),suffix="p2")
+                show_benchmark_composition(l2,bt2)
 
-    except _PerfSkip:
-        pass
+    # Disclaimer
+    st.markdown("---")
+    st.markdown("##### Disclaimer")
+    st.markdown(
+        "Die angegebenen Werte beziehen sich auf die historische Wertentwicklung. "
+        "Der Wert sowie die Erträge einer Kapitalanlage können sowohl steigen als auch fallen. "
+        "Eine positive Wertentwicklung in der Vergangenheit stellt keine Garantie für zukünftige Entwicklungen dar. "
+        "Die Wertentwicklung wird in Euro (€) gemessen."
+    )
+    st.markdown(
+        "Die ausgewiesene Performance wird auf täglicher Basis berechnet. "
+        "Der jährliche Honorarsatz wird dabei in eine äquivalente tägliche Belastung umgerechnet und unter "
+        "Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; "
+        "eine halbjährliche Berücksichtigung erfolgt nicht."
+    )
+    st.markdown(
+        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. "
+        "Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr."
+    )
+    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
+    st.markdown("**Ansprechpartner:** PBAM")
+
+    # PDF Performance
+    st.markdown("---")
+    plt_=[(f"{l1} – {nk_label} ({eff_fee_1:.2f}%)",ia1)]
+    if ia2 is not None: plt_.append((f"{l2} – {nk_label} ({eff_fee_2:.2f}%)",ia2))
+    if sv: plt_.append((f"{l1} – vK",ib1));
+    if sv and ib2 is not None: plt_.append((f"{l2} – vK",ib2))
+    if sb and df1["ret_bm"].notna().any():
+        plt_.append((f"BM {l1}: {bn1}",make_index_from_returns(df1["ret_bm"].fillna(0).to_numpy(float),sw)))
+        if df2 is not None and df2["ret_bm"].notna().any():
+            plt_.append((f"BM {l2}: {bn2}",make_index_from_returns(df2["ret_bm"].fillna(0).to_numpy(float),sw)))
+    # rf-Linie ins PDF wenn aktiv UND Daten vorhanden
+    if sb_rf and rf_idx is not None:
+        plt_.append(("Risikofreier Zins", rf_idx))
+    pdd=[]
+    if sdd:
+        if use_volume: pdd.append((f"{l1} DD €",drawdown_euro_from_index(ia1)));
+        else: pdd.append((f"{l1} DD",drawdown_from_index(ia1_100)))
+        if df2 is not None:
+            if use_volume: pdd.append((f"{l2} DD €",drawdown_euro_from_index(ia2)))
+            else: pdd.append((f"{l2} DD",drawdown_from_index(ia2_100)))
+    lp=get_logo_path()
+    if st.button("📄 PDF Performance",key="perf_pdf"):
+        with st.spinner("PDF..."): pb=generate_perf_pdf(lp,l1,l2,bn1,bn2,bt1,bt2,eff_fee_1,eff_fee_2 if fp2 is not None else None,anlagevolumen,use_volume,sd,ed,xd,plt_,yl,sdd,pdd,stbl,dfr,sbar,bdl,md,mwst_suffix)
+        st.download_button("⬇️ PDF",pb,f"Performance_{l1}_{fmt_date_de(sd)}-{fmt_date_de(ed)}.pdf","application/pdf",key="perf_dl")
 
 
 # ===========================================================================
 # TAB 2: PORTFOLIOANALYSE
 # ===========================================================================
 with tab_pf:
-    st.success("🟢 HIER BEGINNT PORTFOLIOANALYSE-TAB")
     render_portfolioanalyse(name_mapping, anlagevolumen)
