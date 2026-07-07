@@ -39,6 +39,13 @@ except ImportError:
     # Fallback für lokalen Skript-Aufruf (ohne modules/-Prefix im sys.path)
     from formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
 
+# Datenbasierte Chart-Nachbearbeitung (Achse, Ring-Labels, holeSize) — siehe
+# modules/chart_dynamik.py. Läuft am Ende über alle Charts.
+try:
+    from modules.chart_dynamik import nachbearbeiten as _charts_nachbearbeiten
+except ImportError:
+    from chart_dynamik import nachbearbeiten as _charts_nachbearbeiten
+
 # Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen, Vorlage, Slide-Manipulation)
 try:
     from modules.pptx_helpers import (
@@ -1116,6 +1123,18 @@ def generate_portfolioanalyse_pptx(
     # VOR dem Speichern). Korrigiert die statischen Werte aus der Vorlage
     # (Slide 7 hat z.B. "13", soll aber "7" sein nach Renumber).
     _update_slide_numbers(prs)
+
+    # Charts datenbasiert nachziehen (NEU 07.07.2026): Wertentwicklungs-Linie
+    # auf die echte Datenspanne skalieren (kein Leerraum vor/nach der Kurve),
+    # Doughnut-Ringe auf dünnen Original-Look (holeSize=79) + Außen-Labels
+    # radial aus dem tatsächlichen Segmentwinkel. Läuft NACH allen Fill-/
+    # Slide-Operationen, VOR dem Speichern. Balken (catAx) bleiben unberührt.
+    # Rührt die Download-Logik NICHT an — arbeitet ausschließlich an Chart-XML.
+    try:
+        _charts_nachbearbeiten(prs)
+    except Exception as _ex:
+        # Chart-Kosmetik darf den Export nie abbrechen.
+        LAST_BUILD_ERRORS.append(f"Chart-Nachbearbeitung übersprungen: {_ex}")
 
     # Speichern
     buf = io.BytesIO()
