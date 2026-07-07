@@ -1,7 +1,15 @@
 # streamlit_app.py
 """
-Hauptdatei: Login, Sidebar, Tabs (Performance + Portfolioanalyse).
+Hauptdatei: Login, Sidebar, Navigation (Performance + Portfolioanalyse).
 Performance-Code bleibt inline (bewährt), Portfolioanalyse aus Modul.
+
+NAVIGATION (NEU 07.07.2026): st.tabs wurde durch st.segmented_control
+ersetzt. Grund: st.tabs "vergisst" bei jedem Rerun (z.B. Selectbox-Auswahl
+im Portfolioanalyse-Bereich) den aktiven Tab und springt auf den ersten
+zurück (bekanntes Streamlit-Verhalten, GitHub #6257/#11160/#4996/#12554;
+auch key+default+on_change stellten den Tab nicht wieder her).
+segmented_control hält seinen Zustand nativ im session_state → das Problem
+ist strukturell weg (per AppTest unter Streamlit 1.59.0 verifiziert).
 
 Hinweis: Tab 'Portfolio zusammenstellen' wurde deaktiviert (Modul
 modules/portfolio_builder.py bleibt im Repo, wird aber nicht importiert).
@@ -646,6 +654,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not check_login(): st.stop()
+
+# ── KEEP-ALIVE für Widget-Zustände (NEU 07.07.2026) ─────────────────────────
+# Seit dem Umbau auf segmented_control läuft nur noch die AKTIVE Ansicht.
+# Streamlit löscht Widget-States, deren Widget in einem Run nicht gerendert
+# wird — d.h. beim Wechsel Performance → Portfolioanalyse → zurück wären
+# Selectbox/Häkchen/Kostensatz auf Default. Das Re-Assignen aller Keys am
+# Skriptanfang markiert sie als API-gesetzt → sie überleben den Wechsel
+# (per AppTest unter Streamlit 1.59.0 verifiziert).
+# Trigger-Widgets (Buttons/Downloads) sind ausgenommen: ihr Zustand darf
+# nicht persistieren (sonst würde z.B. ein Klick "hängen bleiben") und ihre
+# Keys lassen sich per API ohnehin nicht setzen. Das try/except fängt
+# künftige, hier nicht gelistete Trigger-Keys defensiv ab.
+_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed", "perf_pdf", "perf_dl",
+                     "pf_pptx_btn", "pf_pptx_dl"}
+for _k in list(st.session_state.keys()):
+    if _k in _KEEPALIVE_SPERRE:
+        continue
+    try:
+        st.session_state[_k] = st.session_state[_k]
+    except Exception:
+        pass  # Trigger-Widget-Key → nicht setzbar, bewusst überspringen
+
 st.title("Fürst Fugger Privatbank – Vermögensverwaltung")
 
 # ── Gemeinsame Sidebar ──
@@ -658,48 +688,80 @@ with st.sidebar:
     st.subheader("Anlagevolumen")
     anlagevolumen = st.number_input("Anlagevolumen in € (optional)",
         min_value=0.0, max_value=1_000_000_000.0, value=0.0, step=10_000.0, format="%.2f",
-        help="Gilt für beide Tabs. Wenn > 0: Werte in Euro.")
+        help="Gilt für beide Bereiche. Wenn > 0: Werte in Euro.")
     use_volume = anlagevolumen > 0
 
-# ── TABS ──
-# Aktiven Tab über Reruns hinweg festhalten (NEU 07.07.2026):
-# Ohne das springt Streamlit bei jedem Rerun (z.B. Strategie-Auswahl im
-# Portfolioanalyse-Tab) zurück auf den ersten Tab (Performance). key=
-# speichert das aktive Tab-Label im session_state, default= stellt es beim
-# Rendern wieder her.
-_TAB_PERF = "📈 Performance"
-_TAB_PF = "📊 Portfolioanalyse"
-_aktiver_tab = st.session_state.get("active_tab", _TAB_PERF)
-tab_perf, tab_pf = st.tabs([_TAB_PERF, _TAB_PF],
-                           key="active_tab", on_change="rerun",
-                           default=_aktiver_tab)
+# ── ZENTRALE DATENBEREITSTELLUNG (läuft bei JEDEM Run, VOR der Navigation) ──
+# Der PowerPoint-Export im Portfolioanalyse-Bereich braucht perf_timeseries /
+# perf_d2c / perf_d2b. Da seit dem Navigations-Umbau nur noch die aktive
+# Ansicht rendert, wird die Bereitstellung hier zentral gemacht — sie darf
+# nicht mehr vom Besuch der Performance-Ansicht abhängen. (Der Fallback-
+# Loader in portfolioanalyse.py bleibt als zweites Netz bestehen, nutzt aber
+# immer den Standard-Date-Tag — hier gilt derselbe Tag wie in der Anzeige.)
+auto_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+date_tag = auto_tag
+# Manuell gesetzter Date-Tag (Erweiterte Einstellungen im Performance-
+# Bereich) gilt auch hier — aber wie bisher NUR solange das Häkchen aktiv
+# ist. Die Widgets selbst werden weiter unten in der Performance-Ansicht
+# gerendert; ihre Werte liegen zum Zeitpunkt dieses Runs bereits im
+# session_state (Streamlit aktualisiert Widget-States VOR dem Rerun).
+if st.session_state.get("adv_perf") and st.session_state.get("perf_tag"):
+    date_tag = st.session_state["perf_tag"]
+
+perf_daten_fehler = None
+data = {}; dn_ordered = []; d2c = {}; d2b = {}
+files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
+if not files:
+    perf_daten_fehler = f"Keine Dateien für Tag {date_tag}."
+else:
+    data = build_portfolio_timeseries(files, mapping)
+    dn_ordered, d2c, d2b = build_name_lookups(name_mapping, set(data.keys()))
+    if not dn_ordered:
+        perf_daten_fehler = "Keine Portfolios zugeordnet."
+
+if perf_daten_fehler is None:
+    # Daten an den Portfolioanalyse-Bereich weitergeben (PowerPoint-Export:
+    # Wertentwicklungs-Folie braucht Zeitreihen, d2c-Auflösung und die
+    # Benchmark-Texte für die ***-Fußnote).
+    st.session_state["perf_timeseries"] = data
+    st.session_state["perf_d2c"] = d2c
+    st.session_state["perf_d2b"] = d2b
+
+# ── NAVIGATION (NEU 07.07.2026): segmented_control statt st.tabs ──
+# st.tabs sprang bei jedem Rerun (z.B. Strategie-Selectbox) auf den ersten
+# Tab zurück — auch mit key/default/on_change (bei gesetztem key wirkt
+# default nur bei der ERSTEN Instanziierung, kann also nichts wiederher-
+# stellen). segmented_control hält seinen Zustand nativ im session_state.
+# required=True verhindert das Abwählen (Klick auf aktives Segment = no-op),
+# es gibt also nie den Zustand "keine Ansicht gewählt".
+_VIEW_PERF = "📈 Performance"
+_VIEW_PF = "📊 Portfolioanalyse"
+if "nav_view" not in st.session_state:
+    st.session_state["nav_view"] = _VIEW_PERF
+ansicht = st.segmented_control("Ansicht", [_VIEW_PERF, _VIEW_PF],
+                               key="nav_view", required=True,
+                               label_visibility="collapsed")
 
 
 # ===========================================================================
-# TAB 1: PERFORMANCE
+# ANSICHT 1: PERFORMANCE
 # ===========================================================================
-with tab_perf:
-    auto_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
-    date_tag = auto_tag
-
+if ansicht == _VIEW_PERF:
     with st.sidebar:
         st.markdown("---")
         st.subheader("📈 Performance")
         show_adv_perf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_perf")
         if show_adv_perf:
-            date_tag = st.text_input("Date-Tag (yyMMdd)", value=auto_tag,
+            # Der Wert wird OBEN in der zentralen Datenbereitstellung gelesen
+            # (session_state["perf_tag"]) — hier nur das Widget rendern.
+            st.text_input("Date-Tag (yyMMdd)", value=auto_tag,
                 help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="perf_tag")
 
-    files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
-    if not files: st.error(f"Keine Dateien für Tag {date_tag}."); st.stop()
-    data = build_portfolio_timeseries(files, mapping)
-    dn_ordered, d2c, d2b = build_name_lookups(name_mapping, set(data.keys()))
-    if not dn_ordered: st.error("Keine Portfolios zugeordnet."); st.stop()
-
-    # Daten an Portfolioanalyse-Tab weitergeben (für PowerPoint-Export der Performance-Folie)
-    st.session_state["perf_timeseries"] = data
-    st.session_state["perf_d2c"] = d2c
-    st.session_state["perf_d2b"] = d2b  # Benchmark-Texte für ***-Fußnote der WE-Folie (07/2026)
+    # Fehler aus der zentralen Datenbereitstellung hier anzeigen (nur die
+    # Performance-Ansicht braucht diese Daten zwingend; die Portfolioanalyse
+    # hat einen eigenen Fallback und läuft weiter).
+    if perf_daten_fehler:
+        st.error(perf_daten_fehler); st.stop()
 
     with st.sidebar:
         ds1=st.selectbox("Portfolio",dn_ordered,key="p_sel1"); ps1=d2c[ds1]
@@ -831,7 +893,7 @@ with tab_perf:
     if _pp_abweichungen:
         st.info("ℹ️ **Anzeige weicht von der PowerPoint-Basis ab** (die Broschüre rechnet immer: "
                 "volle Historie, Standardsatz aus dem Mapping): " + " · ".join(_pp_abweichungen)
-                + ". MwSt-Häkchen ggf. in beiden Tabs gleich stellen.")
+                + ". MwSt-Häkchen ggf. in beiden Bereichen gleich stellen.")
 
     # Kennzahlen
     nd1=len(r1); draf1=calc_daily_returns_after_fee(r1,fdec1); cg1=calc_cagr(ia1,nd1); vo1=calc_vola(draf1)
@@ -1020,7 +1082,7 @@ with tab_perf:
 
 
 # ===========================================================================
-# TAB 2: PORTFOLIOANALYSE
+# ANSICHT 2: PORTFOLIOANALYSE
 # ===========================================================================
-with tab_pf:
+else:
     render_portfolioanalyse(name_mapping, anlagevolumen)
