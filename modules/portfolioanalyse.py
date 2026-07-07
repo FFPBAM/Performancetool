@@ -32,7 +32,7 @@ from modules.shared import (
     csv_name_to_display, load_mapping,
     load_all_csvs, build_portfolio_timeseries,
 )
-
+from modules.download_helfer import medien_download_url
 
 # ---------------------------------------------------------------------------
 # Ring-Chart Farben (Corporate: Fuggerblau #003460, Fuggergold #C3A069)
@@ -824,11 +824,19 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             # Download-Button mit gecachten Bytes
             st.download_button(
                 "⬇️ PowerPoint herunterladen",
+                else:
+            # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
+            for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
+                st.warning(f"⚠️ {_diag_msg}")
+            # Download-Button mit gecachten Bytes
+            st.download_button(
+                "⬇️ PowerPoint herunterladen",
                 data=st.session_state["pf_pptx_bytes"],
                 file_name=f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 key="pf_pptx_dl",
                 use_container_width=True,
+            )
             )
 
 
