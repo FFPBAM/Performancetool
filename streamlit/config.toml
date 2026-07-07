@@ -1,2 +1,13 @@
+# .streamlit/config.toml
+
+[server]
+# Aktiviert Streamlits offizielles Static File Serving (NEU 07.07.2026).
+# Dadurch werden Dateien aus dem Ordner  static/  (neben streamlit_app.py)
+# unter der echten URL  /app/static/<datei>  ausgeliefert — mit korrektem
+# Content-Type. Wird für den Broschüren-Download im neuen Tab gebraucht
+# (Atruvia-Gateway-Scan sichtbar). Siehe modules/download_helfer.py.
+enableStaticServing = true
+
 [client]
+# Schlanke Toolbar (unverändert).
 toolbarMode = "minimal"
