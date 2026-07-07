@@ -821,22 +821,42 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
             for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
                 st.warning(f"⚠️ {_diag_msg}")
-            # Download-Button mit gecachten Bytes
+
+            _pptx_bytes = st.session_state["pf_pptx_bytes"]
+            _dateiname = f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pptx"
+
+            # ── DOWNLOAD IM NEUEN TAB (NEU 07.07.2026, IT-Vorgabe) ──────────
+            # Der klassische st.download_button lädt über einen In-Page-
+            # Mechanismus (Fetch/Blob). Das Firmen-Gateway (Atruvia/Skyhigh)
+            # schiebt beim Scan eine progress.htm dazwischen, die dabei als
+            # "Datei" gespeichert wird → der Nutzer bekommt progress.htm statt
+            # der PPTX. IT-Vorgabe: NICHT den Scanner umgehen, sondern den
+            # Download als echte Navigation in einem NEUEN TAB ausführen. Dort
+            # zeigt Atruvia seinen Scan-Status; nach Abschluss lädt die echte
+            # PPTX. medien_download_url erzeugt dafür eine echte /media/-URL
+            # (korrekter Content-Type) und gibt bei internem API-Problem None
+            # zurück → dann greift der klassische Button unten als Fallback.
+            _url = medien_download_url(_pptx_bytes, _dateiname)
+            if _url:
+                st.link_button(
+                    "📥 Broschüre herunterladen (öffnet neuen Tab – Scan sichtbar)",
+                    _url, use_container_width=True,
+                )
+                st.caption("Der Download öffnet einen neuen Tab. Dort läuft der "
+                           "Viren-Scan des Firmen-Gateways sichtbar durch; danach "
+                           "startet der Download automatisch.")
+
+            # FALLBACK/ALTERNATIVE: klassischer In-Page-Download. Bleibt IMMER
+            # stehen — als Rückfall, falls die interne Media-API nach einem
+            # Streamlit-Update bricht (dann ist _url None) ODER der neue Tab
+            # beim Nutzer wider Erwarten nicht startet.
             st.download_button(
-                "⬇️ PowerPoint herunterladen",
-                else:
-            # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
-            for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
-                st.warning(f"⚠️ {_diag_msg}")
-            # Download-Button mit gecachten Bytes
-            st.download_button(
-                "⬇️ PowerPoint herunterladen",
-                data=st.session_state["pf_pptx_bytes"],
-                file_name=f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pptx",
+                "⬇️ Alternativ: direkt herunterladen" if _url else "⬇️ PowerPoint herunterladen",
+                data=_pptx_bytes,
+                file_name=_dateiname,
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 key="pf_pptx_dl",
                 use_container_width=True,
-            )
             )
 
 
