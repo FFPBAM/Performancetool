@@ -669,6 +669,7 @@ tab_perf, tab_pf = st.tabs(["📈 Performance", "📊 Portfolioanalyse"])
 # TAB 1: PERFORMANCE
 # ===========================================================================
 with tab_perf:
+    st.error("🔴 MARKER: Dies ist der PERFORMANCE-Tab-Code")
     auto_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
     date_tag = auto_tag
 
@@ -1013,4 +1014,5 @@ with tab_perf:
 # TAB 2: PORTFOLIOANALYSE
 # ===========================================================================
 with tab_pf:
+    st.success("🟢 MARKER: Dies ist der PORTFOLIOANALYSE-Tab-Code")
     render_portfolioanalyse(name_mapping, anlagevolumen)
