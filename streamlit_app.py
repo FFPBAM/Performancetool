@@ -662,8 +662,17 @@ with st.sidebar:
     use_volume = anlagevolumen > 0
 
 # ── TABS ──
-tab_perf, tab_pf = st.tabs(["📈 Performance", "📊 Portfolioanalyse"],
-                           key="active_tab", on_change="rerun")
+# Aktiven Tab über Reruns hinweg festhalten (NEU 07.07.2026):
+# Ohne das springt Streamlit bei jedem Rerun (z.B. Strategie-Auswahl im
+# Portfolioanalyse-Tab) zurück auf den ersten Tab (Performance). key=
+# speichert das aktive Tab-Label im session_state, default= stellt es beim
+# Rendern wieder her.
+_TAB_PERF = "📈 Performance"
+_TAB_PF = "📊 Portfolioanalyse"
+_aktiver_tab = st.session_state.get("active_tab", _TAB_PERF)
+tab_perf, tab_pf = st.tabs([_TAB_PERF, _TAB_PF],
+                           key="active_tab", on_change="rerun",
+                           default=_aktiver_tab)
 
 
 # ===========================================================================
