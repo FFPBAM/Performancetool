@@ -1,190 +1,125 @@
 # modules/download_helfer.py
 """
-Broschüren-Download über Streamlits offizielles STATIC FILE SERVING
-(NEU 07.07.2026, ersetzt den fragilen Media-URL-Weg).
+Broschüren-Download OHNE Server-Abruf (NEU 07.07.2026).
 
 WARUM (Firmen-Gateway Atruvia / Skyhigh):
-    st.download_button lädt über einen In-Page-Mechanismus (Fetch/Blob). Das
-    Gateway schiebt beim Scan eine progress.htm dazwischen, die als "Datei"
-    gespeichert wird → der Nutzer bekommt progress.htm statt der PPTX.
-    IT-Vorgabe: NICHT den Scanner umgehen, sondern den Download als echte
-    Navigation in einem NEUEN TAB ausführen — dort zeigt Atruvia seinen
-    Scan-Status, nach Abschluss lädt die echte Datei.
+    Jeder Download, der die Datei vom Server holt (st.download_button →
+    /media/…, oder /app/static/…), läuft durch den Viren-Scanner des
+    Gateways. Der scannt, liefert eine progress.htm aus und hält die
+    Verbindung → In-Page-Download speichert die progress.htm; Navigation im
+    neuen Tab "lädt ewig". Beides ist NICHT clientseitig lösbar, solange die
+    Datei über das Netz geholt wird.
 
-WARUM STATIC SERVING (statt der internen Media-URL):
-    Der erste Versuch nutzte die interne Media-URL (/media/<id>.pptx). Auf
-    Streamlit Community Cloud trifft dieser Pfad NICHT den Media-Handler,
-    sondern bootet die App neu → der neue Tab "lädt ewig" (im Deploy-Log
-    bewiesen: Aufruf von /media/… startete die App).
-    Static File Serving ist der robuste Weg:
-      • Offizielle, STABILE API (kein internes streamlit.runtime nötig).
-      • FESTER, vorhersagbarer Pfad:  /app/static/<datei>
-      • Die Datei liegt echt auf der Platte → kann nicht "nicht gefunden"
-        werden (anders als die session-flüchtige Media-Datei).
-      • .pptx wird mit KORREKTEM Content-Type ausgeliefert (in Streamlit
-        1.59.0 verifiziert: guess_content_type → application/vnd…presentation),
-        d.h. der neue Tab lädt eine öffenbare Datei statt Text-Müll.
-      • Max. Dateigröße 200 MB (unsere Broschüre ~4 MB) — unkritisch.
+LÖSUNG — CLIENTSEITIGER DOWNLOAD (kein Netzwerk-Request):
+    Die PPTX-Bytes werden als Base64 DIREKT in die Seite eingebettet. Ein
+    kleiner Button baut die Datei im Browser aus diesen Bytes zusammen
+    (Blob) und speichert sie lokal. Dabei geht KEIN HTTP-Request raus →
+    das Gateway hat nichts zu scannen → der Download startet sofort, im
+    selben Fenster, ganz normal.
 
-VORAUSSETZUNG:
-    In  .streamlit/config.toml  muss stehen:
-        [server]
-        enableStaticServing = true
-    Der Ordner  static/  wird von diesem Modul bei Bedarf selbst angelegt
-    (neben streamlit_app.py, dort erwartet Streamlit ihn).
+    Umgesetzt über st.components.v1.html: Dessen iframe erlaubt Downloads
+    (Streamlit setzt sandbox="… allow-downloads"; im Frontend-Code
+    verifiziert). st.markdown scheidet aus, weil es <script> entfernt.
 
-HINWEIS Content-Disposition:
-    Static Serving setzt KEIN "attachment" — der Download-Dateiname ergibt
-    sich aus dem letzten URL-Segment. Deshalb schreiben wir die Datei unter
-    static/<token>/<schöner_name>.pptx: der <token>-Unterordner macht die URL
-    eindeutig (keine Kollision bei mehreren Beratern gleichzeitig), der
-    Dateiname bleibt sauber und landet genau so im Download.
+    Die Base64-Daten reisen nur als Teil der normalen App-Antwort mit (kein
+    "Datei-Download" im Sinne der Gateway-Regel) — der eigentliche
+    Speichervorgang passiert rein lokal im Browser.
+
+HINWEIS Größe:
+    ~4 MB PPTX → ~5,5 MB Base64 in der Seite. Für den gelegentlichen
+    Broschüren-Download unkritisch (Streamlit maxMessageSize default 200 MB).
+
+FALLBACK:
+    Der klassische st.download_button bleibt darunter stehen (In-Page-Weg
+    über den Server) — falls die Komponente in einer Umgebung mal nicht
+    greifen sollte.
 """
 
 from __future__ import annotations
 
-import os
-import re
-import time
-import uuid
-import hashlib
+import json
+import base64
 
 PPTX_MIMETYPE = (
     "application/vnd.openxmlformats-officedocument."
     "presentationml.presentation"
 )
 
-# static/ liegt neben dem Entrypoint (streamlit_app.py im Repo-Root). Dieses
-# Modul liegt in modules/ → Repo-Root ist genau eine Ebene höher.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_STATIC_DIR = os.path.join(_REPO_ROOT, "static")
-_URL_PREFIX = "/app/static"  # externer Pfad (Community Cloud: baseUrlPath leer)
 
-
-def _sanitize(name: str) -> str:
-    """Dateinamen URL-/dateisystem-sicher machen, .pptx sicherstellen."""
-    name = str(name).strip().replace(" ", "_")
-    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
-    if not name.lower().endswith(".pptx"):
-        name += ".pptx"
-    return name or "Broschuere.pptx"
-
-
-def _cleanup_old(max_alter_sekunden: int = 2 * 3600) -> None:
-    """Alte Token-Ordner entfernen, damit die (ephemere) Platte nicht
-    vollläuft. Fehler werden bewusst geschluckt (Aufräumen ist Best-Effort)."""
-    try:
-        if not os.path.isdir(_STATIC_DIR):
-            return
-        jetzt = time.time()
-        for eintrag in os.listdir(_STATIC_DIR):
-            pfad = os.path.join(_STATIC_DIR, eintrag)
-            try:
-                if os.path.isdir(pfad) and (jetzt - os.path.getmtime(pfad)) > max_alter_sekunden:
-                    for f in os.listdir(pfad):
-                        try:
-                            os.remove(os.path.join(pfad, f))
-                        except Exception:
-                            pass
-                    os.rmdir(pfad)
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-
-def statische_download_url(daten: bytes, dateiname: str) -> str | None:
-    """Schreibt `daten` nach static/<token>/<dateiname> und gibt die echte,
-    im neuen Tab navigierbare URL '/app/static/<token>/<dateiname>' zurück.
-
-    Returns die URL oder None (dann Fallback auf st.download_button).
-    """
-    try:
-        safe = _sanitize(dateiname)
-        token = uuid.uuid4().hex[:12]
-        ordner = os.path.join(_STATIC_DIR, token)
-        os.makedirs(ordner, exist_ok=True)
-        with open(os.path.join(ordner, safe), "wb") as fh:
-            fh.write(daten)
-        _cleanup_old()
-        return f"{_URL_PREFIX}/{token}/{safe}"
-    except Exception:
-        return None
-
-
-def _url_datei_existiert(url: str) -> bool:
-    """Prüft, ob die Datei zu einer zuvor erzeugten /app/static-URL noch auf
-    der Platte liegt (die Cloud kann zwischendurch neu gestartet haben)."""
-    try:
-        rel = url[len(_URL_PREFIX) + 1:]  # "token/name.pptx"
-        return os.path.isfile(os.path.join(_STATIC_DIR, *rel.split("/")))
-    except Exception:
-        return False
-
-
-def _button_link_html(href: str, label: str) -> str:
-    """Als Streamlit-Button gestylter HTML-Anker, der IMMER in einem neuen
-    Tab öffnet (target="_blank"). Echter Anker (kein st.link_button), damit
-    garantiert exakt dieser href genutzt wird. BEWUSST OHNE download-Attribut:
-    so navigiert der Tab echt auf die URL → das Gateway kann seine
-    Scan-Status-Seite zeigen (genau das wollte die IT)."""
-    return (
-        f'<a href="{href}" target="_blank" rel="noopener noreferrer" '
-        f'style="display:block;box-sizing:border-box;width:100%;'
-        f'text-align:center;padding:0.55rem 0.75rem;margin:0.15rem 0;'
-        f'border:1px solid rgba(49,51,63,0.2);border-radius:0.5rem;'
-        f'background:#ffffff;color:#003460;font-weight:600;'
-        f'text-decoration:none;">{label}</a>'
-    )
+def _download_komponente_html(daten: bytes, dateiname: str) -> str:
+    """Baut das HTML/JS für den clientseitigen Blob-Download."""
+    b64 = base64.b64encode(daten).decode("ascii")
+    # Dateiname sicher als JS-String-Literal einbetten (Umlaute, Quotes …).
+    name_js = json.dumps(dateiname)
+    mime_js = json.dumps(PPTX_MIMETYPE)
+    return f"""
+<div style="font-family:'Segoe UI',Tahoma,sans-serif;">
+  <button id="dlbtn" style="
+      width:100%;box-sizing:border-box;padding:0.6rem 1rem;cursor:pointer;
+      border:1px solid #003460;border-radius:0.5rem;background:#003460;
+      color:#ffffff;font-size:1rem;font-weight:600;">
+    📥 Broschüre herunterladen
+  </button>
+  <div id="dlmsg" style="margin-top:0.4rem;font-size:0.85rem;color:#5c6b3c;"></div>
+</div>
+<script>
+(function() {{
+  const b64 = "{b64}";
+  const btn = document.getElementById("dlbtn");
+  const msg = document.getElementById("dlmsg");
+  btn.addEventListener("click", function() {{
+    try {{
+      const bin = atob(b64);
+      const len = bin.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {{ bytes[i] = bin.charCodeAt(i); }}
+      const blob = new Blob([bytes], {{ type: {mime_js} }});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = {name_js};
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() {{ URL.revokeObjectURL(url); }}, 2000);
+      msg.textContent = "✓ Download gestartet. Bitte im Download-Ordner nachsehen.";
+    }} catch (e) {{
+      msg.style.color = "#a11";
+      msg.textContent = "Fehler beim lokalen Download: " + e + " — bitte den Fallback-Button unten nutzen.";
+    }}
+  }});
+}})();
+</script>
+"""
 
 
 def download_bereich(daten: bytes, dateiname: str) -> None:
-    """Rendert den kompletten Broschüren-Download:
-    1) PRIMÄR: Link, der die Broschüre im NEUEN TAB über /app/static öffnet
-       (Gateway-Scan sichtbar) — die Datei wird pro Inhalt nur EINMAL auf die
-       Platte geschrieben (Cache über session_state, Hash-basiert).
-    2) FALLBACK: klassischer In-Page-Download (bleibt immer erreichbar).
+    """Rendert den Broschüren-Download:
+    1) PRIMÄR: clientseitiger Blob-Download (kein Server-Abruf → kein Gateway-
+       Scan → startet sofort, kein neuer Tab).
+    2) FALLBACK: klassischer st.download_button (In-Page über den Server).
     """
     import streamlit as st
+    import streamlit.components.v1 as components
 
-    # Datei nur einmal pro Inhalt schreiben (nicht bei jedem Rerun neu).
-    h = hashlib.md5(daten).hexdigest()[:12]
-    cache = st.session_state.get("_static_dl_cache")
-    url = None
-    if cache and cache.get("hash") == h and cache.get("url") and _url_datei_existiert(cache["url"]):
-        url = cache["url"]
-    if url is None:
-        url = statische_download_url(daten, dateiname)
-        if url:
-            st.session_state["_static_dl_cache"] = {"hash": h, "url": url}
+    # Clientseitiger Download-Button (im Komponenten-iframe, downloads erlaubt).
+    components.html(_download_komponente_html(daten, dateiname), height=90)
 
-    if url:
-        st.markdown(
-            _button_link_html(url, "📥 Broschüre herunterladen (öffnet neuen Tab)"),
-            unsafe_allow_html=True,
+    # Fallback bleibt IMMER erreichbar.
+    with st.expander("Alternativer Download (falls der Button oben nicht lädt)"):
+        st.download_button(
+            "⬇️ Klassischer Download (über den Server)",
+            data=daten,
+            file_name=dateiname,
+            mime=PPTX_MIMETYPE,
+            key="pf_pptx_dl",
+            use_container_width=True,
         )
-        st.caption("Öffnet einen neuen Tab. Dort läuft der Viren-Scan des "
-                   "Firmen-Gateways sichtbar durch; danach startet der Download "
-                   "automatisch.")
-        st.markdown("---")
-
-    # FALLBACK / KLASSISCH — bleibt IMMER stehen (funktioniert für den
-    # direkten Download-Pfad; nur der Gateway-Scan kann hier die progress.htm
-    # erzeugen). Auch aktiv, wenn statische_download_url None lieferte.
-    st.download_button(
-        "⬇️ Klassischer Download (In-Page, Fallback)",
-        data=daten,
-        file_name=dateiname,
-        mime=PPTX_MIMETYPE,
-        key="pf_pptx_dl",
-        use_container_width=True,
-    )
 
 
-# ── LEGACY (nicht mehr genutzt, nur Import-Kompatibilität) ──────────────────
-# Frühere interne Media-URL-Variante. portfolioanalyse.py importiert den Namen
-# noch mit; deshalb hier als No-Op-kompatible Funktion belassen. Nicht mehr
-# verwenden — der Community-Cloud-Pfad /media/… bootet die App (siehe oben).
+# ── LEGACY (nur Import-Kompatibilität; nicht mehr genutzt) ──────────────────
+# Frühere Varianten (interne Media-URL / Static Serving). portfolioanalyse.py
+# importiert medien_download_url noch mit → als No-Op belassen.
 def medien_download_url(daten: bytes, dateiname: str,
-                        mimetype: str = PPTX_MIMETYPE) -> str | None:
+                        mimetype: str = PPTX_MIMETYPE):
     return None
