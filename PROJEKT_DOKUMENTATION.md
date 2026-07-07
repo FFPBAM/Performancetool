@@ -1,5 +1,24 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: Juni 2026 (Phase 2: Performance-PPTX-Export implementiert)
+## Stand: 07.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau)
+
+> Vorgänger-Stand: Juni 2026 (Phase 2: Performance-PPTX-Export). Alle
+> Transferwissen-Einträge #1–#17 aus Phase 2 bleiben gültig und stehen
+> weiter unten; NEU sind #18–#24 sowie die Abschnitte zu Themen-Broschüren,
+> Vier-Modul-PPTX-Architektur, Konsistenz-Doktrin, lokalem Batch und dem
+> Navigations-Umbau (st.tabs → segmented_control).
+
+---
+
+## 0. Was ist seit Juni 2026 passiert? (Executive Summary)
+
+| Datum | Änderung |
+|---|---|
+| Ende Juni/02.07. | **PPTX-Codebase in 4 Module aufgeteilt** (`pptx_helpers` / `pptx_charts` / `pptx_slides` / `pptx_export`); Donut-Rückbau auf native PP-Charts (matplotlib-PNG-Ansatz verworfen, `png_charts.py` raus); **Kapazitäts-Fix** Anlagevorschlag-Tabelle (>34 Zeilen wurden vorher STILL abgeschnitten) |
+| 02.07. | **Wertentwicklungs-Folie (F8)** aus altem VBA-Tool per ZIP-Slide-Copy in die Standard-Vorlage integriert → Vorlage jetzt **26 Slides**; Berechnungs-Logik nach `modules/analytics.py` (Single Source of Truth) |
+| 03.07. | **YTD-Fix** rollierende Tabelle (asof 31.12. statt 01.01.); **Konsistenz-Doktrin** Tool ↔ PP festgelegt + Info-Caption; **Duration/Rendite aus den Titeln** berechnet (Duration-Ordner gelöscht); **Arrow-String-Falle** gefixt; `replace_data` **Bug 4** (Achsen-numFmt) entdeckt + gefixt; F9-Anpassungen (YTD-Balken, Achsen-Untergrenze, statische Quelle) |
+| 04.–06.07. | **Lokaler Batch** `erstelle_broschueren.py` (streamlit-frei, bewiesen; aktuell pausiert wg. IT-Paketinstallation); **Themen-Broschüren** (Familie „Thema" via Mapping-Spalte „Powerpoint Familie", `Vorlage_Thema.pptx` 21 Folien, 24 MB → 3,95 MB); PDF-Export im Portfolioanalyse-Bereich entfernt |
+| 06.07. | **Streamlit-Cloud-Versionsfalle**: `>=`-requirements zog Streamlit 1.59.0 + pandas 3.0; Downgrade-Versuch hing unter Python 3.14 → zurück auf `>=` (Pinnen offen, siehe Backlog) |
+| 07.07. | **Navigations-Umbau**: `st.tabs` → `st.segmented_control` (Tab-Rücksprung-Bug strukturell gelöst); Keep-Alive für Widget-States; zentrale Datenbereitstellung vor der Navigation. Per AppTest unter 1.59.0 verifiziert, im Deploy bestätigt |
 
 ---
 
@@ -149,7 +168,7 @@ if np.nanmedian(np.abs(rf_raw[~np.isnan(rf_raw)])) > 1.0:
     rf_raw = rf_raw / 100.0
 ```
 
-Diese Logik wird in diesem Projekt schon länger bei `to_decimal_interval()` für Performance-Werte verwendet — wird jetzt analog auf rf angewendet.
+Diese Logik wird in diesem Projekt schon länger bei `to_decimal_interval()` für Performance-Werte verwendet — wird analog auf rf angewendet.
 
 ---
 
@@ -223,17 +242,25 @@ Und definierst `KONSTANTE_NEU` in `B.py`.
 
 ---
 
-### 12. python-pptx `chart.replace_data()` ist VERSEUCHT — Bug-Trio bei Charts mit embedded Excel
+### 12. python-pptx `chart.replace_data()` ist VERSEUCHT — Bug-QUARTETT bei Charts mit embedded Excel
+
+> **Update Juli 2026:** Zu den drei bekannten Bugs kam ein VIERTER dazu
+> (Achsen-numFmt-Reset). Der Workaround lebt seit der Modul-Aufteilung in
+> `modules/pptx_charts.py` → `replace_chart_data_safe()` und deckt alle
+> vier ab. Ring-/Donut-Charts werden dagegen über `replace_chart_data`
+> (XML-in-place) befüllt — dieser Pfad ist bugfrei.
 
 **Situation:** Du willst Chart-Daten in einer PPTX programmatisch ändern (Balken-Werte, Linien-Werte, Kategorien). Die Standard-Methode in python-pptx ist `chart.replace_data(CategoryChartData)`.
 
-**Falle (drei zusammenhängende Bugs):** Wenn der Chart ein **embedded Excel-Workbook** hat (das ist bei aus PowerPoint exportierten Vorlagen-Charts der Standard), passiert beim `replace_data()`:
+**Falle (vier zusammenhängende Bugs):** Wenn der Chart ein **embedded Excel-Workbook** hat (das ist bei aus PowerPoint exportierten Vorlagen-Charts der Standard), passiert beim `replace_data()`:
 
 1. **Embedded Excel wird NICHT aktualisiert.** Die XML-Daten werden geändert, das eingebettete `Microsoft_Excel_Worksheet1.xlsx` behält aber die alten Vorlagen-Werte. PowerPoint erkennt die Diskrepanz → "**Datei muss repariert werden**"-Dialog → die Folie wird beschädigt oder verschwindet.
 
 2. **`style*.xml` wird mit Binärmüll überschrieben.** Konkret: die Chart-Style-Datei (z.B. `ppt/charts/style7.xml`) wird VOR `replace_data()` ein gültiges `<cs:chartStyle ...>` XML — und NACH `replace_data()` ein **ZIP-Header** (`PK\x03\x04...`). python-pptx schreibt aus Versehen ZIP-Inhalt in den falschen Pfad. Auch das löst den Reparieren-Dialog aus.
 
 3. **Format-Codes der Daten-Labels werden auf `"General"` zurückgesetzt.** Das Daten-Label das vorher `0.05` als `5,00%` angezeigt hat, zeigt jetzt `0.05` als Text — die Prozent-Formatierung ist weg. Visueller Schaden, aber nicht datei-zerstörend.
+
+4. **Format-Codes der ACHSEN werden ebenfalls zurückgesetzt** (NEU Juli 2026). Betrifft `valAx`, `catAx` UND `dateAx`. Fix: `<c:numFmt>` nach dem replace wieder einfügen — Position ist kritisch: **direkt nach `<c:axPos>`**, sonst ignoriert PowerPoint das Element.
 
 **Diagnose:** Datei nach `replace_data()` öffnen mit:
 ```python
@@ -250,7 +277,7 @@ with zipfile.ZipFile("output.pptx") as z:
 ```python
 def _replace_chart_data_safe(chart_shape, categories, series_data, data_label_format=None):
     """
-    Workaround für 3 python-pptx-Bugs bei chart.replace_data() mit embedded Excel.
+    Workaround für 4 python-pptx-Bugs bei chart.replace_data() mit embedded Excel.
     """
     from pptx.chart.data import CategoryChartData
     
@@ -293,9 +320,13 @@ def _replace_chart_data_safe(chart_shape, categories, series_data, data_label_fo
     if ext_data is not None:
         ext_data.getparent().remove(ext_data)
     
-    # ─── 5. Format-Code wiederherstellen (Bug 3 Fix) ───
+    # ─── 5. Format-Code Daten-Labels wiederherstellen (Bug 3 Fix) ───
     if data_label_format:
         _restore_data_label_format(chart_shape, data_label_format)
+
+    # ─── 6. Format-Codes der ACHSEN wiederherstellen (Bug 4 Fix) ───
+    # valAx/catAx/dateAx: <c:numFmt> DIREKT NACH <c:axPos> einfügen,
+    # sonst wird es von PowerPoint ignoriert. Siehe pptx_charts.py.
 
 
 def _restore_data_label_format(chart_shape, format_code: str):
@@ -327,7 +358,7 @@ style7.xml: 5569 bytes, beginnt mit b'PK\x03\x04...'  ← ZIP-Müll!
 style7.xml: 9674 bytes, beginnt mit b'<cs:chartStyle xmlns:cs=...'  ← Korrektes XML
 ```
 
-**Verwendet in diesem Projekt:** `modules/pptx_export.py` → `_replace_chart_data_safe()`. Beide Performance-Charts (Säulen + Linien) gehen durch diese Funktion.
+**Verwendet in diesem Projekt:** `modules/pptx_charts.py` → `replace_chart_data_safe()`. ALLE Kategorien-Charts (Säulen + Linien, F8/F9 und Themen-Blöcke) gehen durch diese Funktion. Ringe/Donuts: `replace_chart_data` (XML-in-place).
 
 **Generelle Lesson:** Wenn eine populäre Bibliothek einen Bug hat den du nicht umgehen kannst → **Backup-Restore-Pattern** ist oft die schnellste Lösung. Statt den Bug zu fixen (kann Wochen dauern bis upstream merged ist), sicherst du den State vorher und stellst ihn hinterher wieder her. Funktioniert für `_blob`-Manipulation in python-pptx, könnte ähnlich für openpyxl oder python-docx funktionieren.
 
@@ -396,9 +427,9 @@ for name in z.namelist():
             rels = rels.replace(f"media/{img}", f"media/{jpeg_img}")
 ```
 
-**Validiert in diesem Projekt:** Original-Vorlage 22.7 MB → optimierte Vorlage 4.14 MB. **−82% Größe** ohne sichtbaren Qualitätsverlust. Streamlit-Cloud progress.html Problem gelöst.
-
-**Statistik der 19 konvertierten Bilder:** Alle hatten min-Alpha = 255 (fake), zusammen 17 MB → 1.8 MB als JPEG. Ohne erkennbaren visuellen Unterschied bei q=85.
+**Validiert in diesem Projekt (2×):**
+- Standard-Vorlage: 22.7 MB → 4.14 MB (−82%, 19 Bilder, alle fake-Alpha)
+- `Vorlage_Thema.pptx` (Juli 2026): 24 MB → **3,95 MB** (24 unkomprimierte RGBA-PNGs; opake → JPG Q82, `.jpeg`-Endung nutzt den vorhandenen Content-Type-Default, 1 echt-transparentes Bild blieb PNG; Charts/Tabellen unangetastet)
 
 **Generelle Lesson:** Vor jeder PPTX-Optimierung — Inhalts-Inventur. Welche Bilder sind drin, wie groß, welche Alpha-Properties? Dann gezielt komprimieren. Erspart blindes Trial-and-Error.
 
@@ -564,27 +595,33 @@ with zipfile.ZipFile(target_pptx_path, "w", zipfile.ZIP_DEFLATED) as zout:
         zout.writestr(path, content)
 ```
 
-**Validiert in diesem Projekt:** v7-Vorlage komplett aus zwei Quellen (Original + Master) gebaut, 25 Slides, 0 XML-Fehler. Siehe Abschnitt 11 "PowerPoint-Vorlage Recipe" für das vollständige `build_v7.py` Skript.
+**Validiert in diesem Projekt (2×):** v7-Vorlage komplett aus zwei Quellen gebaut (Juni 2026, 25 Slides, 0 XML-Fehler); Wertentwicklungs-Folie aus dem alten VBA-Tool in die Standard-Vorlage integriert (Juli 2026 → 26 Slides).
 
 **Generelle Lesson:** Office-Dokumente sind ZIP-Archive mit strenger Hierarchie. Was ein einzelner Slide-Copy in PowerPoint mit zwei Mausklicks tut, sind im Code ~8 Phasen synchroner Updates. Das ist OK, weil reproduzierbar und versionierbar.
 
 ---
 
-### 15. Streamlit Cross-Tab Daten-Sharing — robuste Fallback-Strategie
+### 15. Streamlit Cross-View Daten-Sharing — robuste Fallback-Strategie
 
-**Situation:** Daten aus Tab A werden in Tab B benötigt (z.B. Performance-Zeitreihe aus Tab A wird in Tab B für PPTX-Export verwendet).
+> **Update 07.07.2026:** Seit dem Navigations-Umbau (segmented_control statt
+> st.tabs) läuft nur noch die AKTIVE Ansicht. Die Datenbereitstellung
+> (`perf_timeseries`/`perf_d2c`/`perf_d2b`) wurde deshalb ZENTRAL vor die
+> Navigation gezogen (läuft bei jedem Run) — der hier beschriebene
+> Fallback-Loader in `portfolioanalyse.py` bleibt als zweites Netz bestehen.
 
-**Falle:** Naive Lösung `st.session_state["data"] = data` in Tab A, dann `data = st.session_state["data"]` in Tab B — funktioniert NICHT zuverlässig:
-- Streamlit-Tabs werden zwar alle gerendert, aber wenn Tab A einen `st.stop()` aufruft (z.B. fehlende CSV-Datei), wird `session_state` nie gesetzt
-- User könnte direkt auf Tab B klicken bevor Tab A "warm" ist
+**Situation:** Daten aus Ansicht A werden in Ansicht B benötigt (z.B. Performance-Zeitreihe wird für den PPTX-Export verwendet).
+
+**Falle:** Naive Lösung `st.session_state["data"] = data` in Ansicht A, dann `data = st.session_state["data"]` in Ansicht B — funktioniert NICHT zuverlässig:
+- Wenn Ansicht A einen `st.stop()` aufruft (z.B. fehlende CSV-Datei), wird `session_state` nie gesetzt
+- User könnte direkt Ansicht B nutzen bevor Ansicht A "warm" ist
 - Bei Reload geht session_state verloren
 
-**Symptom in diesem Projekt:** User klickte Portfolioanalyse → PowerPoint, ohne den Performance-Tab vorher geöffnet zu haben → Slide 8 zeigte Vorlagen-Defaults (0,0%) statt echte Daten.
+**Symptom in diesem Projekt:** User klickte Portfolioanalyse → PowerPoint, ohne den Performance-Bereich vorher geöffnet zu haben → Slide 8 zeigte Vorlagen-Defaults (0,0%) statt echte Daten.
 
 **Lösung — Fallback-Pattern:**
 
 ```python
-# Tab B: erst session_state versuchen, dann selbst laden
+# Ansicht B: erst session_state versuchen, dann selbst laden
 perf_timeseries = st.session_state.get("perf_timeseries", {})
 
 # Wenn leer → direkt laden statt aufgeben
@@ -614,9 +651,11 @@ if missing:
     )
 ```
 
-**Wichtige Voraussetzung:** Die Lade-Funktionen müssen aus einem GEMEINSAMEN Modul kommen, nicht aus dem Top-Level eines Tab-Files. In diesem Projekt: `build_portfolio_timeseries`, `load_all_csvs` etc. wurden in `modules/shared.py` verschoben, damit sowohl `streamlit_app.py` (Tab A) als auch `portfolioanalyse.py` (Tab B) sie nutzen können.
+**Wichtige Voraussetzung:** Die Lade-Funktionen müssen aus einem GEMEINSAMEN Modul kommen, nicht aus dem Top-Level eines View-Files. In diesem Projekt: `build_portfolio_timeseries`, `load_all_csvs` etc. leben in `modules/shared.py`.
 
-**Generelle Lesson:** Cross-Tab Coupling ist Streamlit-Antipattern. Wenn du die Daten in Tab B brauchst, lade sie in Tab B. session_state ist eine Optimierung (Cache), keine Datenquelle. Plan also: **session_state ist nie garantiert da, immer Fallback einbauen, immer Diagnose bei Datenlücken zeigen.**
+**Wichtig (NEU Juli 2026):** Diagnose-Meldungen, die direkt vor `st.rerun()` per `st.warning` ausgegeben werden, werden vom Rerun WEGGEWISCHT. Lösung: Meldungen in `session_state` sammeln (`pf_pptx_build_errors`) und NACH dem Rerun anzeigen.
+
+**Generelle Lesson:** Cross-View Coupling ist ein Streamlit-Antipattern. session_state ist eine Optimierung (Cache), keine Datenquelle. Plan also: **session_state ist nie garantiert da, immer Fallback einbauen, immer Diagnose bei Datenlücken zeigen — und Diagnosen rerun-fest machen.**
 
 ---
 
@@ -625,6 +664,18 @@ if missing:
 **Situation:** Du hast eine PPTX generiert/modifiziert und musst herausfinden warum PowerPoint sie nicht öffnen kann (oder reparieren möchte).
 
 **Falle:** PowerPoint zeigt nur "Datei muss repariert werden" — keine Diagnose welcher Part kaputt ist. LibreOffice öffnet die Datei vielleicht fehlerfrei (LO ist toleranter), also `soffice --convert-to pdf` ist kein zuverlässiger Validitäts-Test.
+
+> **Update Juli 2026 — LibreOffice ≠ PowerPoint gilt in BEIDE Richtungen:**
+> LO zeigt Fehler, die PP nicht hat (Achsen-rot, Dezimalpunkt-, Datums-
+> Formate) UND verschluckt Fehler, die PP hat (z.B. `baseTimeUnit`!).
+> LO-Renders sind nur Näherung; echte Verifikation = PowerPoint-Screenshot
+> vom Nutzer. Zusatz-Falle `dateAx`: `baseTimeUnit` muss zur Daten-
+> Granularität passen — Tagesdaten mit `baseTimeUnit="months"` → PP bündelt
+> monatsweise, Linie zerhackt, in LO unsichtbar. Fix:
+> `set_date_axis_base_unit(chart, "days")` (pptx_charts). Ebenso: Achsen-
+> Untergrenzen DATENBASIERT setzen, nie fix/Auto (PP wählt bei Index >>100%
+> gern 0%), und Live-Datumsfelder in "Stand"-Boxen statisch setzen (zeigen
+> sonst das Öffnungsdatum).
 
 **Lösung — Multi-Layer-Validierung** (in der Reihenfolge ausführen, jeder Layer baut auf vorherigem auf):
 
@@ -784,22 +835,170 @@ modify_office_file("Vorlage.pptx", "Vorlage_neu.pptx", mods)
 
 ---
 
+### 18. st.tabs "vergisst" den aktiven Tab bei jedem Rerun — Navigation über keyed Widgets bauen (NEU 07.07.2026)
+
+**Situation:** Eine App mit `st.tabs(["A", "B"])`. In Tab B löst eine Selectbox-Auswahl (oder jedes andere Widget) einen Rerun aus.
+
+**Falle:** `st.tabs` rendert nach dem Rerun wieder den ERSTEN Tab — die Ansicht "springt zurück". Das ist ein bekanntes, vom Streamlit-Team bestätigtes Verhalten (GitHub #6257, #11160, #4996, #12554), KEIN Fehler im eigenen Code. **Auch die neuen Parameter helfen nicht:** `key="active_tab"` + `on_change="rerun"` trackt den Zustand, stellt den Tab aber nicht wieder her. Und `default=` ist bei gesetztem `key` per Doku wirkungslos nach der ersten Instanziierung (bei Key-basierter Widget-Identität wird `default` nur beim ersten Run ausgewertet) — kann also strukturell nichts "wiederherstellen".
+
+**Lösung:** Navigation NICHT über `st.tabs` bauen, sondern über ein keyed Auswahl-Widget (`st.segmented_control` oder `st.radio`) + `if/else` um die View-Bodies. Der Zustand lebt dann nativ im `session_state` und kann bei Reruns nicht "vergessen" werden.
+
+```python
+_VIEW_A = "📈 Performance"
+_VIEW_B = "📊 Portfolioanalyse"
+if "nav_view" not in st.session_state:
+    st.session_state["nav_view"] = _VIEW_A
+ansicht = st.segmented_control("Ansicht", [_VIEW_A, _VIEW_B],
+                               key="nav_view", required=True,
+                               label_visibility="collapsed")
+if ansicht == _VIEW_A:
+    ...  # ehemals `with tab_a:` — gleiche Einrückung, minimaler Diff
+else:
+    ...
+```
+
+**Wichtige Details:**
+- **`required=True`** (single mode, ab Streamlit ~1.59): verhindert das Abwählen — Klick aufs aktive Segment ist ein No-op, es gibt nie den Zustand "keine Ansicht gewählt" (sonst gibt das Widget `None` zurück!).
+- **Nebenwirkung 1 — nur die aktive Ansicht läuft:** Bei `st.tabs` liefen ALLE Tab-Bodies bei jedem Run; nach dem Umbau nur noch der aktive. Alles, was "immer laufen muss" (z.B. session_state-Datenbereitstellung für den PPTX-Export), VOR die Navigation ziehen.
+- **Nebenwirkung 2 — Widget-States der inaktiven Ansicht werden gelöscht:** siehe #19 (Keep-Alive).
+- **Positiv-Nebenwirkung:** `st.stop()` in Ansicht A stoppt nicht mehr Ansicht B mit.
+
+**Verifiziert in diesem Projekt:** Per Streamlit `AppTest` unter exakt 1.59.0 (Selectbox-Rerun → Navigation bleibt stehen), anschließend im Cloud-Deploy bestätigt.
+
+**Generelle Lesson:** `st.tabs` ist ein reines LAYOUT-Element ohne verlässlichen Zustand — für NAVIGATION (Zustand, der Reruns überleben muss) immer ein keyed Input-Widget nehmen.
+
+> 📖 **Ausführlich:** Kausalmodell, Vorher/Nachher-Rezept, Nebenwirkungen und Umbau-Checkliste stehen im **Deep-Dive Abschnitt 8**.
+
+---
+
+### 19. Keep-Alive-Pattern: Widget-Zustände überleben bedingtes Rendern nicht (NEU 07.07.2026)
+
+**Situation:** Widgets werden nur bedingt gerendert (z.B. nur die aktive Ansicht einer Radio/segmented_control-Navigation, siehe #18).
+
+**Falle:** Streamlit LÖSCHT den session_state-Eintrag eines Widgets, sobald das Widget in einem Run nicht gerendert wird. Wechselt der User Ansicht A → B → zurück zu A, stehen alle Häkchen/Selectboxen/Eingaben von A wieder auf Default.
+
+**Lösung — Keep-Alive am Skriptanfang:** Alle Keys einmal re-assignen. Damit gelten sie als "per API gesetzt" und überleben das Nicht-Rendern.
+
+```python
+# Trigger-Widgets (Buttons, Download-Buttons) MÜSSEN ausgenommen werden:
+# ihr Zustand darf nicht persistieren und ihre Keys sind per API nicht
+# setzbar (StreamlitAPIException). try/except fängt künftige defensiv ab.
+_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed", "perf_pdf", "perf_dl",
+                     "pf_pptx_btn", "pf_pptx_dl"}
+for _k in list(st.session_state.keys()):
+    if _k in _KEEPALIVE_SPERRE:
+        continue
+    try:
+        st.session_state[_k] = st.session_state[_k]
+    except Exception:
+        pass
+```
+
+**Alternative (offiziell, ab ~1.59):** Widgets haben einen `persist_state`-Parameter (`"page"` / `"session"`, braucht `key`). Für EINZELNE Widgets sauberer; das Keep-Alive-Loop-Pattern deckt dagegen ALLE Widgets zentral mit einer Stelle ab — in diesem Projekt bewusst so gewählt (minimaler Diff, keine Änderung an Dutzenden Widget-Aufrufen).
+
+**Verifiziert in diesem Projekt:** Per AppTest unter 1.59.0 (Checkbox + Selectbox verstellen → Ansicht wechseln + dort interagieren → zurück → Werte erhalten).
+
+> 📖 **Ausführlich:** Warum die Sperrliste + try/except nötig sind und wie das Keep-Alive in die feste Skript-Reihenfolge passt, steht im **Deep-Dive Abschnitt 8** (8.5–8.6).
+
+---
+
+### 20. Streamlit-Cloud-Versionsfalle: `>=` in requirements.txt + automatische Paket-Updates (NEU 06.07.2026)
+
+**Situation:** `requirements.txt` nutzt `>=`-Mindestversionen. Streamlit Community Cloud zieht bei jedem Reboot die NEUESTEN Pakete.
+
+**Falle (real passiert, teuer):** Am 6.7. erschien Streamlit 1.59.0 (+ pandas 3.0, numpy 2.5). Der Reboot zog sie automatisch — die App verhielt sich plötzlich anders ("lief gestern noch"), obwohl KEIN eigener Code geändert wurde. Der Verdacht fällt dann reflexhaft auf den letzten eigenen Commit.
+
+**Zweite Falle beim Gegensteuern:** Naives Pinnen auf die ALTEN Versionen (streamlit==1.58, pandas==2.2.3, numpy==1.26.4) ließ die App im Reboot HÄNGEN — die alten Versionen bauen unter **Python 3.14** (das die Cloud nutzt) nicht sauber. Zurück auf `>=` brachte die App wieder hoch.
+
+**Learnings:**
+1. Bei "lief gestern noch, heute kaputt" auf Streamlit Cloud IMMER ZUERST ins **Deploy-Log** schauen (Manage app → schwarze Konsole) — dort stehen die installierten Paketversionen. Hätte hier Stunden gespart.
+2. Versionen pinnen ist richtig, aber NUR auf Versionen, die mit der Cloud-Python-Version (aktuell 3.14) kompatibel sind. Erst prüfen, welche streamlit/pandas/numpy-Kombination unter 3.14 baut, DANN pinnen. (Offener Backlog-Punkt.)
+3. Python-3.14/pandas-3-Nebenwirkung im Code: Arrow-String-dtypes → siehe #21.
+
+---
+
+### 21. Arrow-String-Falle unter Python 3.14 / pandas ≥ 3 (NEU 03.07.2026)
+
+**Situation:** CSV-Spalten werden mit `dtype=str` gelesen und später verrechnet.
+
+**Falle:** Unter Python 3.14 / pandas-Arrow-Backend sind Spalten teils **Arrow-Strings**. Dann macht z.B. `spalte.sum()` eine String-VERKETTUNG statt einer Summe, und Multiplikationen werfen `"Can only string multiply by an integer"` bzw. `"could not convert string to float"`. Betroffen war `get_bond_summary` (total_weight, Fälligkeits-Gewichte, gewichtete Mittel).
+
+**Lösung/Regel:** Rechen-relevante Spalten IMMER erst **deterministisch in float** wandeln (elementweise; deutsches Komma, `%`, `-`, leere Werte abfangen), BEVOR summiert/multipliziert wird. `pd.to_numeric` allein reicht nur, wenn die Strings bereits Punkt-Dezimale sind — der robuste Weg ist die explizite Konvertierung wie in `get_bond_summary._to_float_series` bzw. `.astype(str)` → Komma→Punkt → `to_numeric` im Parser.
+
+---
+
+### 22. Perioden-Grenzen: `asof(Periodenstart)` schneidet den ersten Tag ab (NEU 03.07.2026)
+
+**Situation:** Eine rollierende Renditetabelle rechnet "YTD" als `idx.asof(01.01.) → idx.asof(heute)`.
+
+**Falle:** Bei kalendertäglichen Daten EXISTIERT am 01.01. eine Datenzeile — `asof(01.01.)` nimmt also den Indexstand NACH dem 01.01. Die Rechnung verliert damit den ersten Tag des Jahres (dessen Rendite + 1 Tag Honorar-Drag, hier ~0,003–0,004 %-Punkte) und weicht von jeder Rechnung ab, die ab Vorjahres-Schlussstand rechnet (PP-Folie 8, eigener Balken-Chart).
+
+**Lösung/Regel:** Perioden-Konvention immer als **"ab Schlussstand des Vortags/Vorjahres"** definieren: YTD-Start = `asof(31.12. Vorjahr)`. Danach waren Tool-Tabelle, Balken-Chart und PP **bit-identisch** (numerisch bewiesen). Fachlich ist das auch die marktübliche Lesart von "Wertentwicklung seit 01.01.". Rollierende Punkt-zu-Punkt-Zeiträume (1/3/5/10 Jahre) behalten bewusst ihre Konvention — nur an Jahres-/Periodengrenzen schlägt die Falle zu.
+
+---
+
+### 23. GitHub Web-UI: Große Binärdateien NIE umbenennen, Git-LFS-Zeiger erkennen (NEU Juli 2026)
+
+**Situation:** Eine große `.pptx` liegt im GitHub-Repo und soll umbenannt/ersetzt werden.
+
+**Falle 1 (real passiert):** Der Web-Rename in GitHub **zerstörte den Datei-Inhalt** — übrig blieb eine 2-Byte-Datei; die App meldete beim Laden "Package not found". Große Binärdateien immer FRISCH hochladen, nie über die Web-UI umbenennen.
+
+**Falle 2:** Wenn eine Datei über Git LFS ins Repo kam, liegt am Pfad nur ein ~130-Byte-**LFS-Zeiger** statt der echten Datei. Diagnose im Code (in `portfolioanalyse.py` eingebaut): existiert die Datei? Wie groß? `< 5000 Bytes` → sehr wahrscheinlich LFS-Zeiger oder Rename-Leiche.
+
+```python
+if os.path.getsize(pfad) < 5000:
+    # ⚠️ vermutlich Git-LFS-Zeiger oder zerstörte Datei statt echter PPTX
+```
+
+**Regel:** Vorlagen als normale Binärdateien (nicht über LFS) im Repo halten; nach jedem Vorlagen-Upload einmal Dateigröße im Repo prüfen.
+
+---
+
+### 24. Streamlit AppTest als Beweis-Werkzeug für Rerun-/State-Verhalten (NEU 07.07.2026)
+
+**Situation:** Du willst VOR dem Deploy beweisen, dass sich Widgets/Navigation über Reruns korrekt verhalten (z.B. Tab-Bug-Fix aus #18, Keep-Alive aus #19).
+
+**Lösung:** `streamlit.testing.v1.AppTest` simuliert die App headless — Widgets lassen sich programmatisch bedienen (`at.selectbox(key=...).select(...).run()`), session_state ist inspizier- und setzbar. Damit lassen sich Rerun-Szenarien exakt nachstellen ("Selectbox-Auswahl → bleibt Navigation stehen?") und als assert-Tests festhalten.
+
+```python
+from streamlit.testing.v1 import AppTest
+at = AppTest.from_function(app)   # oder .from_file("streamlit_app.py")
+at.run()
+at.session_state["nav_view"] = "B"; at.run()
+at.selectbox(key="pf_sel_1").select("Strat Y").run()
+assert at.session_state["nav_view"] == "B"
+```
+
+**Grenze:** AppTest simuliert das Streamlit-PROTOKOLL, nicht den Browser — Frontend-Rendering-Bugs (Material-Icons #1, LO/PP-Unterschiede) sieht es nicht. Für State-/Rerun-Logik ist es aber der schnellste harte Beweis; der echte Deploy bleibt der finale Prüfstein.
+
+> 📖 **Ausführlich:** Die konkreten zwei AppTests für den Navigations-Umbau (Bug-Fall + Keep-Alive) stehen ausformuliert im **Deep-Dive Abschnitt 8** (8.7).
+
+---
+
 ## 1. Projektübersicht
 
-Streamlit-App für Fürst Fugger Privatbank mit 2 aktiven Tabs.
+Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
+per `st.segmented_control` oben auf der Seite navigiert, davor `st.tabs`).
 
-| Tab | Datei | Zeilen | Zweck |
+| Ansicht | Datei | Zeilen (ca.) | Zweck |
 |---|---|---|---|
-| 📈 Performance | `streamlit_app.py` | ~990 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar |
-| 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~870 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail, PDF, **PPTX-Export inkl. Performance-Folie** |
-| (gemeinsam) | `modules/shared.py` | ~290 | Konstanten, Login, Formatierung, Font-Setup, Corporate-Palette, **CSV-Loading-Helpers** |
-| (PowerPoint-Export) | `modules/pptx_export.py` | ~1920 | PPTX-Export aus Portfolioanalyse-Tab inkl. **Performance-Folie mit Daten-Befüllung** |
+| 📈 Performance | `streamlit_app.py` | ~1.090 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar, Konsistenz-Caption |
+| 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~900 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail (Duration/Rendite aus Titeln), **PPTX-Export** (familiengesteuerte Vorlagenwahl) |
+| (Berechnungen) | `modules/analytics.py` | — | **Single Source of Truth** für Performance-Mathematik (CAGR, Vola, Sharpe, Drawdown, Perioden-Renditen); genutzt von App UND PPTX-Export |
+| (gemeinsam) | `modules/shared.py` | ~300 | Konstanten, Login, Formatierung, Font-Setup, Corporate-Palette, CSV-Loading-Helpers |
+| (PPTX generisch) | `modules/pptx_helpers.py` | — | Shape/Text/Table/Slide-Manipulation (inkl. `ensure_table_capacity`, `fit_shape_to_table`, `_reorder_slides`) |
+| (PPTX Charts) | `modules/pptx_charts.py` | — | Chart-XML mit Bug-Workarounds (`replace_chart_data_safe` = 4-Bug-Fix, `replace_chart_data` XML-in-place für Ringe, `set_date_axis_base_unit`) |
+| (PPTX Folien) | `modules/pptx_slides.py` | — | Domain-Logik pro Folie (`fill_*_slide`-Funktionen, Themen-Blöcke, `EINZELTITEL_WARNUNGEN`) |
+| (PPTX Orchestrierung) | `modules/pptx_export.py` | — | Broschüren-Aufbau: N Strategien, `template_config`/`block_reihenfolge`, `compute_performance_data`, `compute_rollierend_data`, Block-Dispatcher, `LAST_BUILD_ERRORS` |
+| (lokaler Batch) | `erstelle_broschueren.py` + `modules/dataload.py` | — | Streamlit-freie Massen-Broschüren-Erzeugung (bewiesen lauffähig ohne Streamlit; **pausiert**, siehe Abschnitt 13) |
 
-**Gesamt aktiv: ~4.070 Zeilen | Deployment: Streamlit Cloud via GitHub | Python 3.10+**
+**Deployment:** Streamlit Community Cloud via GitHub (Repo `FFPBAM/Performancetool`, Branch `main`). Cloud-Python: **3.14**. `requirements.txt` aktuell mit `>=` (Pinnen offen, siehe Backlog + Transferwissen #20). **Repo MUSS privat sein (Honorarsätze im Mapping!).**
 
-**Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~695 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung). Datei bleibt für mögliche spätere Reaktivierung im Repo.
+**Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~695 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung). `generate_pf_pdf` in `portfolioanalyse.py` ist seit Juli 2026 toter Code (PDF-Button im Portfolioanalyse-Bereich entfernt; kann bei Gelegenheit raus).
 
-**Vorlage-Datei:** `Vorlage/Vorlage_FFPB.pptx` – PowerPoint-Master mit Corporate-Design, benannten Shapes und 25 Slides (inkl. Performance-Folie an Position 10). Wird von `pptx_export.py` als Template genutzt. Größe: 4.14 MB (optimiert von ursprünglich 22.7 MB — siehe Transferwissen #13).
+**Vorlagen:**
+- `Vorlage/Vorlage_FFPB.pptx` – Standard-Broschüre, **26 Slides** (seit 02.07.2026 inkl. Wertentwicklungs-Folie), benannte Shapes, JPEG-optimiert (~4 MB)
+- `Vorlage/Vorlage_Thema.pptx` – Themen-Broschüre (Pro / Pro Dividende / Offensiv), **21 Slides**, 3,95 MB (von 24 MB optimiert), dynamischer Block F10–F13
 
 ---
 
@@ -807,29 +1006,39 @@ Streamlit-App für Fürst Fugger Privatbank mit 2 aktiven Tabs.
 
 ```
 Repository Root/
-├── streamlit_app.py
+├── streamlit_app.py                 ← Navigation (segmented_control), Keep-Alive,
+│                                      zentrale Datenbereitstellung, Performance-Ansicht inline
+├── erstelle_broschueren.py          ← lokaler Batch (streamlit-frei; PAUSIERT)
 ├── modules/
 │   ├── __init__.py
-│   ├── shared.py
-│   ├── portfolioanalyse.py
-│   ├── pptx_export.py               ← PowerPoint-Export (Portfolioanalyse + Performance-Folie aktiv)
+│   ├── shared.py                    ← Konstanten, Login, Formatierung, CSV-Loader
+│   ├── analytics.py                 ← Berechnungs-Single-Source-of-Truth
+│   ├── portfolioanalyse.py          ← Portfolioanalyse-Ansicht + PPTX-Export-Integration
+│   ├── pptx_helpers.py              ← generische Shape/Table/Slide-Manipulation
+│   ├── pptx_charts.py               ← Chart-XML inkl. replace_chart_data_safe (4 Bugs)
+│   ├── pptx_slides.py               ← Folien-Befüllung (Domain-Logik)
+│   ├── pptx_export.py               ← Broschüren-Orchestrierung
+│   ├── dataload.py                  ← streamlit-freie Loader-Kopien für den Batch
 │   └── portfolio_builder.py         ← deaktiviert seit Juni 2026
 ├── Vorlage/
-│   └── Vorlage_FFPB.pptx            ← Corporate-Master, 25 Slides, benannte Shapes, JPEG-optimiert
-├── fonts/
-│   ├── segoeui.ttf
-│   └── segoeuib.ttf
-├── .streamlit/
-│   └── config.toml                  ← toolbarMode = "minimal"
-├── Mapping_Honorarsatz.xlsx
-├── Mapping_Namen.xlsx
+│   ├── Vorlage_FFPB.pptx            ← Standard, 26 Slides, ~4 MB
+│   └── Vorlage_Thema.pptx           ← Themen (Pro/Pro Dividende/Offensiv), 21 Slides, 3,95 MB
+├── fonts/  (segoeui.ttf, segoeuib.ttf)
+├── .streamlit/config.toml           ← toolbarMode = "minimal"
+├── Mapping_Honorarsatz.xlsx         ← Inhaber + Honorarsatz Standard (Dezimal)
+├── Mapping_Namen.xlsx               ← A=Anzeigename, B=CSV-Key, C=Duration(alt), D=Benchmark,
+│                                      + Spalte "Powerpoint Familie" (NEU Juli 2026)
 ├── Fuerst_Fugger_Bank_Logo_2-ZL-RGB.jpg
 ├── Daten/                           ← Performance-CSVs
-├── Daten_PF/                        ← Portfolioanalyse-CSVs
-├── Duration/                        ← Duration/Rendite pro Portfolio
+├── Daten_PF/                        ← Portfolioanalyse-CSVs (Spalten inkl. Duration, Rendite;
+│                                      Spalte "Währung" angekündigt, siehe Backlog)
 ├── Zieldaten/                       ← Anlageuniversum für Builder (deaktiviert)
-└── requirements.txt
+└── requirements.txt                 ← aktuell >=-Mindestversionen (Pinnen offen)
 ```
+
+**GELÖSCHT (03.07.2026):** Der Ordner `Duration/` — Duration/Rendite werden seit dem 03.07. **anleihe-gewichtet aus den Titeldaten** berechnet (`duration_info_aus_bestand` → `get_bond_summary`; verifiziert gegen Tool-Werte "Muster defensiv cVV": Duration 3,96 / Rendite 3,28 %). ⚠️ Der lokale Batch liest noch den alten Ordner — siehe Backlog Punkt 2.
+
+**Es gibt ZWEI Mappings — nicht verwechseln:** `build_portfolio_timeseries` erwartet das HONORARSATZ-Mapping (`Mapping_Honorarsatz.xlsx`, Spalten "Inhaber" + "Honorarsatz Standard"); Familien/Benchmark/Duration nutzen das NAMEN-Mapping (`Mapping_Namen.xlsx`, Spalten A–D + "Powerpoint Familie").
 
 ### requirements.txt
 ```
@@ -844,28 +1053,38 @@ Pillow>=10.0
 python-pptx>=1.0
 lxml>=4.9                            ← KRITISCH für Chart-XML-Manipulation
 ```
+⚠️ Siehe Transferwissen #20: Cloud zieht bei Reboot die NEUESTEN Versionen
+(Stand 07.07.: Streamlit 1.59.0, pandas 3.0, numpy 2.5 unter Python 3.14).
+Pinnen steht im Backlog — NUR auf 3.14-kompatible Versionen.
 
 ---
 
 ## 3. Abhängigkeiten
 
 ```
-shared.py ──→ streamlit_app.py (Tab 1 inline + importiert Tab 2)
+shared.py ──→ streamlit_app.py (Performance inline + importiert Portfolioanalyse)
           ──→ portfolioanalyse.py ──→ pptx_export.py
-          ──→ pptx_export.py
+analytics.py ──→ streamlit_app.py (Wrapper) + pptx_export.py (identische Mathematik!)
+
+PPTX-Schichten:
+    pptx_helpers (Shape/Text/Table/Slide-Manipulation)
+    pptx_charts  (Chart-XML mit Bug-Workarounds)
+        ↑
+    pptx_slides  (Domain-Logik pro Folie)
+        ↑
+    pptx_export  (Orchestrierung der Broschüre)
+
+Batch: erstelle_broschueren.py ──→ modules/dataload.py (streamlit-freie Loader-KOPIEN)
+                               ──→ pptx_export.py (gleiche Broschüren-Logik wie die App)
 ```
 
-Seit Juni 2026 (Phase 2):
-- `shared.py` enthält die CSV-Loading-Helpers (`build_portfolio_timeseries`, `load_all_csvs`, `read_one_csv`, `parse_dates_col`, `extract_benchmark_name`, `to_decimal_interval`). Damit kann sowohl der Performance-Tab als auch der Portfolioanalyse-Tab die Performance-Zeitreihen laden — egal in welcher Reihenfolge der User die Tabs öffnet.
-- `pptx_export.py` enthält die `compute_performance_data()` Funktion, die aus einer Zeitreihe alle Kennzahlen + Chart-Daten für die Performance-Folie berechnet.
-
-`portfolio_builder.py` liegt im Repo, wird aber nicht importiert.
+`modules/dataload.py` enthält BEWUSST Kopien der shared.py-Loader (kein Import aus `modules.shared`, weil shared.py `import streamlit` am Modulkopf hat). Parser/Mathematik sind 1:1 identisch zur App. `portfolio_builder.py` liegt im Repo, wird aber nicht importiert.
 
 ---
 
 ## 4. Corporate Design
 
-**Seit Juni 2026 nutzen beide Tabs durchgängig die offiziellen Fürst Fugger Privatbank Corporate Colors.**
+**Beide Ansichten nutzen durchgängig die offiziellen Fürst Fugger Privatbank Corporate Colors.**
 Single source of truth ist `modules/shared.py`.
 
 ### Hauptfarben
@@ -921,56 +1140,337 @@ FFPB_PALETTE = [
 | 7 | `Benchmark Performance [%] (Intervall)` | Tagesperformance Benchmark | Prozent |
 | 8 | `Risiko freier Zins` | Annualisierter rf | Dezimal |
 
-### 6.2 Mapping-Dateien
+### 6.2 Portfolioanalyse-CSVs (`Daten_PF/`)
+
+Positions-CSVs mit u.a. Wertpapier, WKN, ISIN, Gewicht, Gattung, Region,
+Segment, Kupon, Fälligkeit, **Duration**, **Rendite**, Auswertungsdatum.
+Duration ist eine JAHRES-Zahl (z.B. 3,96), KEIN Prozentwert. Seit 03.07.
+werden Portfolio-Duration und -Rendite anleihe-gewichtet direkt aus diesen
+Spalten berechnet (Variante B: normiert auf die Gewichtssumme der Anleihen).
+**Geplant:** Spalte "Währung" (für die Themen-Einzeltitel-Folie; Philip
+liefert per Push nach — der Code füllt sie dann automatisch).
+
+### 6.3 Mapping-Dateien
 
 **`Mapping_Honorarsatz.xlsx`:** Inhaber + Honorarsatz Standard (Dezimal)  
-**`Mapping_Namen.xlsx`:** A=Anzeigename, B=CSV-Key, C=Duration, D=Benchmark-Zusammensetzung
+**`Mapping_Namen.xlsx`:** A=Anzeigename, B=CSV-Key, C=Duration (Altbestand, unbenutzt), D=Benchmark-Zusammensetzung, **Spalte "Powerpoint Familie"** (NEU Juli 2026): steuert die PPTX-Vorlage. Werte: `Thema` / `CVV` / `ETF` / `ESG` / leer (= Standard). Erkennung ist tolerant gegen Schreibweise/Whitespace (`_finde_familie_spalte`, case-insensitive Wert-Mapping auf kanonische Schlüssel).
 
 ---
 
-## 7. Tab 1: Performance
+## 7. App-Grundgerüst: Navigation, Keep-Alive, Datenbereitstellung (NEU 07.07.2026)
 
-### Layout & Aufbau
-- Hinweis + Quelle oben, Disclaimer unten
-- Sidebar: Portfolio, Vergleich, Checkboxen (Vor Kosten, Benchmark, **Risikofreier Zins**, Drawdown, Tabelle, Balken), Kosten (dynamischer Key), MwSt (×1.19)
-- Zeitraum: Datumspicker + Reset-Buttons (Counter-Keys, siehe Transferwissen #4)
+`streamlit_app.py` hat seit dem 07.07. folgende feste Reihenfolge — sie ist
+BEWUSST so und darf beim Erweitern nicht durcheinandergebracht werden:
 
-### Kennzahlen (zwei Reihen)
-**Reihe 1:** Auflagedatum | ⌀ Rendite p.a. (CAGR) | Volatilität p.a.  
-**Reihe 2:** Calmar Ratio | **Sharpe Ratio** | Endwert  
-**Caption:** `Ø Risikofreier Zins p.a. (Zeitraum): X,XX%`
+1. **Login** (`check_login`)
+2. **Keep-Alive-Block** (Transferwissen #19): re-assignt alle session_state-Keys, Trigger-Widgets per `_KEEPALIVE_SPERRE` ausgenommen
+3. **Gemeinsame Sidebar** (Anlagevolumen)
+4. **Zentrale Datenbereitstellung** (läuft bei JEDEM Run): lädt die Performance-Zeitreihen (respektiert `adv_perf`+`perf_tag` aus dem session_state) und setzt `perf_timeseries` / `perf_d2c` / `perf_d2b`. Lade-Fehler stoppen NICHT die App — nur die Performance-Ansicht zeigt den Fehler, die Portfolioanalyse läuft weiter (Fallback-Loader, Transferwissen #15)
+5. **Navigation**: `st.segmented_control(key="nav_view", required=True)` (Transferwissen #18)
+6. `if ansicht == _VIEW_PERF:` → Performance-Ansicht (inline) / `else:` → `render_portfolioanalyse(...)`
 
-**Sharpe-Berechnung:** Wissenschaftlich saubere Variante nach Sharpe (1994) auf Basis täglicher Excess Returns.
+**Warum 4 vor 5:** Der PPTX-Export im Portfolioanalyse-Bereich braucht die
+Performance-Daten — seit dem Umbau läuft aber nur noch die aktive Ansicht,
+die Bereitstellung darf also nicht mehr am Besuch der Performance-Ansicht
+hängen.
 
-### Cross-Tab Daten-Sharing (NEU Juni 2026)
-Tab 1 setzt nach erfolgreichem Daten-Loading:
+### Performance-Ansicht (Inhalt unverändert zu Phase 2, plus:)
+
+- **Konsistenz-Caption (03.07.2026):** Info-Box über den Kennzahlen benennt
+  live jede aktive Abweichung von der PowerPoint-Basis (Zeitraum-Filter,
+  Vergleichs-Schnittmenge, manuell geänderter Kostensatz). Siehe
+  Konsistenz-Doktrin, Abschnitt 11.8.
+- **YTD der rollierenden Tabelle** rechnet seit 03.07. ab
+  Vorjahres-Schlussstand (`asof(31.12.)`) — bit-identisch zu Balken-Chart
+  und PP-Folie (Transferwissen #22).
+- Kennzahlen-Wrapper delegieren an `modules/analytics.py`; UI-spezifische
+  Kennzahlen (Euro-Drawdown, Calmar, DD-Dauer, rf-Index) bleiben lokal.
+
+### Portfolioanalyse-Ansicht
+
+- `_render_single_portfolio()` mit `suffix="pf1"/"pf2"` (Transferwissen #3)
+- Ring-Diagramme: Absteigend sortiert, Labels außen (13px), <3% ausgeblendet
+- **Duration/Rendite aus den Titeln** (seit 03.07.): `duration_info_aus_bestand` → `get_bond_summary` (anleihe-gewichtet, Arrow-robust, Transferwissen #21)
+- **Export: NUR noch PowerPoint** (PDF-Button im Juli entfernt; `generate_pf_pdf` = toter Code). Export-Bytes werden in `session_state` gecacht (Key aus Auswahl+Familie), Diagnosen rerun-fest über `pf_pptx_build_errors`
+- **Familiengesteuerte Vorlagenwahl** (Variante A): Der Berater wählt NUR die Strategie; die Mapping-Spalte "Powerpoint Familie" bestimmt die Vorlage. Leere/unbekannte Familie ODER fehlende Vorlagen-Datei → Standard-Export (rückwärtskompatibel, kein Crash). Bei "Package not found" gibt es eine Diagnose (Dateigröße, LFS-Zeiger-Warnung, Ordnerinhalt — Transferwissen #23)
+
+Sidebar-Optionen: ☐ YTD Performance anzeigen · ☐ Bruttohonorar (inkl. 19% MwSt., wirkt auf PPTX-Kennzahlen) · ☐ Erweiterte Einstellungen (Date-Tag-Override)
+
+---
+
+## 8. DEEP-DIVE: Navigation ohne st.tabs — das vollständige Muster
+
+> **Warum ein eigener Abschnitt?** Der Umbau von `st.tabs` auf
+> `st.segmented_control` am 07.07.2026 hat einen hartnäckigen Bug strukturell
+> beseitigt, der über Wochen immer wieder auftauchte. Das zugrunde liegende
+> Muster — "Layout-Container taugt nicht als Navigations-Zustand" — ist nicht
+> FFPB-spezifisch, sondern trifft JEDE mehrseitige Streamlit-App. Dieser
+> Abschnitt erklärt das Kausalmodell, liefert das komplette Vorher/Nachher-
+> Rezept, einen Entscheidungsbaum und die Fallstricke, damit niemand die
+> Fehlersuche wiederholen muss. Die Kurzeinträge Transferwissen #18 (Bug),
+> #19 (Keep-Alive) und #24 (AppTest-Beweis) verweisen hierher.
+
+### 8.1 Das Symptom (was der Nutzer sah)
+
+Im Portfolioanalyse-Tab: Strategie in der Selectbox auswählen → die Ansicht
+sprang zurück auf den Performance-Tab. Der Portfolioanalyse-Tab startete
+sauber (per Marker-Test bewiesen: die farbige Box "HIER BEGINNT
+PORTFOLIOANALYSE" stand ganz oben, kein Performance-Inhalt davor) — erst die
+Strategie-**Auswahl** warf die Ansicht auf Tab 1. Für den Berater wirkte das
+wie ein zufälliger, nicht reproduzierbarer Aussetzer; tatsächlich war es
+deterministisch und trat bei JEDER Widget-Interaktion im zweiten Tab auf.
+
+### 8.2 Das Kausalmodell (warum es passiert — der eigentliche Kern)
+
+Drei Streamlit-Grundwahrheiten greifen hier ineinander. Wer sie einzeln
+kennt, dem ist der Bug sofort klar:
+
+**(1) Jede Widget-Interaktion löst einen kompletten Skript-Rerun aus.**
+Streamlit hat kein Event-System, das nur ein Fragment aktualisiert — das
+GESAMTE `streamlit_app.py` läuft bei jeder Selectbox-Auswahl von oben neu
+durch. Das ist das Grundmodell, kein Bug.
+
+**(2) `st.tabs` ist ein reines LAYOUT-Element, kein Zustands-Element.**
+`st.tabs` erzeugt Container nebeneinander und rendert bei jedem Run ALLE
+Tab-Bodies (der Browser blendet nur den nicht-aktiven visuell aus). Welcher
+Tab "vorne" liegt, ist reiner Frontend-Zustand im Browser — er wird NICHT
+serverseitig im `session_state` gehalten. Beim Rerun baut Streamlit die
+Tab-Gruppe neu auf und der Frontend-Zustand fällt auf den Default zurück:
+den ERSTEN Tab.
+
+**(3) Der Rerun serialisiert Server → Frontend, nicht umgekehrt.** Zum
+Zeitpunkt, an dem der Server die neue Tab-Gruppe rendert, weiß er nicht,
+welcher Tab im Browser aktiv war — diese Information war nie beim Server.
+
+**Zusammengesetzt:** Interaktion in Tab 2 → Rerun (1) → Server baut
+Tab-Gruppe neu, ohne den aktiven Tab zu kennen (2)+(3) → Frontend zeigt
+wieder Tab 1. Der Bug ist damit KEINE Fehlfunktion, sondern die logische
+Folge davon, ein Layout-Element für Navigation zu missbrauchen.
+
+> **Verallgemeinerung (das eigentliche Transferwissen):** In Streamlit muss
+> jeder Zustand, der einen Rerun überleben soll, im `session_state` leben.
+> Ein Container/Layout-Element (`st.tabs`, `st.columns`, `st.expander` in
+> seiner Auf/Zu-Stellung ohne key) hält KEINEN rerun-festen Zustand. Für
+> NAVIGATION braucht es ein keyed Input-Widget.
+
+### 8.3 Was NICHT funktioniert hat (und warum — Zeit gespart für den Nächsten)
+
+Diese Versuche wurden gemacht und scheiterten; sie erneut zu probieren ist
+verlorene Zeit:
+
+| Versuch | Warum es nicht reicht |
+|---|---|
+| `st.tabs(..., key="active_tab")` | Der key macht den Tab-Zustand im `session_state` LESBAR (für Callbacks), stellt ihn aber beim Rendern nicht wieder her. Bug bleibt. |
+| zusätzlich `on_change="rerun"` | Ändert nur, WANN ein Rerun ausgelöst wird (beim Tab-Wechsel) — nicht, welcher Tab nach dem Rerun aktiv ist. Bug bleibt. |
+| zusätzlich `default=_aktiver_tab` (aus `session_state` zurückgelesen) | Laut Streamlit-Doku zur Widget-Identität gilt: **bei gesetztem `key` bestimmt der key die Identität, und `default` wird nur bei der ERSTEN Instanziierung ausgewertet.** Ab dem zweiten Run ignoriert Streamlit `default` — es kann strukturell nichts "wiederherstellen". Bug bleibt. |
+
+Der rote Faden: Alle drei Versuche kämpfen GEGEN das Layout-Element, statt
+den Zustand woanders hinzulegen. Das kann nicht gewinnen.
+
+### 8.4 Die Lösung (segmented_control + if/else)
+
+Navigation über ein keyed Input-Widget, dessen Wert von Natur aus im
+`session_state` lebt und Reruns übersteht. Die Tab-Bodies werden zu
+`if/else`-Zweigen — bei gleicher Einrückung ist der Diff minimal.
+
 ```python
-st.session_state["perf_timeseries"] = data
-st.session_state["perf_d2c"] = d2c
+# ── NAVIGATION: segmented_control statt st.tabs ──
+_VIEW_PERF = "📈 Performance"
+_VIEW_PF = "📊 Portfolioanalyse"
+if "nav_view" not in st.session_state:
+    st.session_state["nav_view"] = _VIEW_PERF
+ansicht = st.segmented_control(
+    "Ansicht", [_VIEW_PERF, _VIEW_PF],
+    key="nav_view",            # Zustand lebt im session_state
+    required=True,             # Klick aufs aktive Segment = No-op (kein None!)
+    label_visibility="collapsed",
+)
+
+if ansicht == _VIEW_PERF:
+    ...   # ehemals `with tab_perf:` — Einrückung bleibt, Diff minimal
+else:
+    ...   # ehemals `with tab_pf:`
 ```
 
-Tab 2 (Portfolioanalyse) liest diese im PPTX-Export — mit Fallback-Loader falls leer (siehe Transferwissen #15).
+**Warum `required=True` nicht optional ist:** Im Single-Mode kann der Nutzer
+ein `segmented_control` sonst ABWÄHLEN (nochmal aufs aktive Segment klicken)
+→ das Widget gibt dann `None` zurück → `ansicht == _VIEW_PERF` ist False,
+`else` greift, und plötzlich landet man ungewollt in der Portfolioanalyse
+ODER (je nach Logik) im Nichts. `required=True` macht den Klick aufs aktive
+Segment zum No-op — es gibt nie den `None`-Zustand.
 
----
+**Alternativen (gleiches Prinzip, andere Optik):**
+- `st.radio(..., horizontal=True, key="nav_view")` — funktioniert identisch
+  (keyed → rerun-fest), sieht klassischer aus.
+- Radio/segmented in der Sidebar statt oben — spart vertikalen Platz, aber
+  bei FFPB ist die Sidebar schon voll mit Einstellungen, daher oben.
+- `st.navigation`/`st.Page` (echte Multipage) — der "richtige" Weg für viele
+  Seiten, aber ein größerer Umbau (eigene Dateien pro Seite, kein geteilter
+  Inline-State) — für zwei Ansichten Overkill.
 
-## 8. Tab 2: Portfolioanalyse
+### 8.5 Die zwei Nebenwirkungen — und wie man sie behandelt
 
-- `_render_single_portfolio()` mit `suffix="pf1"/"pf2"` (siehe Transferwissen #3)
-- Ring-Diagramme: Absteigend sortiert, Labels außen (13px), <3% ausgeblendet, Legende horizontal unten
-- YTD: Spalten ausgeschrieben (Wertpapier-Performance/Performancebeitrag)
-- PDF (reportlab): Ring-Charts kompakter (100×85mm), intelligente Spaltenbreiten
-- **PowerPoint-Export aktiv** mit Performance-Folie (siehe Abschnitt 10)
+Der Wechsel von "alle Tab-Bodies laufen" zu "nur die aktive Ansicht läuft"
+hat zwei Konsequenzen, die man AKTIV behandeln muss, sonst tauscht man einen
+Bug gegen zwei neue.
 
-### Sidebar-Optionen (Portfolioanalyse-Sektion)
-- ☐ YTD Performance anzeigen
-- ☐ **Bruttohonorar (inkl. 19% MwSt.)** — wirkt auf Performance-Folie-Kennzahlen im PPTX
-- ☐ Erweiterte Einstellungen (Date-Tag-Override)
+#### Nebenwirkung A — Daten, die "immer da sein müssen", laufen nicht mehr
+
+Bei `st.tabs` lief der Performance-Body bei jedem Run mit und füllte dabei
+`st.session_state["perf_timeseries"]` (die der PPTX-Export im
+Portfolioanalyse-Bereich braucht). Nach dem Umbau läuft der Performance-Code
+nur noch, wenn seine Ansicht aktiv ist — öffnet der Nutzer direkt die
+Portfolioanalyse und klickt "PowerPoint erstellen", fehlen die Daten.
+
+**Lösung: alles "immer Nötige" VOR die Navigation ziehen.** Die
+Datenbereitstellung läuft jetzt zentral, unabhängig von der aktiven Ansicht
+(siehe Abschnitt 7, Schritt 4). Der Fallback-Loader in `portfolioanalyse.py`
+(Transferwissen #15) bleibt als zweites Netz — er ist jetzt aber selten der
+aktive Pfad, weil die zentrale Bereitstellung schon greift.
+
+> **Merksatz:** Nach dem Umbau jede Zeile prüfen, die per Seiteneffekt in
+> `session_state` schreibt und von der ANDEREN Ansicht gelesen wird. Solche
+> Zeilen gehören vor die Navigation.
+
+#### Nebenwirkung B — Widget-Zustände der inaktiven Ansicht werden gelöscht
+
+Streamlit LÖSCHT den `session_state`-Eintrag eines Widgets, sobald das
+Widget in einem Run nicht gerendert wird. Wechsel Performance →
+Portfolioanalyse → zurück ⇒ alle Häkchen/Selectboxen/Eingaben der
+Performance-Ansicht stehen wieder auf Default.
+
+**Lösung: Keep-Alive am Skriptanfang** — alle Keys einmal re-assignen, damit
+sie als "per API gesetzt" gelten und das Nicht-Rendern überleben:
+
+```python
+# Trigger-Widgets (Buttons/Downloads) AUSNEHMEN: ihr Zustand darf nicht
+# persistieren und ihre Keys sind per API nicht setzbar (Exception).
+_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed", "perf_pdf", "perf_dl",
+                     "pf_pptx_btn", "pf_pptx_dl"}
+for _k in list(st.session_state.keys()):
+    if _k in _KEEPALIVE_SPERRE:
+        continue
+    try:
+        st.session_state[_k] = st.session_state[_k]
+    except Exception:
+        pass   # Trigger-Widget-Key → nicht setzbar, bewusst überspringen
+```
+
+**Warum die Sperrliste + try/except:** Button-artige Widgets (`st.button`,
+`st.download_button`) lassen ihren Key per API nicht setzen und werfen eine
+`StreamlitAPIException`. Die explizite Sperrliste dokumentiert die bekannten
+Fälle; das `try/except` fängt künftige, noch nicht gelistete Trigger-Keys
+defensiv ab, ohne dass die App crasht.
+
+**Offizielle Alternative (ab Streamlit ~1.59):** Einzelne Widgets haben einen
+`persist_state`-Parameter (`"page"` / `"session"`, braucht `key`). Sauberer
+für EINZELNE Widgets — das zentrale Keep-Alive-Loop deckt dagegen ALLE
+Widgets mit einer Stelle ab. In diesem Projekt bewusst das Loop-Pattern
+gewählt: minimaler Diff, keine Änderung an Dutzenden Widget-Aufrufen.
+
+### 8.6 Die feste Reihenfolge in streamlit_app.py (und warum sie fest ist)
+
+Aus den beiden Nebenwirkungen ergibt sich eine ZWINGENDE Reihenfolge (siehe
+auch Abschnitt 7):
+
+```
+1. Login
+2. Keep-Alive        ← muss VOR allen Widgets laufen (re-assignt deren Keys)
+3. Sidebar (global)
+4. Datenbereitstellung  ← muss VOR der Navigation laufen (Nebenwirkung A)
+5. Navigation (segmented_control)
+6. if aktive Ansicht == A: ... else: ...
+```
+
+**Wenn man das durcheinanderbringt:** Keep-Alive nach den Widgets → wirkungslos
+(die Keys existieren beim Re-Assign noch nicht bzw. wurden schon gelöscht).
+Datenbereitstellung nach der Navigation → PPTX-Export bricht bei Direkt-Einstieg
+in die Portfolioanalyse. Beide Fehler sind subtil (kein Crash, nur falsches
+Verhalten in bestimmten Klick-Pfaden) — deshalb ist die Reihenfolge hier
+explizit dokumentiert.
+
+### 8.7 Verifikation OHNE Deploy: AppTest (Transferwissen #24)
+
+Der Bug lebt im Rerun-/State-Verhalten — genau das lässt sich mit Streamlits
+`AppTest` headless und deterministisch beweisen, BEVOR man deployed. Zwei
+Tests haben den Umbau abgesichert:
+
+**Test 1 — der Bug-Fall selbst:**
+```python
+from streamlit.testing.v1 import AppTest
+at = AppTest.from_function(app); at.run()
+at.session_state["nav_view"] = "Portfolioanalyse"; at.run()   # auf Ansicht B
+at.selectbox(key="pf_sel_1").select("Strat Y").run()          # Selectbox-Rerun
+assert at.session_state["nav_view"] == "Portfolioanalyse"     # bleibt B? ✓
+```
+
+**Test 2 — Keep-Alive:**
+```python
+at.checkbox(key="p_vk").uncheck().run()          # Widget in A verstellen
+at.selectbox(key="p_sel1").select("P3").run()
+at.session_state["nav_view"] = "Portfolioanalyse"; at.run()   # weg von A
+at.selectbox(key="pf_sel_1").select("Strat Y").run()          # in B interagieren
+at.session_state["nav_view"] = "Performance"; at.run()        # zurück zu A
+assert at.checkbox(key="p_vk").value == False    # Wert erhalten? ✓
+assert at.selectbox(key="p_sel1").value == "P3"  # Wert erhalten? ✓
+```
+
+Beide liefen unter EXAKT der Cloud-Version (Streamlit 1.59.0, per
+`pip install streamlit` im Container installiert und `__version__` geprüft) —
+nicht gegen eine ältere lokale Version, in der sich das Verhalten
+unterscheiden könnte.
+
+**Grenze (ehrlich benannt):** AppTest simuliert das Streamlit-PROTOKOLL, nicht
+den Browser. Reine Frontend-Effekte (Material-Icons-Rendering #1,
+LibreOffice-≠-PowerPoint #16) sieht es NICHT. Für State-/Rerun-Logik ist es
+der schnellste harte Beweis; der echte Deploy bleibt der finale Prüfstein
+(hier bestätigt).
+
+### 8.8 Checkliste: st.tabs → keyed Navigation umbauen (Rezept zum Nachkochen)
+
+Für den nächsten, der eine `st.tabs`-App gegen den Rücksprung-Bug härtet:
+
+1. **Bug bestätigen, nicht raten.** Marker-Box (`st.success`) als erste Zeile
+   jedes Tab-Bodies → beweist, welcher Body nach der Interaktion läuft. Wenn
+   nach einer Selectbox-Auswahl in Tab 2 die Tab-1-Marker-Box erscheint, ist
+   es dieser Bug.
+2. **`st.tabs([...])` ersetzen** durch `st.segmented_control(..., key=...,
+   required=True)` (oder `st.radio(..., horizontal=True, key=...)`).
+3. **`with tab_x:` → `if ansicht == _VIEW_X:` / `else:`.** Einrückung
+   beibehalten (Diff minimal, kein versehentliches De-Indent von 500 Zeilen).
+4. **Nebenwirkung A prüfen:** Jede `session_state`-Schreibzeile suchen, die
+   von der anderen Ansicht gelesen wird → VOR die Navigation ziehen.
+5. **Nebenwirkung B behandeln:** Keep-Alive-Loop am Skriptanfang einfügen,
+   Trigger-Widgets (Buttons/Downloads) per Sperrliste ausnehmen.
+6. **`st.stop()`-Aufrufe prüfen:** Ein `st.stop()` in der einen Ansicht reißt
+   jetzt nicht mehr die andere mit (positiver Nebeneffekt) — aber ein `stop`,
+   der VOR der Navigation steht (z.B. in der zentralen Datenbereitstellung),
+   legt weiterhin ALLES lahm. Fehlerbehandlung so bauen, dass ein Daten-Fehler
+   nur die betroffene Ansicht stoppt, nicht die App.
+7. **AppTest schreiben:** mindestens Test 1 (Bug-Fall) + Test 2 (Keep-Alive),
+   gegen die reale Cloud-Version.
+8. **Deploy + Marker-/TEST-Titel-Trick:** im echten Streamlit gegenprüfen.
+
+### 8.9 Wiederverwendbare Kernaussagen (das, was in 6 Monaten zählt)
+
+- **Layout ≠ Navigation.** `st.tabs`/`st.columns`/`st.expander` sind Layout;
+  ihr "aktiver" Zustand ist Frontend und überlebt keinen Rerun. Navigation =
+  keyed Input-Widget (`segmented_control`/`radio`) + `if/else`.
+- **Jeder rerun-feste Zustand lebt im `session_state`.** Wenn ein Zustand
+  nach einer Interaktion "vergessen" wird, ist die erste Frage: liegt er
+  überhaupt im `session_state` oder nur im Frontend?
+- **Bedingt gerenderte Widgets verlieren ihren State** — Keep-Alive oder
+  `persist_state` einplanen, sobald nicht mehr alles bei jedem Run rendert.
+- **"Immer nötige" Seiteneffekte gehören vor die Verzweigung**, sobald nur
+  noch ein Zweig läuft.
+- **AppTest beweist State-/Rerun-Verhalten vor dem Deploy** — gegen die reale
+  Ziel-Version, nicht die lokale.
 
 ---
 
 ## 9. Disclaimers
 
-| Tab | Schlüsselsatz |
+| Ansicht | Schlüsselsatz |
 |---|---|
 | Performance | "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr." |
 | Portfolioanalyse | "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr." |
@@ -979,462 +1479,7 @@ Quelle: Infront & eigene Berechnungen | Ansprechpartner: PBAM
 
 ---
 
-## 10. PowerPoint-Export-System
-
-Das PowerPoint-Export-System ist ein zentraler Baustein für die Kunden-Kommunikation.
-
-### 10.1 Architektur-Prinzip "B2"
-
-Jeder Tab füllt **nur seine eigenen Folien**:
-
-| Tab | Befüllt Slides | Entfernt Slides |
-|---|---|---|
-| 📊 Portfolioanalyse | 7-9 (Anlagevorschlag, **Performance**, Zusammenstellung) | 11 (Währungen) |
-| 📈 Performance (geplant) | (eigener Export) | analog |
-
-### 10.2 Vorlage `Vorlage/Vorlage_FFPB.pptx`
-
-25 Slides nach Phase-2-Integration:
-
-| # | Slide | Verwendung |
-|---|---|---|
-| 1-6 | Cover, Intro | statisch |
-| 7 | **Anlagevorschlag** (Tabelle + Allokations-Ring) | dynamisch befüllt |
-| 8 | (alte Anlagevorschlag-Teil-2) | wird beim Export ENTFERNT |
-| 9 | **Aktuelle Portfoliozusammenstellung** | dynamisch befüllt |
-| 10 | **Performance/Wertentwicklung** (NEU Juni 2026) | dynamisch befüllt |
-| 11 | Währungen-Ring | wird beim Export ENTFERNT |
-| 12+ | Honorar, Bank, Ansprechpartner, etc. | statisch |
-
-**Beim Export passiert** (in `pptx_export.py`):
-1. `_remove_slide(prs, 7)` → alte Anlagevorschlag-Teil-2 raus (Index 7 = Slide 8)
-2. `_remove_slide(prs, 9)` → Währungen raus (war Index 10, nach Op1 = 9)
-3. `_move_slide(prs, 8, 7)` → Performance nach Position 8 (vor Portfolio)
-
-**Resultierende Reihenfolge:**
-- Slide 7 = Anlagevorschlag
-- Slide 8 = **Performance** (war Slide 10 in der Vorlage)
-- Slide 9 = Portfoliozusammenstellung
-
-### 10.3 Shape-Namen-Konvention
-
-Die Vorlage nutzt **benannte Shapes**:
-
-#### Anlagevorschlag-Slide (Slide 7 in der Vorlage)
-| Shape-Name | Typ | Verwendung |
-|---|---|---|
-| `Titel` | Placeholder | "Anlagevorschlag – {Strategie}" |
-| `C_Kennzahlen` | Chart | Allokations-Ring |
-| `T_Kennzahlen` | Tabelle | Positionen mit "Marktrisikowert" Header |
-| `Fußnote` | Placeholder | Disclaimer |
-| `Quelle` | Textbox | "Quelle: ... Stand DD.MM.YYYY" |
-
-#### Performance-Slide (Slide 10 in der Vorlage)
-| Shape-Name | Typ | Verwendung |
-|---|---|---|
-| `Titel` | Placeholder | "{Strategie} \| Wertentwicklung (mit Benchmark)" |
-| `Tabelle` | Tabelle 7×5 | KENNZAHLEN / REFERENZ / BENCHMARK |
-| `Diagramm links` | Chart (Säulen) | "PERFORMANCE P.A. (NACH KOSTEN)" |
-| `Diagramm rechts` | Chart (Linien) | "WERTENTWICKLUNG" |
-| `Fußnote` | Placeholder | Disclaimer |
-| `Quelle` | Textbox | Dynamisch via Drawing-XML-Manipulation |
-
-**Tabellen-Struktur** (7×5):
-- Row 0: Header (KENNZAHLEN | _ | REFERENZ | _ | BENCHMARK)
-- Row 1: Spacer
-- Row 2: Performance p.a.
-- Row 3: Volatilität
-- Row 4: Sharpe Ratio
-- Row 5: Max Drawdown
-- Row 6: Spacer
-
-### 10.4 Strategienamen-Normalisierung
-
-`clean_strategy_name()` entfernt: `cVV`, `Muster`, `Stiftung`.
-
-### 10.5 Slide-Duplikation für Vergleichsportfolio
-
-`_duplicate_slide(prs, source_idx)` mit deepcopy aller Shapes, eigene Chart-Parts, geteilte Image-Referenzen. Nach Duplikation immer `_save_and_reload(prs)`.
-
-### 10.6 Chart-Befüllung — XML-basiert, `_replace_chart_data_safe()`
-
-Charts in Vorlagen haben oft embedded Excel-Workbooks. Python-pptx's `chart.replace_data()` hat dabei **drei bekannte Bugs** (siehe Transferwissen #12):
-
-1. embedded Excel wird nicht aktualisiert
-2. `style*.xml` wird mit ZIP-Header überschrieben  
-3. Format-Codes der Daten-Labels gehen verloren
-
-**Lösung:** `_replace_chart_data_safe()` Wrapper in `pptx_export.py`:
-
-```python
-# Pseudocode des Workflows:
-def _replace_chart_data_safe(chart_shape, categories, series_data, data_label_format):
-    # 1. Backup style/colors parts (Bytes)
-    # 2. chart.replace_data(CategoryChartData(...))
-    # 3. Restore style/colors parts from backup
-    # 4. Remove <c:externalData> from chart XML
-    # 5. Restore numFmt formatCode in <c:dLbls>
-```
-
-Vollständige Implementierung siehe `pptx_export.py` und Transferwissen #12.
-
-### 10.7 Performance-Daten-Befüllung (Phase 2, Juni 2026)
-
-`compute_performance_data(timeseries_df, fee_dec)` in `pptx_export.py`:
-
-**Eingaben:**
-- `timeseries_df`: DataFrame mit Spalten `ret_port`, `ret_bm`, `rf` (Tagessätze)
-- `fee_dec`: Honorarsatz dezimal (z.B. 0,012 für 1,2% p.a.)
-
-**Berechnete Ausgaben (Dict):**
-```python
-{
-    "kennzahlen": {
-        "performance_pa": (ref_dec, bench_dec),     # CAGR nach Kosten
-        "volatilitaet":   (ref_dec, bench_dec),     # std×√365
-        "sharpe":         (ref_val, bench_val),     # Sharpe nach Sharpe (1994)
-        "max_drawdown":   (ref_dec, bench_dec),     # min(idx/cummax - 1)
-    },
-    "performance_pa": {
-        "jahre":     [2021, 2022, 2023, 2024, 2025],
-        "referenz":  [0.054, -0.018, 0.082, ...],   # dezimal pro Kalenderjahr
-        "benchmark": [...],
-    },
-    "wertentwicklung": {
-        "dates":     [date(2020,1,1), date(2020,1,2), ...],
-        "referenz":  [1.0, 1.0023, 1.0011, ...],    # Index (Start=1.0)
-        "benchmark": [...],
-    },
-}
-```
-
-**Architektur:**
-- `_fill_performance_slide(prs, slide_idx, strategy_name, performance_data)` orchestriert
-- `_fill_kennzahlen_table(table, kz)` füllt die 4 Metric-Rows
-- `_replace_chart_data_safe()` (zwei mal) für Säulen + Linien-Chart
-
-### 10.8 Compliance-Anforderungen
-
-Die PPTX wird an Kunden weitergegeben — alle nachfolgenden Regeln sind **nicht verhandelbar**:
-
-| Anforderung | Umsetzung |
-|---|---|
-| **Anti-Cherry-Picking** | Performance-Folien zeigen **die gesamte verfügbare Historie** |
-| **Benchmark wenn gemappt** | BM **immer** angezeigt (UI-Schalter ignoriert) |
-| **Nur Nach Kosten** | "Vor Kosten"-Linien werden im Export **nie** gezeigt |
-| **Strategieentwurf-Hinweis** | Folie 7 hat Überschrift "Strategieentwurf im Rahmen einer Vermögensverwaltung" |
-| **Disclaimer auf jeder Folie** | Standard-Wertentwicklungs-Disclaimer + Quelle + Stand |
-| **Mindestens 5 Jahre Historie** | Durch "gesamte Historie zeigen" implizit erfüllt |
-| **Strategienamen-Bereinigung** | `cVV`, `Muster`, `Stiftung` werden entfernt |
-
-### 10.9 Streamlit-Integration für Performance-Daten
-
-Im Portfolioanalyse-Tab beim PPTX-Erstellen (`portfolioanalyse.py`):
-
-```python
-# Priorität 1: aus session_state
-perf_timeseries = st.session_state.get("perf_timeseries", {})
-perf_d2c = st.session_state.get("perf_d2c", {})
-
-# Priorität 2 (Fallback): direkt laden wenn leer
-if not perf_timeseries:
-    date_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
-    files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
-    if files and mapping_pf is not None:
-        perf_timeseries = build_portfolio_timeseries(files, mapping_pf)
-
-# Performance-Inputs zusammenbauen
-performance_inputs = []
-for pf_name, df_pf, _ad, _dur in portfolios:
-    csv_n = perf_d2c.get(pf_name) or display_to_csv_pf.get(pf_name)
-    ts_df = perf_timeseries.get(csv_n) if csv_n else None
-    fee_dec = float(mapping_pf.loc[mapping_pf["Inhaber"] == csv_n,
-                                   "Honorarsatz Standard"].values[0]) * mwst_faktor
-    performance_inputs.append({"timeseries_df": ts_df, "fee_dec": fee_dec})
-
-# An generate_portfolioanalyse_pptx übergeben
-generate_portfolioanalyse_pptx(portfolios, anlagevolumen, 
-                                performance_inputs=performance_inputs)
-```
-
-**MwSt-Faktor:** Sidebar-Checkbox `Bruttohonorar (inkl. 19% MwSt.)` × 1.19 wenn aktiviert.
-
----
-
-## 11. PowerPoint-Vorlage Recipe — Neuaufbau aus Quell-PPTX
-
-**Dieser Abschnitt dokumentiert wie die aktuelle Vorlage `Vorlage_FFPB.pptx` (v7) gebaut wurde — als Recipe für zukünftige Vorlagen-Updates oder ähnliche Projekte.**
-
-### 11.1 Wann brauche ich das?
-
-- Eine Master-PPTX enthält eine wichtige Folie (z.B. Performance-Folie), die in eine bestehende Corporate-Vorlage integriert werden soll
-- python-pptx kann keine Slides zwischen Dateien kopieren
-- Eine Vorlage ist über die Sessions "verbastelt" und soll von Grund auf sauber neu gebaut werden
-- Bilder in einer PPTX sollen optimiert werden (PNG → JPEG)
-
-### 11.2 Phase-Übersicht
-
-| Phase | Schritt | Tool |
-|---|---|---|
-| 1 | Basis-PPTX kopieren (alle Files in dict) | `zipfile.ZipFile.read()` |
-| 2 | Performance-Slide aus Master importieren mit Pfad-Mapping | dict + `RENAME` mapping |
-| 3 | Innere Pfade in .rels aktualisieren | String-Replace |
-| 4 | `presentation.xml` + .rels: neue Slide registrieren | `lxml.etree` |
-| 5 | `slideMaster1.xml` + .rels: neues Layout registrieren | `lxml.etree` |
-| 6 | `[Content_Types].xml` erweitern | `lxml.etree` |
-| 7 | PNG → JPEG Konvertierung (optional) | PIL + ContentType/rels-Update |
-| 8 | ZIP zusammenstellen | `zipfile.ZipFile.writestr()` |
-
-### 11.3 Phase 1 — Basis kopieren
-
-```python
-import zipfile, io, re
-from PIL import Image
-from lxml import etree
-
-ORIG   = "Vorlage_FFPB_original.pptx"           # Corporate-Master ohne Performance-Folie
-MASTER = "Anlagevorschlag_Master_Dynamische_Folien.pptx"  # mit Performance-Folie
-TARGET = "Vorlage_FFPB_v7.pptx"
-
-files_v7 = {}
-with zipfile.ZipFile(ORIG, "r") as z:
-    for info in z.infolist():
-        files_v7[info.filename] = z.read(info.filename)
-```
-
-### 11.4 Phase 2 — Slide-Import mit Pfad-Mapping
-
-```python
-# Dependencies der Master-Slide identifizieren (manuell, einmal):
-#  master/slide8.xml          → enthält Performance-Folie mit Benchmark
-#  master/charts/chart3.xml   → Linien-Chart (Wertentwicklung)
-#  master/charts/chart4.xml   → Säulen-Chart (Performance p.a.)
-#  master/charts/style3.xml, colors3.xml, style4.xml, colors4.xml
-#  master/embeddings/Microsoft_Excel_Worksheet2.xlsx (chart3)
-#  master/embeddings/Microsoft_Excel_Worksheet3.xlsx (chart4)
-#  master/slideLayouts/slideLayout17.xml (Anlagestrategie Wertentwicklung)
-
-# Pfad-Mapping master → v7 (neue freie Indizes)
-RENAME = {
-    "ppt/slides/slide8.xml": "ppt/slides/slide26.xml",
-    "ppt/slides/_rels/slide8.xml.rels": "ppt/slides/_rels/slide26.xml.rels",
-    "ppt/charts/chart3.xml": "ppt/charts/chart8.xml",   # Line → chart8
-    "ppt/charts/_rels/chart3.xml.rels": "ppt/charts/_rels/chart8.xml.rels",
-    "ppt/charts/style3.xml": "ppt/charts/style8.xml",
-    "ppt/charts/colors3.xml": "ppt/charts/colors8.xml",
-    "ppt/charts/chart4.xml": "ppt/charts/chart7.xml",   # Bar → chart7
-    "ppt/charts/_rels/chart4.xml.rels": "ppt/charts/_rels/chart7.xml.rels",
-    "ppt/charts/style4.xml": "ppt/charts/style7.xml",
-    "ppt/charts/colors4.xml": "ppt/charts/colors7.xml",
-    "ppt/embeddings/Microsoft_Excel_Worksheet2.xlsx": "ppt/embeddings/Microsoft_Excel_Worksheet2.xlsx",
-    "ppt/embeddings/Microsoft_Excel_Worksheet3.xlsx": "ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx",
-    "ppt/slideLayouts/slideLayout17.xml": "ppt/slideLayouts/slideLayout29.xml",
-    "ppt/slideLayouts/_rels/slideLayout17.xml.rels": "ppt/slideLayouts/_rels/slideLayout29.xml.rels",
-}
-
-with zipfile.ZipFile(MASTER, "r") as z:
-    for old_path, new_path in RENAME.items():
-        files_v7[new_path] = z.read(old_path)
-```
-
-### 11.5 Phase 3 — Innere Pfade in .rels aktualisieren
-
-```python
-def update_rels(rels_str, mappings):
-    for old, new in mappings.items():
-        rels_str = rels_str.replace(f'Target="{old}"', f'Target="{new}"')
-    return rels_str
-
-# slide26.xml.rels: enthielt master-Pfade
-content_str = files_v7["ppt/slides/_rels/slide26.xml.rels"].decode("utf-8")
-content_str = update_rels(content_str, {
-    "../charts/chart3.xml": "../charts/chart8.xml",
-    "../charts/chart4.xml": "../charts/chart7.xml",
-    "../slideLayouts/slideLayout17.xml": "../slideLayouts/slideLayout29.xml",
-})
-files_v7["ppt/slides/_rels/slide26.xml.rels"] = content_str.encode("utf-8")
-
-# chart8.xml.rels: war chart3.xml.rels
-content_str = files_v7["ppt/charts/_rels/chart8.xml.rels"].decode("utf-8")
-content_str = update_rels(content_str, {
-    "colors3.xml": "colors8.xml",
-    "style3.xml": "style8.xml",
-})
-files_v7["ppt/charts/_rels/chart8.xml.rels"] = content_str.encode("utf-8")
-
-# chart7.xml.rels: war chart4.xml.rels (mit Worksheet-Umnummerierung!)
-content_str = files_v7["ppt/charts/_rels/chart7.xml.rels"].decode("utf-8")
-content_str = update_rels(content_str, {
-    "../embeddings/Microsoft_Excel_Worksheet3.xlsx": "../embeddings/Microsoft_Excel_Worksheet1.xlsx",
-    "colors4.xml": "colors7.xml",
-    "style4.xml": "style7.xml",
-})
-files_v7["ppt/charts/_rels/chart7.xml.rels"] = content_str.encode("utf-8")
-```
-
-### 11.6 Phase 4 — Slide in presentation.xml registrieren
-
-```python
-NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
-NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-NS_PKG = "http://schemas.openxmlformats.org/package/2006/relationships"
-
-# presentation.xml.rels: neue Slide-Relationship
-pres_rels = etree.fromstring(files_v7["ppt/_rels/presentation.xml.rels"])
-existing_rids = [r.get("Id") for r in pres_rels.findall(f"{{{NS_PKG}}}Relationship")]
-new_rid = f"rId{max(int(r[3:]) for r in existing_rids if r.startswith('rId')) + 1}"
-
-new_rel = etree.SubElement(pres_rels, f"{{{NS_PKG}}}Relationship")
-new_rel.set("Id", new_rid)
-new_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide")
-new_rel.set("Target", "slides/slide26.xml")
-
-# presentation.xml: sldIdLst erweitern an Position 9 (= Slide 10 in UI)
-pres = etree.fromstring(files_v7["ppt/presentation.xml"])
-sld_ids = pres.findall(f".//{{{NS_P}}}sldIdLst/{{{NS_P}}}sldId")
-new_sld_id = max(int(s.get("id")) for s in sld_ids) + 1
-
-new_sld = etree.Element(f"{{{NS_P}}}sldId")
-new_sld.set("id", str(new_sld_id))
-new_sld.set(f"{{{NS_R}}}id", new_rid)
-pres.find(f"{{{NS_P}}}sldIdLst").insert(9, new_sld)  # Position 9 = Slide 10
-
-files_v7["ppt/presentation.xml"] = etree.tostring(
-    pres, xml_declaration=True, encoding="UTF-8", standalone=True
-)
-files_v7["ppt/_rels/presentation.xml.rels"] = etree.tostring(
-    pres_rels, xml_declaration=True, encoding="UTF-8", standalone=True
-)
-```
-
-### 11.7 Phase 5 — Layout im slideMaster registrieren
-
-```python
-# slideMaster1.xml.rels: slideLayout29 als neue Relationship
-sm_rels = etree.fromstring(files_v7["ppt/slideMasters/_rels/slideMaster1.xml.rels"])
-existing_sm_rids = [r.get("Id") for r in sm_rels.findall(f"{{{NS_PKG}}}Relationship")]
-new_layout_rid = f"rId{max(int(r[3:]) for r in existing_sm_rids if r.startswith('rId')) + 1}"
-
-new_layout_rel = etree.SubElement(sm_rels, f"{{{NS_PKG}}}Relationship")
-new_layout_rel.set("Id", new_layout_rid)
-new_layout_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout")
-new_layout_rel.set("Target", "../slideLayouts/slideLayout29.xml")
-
-# slideMaster1.xml: sldLayoutIdLst erweitern
-sm = etree.fromstring(files_v7["ppt/slideMasters/slideMaster1.xml"])
-layout_lst = sm.find(f"{{{NS_P}}}sldLayoutIdLst")
-existing_ids = [int(e.get("id")) for e in layout_lst.findall(f"{{{NS_P}}}sldLayoutId")]
-new_layout_entry = etree.SubElement(layout_lst, f"{{{NS_P}}}sldLayoutId")
-new_layout_entry.set("id", str(max(existing_ids) + 1))
-new_layout_entry.set(f"{{{NS_R}}}id", new_layout_rid)
-
-files_v7["ppt/slideMasters/slideMaster1.xml"] = etree.tostring(sm, ...)
-files_v7["ppt/slideMasters/_rels/slideMaster1.xml.rels"] = etree.tostring(sm_rels, ...)
-```
-
-### 11.8 Phase 6 — ContentTypes erweitern
-
-```python
-NS_CT = "http://schemas.openxmlformats.org/package/2006/content-types"
-ct = etree.fromstring(files_v7["[Content_Types].xml"])
-
-NEW_OVERRIDES = [
-    ("/ppt/slides/slide26.xml", "application/vnd.openxmlformats-officedocument.presentationml.slide+xml"),
-    ("/ppt/charts/chart7.xml", "application/vnd.openxmlformats-officedocument.drawingml.chart+xml"),
-    ("/ppt/charts/chart8.xml", "application/vnd.openxmlformats-officedocument.drawingml.chart+xml"),
-    ("/ppt/charts/style7.xml", "application/vnd.ms-office.chartstyle+xml"),
-    ("/ppt/charts/style8.xml", "application/vnd.ms-office.chartstyle+xml"),
-    ("/ppt/charts/colors7.xml", "application/vnd.ms-office.chartcolorstyle+xml"),
-    ("/ppt/charts/colors8.xml", "application/vnd.ms-office.chartcolorstyle+xml"),
-    ("/ppt/slideLayouts/slideLayout29.xml", "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"),
-]
-for partname, ct_type in NEW_OVERRIDES:
-    ov = etree.SubElement(ct, f"{{{NS_CT}}}Override")
-    ov.set("PartName", partname)
-    ov.set("ContentType", ct_type)
-
-files_v7["[Content_Types].xml"] = etree.tostring(ct, ...)
-```
-
-### 11.9 Phase 7 — PNG → JPEG Optimierung (siehe Transferwissen #13)
-
-```python
-TO_JPEG = ["image4.png", "image7.png", "image8.png", "image11.png", "image12.png",
-           "image13.png", "image14.png", "image15.png", "image16.png", "image18.png",
-           "image20.png", "image25.png", "image26.png", "image27.png", "image28.png",
-           "image29.png", "image30.png", "image31.png", "image32.png"]
-
-def png_to_jpeg(png_bytes, quality=85):
-    img = Image.open(io.BytesIO(png_bytes))
-    if img.mode == "RGBA":
-        white_bg = Image.new("RGB", img.size, (255, 255, 255))
-        white_bg.paste(img, mask=img.split()[-1])
-        img = white_bg
-    elif img.mode != "RGB":
-        img = img.convert("RGB")
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=quality, optimize=True)
-    return buf.getvalue()
-
-# Files konvertieren
-files_v7_new = {}
-for path, content in files_v7.items():
-    if path.startswith("ppt/media/"):
-        bn = path.split("/")[-1]
-        if bn in TO_JPEG:
-            jpeg = png_to_jpeg(content)
-            new_path = path.replace(".png", ".jpeg")
-            files_v7_new[new_path] = jpeg
-            continue
-    files_v7_new[path] = content
-files_v7 = files_v7_new
-
-# Pfade in ContentTypes + rels aktualisieren
-for path in list(files_v7.keys()):
-    if path == "[Content_Types].xml" or path.endswith(".rels"):
-        s = files_v7[path].decode("utf-8")
-        for img in TO_JPEG:
-            jpeg_img = img.replace(".png", ".jpeg")
-            s = s.replace(f"media/{img}", f"media/{jpeg_img}")
-            s = s.replace(f"/ppt/media/{img}", f"/ppt/media/{jpeg_img}")
-        files_v7[path] = s.encode("utf-8")
-```
-
-### 11.10 Phase 8 — ZIP zusammenstellen + Validieren
-
-```python
-with zipfile.ZipFile(TARGET, "w", zipfile.ZIP_DEFLATED) as zout:
-    for path, content in files_v7.items():
-        zout.writestr(path, content)
-
-# Validierung (Transferwissen #16)
-from pptx import Presentation
-prs = Presentation(TARGET)
-print(f"✓ {len(prs.slides)} Slides, {os.path.getsize(TARGET)/1024/1024:.2f} MB")
-```
-
-### 11.11 Layout-Anpassungen (Post-Build)
-
-Nach dem Neuaufbau wurden noch drei Layout-Mods angewendet:
-
-```python
-# 1. "ASSETKLASSEN" → "AKTUELLE STRUKTUR" in drawing1.xml + slideLayout26.xml
-# 2. Tabellen-Header "Rating" → "Marktrisikowert" in slide8.xml (UI Slide 7)
-# 3. "Linie links" Y-Position: 5240797 EMU → 5848626 EMU (auf gleiche Höhe wie "Linie rechts")
-```
-
-EMU = English Metric Unit, 914400 EMU = 1 Zoll.
-
-### 11.12 Resultat
-
-- **Vorher:** Vorlage v5/v6 mit Altlasten, 8.4 MB, gelegentliche Reparieren-Dialoge
-- **Nachher (v7):** Vorlage 4.14 MB, 25 Slides, 0 XML-Fehler, sauber neu gebaut, generierte PPTX 4.22 MB
-- **Generierungs-Zeit:** 0.6s (vorher ~2s)
-- **Streamlit-Cloud:** kein progress.html-Timeout mehr
-
----
-
-## 12. Berechnungsformeln
+## 10. Berechnungsformeln
 
 ```
 daily_drag      = (1 + fee_pa)^(1/365) - 1
@@ -1442,10 +1487,10 @@ idx_nach_kosten = idx[i-1] * (1 + ret - daily_drag)
 cagr            = (endwert/startwert)^(365/tage) - 1
 vola            = std(tagesrenditen) * sqrt(365)
 calmar          = cagr / |max_drawdown|
-gew_duration    = Σ(gewicht × duration) / Σ(gewichte_anleihen)
+gew_duration    = Σ(gewicht × duration) / Σ(gewichte_anleihen)   ← aus Titeln, seit 03.07.
 ```
 
-### Sharpe Ratio – wissenschaftlich saubere Variante nach Sharpe (1994)
+### Sharpe Ratio – nach Sharpe (1994), tägliche Excess Returns
 
 ```
 daily_rf[t]   = (1 + rf_annual[t])^(1/365) - 1
@@ -1454,182 +1499,396 @@ sharpe_daily  = mean(excess) / std(excess, ddof=1)
 sharpe_p.a.   = sharpe_daily × √365
 ```
 
-Implementiert in `calc_sharpe_excess(draf, df["rf"])` in `streamlit_app.py` und in `compute_performance_data()` in `pptx_export.py`.
+Implementiert in `modules/analytics.py` (`calc_sharpe_excess`) — genutzt von App UND `compute_performance_data()` im Export.
 
-### Risikofreier Zins – Aggregation (geometrisch)
+### Risikofreier Zins – Aggregation (geometrisch) / rf-Index
 
 ```
 daily_rf = (1 + rf_annual)^(1/365) - 1
 growth   = Π (1 + daily_rf)
 rf_pa    = growth^(365 / n_days) - 1
+idx[i]   = idx[i-1] * (1 + daily_rf[i])
 ```
 
-### rf-Index für Chart
+### Kostenmodell-Fußnote (dokumentiert, KEIN Bug)
 
-```
-daily_rf[i] = (1 + rf_annual[i])^(1/365) - 1
-idx[i]      = idx[i-1] * (1 + daily_rf[i])
-```
+Der additive Tages-Drag `(1+f)^(1/365)−1` ergibt bei Nullperformance eine
+effektive Jahresbelastung von `f/(1+f)` (Beispiel: 1,19% → ~1,176%,
+Δ ~0,014 %-Pkt/Jahr). Das ist marktüblich und entspricht dem freigegebenen
+Disclaimer. Nur ändern als bewusste fachliche Entscheidung — es verschiebt
+ALLE Nach-Kosten-Zahlen minimal.
 
 ---
 
-## 13. Roadmap — Geplante Implementierungen
+## 11. PowerPoint-Export-System (Stand Juli 2026)
 
-### 13.1 Aktueller Stand (Juni 2026)
+### 10.1 Vier-Modul-Architektur
 
-| Aufgabe | Status |
+```
+pptx_helpers (generisch: Shapes, Text, Tabellen, Slide remove/move/duplicate/reorder)
+pptx_charts  (generisch: Chart-XML; replace_chart_data_safe = 4-Bug-Workaround,
+              replace_chart_data XML-in-place für Ringe, set_date_axis_base_unit)
+    ↑
+pptx_slides  (Domain: fill_*_slide je Folie, Asset-Klassen-Logik, Tabellen-Layouts,
+              EINZELTITEL_WARNUNGEN; kennt KEIN Streamlit)
+    ↑
+pptx_export  (Orchestrierung: N Strategien, template_config, Block-Dispatcher,
+              compute_performance_data, compute_rollierend_data, LAST_BUILD_ERRORS)
+```
+
+Fehler bei der Befüllung einzelner Folien werden NICHT mehr still
+verschluckt: `pptx_export.LAST_BUILD_ERRORS` sammelt sie, die App zeigt
+sie nach dem Rerun an (rerun-feste Diagnose, Transferwissen #15).
+
+### 10.2 Standard-Broschüre (`Vorlage_FFPB.pptx`, 26 Slides)
+
+Dynamischer Block der Standard-Broschüre (Export-Reihenfolge):
+
+| Folie (Export) | Rolle | Inhalt |
+|---|---|---|
+| 7 | Anlagevorschlag | Tabelle (Kapazitäts-Fix! s.u.) + Allokations-Ring |
+| 8 | **Wertentwicklung/Kurzübersicht** (NEU 02.07.2026) | Titel, 4 Kennzahlen (kumulierte WE, Rendite p.a., WE seit 01.01., Duration), Balken (Perf p.a.), Linie (Wertentwicklung). Aus dem alten VBA-Tool per ZIP-Slide-Copy integriert; `fill_wertentwicklung_slide`, `we_data=None` → Platzhalter-Modus (nur Titel) |
+| 9 | Performance (mit Benchmark) | Kennzahlen-Tabelle + Säulen- + Linien-Chart |
+| 10 | Aktuelle Portfoliozusammenstellung | 2 Ring-Charts |
+
+**F9-Änderungen (07/2026):** Balken zeigt zusätzlich das LAUFENDE Jahr
+(YTD nK vs. BM; Schalter `F9_BAR_INCLUDE_CURRENT_YEAR` in pptx_export,
+Default True) → F8/F9 sind nicht mehr datenidentisch; der 2026-Balken trägt
+KEINE Sternchen-Markierung (Tool-UI-analog). Linien-Chart: datenbasierte
+Achsen-Untergrenze über BEIDE Serien (statt Template-Fixwert 70%).
+Quelle-Datumsfeld statisch (wie F8). Fußnote: Tool-Wortlaut via
+`WE_DISCLAIMER_REPLACEMENTS` (läuft daten-UNABHÄNGIG, auch im
+Platzhalter-Modus).
+
+**Kapazitäts-Fix Anlagevorschlag-Tabelle (F7, Juni/Juli 2026):** Vorher
+wurden bei >34 Datenzeilen überschüssige Zeilen STILL abgeschnitten —
+Positionen verschwanden kommentarlos aus einem Compliance-Dokument. Jetzt:
+`ensure_table_capacity()` klont bei Bedarf `<a:tr>`-Zeilen,
+`fit_shape_to_table()` staucht alle Zeilen proportional (Untergrenze
+`MIN_ROW_H_EMU`; reicht das nicht, schrumpft die Schrift bis `MIN_FONT_PT`).
+Geometrie-Konstanten aus ECHTEN Exporten kalibriert
+(ORIGINAL_DATA_ROW_H_EMU = 0.1424" × 914400, ORIGINAL_FONT_PT = 6.0,
+MIN_ROW_H_INCH = 0.115, MIN_FONT_PT = 5.5, MAX_TABLE_BOTTOM_INCH = 6.60).
+Realer Extremfall (35 Titel/39 Zeilen) braucht keine Schriftverkleinerung.
+Nur im pathologischen Fall gibt es eine WARNUNG — NIE mehr stilles Verwerfen.
+
+**Ring-Charts:** Nach einem matplotlib-PNG-Zwischenspiel (verworfen, weil
+die PNGs sich im Deploy nie zuverlässig aktualisieren ließen und das
+Template-Styling verloren ging) laufen die Donuts wieder NATIV über
+`replace_chart_data` (XML-in-place, bugfrei) — Banner, Legende, Quelle,
+Datenlabels der Vorlage bleiben unangetastet. `png_charts.py` ist gelöscht.
+
+### 10.3 Themen-Broschüren (`Vorlage_Thema.pptx`, 21 Slides) — NEU 06.07.2026
+
+Pro / Pro Dividende / Offensiv teilen sich EINE Vorlage + Struktur.
+Dynamischer Block F10–F13 mit Rollen (verifiziert an der echten Vorlage_Pro):
+
+| Folie (Vorlage) | Rolle | Inhalt |
+|---|---|---|
+| 10 | `einzeltitel_themen` | 7-Spalten-Tabelle (Wertpapier / Währung / WKN / Anteil), Gruppen AKTIEN/RENTEN/LIQUIDITÄT, `fill_einzeltitel_themen_slide`; Währung aus Daten_PF-Spalte "Währung"; Summenzeile "Gesamt" links, Prozentwert rechts |
+| 11 | `zusammenstellung` | Ring-Charts (holeSize 79→55 für Lesbarkeit; ECHTE Außenbeschriftung ist bei PP-Doughnuts technisch NICHT möglich) |
+| 12 | `wertentwicklung` | wie Standard-F8 |
+| 13 | `rollierend` | Renditetabelle YTD/1/3/5/10 Jahre, nach Kosten, bit-identisch zur Streamlit-Rolltabelle (`compute_rollierend_data` + `fill_rollierend_slide`; <3 Jahre → "–") |
+
+BEWUSST: keine Performance-Folie mit Benchmark in der Themen-Struktur.
+Block-Reihenfolge pro Vorlage konfigurierbar via
+`template_config["block_reihenfolge"]` (Default-Fallback = Standard).
+
+**Steuerung (Variante A, familiengesteuert):** `VORLAGEN_FAMILIEN` in
+`portfolioanalyse.py` mappt Familie → (Vorlagen-Datei, template_config).
+Aktuell nur `"Thema"` eingetragen; CVV/ETF/ESG fallen sicher auf Standard
+zurück, bis ihre Vorlagen existieren. Der Vorlagen-Pfad wird vom
+funktionierenden Standard-`TEMPLATE_PATH` abgeleitet (gleicher Ordner wie
+Vorlage_FFPB.pptx) — funktioniert damit in jeder Ausführungsumgebung.
+
+### 10.4 Shape-Namen-Konvention
+
+Die Vorlagen nutzen **benannte Shapes** — Namen müssen EXAKT stimmen:
+
+| Folie | Shapes |
 |---|---|
-| **Aufgabe A:** Strategieentwurf-Überschrift auf PPTX Folie 7 | ⚠️ Offen |
-| **Aufgabe B:** Seitenzahlen in PDF-Druckversionen | ⚠️ Offen (Position-Spec ausstehend) |
-| **Aufgabe C:** Seitenzahlen in PPTX dynamisch | ⚠️ Offen |
-| **Aufgabe D:** Performance-PPTX-Export | ✅ **ERLEDIGT (Juni 2026)** |
+| Anlagevorschlag | `Titel`, `C_Kennzahlen` (Ring), `T_Kennzahlen` (Tabelle, "Marktrisikowert"-Header), `Fußnote`, `Quelle` |
+| Performance | `Titel`, `Tabelle` (7×5: KENNZAHLEN/REFERENZ/BENCHMARK; Rows: Perf p.a., Vola, Sharpe, Max DD), `Diagramm links` (Säulen), `Diagramm rechts` (Linie), `Fußnote`, `Quelle` |
+| Wertentwicklung / Themen-Folien | analoge benannte Shapes je `fill_*_slide` (siehe pptx_slides.py Docstrings) |
 
-### 13.2 Aufgabe A: Strategieentwurf-Überschrift
+### 10.5 Strategienamen-Normalisierung
 
-- **Was:** Überschrift "Anlagevorschlag" → "Strategieentwurf im Rahmen einer Vermögensverwaltung"
-- **Wo:** Nur Folie 7
-- **Aufwand:** Trivial (~10 Min)
+`clean_strategy_name()` entfernt: `cVV`, `Muster`, `Stiftung`.
 
-### 13.3 Aufgabe B: PDF-Seitenzahlen
+### 10.6 Slide-Umbau
 
-- **Was:** Seitenzahlen analog zur PPTX
-- **Wo:** `streamlit_app.py` (Performance-PDF) + `portfolioanalyse.py` (Portfolioanalyse-PDF)
-- **Position:** NOCH ZU KLÄREN
-- **Aufwand:** Klein (~30 Min)
+`_remove_slide` / `_move_slide` / `_duplicate_slide` in pptx_helpers. Regeln:
+nach Duplikaten `_save_and_reload(prs)`; Reorder als EIN atomarer Schritt
+(`_reorder_slides`) statt Move-Ketten. Quelle-Datums-Diskrepanz F7 vs. F8
+ist KEIN Bug: strukturell verschiedene Datumsquellen (Auswertungsdatum der
+Positions-CSV vs. Enddatum der Performance-Zeitreihe).
 
-### 13.4 Aufgabe C: PPTX-Seitenzahlen dynamisch
+### 10.7 Performance-Daten-Befüllung
 
-- **Problem:** Vorlage hat statische Seitenzahlen, aber dynamisches Slide-Reorder beim Export
-- **Lösung:** Über alle Slides iterieren, `Foliennummer`-Shape mit korrekter Position befüllen
-- **Aufwand:** Mittel (~1h)
+`compute_performance_data(timeseries_df, fee_dec)` in `pptx_export.py`
+liefert Kennzahlen (CAGR, Vola, Sharpe, Max DD je für Referenz + Benchmark),
+Säulen-Chart-Daten (Kalenderjahre + laufendes Jahr) und Linien-Chart-Daten
+(gesamte Historie, Index Start=1.0). Die `performance_inputs` aus der App
+enthalten zusätzlich je Strategie `duration` (aus den Titeln) und
+`benchmark_text` (Mapping Spalte D, für die ***-Fußnote der F8; Platzhalter-
+Werte wie "haben keine Benchmark" werden gefiltert).
 
-### 13.5 Aufgabe D — ERLEDIGT (Juni 2026)
+**Korrektheits-Verifikation (03.07., Technik merken):** Kennzahlen
+unabhängig aus der Chart-eigenen Index-Serie im Export nachgerechnet
+(Stichtags-Verhältnisse) — YTD 2,7439% ≈ 2,74% ✓, kumuliert 184,01% ✓.
 
-**Performance-PPTX-Export** wurde vollständig implementiert. Details:
+### 10.8 KONSISTENZ-DOKTRIN Tool ↔ PowerPoint (fachlich festgelegt, Philip 03.07.2026)
 
-- ✅ `_fill_performance_slide()` in `pptx_export.py`
-- ✅ `compute_performance_data()` mit allen Kennzahlen + Chart-Daten
-- ✅ `_replace_chart_data_safe()` mit Workaround für 3 python-pptx-Bugs
-- ✅ Streamlit-Integration: session_state + Fallback-Loader
-- ✅ MwSt-Checkbox in Portfolioanalyse-Sidebar
-- ✅ Sauber neu aufgebaute Vorlage v7 mit Performance-Folie an Slide 10
-- ✅ 4.14 MB Vorlage (statt 22.7 MB), löst Streamlit-Cloud progress.html
+**Die PowerPoint ist kanonisch:** Sie rechnet IMMER volle Historie +
+Standardsatz aus dem Mapping (× pf_mwst). Die Tool-Anzeige DARF davon
+abweichen (Datumsfilter, Vergleichs-INNER-JOIN auf gemeinsamen Zeitraum,
+editierbarer Kostensatz, eigenes MwSt-Häkchen je Ansicht) — das ist GEWOLLT
+und wird seit 03.07. per Info-Caption über den Kennzahlen sichtbar gemacht
+(benennt jede aktive Abweichung, erinnert ans MwSt-Häkchen-Gleichstellen).
+Beide Pfade nutzen identische `analytics`-Funktionen: bei gleichen Eingaben
+bit-identisch (bewiesen). YTD überall ab Vorjahres-Schlussstand.
 
-**Architektur abweichend von ursprünglicher Spec:**
-- Performance-Folie wurde Teil des **Portfolioanalyse-Tabs** (nicht separater Performance-Tab-Button), weil sie strukturell mit Slide 7-9 zusammengehört
-- Nur EINE Performance-Folie statt der ursprünglich geplanten F1/F2/F3-Variante (kann später erweitert werden)
+### 10.9 Compliance-Anforderungen (nicht verhandelbar — PPTX geht an Kunden)
 
-### 13.6 Sonstige Pflege-Punkte
-
-- Ggf. F2/F3-Varianten (ohne BM / Berater-Zeitraum) als zusätzliche Slides
-- Sharpe + rf-Linie auch in Portfolioanalyse-Tab
-- Bei Bedarf: Portfolio-Builder-Reaktivierung
-
----
-
-## 14. Changelog
-
-### Juni 2026 (Phase 2) – Performance-PPTX-Export implementiert + Vorlage-Neuaufbau
-
-**Phase 2.1 — Performance-Daten-Berechnung (`pptx_export.py`)**
-- `compute_performance_data(timeseries_df, fee_dec)` neu: berechnet alle Kennzahlen, Säulen-Chart-Daten (5 Kalenderjahre) und Linien-Chart-Daten (gesamte Historie) aus einer Zeitreihe
-- `_fill_performance_slide(prs, slide_idx, strategy_name, performance_data=None)` befüllt Titel + Tabelle + 2 Charts; bei `performance_data=None` werden nur Titel gesetzt (Phase-1-Verhalten)
-- Berechnungs-Funktionen aus `streamlit_app.py` dupliziert: `_calc_cagr`, `_calc_vola`, `_calc_sharpe_excess`, `_calc_max_drawdown`, `_make_index_after_fee`
-- `_fmt_pct()`, `_fmt_ratio()` für deutsche Zahlenformatierung in der Tabelle
-
-**Phase 2.2 — python-pptx Bug-Workaround (`_replace_chart_data_safe`)**
-- 3 Bugs in `chart.replace_data()` identifiziert und gefixt (siehe Transferwissen #12):
-  - Bug 1: embedded Excel nicht aktualisiert → `<c:externalData>` entfernen
-  - Bug 2: `style*.xml` mit ZIP-Header überschrieben → Backup-Restore Pattern
-  - Bug 3: Format-Codes auf "General" → `_restore_data_label_format()`
-- Vollständige Diagnose dokumentiert (siehe `WISSENSBASIS.md` im Workspace)
-
-**Phase 2.3 — Streamlit-Integration (`portfolioanalyse.py`)**
-- Sidebar-Checkbox `pf_brutto_mwst` für Bruttohonorar (×1.19)
-- PPTX-Button-Block baut `performance_inputs` aus session_state + load_mapping + mwst_faktor
-- **Fallback-Loader** (Transferwissen #15): wenn session_state leer → direkt aus `Daten/`-Ordner laden
-- Diagnose-Warnung wenn ein gewähltes Portfolio nicht in den Performance-Daten gefunden wird
-
-**Phase 2.4 — shared.py erweitert**
-- CSV-Loading-Helpers verschoben aus `streamlit_app.py`: `to_decimal_interval`, `read_one_csv`, `parse_dates_col`, `extract_benchmark_name`, `load_all_csvs`, `build_portfolio_timeseries`
-- Damit können sowohl Performance-Tab als auch Portfolioanalyse-Tab die Daten laden
-
-**Phase 2.5 — streamlit_app.py erweitert**
-- Im Performance-Tab nach Daten-Load: `st.session_state["perf_timeseries"] = data` + `st.session_state["perf_d2c"] = d2c`
-- Damit kann Portfolioanalyse-Tab die Daten direkt nutzen (mit Fallback wenn leer)
-
-**Phase 2.6 — Vorlage komplett neu aufgebaut (v5/v6 → v7)**
-- Problem: v5 hatte Altlasten aus mehreren Modifikations-Sessions, gelegentliche PowerPoint-Reparieren-Dialoge
-- Lösung: Sauberer Neuaufbau aus Original (22.7 MB, ohne Performance-Folie) + Master (mit Performance-Folie)
-- **`build_v7.py` Skript** (siehe Abschnitt 11 für Details):
-  1. Original-Vorlage als Basis (alle 181 Files)
-  2. Performance-Slide aus Master importiert mit Umnummerierung (slide8→26, chart3/4→7/8, etc.)
-  3. presentation.xml + slideMaster.xml + ContentTypes synchron erweitert
-  4. 19 PNGs zu JPEG q=85 konvertiert (alle hatten fake-Alpha min=255)
-- **Layout-Mods auf v7**: "AKTUELLE STRUKTUR", "Marktrisikowert"-Header, Linien-Y-Alignment
-- **Resultat:** Vorlage 4.14 MB (statt 22.7 MB), 25 Slides, 0 XML-Fehler, sauber
-
-**Phase 2.7 — Transferwissen erweitert**
-- Transferwissen #12: python-pptx `chart.replace_data()` Bug-Trio
-- Transferwissen #13: PNG → JPEG mit Alpha-Check für PPTX-Optimierung
-- Transferwissen #14: Slide-Copy zwischen PPTX-Dateien (ZIP-Workflow)
-- Transferwissen #15: Streamlit Cross-Tab Daten-Sharing mit Fallback-Strategie
-- Transferwissen #16: PPTX-Validierung Multi-Layer-Toolchain
-- Transferwissen #17: Office-Dokumente sind ZIPs (Manipulation-Recipe)
-
-**Performance-Test Phase 2 (Endzustand):**
-- Generation: 0.60s (mit 5-Jahres-Zeitreihe)
-- PPTX-Größe: 4.22 MB
-- 0 XML-Fehler in Validation
-- 0 PK-Header in XML-Files (kein style-corruption)
-- `<c:externalData>` korrekt entfernt aus chart7 und chart8
-
-### Juni 2026 – Brainstorming PowerPoint-Export-Erweiterung
-- Email-Anforderung mit 3 Compliance-Punkten dokumentiert
-- Bestehender PPTX-Export erstmals in Doku dokumentiert
-- Performance-PPTX-Export als großes Feature spezifiziert (→ dann in Phase 2 implementiert)
-- Master-Vorlage `Anlagevorschlag_Master_Dynamische_Folien.pptx` als Quelle für Performance-Folie identifiziert
-
-### Juni 2026 – Performance-Tab auf Corporate Colors umgestellt
-- Strategie A: Konstanten in `shared.py` direkt umdefiniert (single source of truth)
-- `FFPB_DARK`, `FFPB_GOLD`, `FFPB_LIGHT`, `FFPB_BLUE2` auf Fürst-Fugger-Hex-Werte
-- Neue Konstanten: `FFPB_SAND`, `FFPB_PALETTE` (15 Farben)
-- Plotly-Linien-Charts nutzen `colorway=FFPB_PALETTE` (Transferwissen #10)
-
-### Juni 2026 – Disclaimer-Wording auf Vermögensverwaltung
-- Compliance-Abstimmung: "im Beratungsgespräch" → "der Vermögensverwaltungsstrategien im Kundengespräch"
-
-### Juni 2026 – Tab "Portfolio zusammenstellen" deaktiviert
-- Compliance-Entscheidung
-
-### Mai 2026 (Validierung) – Echtdaten-Test mit 17-Jahres-Zeitreihe
-- Sharpe-Berechnung und rf-Verarbeitung mit echter Zeitreihe (31.12.2008 – 12.05.2026, ~6300 Tageswerte) validiert
-
-### Mai 2026 – Sharpe Ratio auf Excess-Return-Variante
-
-### Mai 2026 – Risikofreier Zins & Sharpe Ratio (Erstimplementierung)
-
-### April 2026 – Initiale Doku-Version
+| Anforderung | Umsetzung |
+|---|---|
+| **Anti-Cherry-Picking** | Performance-Folien zeigen **die gesamte verfügbare Historie** |
+| **Benchmark wenn gemappt** | BM **immer** angezeigt (UI-Schalter ignoriert) |
+| **Nur Nach Kosten** | "Vor Kosten"-Linien werden im Export **nie** gezeigt |
+| **Strategieentwurf-Hinweis** | Folie 7: "Strategieentwurf im Rahmen einer Vermögensverwaltung" |
+| **Disclaimer auf jeder Folie** | Standard-Wertentwicklungs-Disclaimer + Quelle + Stand |
+| **Mindestens 5 Jahre Historie** | Durch "gesamte Historie zeigen" implizit erfüllt |
+| **Strategienamen-Bereinigung** | `cVV`, `Muster`, `Stiftung` werden entfernt |
+| **Keine stillen Datenverluste** | Kapazitäts-Fix F7 + `LAST_BUILD_ERRORS`-Diagnosen |
 
 ---
 
-## 15. Für den nächsten Chat / Kollegen
+## 12. PowerPoint-Vorlage Recipe — Neuaufbau/Slide-Import aus Quell-PPTX
 
-**Hochladen:** Diese MD + 4 aktive Code-Dateien (`streamlit_app.py`, `modules/shared.py`, `modules/portfolioanalyse.py`, `modules/pptx_export.py`).  
-**Sagen:** "Lies die PROJEKT_DOKUMENTATION.md zuerst komplett. Dann [Aufgabe]."  
-**Bei Problemen:** Screenshot + erwartetes Verhalten + welche Dateien aktuell deployed sind.
+Das vollständige 8-Phasen-Recipe (Basis kopieren → Slide-Import mit
+Pfad-Mapping → .rels aktualisieren → presentation.xml → slideMaster →
+ContentTypes → PNG→JPEG → ZIP) steht in **Transferwissen #14** und wurde
+in diesem Projekt ZWEIMAL erfolgreich angewendet:
+
+1. **Juni 2026 (v7):** Standard-Vorlage sauber neu gebaut aus Original +
+   `Anlagevorschlag_Master_Dynamische_Folien.pptx` (Performance-Folie);
+   19 PNGs → JPEG; 22,7 MB → 4,14 MB; 25 Slides, 0 XML-Fehler,
+   Generierung 0,6s. Post-Build-Mods: "AKTUELLE STRUKTUR",
+   "Marktrisikowert"-Header, Linien-Y-Alignment (EMU; 914400 EMU = 1 Zoll).
+2. **Juli 2026:** Wertentwicklungs-Folie (aus dem alten VBA-Tool) in die
+   Standard-Vorlage integriert → **26 Slides**; außerdem
+   `Vorlage_Thema.pptx` bild-optimiert (24 MB → 3,95 MB, Transferwissen #13).
+
+**Regeln bei Vorlage-Updates:**
+- Original-Vorlagen immer als Master archivieren
+- Bei "Vorlage scheint kaputt": lieber neu aufbauen statt reparieren
+- Shape-Namen müssen exakt stimmen
+- Große .pptx im GitHub NIE per Web-UI umbenennen (Transferwissen #23) —
+  immer frisch hochladen, danach Dateigröße im Repo prüfen
+
+---
+
+## 13. Lokaler Batch `erstelle_broschueren.py` (Stand: PAUSIERT)
+
+**Zweck:** Massen-Erzeugung der Broschüren OHNE Streamlit/Cloud — z.B. alle
+Strategien einer Familie in einem Lauf, lokal, reproduzierbar.
+
+**Architektur:**
+- `modules/dataload.py`: streamlit-freie KOPIEN der Loader
+  (`detect_newest_date_tag`, `load_all_csvs`, `build_portfolio_timeseries`).
+  Bewusst KEIN Import aus `modules.shared` (das importiert Streamlit).
+  Abhängigkeiten nur: pandas, numpy, python-pptx, openpyxl, lxml.
+- `VORLAGEN`-Konfiguration je Familie: Pfad, erwartete_folien,
+  block_positionen, entfernen, Modus (`zusammen` = eine Datei mit allen
+  Strategien / `einzeln` = eine Datei je Strategie), Dateiname.
+- Nutzt dieselbe `pptx_export`-Logik wie die App (Konsistenz), inkl.
+  Multi-Layer-Validierung (`validiere_pptx`) je erzeugter Datei.
+
+**Bewiesen (Juli 2026):** Kompletter Batch-Lauf mit HART blockiertem
+Streamlit-Import → identische Ergebnisse (CVV 28 Folien, Kennzahlen
+befüllt, 0 Build-Errors).
+
+**Status:** PAUSIERT — die Firmen-IT lässt lokale Paket-Installationen nur
+schwer zu; Fokus liegt deshalb auf der Streamlit-App. Der Batch-Stand ist
+aber aktuell (Duration aus Titeln steht dort noch aus → Backlog Punkt 2!).
+
+---
+
+## 14. Download-Problem Firmen-Gateway (an IT übergeben — KEIN Code-Thema)
+
+Der PowerPoint-Download aus der Streamlit-Cloud scheitert firmenseitig oft
+am **Atruvia Secure Web Gateway / Skyhigh** (Regel "Block If Virus was
+Found") — statt der Datei kommt eine `progress.htm`. Die Datei wird von
+Streamlit korrekt bereitgestellt (`/~/+/media/…pptx`); es scheitert der
+Scan-Vorgang des Gateways, NICHT der Code. **Philip hat der IT die
+Whitelist-Ausnahme mitgegeben** (App-Domain vom Scan ausnehmen).
+Rückfallebenen: nur den `/~/+/media/`-Pfad ausnehmen oder Scan-Timeout
+erhöhen. Langfristig löst **internes Hosting** sowohl das Download- als
+auch das Cloud-Update-Problem (Backlog).
+
+---
+
+## 15. Backlog (Stand 07.07.2026, nach Priorität)
+
+1. **requirements.txt Python-3.14-kompatibel pinnen** (Transferwissen #20).
+   Guter Zeitpunkt: JETZT — Streamlit 1.59.0 ist mit dem aktuellen Code
+   nachweislich verifiziert. Erst prüfen, welche streamlit/pandas/numpy-
+   Versionen unter 3.14 bauen, dann pinnen.
+2. **Duration-Inkonsistenz Batch vs. App (WICHTIG):** Die App berechnet
+   Duration/Rendite seit 03.07. aus den Titeln; der Duration-Ordner ist
+   gelöscht. Der BATCH (`erstelle_broschueren.py` ~Z.288 +
+   `dataload.lade_duration`) liest aber noch den alten Ordner → Duration
+   "–" oder veraltete Werte. TODO: Titel-Berechnung
+   (`duration_info_aus_bestand`/`get_bond_summary`) in ein UI-freies Modul
+   ziehen und im Batch aus `df_pf` rechnen; `DATEN_DURATION` entfällt dann
+   komplett. (Voraussetzung erfüllt: Bestands-CSVs tragen Duration+Rendite.)
+3. **Spalte "Währung" in Daten_PF** — Philip liefert per Push nach;
+   `fill_einzeltitel_themen_slide` füllt dann automatisch.
+4. **Vorlagen-Familien ESG/CVV/ETF anlegen + kalibrieren:** je Familie
+   Vorlage bauen, Shape-Namen prüfen, `block_positionen`/`erwartete_folien`
+   in `VORLAGEN_FAMILIEN` eintragen, Erstlauf + PowerPoint-Sichtprüfung.
+   Mapping-Spalte "Powerpoint Familie" vollständig befüllen.
+5. **`generate_pf_pdf` toter Code** in portfolioanalyse.py entfernbar.
+6. **Download-Whitelist bei IT nachhalten** (Abschnitt 14); parallel
+   **internes Hosting evaluieren** (löst Download + Cloud-Updates dauerhaft).
+7. **Alt-Aufgaben aus Phase 2 — Status prüfen:** PDF-Seitenzahlen
+   (Position-Spec stand aus) und dynamische PPTX-Seitenzahlen. Ob sie noch
+   gewünscht sind, ist offen — vor Umsetzung mit Philip klären.
+8. Ggf. F2/F3-Varianten der Performance-Folie (ohne BM / Berater-Zeitraum);
+   Sharpe + rf-Linie auch in der Portfolioanalyse; Portfolio-Builder-
+   Reaktivierung bei Bedarf.
+
+---
+
+## 16. Changelog
+
+### 07.07.2026 – Navigations-Umbau: st.tabs → segmented_control
+- **Bug:** Strategie-Auswahl im Portfolioanalyse-Tab warf die Ansicht auf
+  Tab 1 zurück (bekanntes st.tabs-Verhalten, GitHub #6257/#11160/#4996/#12554;
+  `key`+`on_change`+`default` halfen nicht — `default` ist bei gesetztem key
+  nach dem ersten Run wirkungslos)
+- **Fix:** `st.segmented_control(key="nav_view", required=True)` oben auf der
+  Seite; Tab-Bodies → `if/else`. Keep-Alive-Block für Widget-States
+  (Trigger-Widgets ausgenommen). Zentrale Datenbereitstellung
+  (`perf_timeseries`/`perf_d2c`/`perf_d2b`) VOR die Navigation gezogen;
+  `st.stop()` der Performance-Ansicht reißt die Portfolioanalyse nicht mehr mit
+- **Verifikation:** AppTest unter exakt Streamlit 1.59.0 (Selectbox-Rerun →
+  Navigation bleibt; View-Wechsel → Widget-Werte erhalten); py_compile;
+  AST-Check (alle 35 Funktionen, Bereitstellung vor Navigation); Deploy
+  bestätigt. `portfolioanalyse.py` unverändert
+- Transferwissen #18, #19, #24
+
+### 06.07.2026 – Streamlit-Cloud-Versionsfalle
+- Reboot zog Streamlit 1.59.0 + pandas 3.0 + numpy 2.5 (wegen `>=`);
+  Downgrade-Pinnen hing unter Python 3.14 → zurück auf `>=`, App läuft
+- LEARNING: bei "lief gestern noch" ZUERST Deploy-Log (Paketversionen) prüfen
+- Transferwissen #20
+
+### 04.–06.07.2026 – Themen-Broschüren + lokaler Batch
+- **Themen-Broschüren** (Pro/Pro Dividende/Offensiv): familiengesteuerte
+  Vorlagenwahl über Mapping-Spalte "Powerpoint Familie" (Variante A);
+  `VORLAGEN_FAMILIEN`, `_familie_fuer_strategie`, `_vorlage_fuer_familie`
+  (robuste, case-/whitespace-tolerante Erkennung, sicherer Fallback auf
+  Standard); Blöcke `einzeltitel_themen` (7-Spalten-Tabelle mit Währung) und
+  `rollierend` (YTD/1/3/5/10 J., bit-identisch zur Tool-Tabelle);
+  `template_config["block_reihenfolge"]`
+- `Vorlage_Thema.pptx` 24 MB → 3,95 MB (24 RGBA-PNGs, opake → JPG Q82);
+  F10-Summenzeile bereinigt; F11-Ringe holeSize 79→55
+- GitHub-Web-Rename zerstörte eine große PPTX (2-Byte-Datei) →
+  Transferwissen #23; LFS-Zeiger-Diagnose in den Export eingebaut
+- **PDF-Export im Portfolioanalyse-Bereich entfernt** (nur noch PowerPoint)
+- **Lokaler Batch** `erstelle_broschueren.py` + `modules/dataload.py`:
+  streamlit-frei (mit blockiertem Streamlit-Import bewiesen); pausiert
+  wegen IT-Paketinstallation
+
+### 03.07.2026 – Konsistenz-Tag
+- **YTD-Fix** rollierende Tabelle: Start `asof(31.12. Vorjahr)` statt
+  `asof(01.01.)` → Tabelle == Balken-Chart == PP bit-identisch
+  (Transferwissen #22)
+- **Konsistenz-Doktrin** Tool ↔ PP festgelegt (PP kanonisch: volle Historie
+  + Standardsatz) + Info-Caption benennt live jede aktive Abweichung
+- **Duration/Rendite aus den Titeln** (`duration_info_aus_bestand` →
+  `get_bond_summary`, anleihe-gewichtet Variante B; verifiziert 3,96 /
+  3,28 %); Duration-Ordner aus dem Repo gelöscht
+- **Arrow-String-Fix** in `get_bond_summary` (Python 3.14 / pandas-Arrow;
+  Transferwissen #21)
+- **replace_data Bug 4** entdeckt + gefixt: Achsen-numFmt-Reset
+  (valAx/catAx/dateAx; numFmt direkt nach c:axPos) — Transferwissen #12
+- `perf_d2b` (Benchmark-Texte) für die ***-Fußnote der Wertentwicklungs-Folie
+- **F9-Anpassungen:** YTD-Balken (Schalter `F9_BAR_INCLUDE_CURRENT_YEAR`),
+  datenbasierte Achsen-Untergrenze, statische Quelle, Tool-Fußnote
+- Korrektheits-Verifikation der Exportzahlen gegen unabhängige Nachrechnung
+
+### Ende Juni/02.07.2026 – Modul-Architektur + F8
+- **PPTX-Code in 4 Module aufgeteilt**: pptx_helpers / pptx_charts /
+  pptx_slides / pptx_export (Schichten-Architektur, pptx_slides kennt kein
+  Streamlit)
+- **Berechnungs-Logik nach `modules/analytics.py`** (Single Source of Truth
+  für App UND Export; streamlit_app.py behält dünne Wrapper)
+- **Wertentwicklungs-Folie (F8)** aus dem alten VBA-Tool per ZIP-Slide-Copy
+  integriert → Standard-Vorlage 26 Slides; `fill_wertentwicklung_slide`
+  mit Platzhalter-Modus
+- **Donut-Rückbau**: matplotlib-PNG-Ansatz (`png_charts.py`) verworfen,
+  native PP-Donuts via `replace_chart_data` (Template-Styling bleibt)
+- **Kapazitäts-Fix F7-Tabelle**: `ensure_table_capacity` +
+  `fit_shape_to_table`; Geometrie aus echten Exporten kalibriert; nie mehr
+  stilles Abschneiden von Positionen
+- LibreOffice-≠-PowerPoint-Erkenntnisse + `dateAx baseTimeUnit`
+  (Transferwissen #16-Update)
+
+### Juni 2026 (Phase 2) – Performance-PPTX-Export + Vorlage v7
+- `compute_performance_data`, `_fill_performance_slide`,
+  `_replace_chart_data_safe` (damals 3 Bugs), Streamlit-Integration mit
+  Fallback-Loader, MwSt-Checkbox, Vorlage v7 sauber neu gebaut
+  (22,7 → 4,14 MB, 25 Slides). Details siehe Phase-2-Stand dieser Doku.
+
+### Früher (Kurzform)
+- Juni 2026: Corporate Colors (FFPB_PALETTE), Disclaimer-Wording,
+  Tab "Portfolio zusammenstellen" deaktiviert (Compliance)
+- Mai 2026: Sharpe (Excess-Variante) + risikofreier Zins, validiert an
+  17-Jahres-Echtzeitreihe inkl. Negativzinsphase
+- April 2026: Initiale Doku-Version
+
+---
+
+## 17. Für den nächsten Chat / Kollegen
+
+**Hochladen:** Diese MD + die aktiven Code-Dateien (`streamlit_app.py`,
+`modules/shared.py`, `modules/analytics.py`, `modules/portfolioanalyse.py`,
+`modules/pptx_helpers.py`, `modules/pptx_charts.py`, `modules/pptx_slides.py`,
+`modules/pptx_export.py`; für Batch-Themen zusätzlich
+`erstelle_broschueren.py` + `modules/dataload.py`).
+**Sagen:** "Lies die PROJEKT_DOKUMENTATION.md zuerst komplett. Dann [Aufgabe]."
+**Bei Problemen:** Screenshot + erwartetes Verhalten + welche Dateien aktuell
+deployed sind.
+
+**Arbeitsstil (etabliert, bitte beibehalten):** Diagnose vor Lösung (am
+Artefakt/XML/Log beweisen, NICHT raten) · gegen echte Dateien und den echten
+Deploy testen · komplette Dateien liefern · deutsche Kommentare · Annahmen
+markieren · ein konkreter Prüfstein je Lieferung.
+
+**Bewährte Beweismittel:**
+- TEST-Titel-Trick (st.title kurz ändern) → beweist, dass der Deploy ankommt
+- Farbige Marker-Boxen (st.success/st.error) → beweist, welcher Code-Block läuft
+- Deploy-Log (Manage app → Konsole) → zeigt installierte Paketversionen
+- AppTest (Transferwissen #24) → beweist Rerun-/State-Verhalten vor dem Deploy
+- Generierte-PNG-Dateigröße → verlässliches Signal, ob eine Datei sich wirklich geändert hat
 
 **Wichtig bei CSV-Änderungen:** Nach Deploy IMMER Cache leeren (Transferwissen #7).
 
-**Wichtig bei PPTX-Änderungen:** 
-- Nach jedem Code-Update einmal lokal mit echten Daten testen, in PowerPoint öffnen
-- python-pptx `chart.replace_data()` NIE direkt nutzen — immer durch `_replace_chart_data_safe()` (Transferwissen #12)
-- Bei Datei-Größe > 9 MB: PNG-Optimierung prüfen (Transferwissen #13)
-- Bei "Reparieren"-Dialog: Multi-Layer-Validierung laufen lassen (Transferwissen #16)
+**Wichtig bei PPTX-Änderungen:**
+- Nach jedem Code-Update lokal mit echten Daten testen, in ECHTEM PowerPoint öffnen (LO reicht nicht — #16)
+- `chart.replace_data()` NIE direkt — immer `replace_chart_data_safe()` (#12, jetzt 4 Bugs); Ringe über `replace_chart_data` (XML-in-place)
+- Bei Datei-Größe > 9 MB: PNG-Optimierung prüfen (#13)
+- Bei "Reparieren"-Dialog: Multi-Layer-Validierung (#16)
+- Große .pptx im Repo NIE per Web-UI umbenennen; Dateigröße nach Upload prüfen (#23)
 
-**Wichtig bei Vorlage-Updates:**
-- Original-Vorlage immer als Master behalten (`/mnt/user-data/uploads/` oder eigenes Archiv)
-- Bei "Vorlage scheint kaputt": lieber neu aufbauen (Recipe in Abschnitt 11) statt zu reparieren
-- Shape-Namen müssen exakt übereinstimmen (`Titel`, `Tabelle`, `Diagramm links`, `Diagramm rechts`, ...)
+**Wichtig bei Streamlit-Änderungen:**
+- Navigation/State: #18 + #19 lesen, BEVOR an nav_view/Keep-Alive geschraubt wird
+- Reihenfolge in streamlit_app.py (Abschnitt 7) nicht durcheinanderbringen —
+  insbesondere Datenbereitstellung VOR der Navigation lassen
+- Bei "lief gestern noch": Deploy-Log zuerst (#20)
+- Chat-Praktisches: `.py`-Uploads kommen in sehr langen Chats teils leer an →
+  als `.txt` hochladen oder Code einfügen; bei wiederholt leeren Uploads neue Session
 
-*Stand: Juni 2026 (Phase 2 abgeschlossen)*
+*Stand: 07.07.2026 (Phase 3)*
