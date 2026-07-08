@@ -73,7 +73,7 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
 
 
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
-                                 gap_in=0.45, min_gap_deg=24.0, rand_in=0.12):
+                                 gap_in=0.25, min_gap_deg=24.0, rand_in=0.12):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -139,22 +139,50 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     label_ang = [0.0] * len(mids)
     for si, i in enumerate(order):
         label_ang[i] = ang[si]
-    # 5) Ziel- und Default-Position → Offset (Bruchteile des Rahmens)
+    # 5) Zielpositionen (absolut, in Zoll) berechnen — mit Rand-Begrenzung,
+    #    damit große Ringe nicht abgeschnitten werden.
+    ziel = []
+    for i in range(len(mids)):
+        la = math.radians(label_ang[i])
+        sx, sy = math.sin(la), -math.cos(la)
+        r_use = R_target
+        if sx > 1e-6:    r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
+        elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
+        if sy > 1e-6:    r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
+        elif sy < -1e-6: r_use = min(r_use, (rand_in - cy) / sy)
+        r_use = max(r_use, R_out + 0.05)      # nie innerhalb des Rings
+        ziel.append([cx + r_use * sx, cy + r_use * sy])
+
+    # 6) ADAPTIVE Überlappungs-Auflösung im ABSOLUTEN Raum — garantiert, dass
+    #    sich keine zwei Zahlen überlappen, egal wie die Segmente verteilt
+    #    sind. Zu dicht stehende Labels werden vertikal auseinandergedrängt
+    #    (Zahlen sind waagerechter Text → Überlappung ist v.a. vertikal),
+    #    dabei im Rahmen gehalten. min_v/min_h ≈ halbe Label-Höhe/-Breite.
+    min_v, min_h = 0.205, 0.60
+    for _ in range(120):
+        bewegt = False
+        reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
+        for a in range(len(reihenfolge)):
+            for b in range(a + 1, len(reihenfolge)):
+                i, j = reihenfolge[a], reihenfolge[b]
+                if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
+                    schub = (min_v - abs(ziel[i][1] - ziel[j][1])) / 2.0 + 0.005
+                    hoch, runter = (i, j) if ziel[i][1] <= ziel[j][1] else (j, i)
+                    ziel[hoch][1] = max(rand_in, ziel[hoch][1] - schub)
+                    ziel[runter][1] = min(frame_h_in - rand_in, ziel[runter][1] + schub)
+                    bewegt = True
+        if not bewegt:
+            break
+
+    # 7) Offsets schreiben (Nullpunkt = Ring-Band-Mitte des Segments; so
+    #    rechnet PowerPoint den manualLayout-Offset bei vorhandenem
+    #    manualLayout — empirisch bestätigt).
     from lxml import etree
     dlbls = {int(d.find(_q("idx")).get("val")): d
              for d in root.iter(_q("dLbl")) if d.find(_q("idx")) is not None}
     for i in range(len(mids)):
-        la = math.radians(label_ang[i]); md = math.radians(mids[i])
-        sx, sy = math.sin(la), -math.cos(la)
-        # max. Radius entlang der Richtung, bis das Label an den Rahmenrand
-        # stößt (Rand-Puffer rand_in) → große Ringe werden nicht abgeschnitten
-        r_use = R_target
-        if sx > 1e-6:   r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
-        elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
-        if sy > 1e-6:   r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
-        elif sy < -1e-6: r_use = min(r_use, (rand_in - cy) / sy)
-        r_use = max(r_use, R_out + 0.05)   # nie innerhalb des Rings
-        tx, ty = cx + r_use * sx, cy + r_use * sy
+        md = math.radians(mids[i])
+        tx, ty = ziel[i]
         dx, dy = cx + band_center * math.sin(md), cy - band_center * math.cos(md)
         ox, oy = (tx - dx) / frame_w_in, (ty - dy) / frame_h_in
         d = dlbls.get(i)
@@ -195,7 +223,7 @@ def _hat_dateax(chart):
     return _root(chart).find(".//" + _q("dateAx")) is not None
 
 
-def nachbearbeiten(prs, hole_size=79, label_gap_in=0.45):
+def nachbearbeiten(prs, hole_size=79, label_gap_in=0.25):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
