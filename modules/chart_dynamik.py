@@ -48,19 +48,45 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
     return (lo, hi)
 
 
-def ring_labels_aussen_dynamisch(chart, radius=0.06, aspect=1.0):
-    """Positioniert die Datenlabels eines Doughnut-Rings radial außen —
-    berechnet aus dem tatsächlichen Segment-Mittelwinkel, damit die Zahlen
-    IMMER am richtigen Segment sitzen (unabhängig von den Anteilen).
-    Zusätzlich einfache Kollisionsvermeidung: liegen zwei benachbarte Labels
-    zu dicht, werden sie leicht auseinandergeschoben.
+def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
+                                 gap_in=0.20, min_gap_deg=24.0):
+    """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
+
+    Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
+    (Mittelpunkt, Außenradius) und setzt jedes Label an eine berechnete
+    Zielposition knapp außerhalb (gap_in Zoll). Der manualLayout-Offset wird
+    als (Ziel − PP-Default) berechnet, wobei der Default (Band-Mitte) aus der
+    holeSize abgeleitet wird — dadurch landet das Label in PowerPoint exakt
+    am Ziel, unabhängig davon wie dünn der Ring ist.
+
+    Selbstkalibrierend pro Chart: funktioniert für jede Segmentzahl und jede
+    Plot-Größe (die drei Themen-Ringe haben unterschiedlich große Plots!).
+    Zu dicht stehende Labels werden über einen Mindest-Winkelabstand
+    (min_gap_deg) auseinandergespreizt → keine Überlappung.
+
+    frame_w_in / frame_h_in = Breite/Höhe des Chart-Rahmens in Zoll
+    (aus dem Shape; in nachbearbeiten() automatisch übergeben).
     """
-    from lxml import etree
-    # x_scale = H/B: manualLayout-x ist Bruchteil der BREITE, y der HÖHE.
-    # Bei breiterem Rahmen (aspect>1) muss x gestaucht werden, sonst
-    # schießen die seitlichen Labels zu weit raus.
-    x_scale = 1.0 / aspect if aspect else 1.0
     root = _root(chart)
+    # 1) plotArea inner-Rechteck (Bruchteile des Rahmens)
+    pa = root.find(".//" + _q("plotArea") + "/" + _q("layout") + "/" + _q("manualLayout"))
+    if pa is None:
+        return None
+    def _g(tag):
+        e = pa.find(_q(tag)); return float(e.get("val")) if e is not None else None
+    px, py, pw, ph = _g("x"), _g("y"), _g("w"), _g("h")
+    if None in (px, py, pw, ph):
+        return None
+    # 2) Ring-Geometrie in Zoll
+    left, right = px * frame_w_in, (px + pw) * frame_w_in
+    top, bot = py * frame_h_in, (py + ph) * frame_h_in
+    cx, cy = (left + right) / 2.0, (top + bot) / 2.0
+    R_out = min(right - left, bot - top) / 2.0
+    hs_el = root.find(".//" + _q("holeSize"))
+    hole = float(hs_el.get("val")) / 100.0 if hs_el is not None else 0.5
+    band_center = R_out * (1 + hole) / 2.0     # PP-Default-Radius der Labels
+    R_target = R_out + gap_in                  # knapp außerhalb
+    # 3) Segment-Mittelwinkel (Grad, im Uhrzeigersinn ab 12 Uhr)
     val_block = root.find(".//" + _q("val"))
     if val_block is None:
         return None
@@ -68,55 +94,36 @@ def ring_labels_aussen_dynamisch(chart, radius=0.06, aspect=1.0):
     total = sum(vals) or 1.0
     fsa_el = root.find(".//" + _q("firstSliceAng"))
     fsa = float(fsa_el.get("val")) if fsa_el is not None else 0.0
-
-    # Mittelwinkel je Segment (Grad, im Uhrzeigersinn ab 12 Uhr)
     mids, kum = [], 0.0
     for v in vals:
-        frac = v / total
-        mids.append(fsa + (kum + frac / 2.0) * 360.0)
-        kum += frac
-
-    # Positionen berechnen (Offset vom Default = Segment-Mittelpunkt am Ring)
-    pos = []
-    for theta in mids:
-        r = math.radians(theta)
-        pos.append([radius * x_scale * math.sin(r), -radius * math.cos(r)])
-
-    # ── Überlappungs-Auflösung (damit ALLE Zahlen sichtbar bleiben) ──
-    # Labels sind waagerechter Text; Überlappung ist v.a. VERTIKAL. Wir
-    # drängen zu dicht stehende Labels iterativ in y auseinander. min_v/min_h
-    # ~ halbe Label-Höhe/-Breite als Bruchteil des Rahmens (5.24x4.55in).
-    min_v, min_h = 0.052, 0.135
-    for _ in range(80):
+        f = v / total; mids.append(fsa + (kum + f / 2) * 360); kum += f
+    # 4) Label-Winkel mit Mindest-Winkelabstand spreizen (gegen Überlappung)
+    order = sorted(range(len(mids)), key=lambda i: mids[i] % 360)
+    ang = [mids[i] % 360 for i in order]
+    for _ in range(200):
         bewegt = False
-        reihenfolge = sorted(range(len(pos)), key=lambda i: pos[i][1])
-        for a in range(len(reihenfolge)):
-            for b in range(a + 1, len(reihenfolge)):
-                i, j = reihenfolge[a], reihenfolge[b]
-                dy = pos[j][1] - pos[i][1]
-                dx = pos[j][0] - pos[i][0]
-                if abs(dy) < min_v and abs(dx) < min_h:
-                    schub = (min_v - abs(dy)) / 2.0 + 0.002
-                    if pos[i][1] <= pos[j][1]:
-                        pos[i][1] -= schub; pos[j][1] += schub
-                    else:
-                        pos[i][1] += schub; pos[j][1] -= schub
-                    bewegt = True
+        for k in range(len(ang)):
+            k2 = (k + 1) % len(ang)
+            gap = (ang[k2] - ang[k]) % 360
+            if 0 < gap < min_gap_deg:
+                push = (min_gap_deg - gap) / 2
+                ang[k] = (ang[k] - push) % 360
+                ang[k2] = (ang[k2] + push) % 360
+                bewegt = True
         if not bewegt:
             break
-
-    # Offsets begrenzen, damit KEIN Label über den Rahmenrand geschoben wird
-    # (sonst schneidet PowerPoint es ab → "Label verschwindet"). Grenzen als
-    # Bruchteil des Rahmens, konservativ.
-    MAX_X, MAX_Y = 0.145, 0.115
-    for p in pos:
-        p[0] = max(-MAX_X, min(MAX_X, p[0]))
-        p[1] = max(-MAX_Y, min(MAX_Y, p[1]))
-
-    # in die dLbl schreiben (nur vorhandene idx = echte Segmente)
+    label_ang = [0.0] * len(mids)
+    for si, i in enumerate(order):
+        label_ang[i] = ang[si]
+    # 5) Ziel- und Default-Position → Offset (Bruchteile des Rahmens)
+    from lxml import etree
     dlbls = {int(d.find(_q("idx")).get("val")): d
              for d in root.iter(_q("dLbl")) if d.find(_q("idx")) is not None}
-    for i, (ox, oy) in enumerate(pos):
+    for i in range(len(mids)):
+        la = math.radians(label_ang[i]); md = math.radians(mids[i])
+        tx, ty = cx + R_target * math.sin(la), cy - R_target * math.cos(la)
+        dx, dy = cx + band_center * math.sin(md), cy - band_center * math.cos(md)
+        ox, oy = (tx - dx) / frame_w_in, (ty - dy) / frame_h_in
         d = dlbls.get(i)
         if d is None:
             continue
@@ -127,15 +134,15 @@ def ring_labels_aussen_dynamisch(chart, radius=0.06, aspect=1.0):
         if ml is None:
             ml = etree.SubElement(layout, _q("manualLayout"))
         for tag, val in (("x", ox), ("y", oy)):
-            el = ml.find(_q(tag))
-            if el is None:
-                el = etree.SubElement(ml, _q(tag))
-            el.set("val", f"{val:.4f}")
-    # überzählige Label-Slots (idx >= Anzahl Segmente) entfernen
+            e = ml.find(_q(tag))
+            if e is None:
+                e = etree.SubElement(ml, _q(tag))
+            e.set("val", f"{val:.4f}")
+    # überzählige Label-Slots (idx >= Segmentzahl) entfernen
     for idx, d in dlbls.items():
         if idx >= len(vals):
             d.getparent().remove(d)
-    return list(zip(range(len(mids)), [round(m % 360, 1) for m in mids]))
+    return {"segmente": len(vals), "R_out": round(R_out, 3), "R_target": round(R_target, 3)}
 
 
 def ring_holesize(chart, hole=79):
@@ -155,7 +162,7 @@ def _hat_dateax(chart):
     return _root(chart).find(".//" + _q("dateAx")) is not None
 
 
-def nachbearbeiten(prs, hole_size=79, ring_label_radius=0.06):
+def nachbearbeiten(prs, hole_size=79, label_gap_in=0.20):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
@@ -179,9 +186,11 @@ def nachbearbeiten(prs, hole_size=79, ring_label_radius=0.06):
             try:
                 if "DOUGHNUT" in typ:
                     ring_holesize(chart, hole_size)
-                    # aspect = Breite/Höhe des Chart-Rahmens → korrekte x-Stauchung
-                    _asp = (shape.width / shape.height) if shape.height else 1.0
-                    ring_labels_aussen_dynamisch(chart, radius=ring_label_radius, aspect=_asp)
+                    # Rahmenmaße in Zoll (EMU/914400) für die geometrische
+                    # Label-Platzierung.
+                    _fw = shape.width / 914400.0
+                    _fh = shape.height / 914400.0
+                    ring_labels_aussen_dynamisch(chart, _fw, _fh, gap_in=label_gap_in)
                     stat["ringe"] += 1
                 elif "LINE" in typ and _hat_dateax(chart):
                     datumsachse_an_daten(chart)
