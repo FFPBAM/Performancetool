@@ -1,0 +1,23 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+07.07.2026;3M Co.;851745;3,759%;USD;0,082%;2,106%;-;0%;-;-;Prod. Gew. & Industrie;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Airbus SE;938914;5,736%;EUR;0,288%;4,876%;-;0%;-;-;Prod. Gew. & Industrie;Europa ohne Deutschland;Aktien;5;Comdirect 100
+07.07.2026;Alphabet Inc. A;A14Y6F;4,724%;USD;1,747%;20,782%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Apple Inc.;865985;3,005%;USD;0,077%;2,589%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Berkshire Hathaway Inc. B;A0YJQ2;6,251%;USD;0,206%;3,208%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Deutsche Telekom AG;555750;3,492%;EUR;-0,154%;-3,985%;-;0%;-;-;Informationstechnologie;Deutschland;Aktien;5;Comdirect 100
+07.07.2026;Global Active ESG Equity ETF (Invesco);A2PHJT;10,326%;USD;0,492%;4,904%;-;0%;-;-;Index;Global;Aktien;4;Comdirect 100
+07.07.2026;Intuitive Surgical Inc.;888024;3,000%;USD;-0,850%;-22,341%;-;0%;-;-;Prod. Gew. & Industrie;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;LVMH Moët Henn. L. Vuitton SE;853292;3,228%;EUR;-0,886%;-22,033%;-;0%;-;-;Handel,Konsum;Europa ohne Deutschland;Aktien;5;Comdirect 100
+07.07.2026;Mercadolibre Inc.;A0MYNP;2,830%;USD;-0,203%;-7,322%;-;0%;-;-;Handel,Konsum;Emerging Markets;Aktien;5;Comdirect 100
+07.07.2026;Meta Platforms Inc. A;A1JWVX;4,178%;USD;-0,144%;-3,913%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Microsoft Corp.;870747;4,125%;USD;-0,825%;-17,053%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Münchener Rückvers.-Ges. AG;843002;5,789%;EUR;-0,614%;-9,641%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Comdirect 100
+07.07.2026;NVIDIA Corp.;918422;4,624%;USD;0,839%;8,695%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Philip Morris Internat. Inc.;A0NDBJ;6,753%;USD;1,249%;22,656%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Rheinmetall AG;703000;1,487%;EUR;-0,580%;-28,366%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Comdirect 100
+07.07.2026;Shell PLC;A3C99G;4,424%;GBP;0,512%;13,017%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Europa ohne Deutschland;Aktien;5;Comdirect 100
+07.07.2026;VISA Inc.;A0NC7B;2,775%;USD;0,108%;3,582%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Walmart Inc.;860853;4,707%;USD;0,410%;3,466%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;Waste Management Inc.;893579;4,404%;USD;0,466%;11,584%;-;0%;-;-;Versorger;Nordamerika;Aktien;5;Comdirect 100
+07.07.2026;XETRA Gold;A0S9GB;7,704%;EUR;-0,264%;-3,107%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Comdirect 100
+;;;;;;;;;;;;;;;

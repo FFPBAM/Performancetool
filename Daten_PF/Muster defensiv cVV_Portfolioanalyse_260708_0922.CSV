@@ -1,0 +1,28 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+07.07.2026;Bayer IHS 4 % 26.08.26;A351UZ;3,232%;EUR;0,042%;1,275%;26.08.2026;4,0000%;0,1342;3,4616%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;BMW IHS 3,125 % 22.07.29;A4D5RW;3,666%;EUR;0,023%;0,610%;22.07.2029;3,1250%;2,8632;3,2138%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Deutsche Post IHS 3,0 % 25.11.31;A460PH;4,770%;EUR;0,058%;1,166%;25.11.2031;3,0000%;4,9723;3,2427%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Dt. Bahn IHS 1,875 % 24.05.30;A30VH4;3,230%;EUR;0,012%;0,368%;24.05.2030;1,8750%;3,7666;2,9540%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Dt. Telekom IHS 1,375 % 05.07.34;A2YNSK;3,319%;EUR;0,069%;2,046%;05.07.2034;1,3750%;7,6057;3,3796%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;E.ON IHS 3,448% 19.01.34;A460EP;4,008%;EUR;0,009%;0,215%;19.01.2034;3,4480%;6,7002;3,7173%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;EnBW Green Bond IHS 3,5 % 22.07.31;A3L1LT;3,547%;EUR;0,033%;0,915%;22.07.2031;3,5000%;4,5711;3,2955%;Corporates;Europa ohne Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Fraport IHS 1,875 % 31.03.28;A3E5F0;4,005%;EUR;0,040%;0,971%;31.03.2028;1,8750%;1,7103;3,1330%;Corporates;Deutschland;Renten;5;Muster defensiv cVV
+07.07.2026;Fresenius IHS 0,875 % 01.10.31;A3KN0R;3,351%;EUR;0,018%;0,514%;01.10.2031;0,8750%;5,0976;3,4822%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Future of Defence UCITS ETF (HanETF);A3EB9T;3,020%;USD;0,531%;20,701%;-;0%;-;-;Index;Global;Aktien;5;Muster defensiv cVV
+07.07.2026;Goldman Sachs IHS 2 % 01.11.28;A19340;3,381%;EUR;0,025%;0,717%;01.11.2028;2,0000%;2,2591;2,8703%;Financials;Nordamerika;Renten;3;Muster defensiv cVV
+07.07.2026;Grenke Finance IHS 5,75 % 06.07.29 ;A3LY39;2,970%;EUR;0,018%;0,596%;06.07.2029;5,7500%;2,8422;3,8723%;Financials;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Heidelberg Materials IHS 3,75 % 31.05.32 ;A30V5U;3,653%;EUR;0,037%;0,982%;31.05.2032;3,7500%;5,4016;3,4531%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Hochtief IHS 1,25 % 03.09.31;A2YN2V;3,456%;EUR;-0,044%;-1,178%;03.09.2031;1,2500%;4,9671;3,6774%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Japan Equity Active ETF (GS);A4135A;2,580%;JPY;0,123%;4,908%;-;0%;-;-;Index;Japan;Aktien;4;Muster defensiv cVV
+07.07.2026;MSCI Europe Industrials Sector ETF (iShares);A2QBZ6;3,905%;EUR;0,510%;14,275%;-;0%;-;-;Index;Europa;Aktien;4;Muster defensiv cVV
+07.07.2026;MSCI World Healthcare ETF (Xtrackers);A113FD;2,524%;EUR;0,176%;7,586%;-;0%;-;-;Chemie,Pharma;Global;Aktien;4;Muster defensiv cVV
+07.07.2026;MSCI World IT ETF (Xtrackers);A113FM;3,270%;USD;0,631%;22,686%;-;0%;-;-;Informationstechnologie;Global;Aktien;5;Muster defensiv cVV
+07.07.2026;Nestle Finance IHS 2,875 % 14.01.32;A3L71X;3,954%;EUR;-0,008%;-0,214%;14.01.2032;2,8750%;5,1238;3,1686%;Corporates;Europa ohne Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Porsche IHS 4,25 % 27.09.30;A351SX;4,100%;EUR;0,058%;1,351%;27.09.2030;4,2500%;3,8494;3,7901%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;RCI Banque IHS 1,125 % 15.01.27;A28R15;3,884%;EUR;0,046%;1,162%;15.01.2027;1,1250%;0,5233;3,0743%;Financials;Europa ohne Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Semiconductor ETF (VanEck);A2QC5J;4,791%;EUR;2,665%;77,298%;-;0%;-;-;Nachhaltigkeit;Global;Aktien;6;Muster defensiv cVV
+07.07.2026;Stoxx Europe 600 Insurance ETF (iShares);A0H08K;2,338%;EUR;0,190%;8,568%;-;0%;-;-;Index;Europa;Aktien;4;Muster defensiv cVV
+07.07.2026;VW IHS 1,625 % 16.01.30;A1ZUTM;3,325%;EUR;0,009%;0,241%;16.01.2030;1,6250%;3,4296;3,4871%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;Würth Finance IHS 3 % 28.08.31;A3L4ZS;3,658%;EUR;0,067%;1,800%;28.08.2031;3,0000%;4,7285;3,0074%;Corporates;Deutschland;Renten;3;Muster defensiv cVV
+07.07.2026;XETRA Gold;A0S9GB;7,900%;EUR;-0,149%;-3,107%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Muster defensiv cVV
+;;;;;;;;;;;;;;;

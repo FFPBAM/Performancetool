@@ -1,0 +1,31 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+07.07.2026;Airbus SE;938914;4,069%;EUR;0,186%;4,904%;-;0%;-;-;Prod. Gew. & Industrie;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Allianz SE;840400;5,083%;EUR;0,419%;8,271%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Alphabet Inc. A;A14Y6F;4,534%;USD;0,972%;20,781%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Apple Inc.;865985;3,605%;USD;0,557%;17,742%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;ASML Holding N.V.;A1J4U4;4,176%;EUR;0,680%;18,859%;-;0%;-;-;Elektro;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Broadcom Inc.;A2JG9Z;1,566%;USD;-0,489%;-23,591%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Cisco Systems Inc.;878841;2,827%;USD;-0,095%;-3,211%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Coca-Cola Co.;850663;3,213%;USD;0,313%;10,498%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;E.ON SE;ENAG99;3,443%;EUR;0,548%;18,171%;-;0%;-;-;Versorger;Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Eli Lilly and Company;858560;4,559%;USD;0,732%;18,544%;-;0%;-;-;Chemie,Pharma;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Lam Research Corp.;A40L1V;2,581%;USD;-0,367%;-12,440%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Mercadolibre Inc.;A0MYNP;2,521%;USD;-0,206%;-7,322%;-;0%;-;-;Handel,Konsum;Emerging Markets;Aktien;5;Muster Dynamic cVV
+07.07.2026;Meta Platforms Inc. A;A1JWVX;3,226%;USD;-0,134%;-3,913%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Microsoft Corp.;870747;2,911%;USD;-1,004%;-27,570%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Münchener Rückvers.-Ges. AG;843002;3,627%;EUR;-0,382%;-9,641%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Netflix Inc.;552484;3,259%;USD;-0,615%;-16,368%;-;0%;-;-;Dienstleistungen;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Novartis AG;904278;3,547%;CHF;0,626%;20,180%;-;0%;-;-;Chemie,Pharma;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;NVIDIA Corp.;918422;4,486%;USD;0,377%;8,695%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Palo Alto Networks Inc.;A1JZ0Q;1,982%;USD;-0,088%;-4,252%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Philip Morris Internat. Inc.;A0NDBJ;4,318%;USD;0,802%;22,644%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Rheinmetall AG;703000;2,378%;EUR;-0,742%;-28,366%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Samsung Electronics Co. Ltd. (GDRs);896360;4,679%;EUR;3,582%;111,940%;-;0%;-;-;Elektro;Asien;Aktien;5;Muster Dynamic cVV
+07.07.2026;Schneider Electric SE;860180;2,453%;EUR;0,318%;14,091%;-;0%;-;-;Elektro;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Siemens AG;723610;3,175%;EUR;0,446%;15,300%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Siemens Energy AG;ENER6Y;2,540%;EUR;-0,276%;-9,720%;-;0%;-;-;Versorger;Deutschland;Aktien;5;Muster Dynamic cVV
+07.07.2026;Taiwan Semiconduct.Manufact.Co (ADRs);909800;3,254%;EUR;0,269%;8,841%;-;0%;-;-;Informationstechnologie;Asien;Aktien;5;Muster Dynamic cVV
+07.07.2026;VISA Inc.;A0NC7B;3,390%;USD;0,121%;3,584%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Walmart Inc.;860853;3,865%;USD;0,135%;3,471%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster Dynamic cVV
+07.07.2026;Waste Management Inc.;893579;3,552%;USD;0,372%;11,584%;-;0%;-;-;Versorger;Nordamerika;Aktien;5;Muster Dynamic cVV
+;;;;;;;;;;;;;;;

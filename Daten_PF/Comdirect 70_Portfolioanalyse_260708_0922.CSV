@@ -1,0 +1,24 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+07.07.2026;Airbus SE;938914;5,915%;EUR;0,284%;4,876%;-;0%;-;-;Prod. Gew. & Industrie;Europa ohne Deutschland;Aktien;5;Comdirect 70
+07.07.2026;Amazon.com Inc.;906866;4,309%;USD;0,388%;9,692%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 70
+07.07.2026;Apple Inc.;865985;3,057%;USD;0,077%;2,589%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 70
+07.07.2026;Bayer IHS 4 % 26.08.26;A351UZ;2,642%;EUR;0,033%;1,275%;26.08.2026;4,0000%;0,1342;3,4616%;Corporates;Deutschland;Renten;3;Comdirect 70
+07.07.2026;Belgien Staat 0,0 % 22.10.31;A287RJ;2,907%;EUR;0,011%;0,369%;22.10.2031;0%;5,2904;3,0209%;Staat/ Governments;Europa ohne Deutschland;Renten;3;Comdirect 70
+07.07.2026;Berkshire Hathaway Inc. B;A0YJQ2;7,139%;USD;0,228%;3,208%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Comdirect 70
+07.07.2026;Deutsche Telekom AG;555750;5,153%;EUR;-0,214%;-3,985%;-;0%;-;-;Informationstechnologie;Deutschland;Aktien;5;Comdirect 70
+07.07.2026;E.ON Green Bond IHS 3,875 % 12.01.35;A30V8B;2,102%;EUR;0,014%;0,656%;12.01.2035;3,8750%;7,3651;3,7217%;Corporates;Deutschland;Renten;3;Comdirect 70
+07.07.2026;Fraport IHS 1,875 % 31.03.28;A3E5F0;2,512%;EUR;0,024%;0,970%;31.03.2028;1,8750%;1,7103;3,1330%;Corporates;Deutschland;Renten;5;Comdirect 70
+07.07.2026;Global Active ESG Equity ETF (Invesco);A2PHJT;7,372%;USD;0,344%;4,904%;-;0%;-;-;Index;Global;Aktien;4;Comdirect 70
+07.07.2026;Heidelberg Materials IHS 3,75 % 31.05.32 ;A30V5U;2,967%;EUR;0,029%;0,982%;31.05.2032;3,7500%;5,4016;3,4531%;Corporates;Deutschland;Renten;3;Comdirect 70
+07.07.2026;Johnson & Johnson;853260;4,482%;USD;0,517%;12,990%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 70
+07.07.2026;LVMH Moët Henn. L. Vuitton SE;853292;3,338%;EUR;-0,903%;-22,033%;-;0%;-;-;Handel,Konsum;Europa ohne Deutschland;Aktien;5;Comdirect 70
+07.07.2026;Microsoft Corp.;870747;4,493%;USD;-0,890%;-17,053%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 70
+07.07.2026;Münchener Rückvers.-Ges. AG;843002;5,316%;EUR;-0,555%;-9,641%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Comdirect 70
+07.07.2026;NVIDIA Corp.;918422;4,712%;USD;0,687%;8,694%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 70
+07.07.2026;RCI Banque IHS 4,875 % 02.10.29;A3LNYD;2,104%;EUR;0,016%;0,762%;02.10.2029;4,8750%;2,9788;3,6049%;Financials;Europa ohne Deutschland;Renten;3;Comdirect 70
+07.07.2026;Rheinmetall AG;703000;2,462%;EUR;-0,941%;-28,366%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Comdirect 70
+07.07.2026;Shell PLC;A3C99G;4,485%;GBP;0,505%;13,016%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Europa ohne Deutschland;Aktien;5;Comdirect 70
+07.07.2026;VW Green Bond IHS 3,875 % 10.09.30;A383ET;2,839%;EUR;0,021%;0,738%;10.09.2030;3,8750%;3,8302;3,5875%;Corporates;Deutschland;Renten;3;Comdirect 70
+07.07.2026;Walmart Inc.;860853;4,789%;USD;0,330%;3,466%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 70
+07.07.2026;XETRA Gold;A0S9GB;12,423%;EUR;0,106%;-3,107%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Comdirect 70
+;;;;;;;;;;;;;;;
