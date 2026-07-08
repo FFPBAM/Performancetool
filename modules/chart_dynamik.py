@@ -35,21 +35,45 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
         lo = to_s(to_d(lo).replace(day=1))
         d_hi = to_d(hi).replace(day=1) + dt.timedelta(days=32)
         hi = to_s(d_hi.replace(day=1))
+    from lxml import etree
     ax = root.find(".//" + _q("dateAx"))
     if ax is None:
         return None
     scaling = ax.find(_q("scaling"))
-    from lxml import etree
     for tag, val in (("max", hi), ("min", lo)):   # max VOR min (Schema-Reihenfolge)
         el = scaling.find(_q(tag))
         if el is None:
             el = etree.SubElement(scaling, _q(tag))
         el.set("val", str(int(val)))
+    # majorTimeUnit an die Zeitspanne anpassen: bei langen Historien Jahres-
+    # statt Monatsticks (sonst hunderte Gitterlinien).
+    spanne_jahre = (hi - lo) / 365.0
+    mtu = ax.find(_q("majorTimeUnit"))
+    if mtu is not None:
+        mtu.set("val", "years" if spanne_jahre > 5 else "months")
+
+    # ── Y-ACHSE (valAx) datenbasiert skalieren ──────────────────────────────
+    # Feste Vorlagen-Grenzen (z.B. 0.8-1.4) schneiden stark gestiegene
+    # Strategien (Offensiv: Index bis 2.8) oben ab → halber Chart leer.
+    yvals = [float(v.text) for v in root.find(".//" + _q("val")).iter(_q("v")) if v.text]
+    if yvals:
+        import math as _m
+        dmin, dmax = min(yvals), max(yvals)
+        ymin = _m.floor(dmin * 10) / 10.0          # z.B. 0.897 -> 0.8
+        ymax = _m.ceil(dmax * 10) / 10.0           # z.B. 2.872 -> 2.9
+        vax = root.find(".//" + _q("valAx"))
+        if vax is not None:
+            vsc = vax.find(_q("scaling"))
+            for tag, val in (("max", ymax), ("min", ymin)):
+                el = vsc.find(_q(tag))
+                if el is None:
+                    el = etree.SubElement(vsc, _q(tag))
+                el.set("val", f"{val:.2f}")
     return (lo, hi)
 
 
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
-                                 gap_in=0.20, min_gap_deg=24.0):
+                                 gap_in=0.45, min_gap_deg=24.0, rand_in=0.12):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -121,7 +145,16 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
              for d in root.iter(_q("dLbl")) if d.find(_q("idx")) is not None}
     for i in range(len(mids)):
         la = math.radians(label_ang[i]); md = math.radians(mids[i])
-        tx, ty = cx + R_target * math.sin(la), cy - R_target * math.cos(la)
+        sx, sy = math.sin(la), -math.cos(la)
+        # max. Radius entlang der Richtung, bis das Label an den Rahmenrand
+        # stößt (Rand-Puffer rand_in) → große Ringe werden nicht abgeschnitten
+        r_use = R_target
+        if sx > 1e-6:   r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
+        elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
+        if sy > 1e-6:   r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
+        elif sy < -1e-6: r_use = min(r_use, (rand_in - cy) / sy)
+        r_use = max(r_use, R_out + 0.05)   # nie innerhalb des Rings
+        tx, ty = cx + r_use * sx, cy + r_use * sy
         dx, dy = cx + band_center * math.sin(md), cy - band_center * math.cos(md)
         ox, oy = (tx - dx) / frame_w_in, (ty - dy) / frame_h_in
         d = dlbls.get(i)
@@ -162,7 +195,7 @@ def _hat_dateax(chart):
     return _root(chart).find(".//" + _q("dateAx")) is not None
 
 
-def nachbearbeiten(prs, hole_size=79, label_gap_in=0.20):
+def nachbearbeiten(prs, hole_size=79, label_gap_in=0.45):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
