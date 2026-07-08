@@ -107,6 +107,46 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     top, bot = py * frame_h_in, (py + ph) * frame_h_in
     cx, cy = (left + right) / 2.0, (top + bot) / 2.0
     R_out = min(right - left, bot - top) / 2.0
+
+    # 2b) RING an den verfügbaren vertikalen Raum ZWISCHEN Überschrift und
+    #     Legende anpassen (Größe + Lage). Die Legende sitzt bei diesen Ringen
+    #     unten im Rahmen und schiebt den Ring hoch; gleichzeitig soll oben Luft
+    #     zur Überschrift bleiben. Wir lesen die Legenden-Oberkante, verkleinern
+    #     den Ring wenn nötig und zentrieren ihn im freien Bereich → Labels oben
+    #     wie unten mit Abstand, konsistente Größe.
+    legend = root.find(".//" + _q("legend"))
+    leg_y = None
+    if legend is not None:
+        lm = legend.find(".//" + _q("manualLayout"))
+        if lm is not None and lm.find(_q("y")) is not None:
+            leg_y = float(lm.find(_q("y")).get("val"))
+    legend_top = (leg_y * frame_h_in) if leg_y is not None else frame_h_in * 0.97
+    kopf_rand = 0.15          # Luft zur Überschrift oben
+    label_pad = 0.52          # vertikale Ausdehnung Label + Rand (inkl. De-overlap-Spreizung)
+    R_ziel = min(R_out, 0.27 * frame_h_in)     # Grundverkleinerung großer Ringe
+    # so weit verkleinern, dass Ring + Labels zwischen Kopf und Legende passen
+    for _ in range(20):
+        lo = kopf_rand + R_ziel + label_pad          # min. mögliche Zentrum-y
+        hi = legend_top - R_ziel - label_pad         # max. mögliche Zentrum-y
+        if hi >= lo:
+            break
+        R_ziel *= 0.94
+    new_cy = min(max(frame_h_in / 2.0, lo), hi) if hi >= lo else (lo + hi) / 2.0
+    if R_ziel < R_out - 1e-3 or abs(new_cy - cy) > 1e-3:
+        faktor = R_ziel / R_out
+        cxf = px + pw / 2.0                       # horizontales Zentrum halten
+        pw2, ph2 = pw * faktor, ph * faktor
+        px2 = cxf - pw2 / 2.0
+        py2 = (new_cy / frame_h_in) - ph2 / 2.0   # vertikal neu setzen
+        for tag, val in (("x", px2), ("y", py2), ("w", pw2), ("h", ph2)):
+            e = pa.find(_q(tag))
+            if e is not None:
+                e.set("val", f"{val:.5f}")
+        left, right = px2 * frame_w_in, (px2 + pw2) * frame_w_in
+        top, bot = py2 * frame_h_in, (py2 + ph2) * frame_h_in
+        cx, cy = (left + right) / 2.0, (top + bot) / 2.0
+        R_out = min(right - left, bot - top) / 2.0
+
     hs_el = root.find(".//" + _q("holeSize"))
     hole = float(hs_el.get("val")) / 100.0 if hs_el is not None else 0.5
     band_center = R_out * (1 + hole) / 2.0     # PP-Default-Radius der Labels
@@ -223,6 +263,22 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                         bewegt = True
             if not bewegt:
                 break
+
+    # 6c) MINDEST-RING-ABSTAND: kein Label darf dem Ring zu nah kommen
+    #     (die vertikale De-overlap kann Labels zum Ring drücken). Zu nahe
+    #     Labels werden radial nach außen geschoben (im Rahmen gehalten).
+    min_clear = 0.12
+    for _ in range(4):
+        for i in range(len(ziel)):
+            lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
+            rad = math.hypot(lvx, lvy) or 1e-6
+            pa_ang = math.atan2(lvx, -lvy)                      # Positionswinkel
+            rext = 0.33 * abs(math.sin(pa_ang)) + 0.10 * abs(math.cos(pa_ang))
+            inner = rad - rext - R_out
+            if inner < min_clear:
+                schub = min_clear - inner
+                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, ziel[i][0] + schub * lvx / rad))
+                ziel[i][1] = max(rand_in, min(frame_h_in - rand_in, ziel[i][1] + schub * lvy / rad))
 
     # 7) Offsets schreiben (Nullpunkt = Ring-Band-Mitte des Segments; so
     #    rechnet PowerPoint den manualLayout-Offset bei vorhandenem
