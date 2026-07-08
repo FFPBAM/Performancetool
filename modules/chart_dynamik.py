@@ -73,7 +73,8 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
 
 
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
-                                 gap_in=0.25, min_gap_deg=24.0, rand_in=0.12):
+                                 gap_in=0.30, min_gap_deg=24.0, rand_in=0.12,
+                                 tangential_in=0.14):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -140,18 +141,24 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     for si, i in enumerate(order):
         label_ang[i] = ang[si]
     # 5) Zielpositionen (absolut, in Zoll) berechnen — mit Rand-Begrenzung,
-    #    damit große Ringe nicht abgeschnitten werden.
+    #    damit große Ringe nicht abgeschnitten werden. PLUS ein tangentialer
+    #    Versatz (seitlich zur Radial-Richtung), damit KEIN Label exakt auf der
+    #    radialen Linie zu seinem Segment sitzt → PowerPoint zeichnet dann für
+    #    JEDES Label einen Leader-Strich (auch freistehende Segmente).
     ziel = []
     for i in range(len(mids)):
         la = math.radians(label_ang[i])
-        sx, sy = math.sin(la), -math.cos(la)
+        sx, sy = math.sin(la), -math.cos(la)          # radial nach außen
+        tsx, tsy = math.cos(la), math.sin(la)         # tangential (im Uhrzeigersinn)
         r_use = R_target
         if sx > 1e-6:    r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
         elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
         if sy > 1e-6:    r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
         elif sy < -1e-6: r_use = min(r_use, (rand_in - cy) / sy)
-        r_use = max(r_use, R_out + 0.05)      # nie innerhalb des Rings
-        ziel.append([cx + r_use * sx, cy + r_use * sy])
+        r_use = max(r_use, R_out + 0.05)              # nie innerhalb des Rings
+        tx = cx + r_use * sx + tangential_in * tsx
+        ty = cy + r_use * sy + tangential_in * tsy
+        ziel.append([tx, ty])
 
     # 6) ADAPTIVE Überlappungs-Auflösung im ABSOLUTEN Raum — garantiert, dass
     #    sich keine zwei Zahlen überlappen, egal wie die Segmente verteilt
@@ -174,12 +181,65 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         if not bewegt:
             break
 
+    # 6b) LEADER-GARANTIE: jedes Label muss einen Mindest-Seitenabstand
+    #     (senkrecht zur radialen Linie seines Segments) haben, sonst zeichnet
+    #     PowerPoint keinen Strich. Wir schieben zu radial-nahe Labels
+    #     tangential weg — danach nochmal Überlappung auflösen.
+    min_tang = 0.20
+    for _durchlauf in range(6):
+        for i in range(len(ziel)):
+            md = math.radians(mids[i])
+            perp_x, perp_y = math.cos(md), math.sin(md)   # senkrecht zur Radial-Richtung
+            lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
+            d_perp = lvx * perp_x + lvy * perp_y
+            if abs(d_perp) < min_tang:
+                richtung = 1.0 if d_perp >= 0 else -1.0
+                korr = (min_tang - abs(d_perp)) * richtung
+                nx = ziel[i][0] + korr * perp_x
+                ny = ziel[i][1] + korr * perp_y
+                # im Rahmen halten
+                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, nx))
+                ziel[i][1] = max(rand_in, min(frame_h_in - rand_in, ny))
+        # Überlappung erneut auflösen (Tangential-Schub kann welche erzeugt haben)
+        for _ in range(60):
+            bewegt = False
+            reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
+            for a in range(len(reihenfolge)):
+                for b in range(a + 1, len(reihenfolge)):
+                    i, j = reihenfolge[a], reihenfolge[b]
+                    if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
+                        schub = (min_v - abs(ziel[i][1] - ziel[j][1])) / 2.0 + 0.005
+                        hoch, runter = (i, j) if ziel[i][1] <= ziel[j][1] else (j, i)
+                        ziel[hoch][1] = max(rand_in, ziel[hoch][1] - schub)
+                        ziel[runter][1] = min(frame_h_in - rand_in, ziel[runter][1] + schub)
+                        bewegt = True
+            if not bewegt:
+                break
+
     # 7) Offsets schreiben (Nullpunkt = Ring-Band-Mitte des Segments; so
     #    rechnet PowerPoint den manualLayout-Offset bei vorhandenem
     #    manualLayout — empirisch bestätigt).
+    import copy
     from lxml import etree
     dlbls = {int(d.find(_q("idx")).get("val")): d
              for d in root.iter(_q("dLbl")) if d.find(_q("idx")) is not None}
+
+    # WICHTIG: Hat das Portfolio MEHR Segmente als die Vorlage Label-Elemente
+    # (dLbl), so haben die zusätzlichen Segmente KEIN dLbl → PowerPoint setzt
+    # sie auf die Default-Position (ins Loch). Deshalb für jedes fehlende
+    # Segment ein dLbl aus einem vorhandenen KLONEN und einfügen.
+    if dlbls:
+        referenz = dlbls[min(dlbls)]
+        container = referenz.getparent()
+        for i in range(len(vals)):
+            if i not in dlbls:
+                neu = copy.deepcopy(referenz)
+                neu.find(_q("idx")).set("val", str(i))
+                # direkt hinter das Referenz-dLbl einsortieren (bleibt in der
+                # dLbl-Gruppe vor den gemeinsamen dLbls-Eigenschaften)
+                container.insert(list(container).index(referenz) + 1, neu)
+                dlbls[i] = neu
+
     for i in range(len(mids)):
         md = math.radians(mids[i])
         tx, ty = ziel[i]
@@ -200,7 +260,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 e = etree.SubElement(ml, _q(tag))
             e.set("val", f"{val:.4f}")
     # überzählige Label-Slots (idx >= Segmentzahl) entfernen
-    for idx, d in dlbls.items():
+    for idx, d in list(dlbls.items()):
         if idx >= len(vals):
             d.getparent().remove(d)
     return {"segmente": len(vals), "R_out": round(R_out, 3), "R_target": round(R_target, 3)}
@@ -223,7 +283,7 @@ def _hat_dateax(chart):
     return _root(chart).find(".//" + _q("dateAx")) is not None
 
 
-def nachbearbeiten(prs, hole_size=79, label_gap_in=0.25):
+def nachbearbeiten(prs, hole_size=79, label_gap_in=0.30):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
