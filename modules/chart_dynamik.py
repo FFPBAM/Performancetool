@@ -73,7 +73,7 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
 
 
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
-                                 gap_in=0.30, min_gap_deg=24.0, rand_in=0.12,
+                                 gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
                                  tangential_in=0.14):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
@@ -110,7 +110,11 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     hs_el = root.find(".//" + _q("holeSize"))
     hole = float(hs_el.get("val")) / 100.0 if hs_el is not None else 0.5
     band_center = R_out * (1 + hole) / 2.0     # PP-Default-Radius der Labels
-    R_target = R_out + gap_in                  # knapp außerhalb
+    # gap_in = gewünschte SICHTBARE Freiheit zwischen Text-Innenkante und Ring.
+    # Die nötige radiale Distanz der Label-MITTE hängt vom Winkel ab, weil der
+    # Text waagerecht ist: seitlich ragt die halbe Breite zum Ring, oben/unten
+    # nur die halbe Höhe. R_target wird deshalb pro Label in Schritt 5 berechnet.
+    HALB_W, HALB_H = 0.33, 0.10                # halbe Text-Box (Zoll, ~"29,60%")
     # 3) Segment-Mittelwinkel (Grad, im Uhrzeigersinn ab 12 Uhr)
     val_block = root.find(".//" + _q("val"))
     if val_block is None:
@@ -150,7 +154,11 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         la = math.radians(label_ang[i])
         sx, sy = math.sin(la), -math.cos(la)          # radial nach außen
         tsx, tsy = math.cos(la), math.sin(la)         # tangential (im Uhrzeigersinn)
-        r_use = R_target
+        # radiale Ausdehnung der (waagerechten) Text-Box in Blickrichtung:
+        # seitlich zählt die Breite, oben/unten die Höhe.
+        radial_extent = HALB_W * abs(sx) + HALB_H * abs(sy)
+        r_target_i = R_out + gap_in + radial_extent    # → Innenkante = R_out+gap_in
+        r_use = r_target_i
         if sx > 1e-6:    r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
         elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
         if sy > 1e-6:    r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
@@ -263,7 +271,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     for idx, d in list(dlbls.items()):
         if idx >= len(vals):
             d.getparent().remove(d)
-    return {"segmente": len(vals), "R_out": round(R_out, 3), "R_target": round(R_target, 3)}
+    return {"segmente": len(vals), "R_out": round(R_out, 3)}
 
 
 def ring_holesize(chart, hole=79):
@@ -283,7 +291,7 @@ def _hat_dateax(chart):
     return _root(chart).find(".//" + _q("dateAx")) is not None
 
 
-def nachbearbeiten(prs, hole_size=79, label_gap_in=0.30):
+def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
