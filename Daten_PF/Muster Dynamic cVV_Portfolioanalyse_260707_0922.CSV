@@ -1,0 +1,31 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+06.07.2026;Airbus SE;938914;4,141%;EUR;0,297%;7,759%;-;0%;-;-;Prod. Gew. & Industrie;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Allianz SE;840400;5,005%;EUR;0,387%;7,606%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Alphabet Inc. A;A14Y6F;4,474%;USD;0,953%;20,299%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Apple Inc.;865985;3,586%;USD;0,571%;18,210%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;ASML Holding N.V.;A1J4U4;4,353%;EUR;0,901%;25,049%;-;0%;-;-;Elektro;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Broadcom Inc.;A2JG9Z;1,561%;USD;-0,480%;-23,137%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Cisco Systems Inc.;878841;2,849%;USD;-0,046%;-1,556%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Coca-Cola Co.;850663;3,135%;USD;0,264%;8,798%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;E.ON SE;ENAG99;3,401%;EUR;0,537%;17,798%;-;0%;-;-;Versorger;Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Eli Lilly and Company;858560;4,376%;USD;0,588%;14,856%;-;0%;-;-;Chemie,Pharma;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Lam Research Corp.;A40L1V;2,739%;USD;-0,182%;-6,208%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Mercadolibre Inc.;A0MYNP;2,481%;Sonstige Währungen;-0,223%;-7,953%;-;0%;-;-;Handel,Konsum;Emerging Markets;Aktien;5;Muster Dynamic cVV
+06.07.2026;Meta Platforms Inc. A;A1JWVX;3,109%;USD;-0,223%;-6,529%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Microsoft Corp.;870747;2,861%;USD;-1,027%;-28,137%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Münchener Rückvers.-Ges. AG;843002;3,508%;EUR;-0,468%;-11,793%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Netflix Inc.;552484;3,214%;USD;-0,629%;-16,748%;-;0%;-;-;Dienstleistungen;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Novartis AG;904278;3,474%;CHF;0,585%;18,793%;-;0%;-;-;Chemie,Pharma;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;NVIDIA Corp.;918422;4,403%;USD;0,334%;7,669%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Palo Alto Networks Inc.;A1JZ0Q;2,078%;USD;0,027%;1,320%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Philip Morris Internat. Inc.;A0NDBJ;4,199%;USD;0,721%;20,370%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Rheinmetall AG;703000;2,404%;EUR;-0,693%;-26,885%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Samsung Electronics Co. Ltd. (GDRs);896360;4,908%;Sonstige Währungen;3,868%;124,378%;-;0%;-;-;Elektro;Asien;Aktien;5;Muster Dynamic cVV
+06.07.2026;Schneider Electric SE;860180;2,524%;EUR;0,414%;18,497%;-;0%;-;-;Elektro;Europa ohne Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Siemens AG;723610;3,286%;EUR;0,588%;20,432%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Siemens Energy AG;ENER6Y;2,762%;EUR;-0,028%;-0,918%;-;0%;-;-;Versorger;Deutschland;Aktien;5;Muster Dynamic cVV
+06.07.2026;Taiwan Semiconduct.Manufact.Co (ADRs);909800;3,421%;Sonstige Währungen;0,470%;15,507%;-;0%;-;-;Informationstechnologie;Asien;Aktien;5;Muster Dynamic cVV
+06.07.2026;VISA Inc.;A0NC7B;3,398%;USD;0,162%;4,813%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Walmart Inc.;860853;3,789%;USD;0,094%;2,394%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster Dynamic cVV
+06.07.2026;Waste Management Inc.;893579;3,388%;USD;0,239%;7,449%;-;0%;-;-;Versorger;Nordamerika;Aktien;5;Muster Dynamic cVV
+;;;;;;;;;;;;;;;
