@@ -1590,9 +1590,12 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
         tabelle_leere_zeilen_entfernen(t, daten_spalten=(C_NAME, C_WAEHRUNG,
                                                          C_WKN, C_ANTEIL))
 
-        # 1b. Dicke Abschlusslinie an die (nun) letzte Datenzeile übernehmen —
-        #     sonst endet die Tabelle bei kurzen Portfolios mit einer dünnen
-        #     0.25pt-Linie und wirkt unten offen. VOR der Abstandszeile!
+        # 1b. Unterkante der (nun) letzten Datenzeile vereinheitlichen. In der
+        #     Vorlage trägt die physisch letzte Zeile eine dicke Linie; nach dem
+        #     Entfernen leerer Zeilen rutscht je nach Strategie mal eine dicke,
+        #     mal eine dünne ans Ende. Wir setzen sie einheitlich auf DÜNN —
+        #     die klare Trennung übernimmt die dicke Linie über "Gesamt".
+        #     VOR der Abstandszeile (Indizes!).
         tabelle_abschlusslinie_sichern(t)
 
         # 2. Linienlose Abstandszeile vor die Gesamt-Zeile.
