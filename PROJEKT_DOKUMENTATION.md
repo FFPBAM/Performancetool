@@ -1,12 +1,15 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: 07.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau)
+## Stand: 09.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau, Chart-/Tabellen-Dynamik)
 
 > Vorgänger-Stand: Juni 2026 (Phase 2: Performance-PPTX-Export). Alle
 > Transferwissen-Einträge #1–#17 aus Phase 2 bleiben gültig und stehen
-> weiter unten; NEU sind #18–#25 sowie die Abschnitte zu Themen-Broschüren,
+> weiter unten; NEU sind #18–#28 sowie die Abschnitte zu Themen-Broschüren,
 > Vier-Modul-PPTX-Architektur, Konsistenz-Doktrin, lokalem Batch, dem
-> Navigations-Umbau (st.tabs → segmented_control) und dem gelösten
-> Gateway-Download (#25, clientseitiger Blob-Download).
+> Navigations-Umbau (st.tabs → segmented_control), dem gelösten
+> Gateway-Download (#25, clientseitiger Blob-Download) sowie der
+> datenbasierten Chart-Nachbearbeitung (#26, `chart_dynamik.py`), dem
+> dynamischen Tabellen-Layout (#27) und dem Workflow zur optischen
+> Fehlersuche (#28).
 
 ---
 
@@ -1027,6 +1030,141 @@ components.html(html, height=90)
 
 ---
 
+### 26. Native PowerPoint-Charts datenbasiert nachbearbeiten — Achsen, Ring-Dicke, Außen-Labels (NEU 09.07.2026)
+
+**Modul:** `modules/chart_dynamik.py` · **Aufruf:** `nachbearbeiten(prs)` in `pptx_export.py`, unmittelbar VOR `prs.save()`.
+
+Die Ringe und Linien der Broschüren sind **native PowerPoint-Charts** (python-pptx + lxml auf `chart._chartSpace`, Namespace `c:`), **kein matplotlib, kein Bild**. Alle Layout-Eingriffe passieren im Chart-XML. Eine einzige Funktion läuft am Ende über alle Charts und zieht sie datenbasiert nach:
+
+- **Doughnut-Ringe:** `holeSize=79` (dünner Original-Look), Prozent-Labels außerhalb des Rings mit Führungsstrich, überlappungsfrei, Ring in den freien Raum zwischen Überschrift und Legende eingepasst.
+- **Linie mit Datums-Achse:** X- **und** Y-Achse auf die echte Datenspanne; `majorTimeUnit=years` bei Spannen > 5 Jahre.
+- **Balken (catAx):** unberührt.
+
+Selbstkalibrierend pro Chart → automatisch korrekt für Pro / Pro Dividende / Offensiv und jede Segmentzahl (2–12). Rührt die Download-Logik nicht an. Datenlogik bleibt unverändert.
+
+**Native Äquivalente zu matplotlib-Begriffen** (eine fremde KI schlug uns `ax.annotate` / `radius=0.8` vor — das läuft hier ins Leere):
+
+| matplotlib | nativ (Chart-XML) |
+|---|---|
+| `radius` kleiner | `<c:plotArea><c:layout><c:manualLayout>` x/y/w/h skalieren |
+| Label-Position | `<c:dLbl><c:idx><c:layout><c:manualLayout><c:x/><c:y/>` (Offsets als Bruchteile von Rahmen**breite** bzw. -**höhe**) |
+| Führungslinie | `<c:dLbls><c:showLeaderLines val="1"/>` — PP zeichnet nur bei seitlichem Versatz |
+| `holeSize` | `<c:holeSize val="79"/>` (Lochanteil %, groß = dünn) |
+| `startangle` | `<c:firstSliceAng val="…"/>` |
+
+**Die zehn Fallen (teuer erkauft — nicht wieder aufmachen):**
+
+1. **LibreOffice rendert `holeSize` FALSCH** (ignoriert es, zeigt immer ~50 %). Kontrolltest: `holeSize` 30 vs. 90 → identisches LO-Bild. **Ring-Dicke ist nur in echtem PowerPoint prüfbar.** Verifikation daher immer numerisch aus dem XML.
+2. **PP-Default-Label-Position:** OHNE `manualLayout` sitzt das Label in der **Loch-Mitte**. MIT `manualLayout` rechnet PP den Offset von der **Ring-Band-Mitte** des Segments (`band_center = R_out*(1+holeSize)/2`, Richtung = Segment-Mittelwinkel). Offsets IMMER von dort berechnen — von der Chart-Mitte aus schießen die Labels doppelt weit raus (Striche bis in die Legende).
+3. **`manualLayout` x = Bruchteil der BREITE, y = der HÖHE.** Der Rahmen ist breiter als hoch (5,24 × 4,55") → x muss gestaucht werden. (Im geometrischen Ansatz fällt das automatisch heraus, weil Offsets als `(Ziel − Default)/Rahmenmaß` gerechnet werden.)
+4. **Die Vorlage kann WENIGER `<c:dLbl>` haben als das Portfolio Segmente.** Fehlende dLbl → Segment landet auf Default (im Loch). Beispiel: Offensiv-Regionen 7 Segmente, Vorlage nur 5 dLbl → 2 Zahlen im Loch. **Fix:** für jedes fehlende Segment ein dLbl aus einem vorhandenen KLONEN (`copy.deepcopy`, `idx` setzen, einfügen).
+5. **Führungsstrich nur bei Seitenversatz.** PP zeichnet den Strich erst, wenn das Label SEITLICH (senkrecht zur Radiallinie seines Segments) ≥ ~0,16–0,20" versetzt ist. Rein radiale Labels bleiben strichlos. `showLeaderLines=1` allein reicht **nicht**. **Fix:** Leader-Garantie-Pass mit Mindest-Seitenabstand 0,20".
+6. **Abstand winkelabhängig.** Zahlen sind waagerechter Text: seitliche Labels ragen mit der BREITE zum Ring, oben/unten nur mit der HÖHE. Fester radialer Abstand → seitliche Zahl klebt am Ring. **Fix:** `R_target = R_out + gap + (0,33·|sinθ| + 0,10·|cosθ|)`.
+7. **Ringe haben unterschiedlich große Plot-Flächen** (Außenradius ~1,09 / 1,41 / 1,68" im selben Rahmen). Ein fester Radius-Bruchteil passt nie für alle. **Fix:** Geometrie pro Chart aus dem `plotArea`-Layout lesen (Zentrum, `R_out`).
+8. **Zu große Ringe → kein Platz für Außen-Labels.** **Fix:** Plot-Fläche verkleinern (natives Äquivalent zu `radius=0.8`).
+9. **Vertikale Einpassung / Legende.** Die Legende sitzt via `manualLayout` unten im Rahmen und schiebt den Ring hoch → obere Labels an der Überschrift. **Fix:** Legenden-Oberkante aus deren `manualLayout y` lesen, Ring verkleinern + im freien Bereich zentrieren.
+10. **De-overlap kann Labels zum Ring drücken.** **Fix:** abschließende Mindest-Ring-Abstand-Passe (Innenkante ≥ `R_out + 0,12"`).
+
+**Der Y-Achsen-Bug (Linien-Chart):** Die Vorlage hatte `valAx` fest auf 0,8–1,4. Offensiv steigt auf Index 2,84 → die Kurve schoss ~2011 über die Decke, die rechten ¾ des Charts blieben leer. Symptom war „links zu viel frei" — Ursache war die **Y**-Achse, nicht die X-Achse. Beide skalieren jetzt datenbasiert.
+
+**Verifikations-Checkliste (numerisch, NICHT per LibreOffice):** `dLbl`-Anzahl == Segmentzahl · jedes Label-Radius > `R_out` · Innenkanten-Freiheit ≥ 0,10" (winkelabhängig) · Seitenabstand ≥ 0,16–0,20" · keine zwei Labels überlappen (|Δx|<0,55 und |Δy|<0,19) · oberstes Label über Kopf-Rand, unterstes über Legenden-Oberkante · kein Label am Rahmenrand.
+
+**Parameter:** `hole_size=79` · `label_gap_in=0.14` · `min_gap_deg=24` · `min_tang=0.20` · `label_pad=0.52` · `min_clear=0.12`
+
+---
+
+### 27. PPTX-Tabellen dynamisch layouten — Zeilenhöhe, Schrift, Summenzeile, Zellrahmen (NEU 09.07.2026)
+
+**Modul:** `modules/pptx_slides.py` · **Betrifft:** Einzeltitel-Folie der Themen-Broschüren (Rolle `einzeltitel_themen`).
+
+**Ausgangslage:** `fill_einzeltitel_themen_slide()` hat die Tabelle nur **befüllt** — im Gegensatz zur Standard-Anlagevorschlag-Folie, die `remove_empty_table_rows` → `fit_shape_to_table` aufruft. Ergebnis: leere Zeilen mit Linien, gedrängte Zeilen, Tabelle bis an die Abschlusslinie, überdimensionierte „Gesamt"-Zeile.
+
+**Warum die alten Helfer NICHT wiederverwendbar waren.** Die Anlagevorschlag-Tabelle hat **11 Spalten** (Daten auf 0/2/4/6/8/10), die Einzeltitel-Tabelle nur **7** (Daten auf 0/2/4/6):
+
+- `remove_empty_table_rows` greift hart auf `COL_ANTEIL=8`, `COL_RATING=10` zu → **IndexError**
+- `maybe_narrow_bond_columns` verschmälert Spalten 2/4 → das wären hier **Währung und WKN**
+- `MAX_TABLE_BOTTOM_INCH = 6.60` gilt für die Anlagevorschlag-Folie; die Einzeltitel-Folie hat ihre blaue Abschlusslinie schon bei **6,38"**
+
+**Konsequenz:** neue, **generische** Helfer (Daten-Spalten als Parameter), wiederverwendbar für jede Vorlage der PowerPoint-Familie (ESG/CVV/ETF/…). Die alten Funktionen und `MAX_TABLE_BOTTOM_INCH` bleiben bitweise unverändert → **Blast-Radius null.**
+
+| Neue Funktion | Zweck |
+|---|---|
+| `tabelle_leere_zeilen_entfernen(table, daten_spalten, …)` | leere Datenzeilen raus; Spalten als Parameter |
+| `tabelle_abschlusslinie_sichern(table)` | Unterkante der letzten Datenzeile auf die normale dünne Linie vereinheitlichen |
+| `tabelle_abstandszeile_einfuegen(table)` | leere, seitlich rahmenlose Zeile vor die Summe |
+| `tabelle_dynamisch_skalieren(table_shape, max_bottom_inch, …)` | Zeilenhöhe + Schrift an den Platz anpassen |
+| `_zelle_rahmen_entfernen`, `_zelle_rahmen_uebernehmen`, `_zelle_leeren_kompakt`, `_zeile_schrift_setzen` | Bausteine |
+
+**Aufrufreihenfolge (Indizes!):** leere Zeilen entfernen → Abschlusslinie vereinheitlichen → Abstandszeile einfügen → skalieren → Gesamt-Zeile Schrift explizit setzen.
+
+**Die sechs Fallen:**
+
+1. **Fehlendes `sz`-Attribut erbt ~18 pt.** Die Zelle „Gesamt" hatte `<a:rPr b="1"/>` **ohne** `sz`. In einer 0,142"-Zeile (≈10 pt) quoll der Text über und durchkreuzte die Rahmenlinie („Gesamt zu groß, blaue Linie darüber"). → Schriftgröße nach dem Befüllen **explizit** setzen, nie auf die Vorlage verlassen.
+2. **`text_frame.clear()` hinterlässt einen 18-pt-Absatz.** Der leere Absatz hat keine Schriftgröße → die Zeile wird aufgebläht, egal welche Höhe im XML steht. → `defRPr` **und** `endParaRPr` klein setzen (Renderer nutzen unterschiedliche der beiden).
+3. **Schema-Reihenfolge in `<a:tcPr>`.** `lnL, lnR, lnT, lnB` müssen **VOR** den Füll-Elementen (`noFill`/`solidFill`) stehen. Hängt man sie mit `SubElement` hinten an, ignorieren die Renderer sie und zeichnen die **Standard-Rahmen des Tabellen-Styles** → sichtbarer leerer Kasten. → `tcPr.insert(0, …)`.
+4. **Renderer führen angrenzende Zellrahmen zusammen.** Setzt man die Abstandszeile rundum auf `noFill`, verschwinden auch die Linien der **Nachbarzeilen** (die Tabelle wirkt unten offen). → An jeder Zeilengrenze **beidseitig dasselbe** setzen: oben dünne Trennlinie, unten dicke Summenlinie; seitlich (`lnL`/`lnR`) `noFill`, sonst Kasten.
+5. **Linien-Stärke hängt an der physischen Zeilenposition.** Die dicke 0,75-pt-Linie sitzt in der Vorlage an der *physisch letzten* Datenzeile. Nach dem Entfernen leerer Zeilen rutscht je nach Strategie mal eine dicke, mal eine dünne ans Ende → inkonsistent. → aktiv vereinheitlichen. Rahmen **kopieren** (`deepcopy` + Tag umbenennen), nicht Attribute nachbauen → Corporate-Design (0,75 pt, `14355C`, solid) bleibt exakt.
+6. **Zeilenhöhe ist ein Minimum, kein Fixwert.** Renderer legen Zeilen höher aus als berechnet — gemessen **~0,1" Drift über 37 Zeilen**. → Unterkante konservativ wählen.
+
+**Parameter (`pptx_slides.py`):**
+
+```python
+EINZELTITEL_MAX_BOTTOM_INCH = 6.20   # blaue Abschlusslinie liegt bei 6.38"
+EINZELTITEL_MIN_ROW_H_INCH  = 0.125
+EINZELTITEL_MAX_ROW_H_INCH  = 0.19   # wenige Titel → nicht aufblasen, Rest bleibt leer
+EINZELTITEL_MIN_FONT_PT     = 6.0
+EINZELTITEL_MAX_FONT_PT     = 7.0
+EINZELTITEL_GAP_H_INCH      = 0.10   # Abstandszeile
+EINZELTITEL_SUMMARY_H_INCH  = 0.17   # Gesamt-Zeile
+_ROW_H_PER_PT_INCH          = 0.0237 # kalibriert: 0.142"-Zeile trägt 6 pt
+```
+
+**Ergebnis (gemessen):** Pro 34 Zeilen → 0,134"/6,0 pt · Offensiv & Pro Dividende 27 Zeilen (7 leere entfernt) → 0,169"/7,0 pt. Unterkante überall 6,20". Fußstruktur: dünne Linie 5,92" → 0,10" Abstand → dicke Linie 6,02" → „Gesamt" 6,07–6,14" → 0,21" Luft → blaue Linie 6,35".
+
+**Bewusst nicht gemacht:** Spacer-Spalten weicher (0,06" harte Zwischenräume, rein kosmetisch) · **Fortsetzungsfolie** bei > 34 Zeilen. Achtung falls doch: `generate_portfolioanalyse_pptx` adressiert Folien über `base = block_start + B*k` — ein eingefügter Slide **verschiebt alle nachfolgenden Indizes**. Ferner: `EINZELTITEL_WARNUNGEN` wird befüllt, aber nirgends ausgelesen (könnte an `LAST_BUILD_ERRORS` gehängt werden).
+
+---
+
+### 28. Optische Fehlersuche bei PPTX-Layouts: Screenshots, numerische Verifikation, zweite KI (NEU 09.07.2026)
+
+Die teuerste Zeit ging bei Charts **und** Tabellen dafür drauf, dass niemand zuverlässig sah, wie PowerPoint tatsächlich rendert. Diese Regeln haben sich bewährt.
+
+**1. Screenshots sind das schnellste Diagnosemittel — aber nur aus echtem PowerPoint.**
+Ein Bild von Folie 10/11 klärt in Sekunden, was zehn Runden verbaler Beschreibung nicht schaffen. Die LibreOffice-Vorschau ist **nicht** PowerPoint. Bekannte Abweichungen:
+
+- `holeSize` (Ring-Dicke) wird **komplett ignoriert** (immer ~50 %) → #26
+- angrenzende **Zellrahmen werden zusammengeführt** (PowerPoint zeichnet ggf. beide) → #27
+- **Zeilenhöhen** werden minimal höher ausgelegt (~0,1" Drift über 37 Zeilen)
+
+→ Ring-Dicke und Rahmen-Details **nur** in echtem PowerPoint bewerten.
+
+**2. Immer zusätzlich numerisch verifizieren.**
+Ein Screenshot zeigt, *dass* etwas falsch ist; das XML zeigt, *warum*. Beides kombinieren. Nie „sieht gut aus" als Abnahme akzeptieren, wenn man es messen kann (Label-Radius, `sz`-Attribut vorhanden, Rahmen an beiden Zeilengrenzen identisch).
+
+**3. Renderer-unabhängige Messung am Bild.**
+Liegt ein Render vor, lässt sich vieles objektiv messen statt „hinschauen":
+
+- **Ring-Geometrie:** farbige Pixel → Mittelpunkt, Innen-/Außenradius über einen **radialen Scan pro Winkel-Bin**. (Perzentile über *alle* Pixel verzerren — erste Messung ergab so fälschlich 53 % statt 77 % Lochanteil.)
+- **Tabellenlinien:** Bildzeilen mit Deckung > 45 % der Tabellenbreite = Linie; 2–40 % = Text. Sonst zählt man die **blaue Abschlusslinie als Text**.
+- **Textgröße:** Höhe des Textbands relativ zu einer normalen Datenzeile („Gesamt" sollte ≈ 1,0–1,1× sein, nicht 3×).
+
+**4. Eine zweite KI optisch bewerten lassen.**
+
+- **Geschlossene, prüfbare Fragen** stellen — nicht „sieht das gut aus?", sondern *„Ragen Zahlen in die Legende? Gibt es leere Kästen? Ist die Gesamt-Zeile größer als die Datenzeilen?"*
+- **Kontext mitgeben**, sonst schlägt sie matplotlib-Lösungen für native PP-Charts vor (genau so passiert). Dafür existiert der Übergabe-Block `docs/RING_CHART_KI_BRIEFING.md`; für Tabellen analog anlegbar.
+- **Antworten gegen das XML prüfen**, nicht ungeprüft übernehmen. Die zweite KI sieht das Bild, kennt aber die Vorlage nicht.
+
+**5. Vorher/Nachher rendern und dieselbe Messung anwenden.**
+Nur so fällt auf, wenn ein Fix ein neues Problem erzeugt hat (Beispiel: „Rahmen der Abstandszeile weg" → *auch* die Nachbarlinien verschwanden).
+
+**6. Validieren gegen das Original.**
+`validate.py` auf **beide** Dateien anwenden und die Meldungszahl vergleichen (Transferwissen #16). Gleiche Zahl = kein neuer Fehler; die verbleibenden Meldungen sind Vorlagen-Altstand.
+
+**7. Vor dem ersten Codeschreiben den Blast-Radius bestimmen.**
+Aufrufgraph prüfen: Wer ruft die Funktion sonst noch auf? Geteilte Helfer nie „mal eben" erweitern — lieber **additiv daneben bauen** und den alten Pfad bitweise unverändert lassen (mit Diff belegen).
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -1068,7 +1206,10 @@ Repository Root/
 │   ├── portfolioanalyse.py          ← Portfolioanalyse-Ansicht + PPTX-Export-Integration
 │   ├── pptx_helpers.py              ← generische Shape/Table/Slide-Manipulation
 │   ├── pptx_charts.py               ← Chart-XML inkl. replace_chart_data_safe (4 Bugs)
-│   ├── pptx_slides.py               ← Folien-Befüllung (Domain-Logik)
+│   ├── chart_dynamik.py             ← NEU: Chart-Nachbearbeitung (Achsen, holeSize,
+│   │                                   Ring-Labels außen) — nachbearbeiten(prs), TW #26
+│   ├── pptx_slides.py               ← Folien-Befüllung (Domain-Logik) + generische
+│   │                                   Tabellen-Helfer (TW #27)
 │   ├── pptx_export.py               ← Broschüren-Orchestrierung
 │   ├── dataload.py                  ← streamlit-freie Loader-Kopien für den Batch
 │   └── portfolio_builder.py         ← deaktiviert seit Juni 2026
@@ -1577,16 +1718,26 @@ ALLE Nach-Kosten-Zahlen minimal.
 ### 10.1 Vier-Modul-Architektur
 
 ```
-pptx_helpers (generisch: Shapes, Text, Tabellen, Slide remove/move/duplicate/reorder)
-pptx_charts  (generisch: Chart-XML; replace_chart_data_safe = 4-Bug-Workaround,
-              replace_chart_data XML-in-place für Ringe, set_date_axis_base_unit)
+pptx_helpers  (generisch: Shapes, Text, Tabellen, Slide remove/move/duplicate/reorder)
+pptx_charts   (generisch: Chart-XML; replace_chart_data_safe = 4-Bug-Workaround,
+               replace_chart_data XML-in-place für Ringe, set_date_axis_base_unit)
+chart_dynamik (NEU 09.07.2026 — Nachbearbeitung fertiger Charts: Achsen datenbasiert,
+               holeSize, Ring-Labels außen mit Strich; nachbearbeiten(prs), TW #26)
     ↑
-pptx_slides  (Domain: fill_*_slide je Folie, Asset-Klassen-Logik, Tabellen-Layouts,
-              EINZELTITEL_WARNUNGEN; kennt KEIN Streamlit)
+pptx_slides   (Domain: fill_*_slide je Folie, Asset-Klassen-Logik, Tabellen-Layouts,
+               generische Tabellen-Helfer (TW #27), EINZELTITEL_WARNUNGEN;
+               kennt KEIN Streamlit)
     ↑
-pptx_export  (Orchestrierung: N Strategien, template_config, Block-Dispatcher,
-              compute_performance_data, compute_rollierend_data, LAST_BUILD_ERRORS)
+pptx_export   (Orchestrierung: N Strategien, template_config, Block-Dispatcher,
+               compute_performance_data, compute_rollierend_data, LAST_BUILD_ERRORS;
+               ruft nachbearbeiten(prs) VOR prs.save())
 ```
+
+**Wichtig zur Einordnung:** `chart_dynamik` läuft **nach** allen `fill_*_slide`-Aufrufen
+und arbeitet ausschließlich am Chart-XML der bereits befüllten Präsentation. Es ist
+bewusst kein Teil von `pptx_charts` (das die Daten schreibt), sondern eine
+Nachbearbeitungs-Schicht. Die Download-Logik (`download_helfer.py`) wird davon nicht
+berührt.
 
 Fehler bei der Befüllung einzelner Folien werden NICHT mehr still
 verschluckt: `pptx_export.LAST_BUILD_ERRORS` sammelt sie, die App zeigt
