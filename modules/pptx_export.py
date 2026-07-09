@@ -348,10 +348,15 @@ def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.
 
 
 def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame,
-                                  strategy_name: str, eval_date=None):
-    """Wrapper für pptx_slides.fill_anlagevorschlag_slides."""
+                                  strategy_name: str, eval_date=None, **opt):
+    """Wrapper für pptx_slides.fill_anlagevorschlag_slides.
+
+    **opt reicht vorlagenspezifische Optionen durch (NEU 09.07.2026):
+    titel_text, max_bottom_inch — siehe template_config['rollen_optionen'].
+    Ohne Optionen exakt wie bisher.
+    """
     return fill_anlagevorschlag_slides(prs, slide_7_idx, df, strategy_name,
-                                        eval_date=eval_date)
+                                        eval_date=eval_date, **opt)
 
 
 def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance_data=None,
@@ -1053,16 +1058,46 @@ def generate_portfolioanalyse_pptx(
     LAST_BUILD_ERRORS.clear()  # Diagnose-Liste pro Export frisch
     prs = _load_template(template_path, cfg.get("erwartete_folien"))
 
-    # ── Schritt 1: Vorlage normalisieren (Entfernungen + Block kanonisch) ──
-    block_start = _normalisiere_vorlage(prs, cfg)
-    prs = _save_and_reload(prs)
+    # ── FESTE BLÖCKE (NEU 09.07.2026, für die CVV-Vorlage) ──────────────────
+    # Manche Vorlagen enthalten die Folien ALLER Strategien bereits fertig
+    # vorgebaut (CVV: fünf Strategie-Paare, jedes mit einem eigenen, starren
+    # Anlagekriterien-Kasten). Sie dürfen deshalb NICHT dupliziert werden —
+    # sonst bekämen alle Strategien den Kasten der ersten. Stattdessen wird
+    # an FESTEN Vorlagen-Positionen befüllt.
+    #
+    #   cfg["feste_bloecke"] = [ {rolle: 1-indexierte Vorlagenposition}, … ]
+    #                          ein Eintrag je Strategie, in Reihenfolge
+    #   cfg["rollen_optionen"] = {rolle: {kwarg: wert}}   (optional)
+    #
+    # Fehlt der Schlüssel, läuft exakt der bisherige Pfad
+    # (normalisieren → vervielfältigen). Blast-Radius für Standard/Themen: 0.
+    feste_bloecke = cfg.get("feste_bloecke")
+    rollen_optionen = cfg.get("rollen_optionen", {})
 
-    # ── Schritt 2: Block auf N Strategien vervielfältigen ──
-    reihenfolge = cfg.get("block_reihenfolge", BLOCK_REIHENFOLGE)
-    B = len(reihenfolge)
-    _vervielfaeltige_block(prs, block_start, n_strategien, block_laenge=B)
-    if n_strategien > 1:
+    if feste_bloecke:
+        # Nur Entfernungen anwenden; keine Umsortierung, keine Duplikation.
+        for i in sorted([p - 1 for p in cfg.get("entfernen", [])], reverse=True):
+            _remove_slide(prs, i)
+        if cfg.get("entfernen"):
+            prs = _save_and_reload(prs)
+        if n_strategien > len(feste_bloecke):
+            _record_build_error(
+                "Vorlage",
+                ValueError(f"{n_strategien} Strategien übergeben, die Vorlage "
+                           f"hat aber nur {len(feste_bloecke)} feste Blöcke — "
+                           f"überzählige Strategien werden ignoriert."))
+        block_start, B, reihenfolge = None, None, None
+    else:
+        # ── Schritt 1: Vorlage normalisieren (Entfernungen + Block kanonisch) ──
+        block_start = _normalisiere_vorlage(prs, cfg)
         prs = _save_and_reload(prs)
+
+        # ── Schritt 2: Block auf N Strategien vervielfältigen ──
+        reihenfolge = cfg.get("block_reihenfolge", BLOCK_REIHENFOLGE)
+        B = len(reihenfolge)
+        _vervielfaeltige_block(prs, block_start, n_strategien, block_laenge=B)
+        if n_strategien > 1:
+            prs = _save_and_reload(prs)
 
     # ── Schritt 3: jede Strategie in ihren Block füllen ──
     # Dispatch: Rolle → Fill-Aufruf. Der Offset innerhalb des Blocks ergibt
@@ -1075,13 +1110,25 @@ def generate_portfolioanalyse_pptx(
         we_data = _build_we_data(performance_inputs, k)
         roll_data = _build_rollierend_data(performance_inputs, k)
         stand = _stand_str(eval_date)
-        base = block_start + B * k
 
-        for offset, rolle in enumerate(reihenfolge):
-            idx = base + offset
+        # Folienindizes dieser Strategie ermitteln:
+        #  - feste Blöcke: direkt aus der Vorlagen-Konfiguration (1-indexiert)
+        #  - sonst: wie bisher über base + offset im vervielfältigten Block
+        if feste_bloecke:
+            if k >= len(feste_bloecke):
+                continue
+            ziele = [(pos - 1, rolle)
+                     for rolle, pos in feste_bloecke[k].items()]
+        else:
+            base = block_start + B * k
+            ziele = [(base + offset, rolle)
+                     for offset, rolle in enumerate(reihenfolge)]
+
+        for idx, rolle in ziele:
+            opt = dict(rollen_optionen.get(rolle, {}))
             if rolle == "anlagevorschlag":
                 _fill_anlagevorschlag_slides(prs, idx, df, strategy_name,
-                                             eval_date=eval_date)
+                                             eval_date=eval_date, **opt)
             elif rolle == "wertentwicklung":
                 _fill_wertentwicklung_slide(prs, idx, strategy_name,
                                             we_data=we_data, stand_date_str=stand)
