@@ -1218,17 +1218,38 @@ def _zelle_rahmen_entfernen(cell):
 
     Nötig für die Abstandszeile: eine geklonte Datenzeile bringt sonst ihre
     0.25pt-Linien mit und es stünden drei Linien übereinander.
+
+    WICHTIG — Schema-Reihenfolge: In <a:tcPr> müssen lnL, lnR, lnT, lnB VOR
+    den Füll-Elementen (noFill/solidFill/…) stehen. Hängt man sie hinten an,
+    ignorieren die Renderer sie und zeichnen stattdessen die Standard-Rahmen
+    des Tabellen-Styles (sichtbarer leerer Kasten). Deshalb: vorne einfügen.
     """
+    from lxml import etree
     tcPr = cell._tc.get_or_add_tcPr()
     for tag in _LINE_TAGS:
-        # vorhandene Linien-Elemente entfernen
         for el in tcPr.findall(qn(f"a:{tag}")):
             tcPr.remove(el)
-    # In Schema-Reihenfolge (lnL, lnR, lnT, lnB) explizit auf noFill setzen
-    from lxml import etree
-    for tag in _LINE_TAGS:
-        ln = etree.SubElement(tcPr, qn(f"a:{tag}"))
+    # rückwärts an Position 0 einfügen → Endreihenfolge lnL, lnR, lnT, lnB
+    for tag in reversed(_LINE_TAGS):
+        ln = etree.Element(qn(f"a:{tag}"))
         etree.SubElement(ln, qn("a:noFill"))
+        tcPr.insert(0, ln)
+
+
+def _zelle_leeren_kompakt(cell, font_pt: float = 4.0):
+    """Leert eine Zelle UND begrenzt die Höhe ihres leeren Absatzes.
+
+    text_frame.clear() lässt einen leeren Absatz zurück, dessen Schriftgröße
+    nicht gesetzt ist → er erbt die Default-Größe (~18pt) und bläht die Zeile
+    auf, egal welche Höhe im XML steht. Deshalb defRPr UND endParaRPr klein
+    setzen (Renderer nutzen unterschiedliche der beiden).
+    """
+    tf = cell.text_frame
+    tf.clear()
+    p = tf.paragraphs[0]
+    p.font.size = Pt(font_pt)                       # defRPr
+    end = p._p.get_or_add_endParaRPr()              # endParaRPr
+    end.sz = int(font_pt * 100)
 
 
 def _zeile_schrift_setzen(row, font_pt: float, bold: Optional[bool] = None):
@@ -1327,49 +1348,66 @@ def _zelle_rahmen_uebernehmen(ziel_cell, quell_cell, ziel_tag: str, quell_tag: s
 
 
 def tabelle_abschlusslinie_sichern(table, kopf_zeilen: int = 1) -> bool:
-    """Stellt sicher, dass die LETZTE Datenzeile die dicke Abschlusslinie hat.
+    """Vereinheitlicht die Unterkante der LETZTEN Datenzeile auf die normale,
+    dünne Trennlinie einer mittleren Datenzeile.
 
-    Hintergrund: In der Vorlage hängt die dicke 0.75pt-Linie an der physisch
-    letzten Datenzeile. Werden leere Zeilen entfernt, rutscht eine normale
-    Zeile mit dünner 0.25pt-Linie ans Ende und die Tabelle wirkt unten offen.
-    Wir übernehmen deshalb die Linie der Summenzeile (deren lnT ist die
-    gleiche dicke Linie) als lnB der letzten Datenzeile.
-
-    Muss VOR dem Einfügen der Abstandszeile laufen (Indizes!).
+    Hintergrund: In der Vorlage trägt die physisch letzte Datenzeile eine dicke
+    0.75pt-Linie (weil dort früher direkt die Summe folgte). Werden leere
+    Zeilen entfernt, rutscht mal eine dicke, mal eine dünne Zeile ans Ende —
+    je nach Strategie. Wir setzen sie einheitlich auf DÜNN; die klare Trennung
+    zur Summe übernimmt die dicke Linie über der Gesamt-Zeile.
     """
     n = len(table.rows)
-    if n < kopf_zeilen + 2:
+    if n < kopf_zeilen + 3:
         return False
     letzte_daten = table.rows[n - 2]
-    summe = table.rows[n - 1]
+    # Muster: eine mittlere Datenzeile (die erste trägt oft eine dicke Linie
+    # unter der Gruppen-Überschrift)
+    muster_idx = max(kopf_zeilen + 1, (kopf_zeilen + n - 2) // 2)
+    muster = table.rows[muster_idx]
     ok = False
     for i, cell in enumerate(letzte_daten.cells):
-        if i < len(summe.cells):
-            ok = _zelle_rahmen_uebernehmen(cell, summe.cells[i], "lnB", "lnT") or ok
+        if i < len(muster.cells):
+            ok = _zelle_rahmen_uebernehmen(cell, muster.cells[i], "lnB", "lnB") or ok
     return ok
 
 
 def tabelle_abstandszeile_einfuegen(table):
-    """Fügt direkt VOR der letzten Zeile (Summe) eine linienlose, leere
-    Abstandszeile ein. Klont dafür die letzte Datenzeile (Struktur bleibt
-    erhalten), leert sie und entfernt ihre Rahmen.
+    """Fügt direkt VOR der letzten Zeile (Summe) eine leere Abstandszeile ein.
+
+    Rahmen-Logik (WICHTIG): Renderer führen angrenzende Zellrahmen zusammen —
+    setzt man die Abstandszeile rundum auf noFill, verschwinden auch die
+    Linien der Nachbarzeilen. Deshalb wird an jeder Zeilengrenze BEIDSEITIG
+    dasselbe gesetzt:
+        oben  (letzte Datenzeile ↔ Abstandszeile): dünne Trennlinie
+        unten (Abstandszeile ↔ Gesamt-Zeile):      dicke Summenlinie
+    Seitlich (lnL/lnR) bleibt die Zeile rahmenlos, sonst entsteht ein
+    sichtbarer leerer Kasten.
 
     Returns: die neue Zeile (pptx-Row) oder None.
     """
     tbl = table._tbl
     trs = tbl.findall(qn("a:tr"))
-    if len(trs) < 2:
+    if len(trs) < 3:
         return None
     vorlage = trs[-2]                    # letzte Datenzeile
     neu = deepcopy(vorlage)
     trs[-1].addprevious(neu)             # vor die Summenzeile
 
-    # Referenz auf die neue Zeile über den Index holen
     idx = len(table.rows) - 2
     row = table.rows[idx]
-    for cell in row.cells:
-        cell.text_frame.clear()
-        _zelle_rahmen_entfernen(cell)
+    letzte_daten = table.rows[idx - 1]
+    summe = table.rows[idx + 1]
+
+    for i, cell in enumerate(row.cells):
+        _zelle_leeren_kompakt(cell)          # leert + hält den Absatz klein
+        _zelle_rahmen_entfernen(cell)        # erst mal alle vier weg
+        # Oberkante = Unterkante der letzten Datenzeile (dünn)
+        if i < len(letzte_daten.cells):
+            _zelle_rahmen_uebernehmen(cell, letzte_daten.cells[i], "lnT", "lnB")
+        # Unterkante = Oberkante der Gesamt-Zeile (dicke Summenlinie)
+        if i < len(summe.cells):
+            _zelle_rahmen_uebernehmen(cell, summe.cells[i], "lnB", "lnT")
     return row
 
 
