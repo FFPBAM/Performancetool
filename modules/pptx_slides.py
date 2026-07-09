@@ -1168,6 +1168,271 @@ def fill_kennzahlen_table(table, kz: dict):
         set_cell_text_preserve_format(row.cells[4], bench_str)
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Generische Tabellen-Layout-Helfer (NEU 09.07.2026)
+#
+# Bewusst GENERISCH gehalten (Daten-Spalten werden als Parameter übergeben),
+# damit sie für JEDE Vorlage der PowerPoint-Familie wiederverwendbar sind —
+# unabhängig von der Spaltenanzahl. Die alten Helfer (remove_empty_table_rows,
+# fit_shape_to_table) sind fest auf das 11-spaltige Anlagevorschlag-Layout
+# verdrahtet und würden an der 7-spaltigen Einzeltitel-Tabelle mit
+# IndexError sterben — deshalb diese Parallel-Implementierung.
+#
+# WICHTIG: Diese Funktionen werden AUSSCHLIESSLICH von
+# fill_einzeltitel_themen_slide aufgerufen. Die Standard-Anlagevorschlag-
+# Folie bleibt unangetastet (eigener, kalibrierter Pfad).
+# ─────────────────────────────────────────────────────────────────────────
+
+# Untere Grenze des Tabellenbereichs der Einzeltitel-Folie.
+# Die dunkelblaue Abschlusslinie des Layouts ("Linie rechts") liegt bei
+# 6.38"; 6.20" lässt ~0.18" Sicherheitsabstand (Renderer legen Zeilen minimal
+# höher aus als berechnet — gemessen ~0.1" Drift über 37 Zeilen). NICHT mit dem globalen
+# MAX_TABLE_BOTTOM_INCH (6.60, Anlagevorschlag-Folie) verwechseln.
+EINZELTITEL_MAX_BOTTOM_INCH = 6.20
+
+EINZELTITEL_MIN_ROW_H_INCH = 0.125
+"""Untergrenze Datenzeilenhöhe (6pt-Text braucht ca. 0.10")."""
+
+EINZELTITEL_MAX_ROW_H_INCH = 0.19
+"""Obergrenze: bei wenigen Titeln sollen die Zeilen nicht aufgeblasen
+werden — der freie Bereich bleibt bewusst leer (statt leerer Linien)."""
+
+EINZELTITEL_MIN_FONT_PT = 6.0
+EINZELTITEL_MAX_FONT_PT = 7.0
+
+EINZELTITEL_GAP_H_INCH = 0.10
+"""Höhe der linienlosen Abstandszeile zwischen Tabelle und Gesamt-Zeile."""
+
+EINZELTITEL_SUMMARY_H_INCH = 0.17
+"""Höhe der Gesamt-Zeile (etwas mehr Luft, damit '100,00 %' vertikal
+mittig steht und nicht an der Linie klebt)."""
+
+_ROW_H_PER_PT_INCH = 0.0237
+"""Kalibriert an der Vorlage: 0.142"-Zeile trägt 6pt-Text."""
+
+_LINE_TAGS = ("lnL", "lnR", "lnT", "lnB")
+
+
+def _zelle_rahmen_entfernen(cell):
+    """Entfernt alle Rahmenlinien einer Tabellenzelle (setzt sie auf noFill).
+
+    Nötig für die Abstandszeile: eine geklonte Datenzeile bringt sonst ihre
+    0.25pt-Linien mit und es stünden drei Linien übereinander.
+    """
+    tcPr = cell._tc.get_or_add_tcPr()
+    for tag in _LINE_TAGS:
+        # vorhandene Linien-Elemente entfernen
+        for el in tcPr.findall(qn(f"a:{tag}")):
+            tcPr.remove(el)
+    # In Schema-Reihenfolge (lnL, lnR, lnT, lnB) explizit auf noFill setzen
+    from lxml import etree
+    for tag in _LINE_TAGS:
+        ln = etree.SubElement(tcPr, qn(f"a:{tag}"))
+        etree.SubElement(ln, qn("a:noFill"))
+
+
+def _zeile_schrift_setzen(row, font_pt: float, bold: Optional[bool] = None):
+    """Setzt Schriftgröße (und optional Fettung) ALLER Runs einer Zeile.
+
+    Behebt u.a. den Fall, dass ein Run in der Vorlage KEIN sz-Attribut hat
+    und dadurch die Default-Schriftgröße (~18pt) erbt — genau das ließ die
+    'Gesamt'-Zelle über die Zeile hinauswachsen und die Rahmenlinie
+    durchkreuzen.
+    """
+    for cell in row.cells:
+        for para in cell.text_frame.paragraphs:
+            for run in para.runs:
+                run.font.size = Pt(font_pt)
+                if bold is not None:
+                    run.font.bold = bold
+
+
+def tabelle_leere_zeilen_entfernen(table, daten_spalten,
+                                   kopf_zeilen: int = 1,
+                                   fuss_zeilen: int = 1) -> int:
+    """Entfernt leere Datenzeilen zwischen Kopf und Fuß (Summenzeile).
+
+    GENERISCH: `daten_spalten` ist die Liste der Spalten-Indizes, die über
+    'leer' entscheiden — dadurch für jede Vorlage der Familie nutzbar.
+    Indizes außerhalb der Tabelle werden ignoriert (statt IndexError).
+
+    Returns: Anzahl entfernter Zeilen.
+    """
+    n_rows = len(table.rows)
+    n_cols = len(table.columns)
+    if n_rows <= kopf_zeilen + fuss_zeilen:
+        return 0
+
+    spalten = [c for c in daten_spalten if c < n_cols]
+    zu_entfernen = []
+    for i in range(kopf_zeilen, n_rows - fuss_zeilen):
+        row = table.rows[i]
+        leer = True
+        for c in spalten:
+            text = row.cells[c].text_frame.text.strip()
+            if text and text != "\u00a0":       # NBSP zählt als leer
+                leer = False
+                break
+        if leer:
+            zu_entfernen.append(i)
+
+    if not zu_entfernen:
+        return 0
+
+    tbl = table._tbl
+    trs = tbl.findall(qn("a:tr"))
+    for idx in sorted(zu_entfernen, reverse=True):
+        tbl.remove(trs[idx])
+    return len(zu_entfernen)
+
+
+def _zelle_rahmen_uebernehmen(ziel_cell, quell_cell, ziel_tag: str, quell_tag: str):
+    """Kopiert eine Rahmenlinie (z.B. lnT) einer Quellzelle als andere Linie
+    (z.B. lnB) in die Zielzelle — inklusive Stärke, Farbe und Strichart.
+
+    Bewusst KOPIEREN statt Attribute nachzubauen: so bleibt exakt das
+    Corporate-Design der Vorlage erhalten (0.75pt, Farbe 14355C, solid).
+    """
+    from lxml import etree
+    q_tcPr = quell_cell._tc.get_or_add_tcPr()
+    quelle = q_tcPr.find(qn(f"a:{quell_tag}"))
+    if quelle is None:
+        return False
+    z_tcPr = ziel_cell._tc.get_or_add_tcPr()
+    for el in z_tcPr.findall(qn(f"a:{ziel_tag}")):
+        z_tcPr.remove(el)
+    neu = deepcopy(quelle)
+    neu.tag = qn(f"a:{ziel_tag}")
+    # Schema-Reihenfolge in tcPr: lnL, lnR, lnT, lnB, ...
+    reihenfolge = ["lnL", "lnR", "lnT", "lnB"]
+    ziel_pos = reihenfolge.index(ziel_tag)
+    eingefuegt = False
+    for kind in list(z_tcPr):
+        name = etree.QName(kind).localname
+        if name in reihenfolge and reihenfolge.index(name) > ziel_pos:
+            kind.addprevious(neu)
+            eingefuegt = True
+            break
+    if not eingefuegt:
+        # hinter die letzte vorhandene Linie, sonst an den Anfang
+        letzte = None
+        for kind in list(z_tcPr):
+            if etree.QName(kind).localname in reihenfolge:
+                letzte = kind
+        if letzte is not None:
+            letzte.addnext(neu)
+        else:
+            z_tcPr.insert(0, neu)
+    return True
+
+
+def tabelle_abschlusslinie_sichern(table, kopf_zeilen: int = 1) -> bool:
+    """Stellt sicher, dass die LETZTE Datenzeile die dicke Abschlusslinie hat.
+
+    Hintergrund: In der Vorlage hängt die dicke 0.75pt-Linie an der physisch
+    letzten Datenzeile. Werden leere Zeilen entfernt, rutscht eine normale
+    Zeile mit dünner 0.25pt-Linie ans Ende und die Tabelle wirkt unten offen.
+    Wir übernehmen deshalb die Linie der Summenzeile (deren lnT ist die
+    gleiche dicke Linie) als lnB der letzten Datenzeile.
+
+    Muss VOR dem Einfügen der Abstandszeile laufen (Indizes!).
+    """
+    n = len(table.rows)
+    if n < kopf_zeilen + 2:
+        return False
+    letzte_daten = table.rows[n - 2]
+    summe = table.rows[n - 1]
+    ok = False
+    for i, cell in enumerate(letzte_daten.cells):
+        if i < len(summe.cells):
+            ok = _zelle_rahmen_uebernehmen(cell, summe.cells[i], "lnB", "lnT") or ok
+    return ok
+
+
+def tabelle_abstandszeile_einfuegen(table):
+    """Fügt direkt VOR der letzten Zeile (Summe) eine linienlose, leere
+    Abstandszeile ein. Klont dafür die letzte Datenzeile (Struktur bleibt
+    erhalten), leert sie und entfernt ihre Rahmen.
+
+    Returns: die neue Zeile (pptx-Row) oder None.
+    """
+    tbl = table._tbl
+    trs = tbl.findall(qn("a:tr"))
+    if len(trs) < 2:
+        return None
+    vorlage = trs[-2]                    # letzte Datenzeile
+    neu = deepcopy(vorlage)
+    trs[-1].addprevious(neu)             # vor die Summenzeile
+
+    # Referenz auf die neue Zeile über den Index holen
+    idx = len(table.rows) - 2
+    row = table.rows[idx]
+    for cell in row.cells:
+        cell.text_frame.clear()
+        _zelle_rahmen_entfernen(cell)
+    return row
+
+
+def tabelle_dynamisch_skalieren(table_shape, max_bottom_inch: float,
+                                min_row_h: float = EINZELTITEL_MIN_ROW_H_INCH,
+                                max_row_h: float = EINZELTITEL_MAX_ROW_H_INCH,
+                                min_font_pt: float = EINZELTITEL_MIN_FONT_PT,
+                                max_font_pt: float = EINZELTITEL_MAX_FONT_PT,
+                                gap_h: float = EINZELTITEL_GAP_H_INCH,
+                                summary_h: float = EINZELTITEL_SUMMARY_H_INCH,
+                                kopf_zeilen: int = 1) -> dict:
+    """Skaliert Zeilenhöhen + Schriftgröße dynamisch auf den verfügbaren Platz.
+
+    Erwartete Struktur: [Kopf] + n Datenzeilen + [Abstandszeile] + [Summe].
+    Die Datenzeilen teilen sich den Rest zwischen Kopf und `max_bottom_inch`,
+    begrenzt durch min_row_h/max_row_h. Die Schriftgröße folgt der Zeilenhöhe
+    (kalibriert: 0.142" trägt 6pt), gedeckelt auf [min_font_pt, max_font_pt].
+
+    - VIELE Zeilen → eng (bis min_row_h / min_font_pt)
+    - WENIGE Zeilen → ruhiger (bis max_row_h), Rest bleibt bewusst leer
+
+    Returns: Dict mit den gewählten Werten (Diagnose) + ggf. "warnung".
+    """
+    table = table_shape.table
+    n_rows = len(table.rows)
+    # letzte zwei Zeilen = Abstandszeile + Summe
+    n_daten = max(0, n_rows - kopf_zeilen - 2)
+    if n_daten == 0:
+        return {"n_daten": 0}
+
+    kopf_h = sum(table.rows[i].height for i in range(kopf_zeilen)) / 914400.0
+    top_inch = table_shape.top / 914400.0
+    verfuegbar = max_bottom_inch - top_inch - kopf_h - gap_h - summary_h
+
+    roh = verfuegbar / n_daten
+    row_h = min(max_row_h, max(min_row_h, roh))
+    font_pt = min(max_font_pt, max(min_font_pt, round(row_h / _ROW_H_PER_PT_INCH * 2) / 2))
+
+    warnung = None
+    if roh < min_row_h:
+        warnung = (f"Einzeltitel-Tabelle: {n_daten} Zeilen — bei minimaler "
+                   f"Zeilenhöhe ({min_row_h}\") und {min_font_pt}pt reicht der "
+                   f"Platz nicht ganz. Folie bitte prüfen.")
+
+    # Zeilenhöhen setzen: Datenzeilen, Abstandszeile, Summenzeile
+    for i in range(kopf_zeilen, kopf_zeilen + n_daten):
+        table.rows[i].height = int(row_h * 914400)
+    table.rows[n_rows - 2].height = int(gap_h * 914400)     # Abstandszeile
+    table.rows[n_rows - 1].height = int(summary_h * 914400)  # Summe
+
+    # Schrift der Datenzeilen (Fettung der Gruppen-Header bleibt erhalten)
+    for i in range(kopf_zeilen, kopf_zeilen + n_daten):
+        _zeile_schrift_setzen(table.rows[i], font_pt)
+
+    # Shape-Höhe = Summe der Zeilenhöhen
+    total = sum(r.height for r in table.rows)
+    table_shape.height = total
+
+    return {"n_daten": n_daten, "row_h": round(row_h, 4),
+            "font_pt": font_pt, "bottom": round(top_inch + total / 914400.0, 3),
+            "warnung": warnung}
+
+
 def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
                                    eval_date=None):
     """Befüllt die Einzeltitel-Folie der THEMEN-Broschüren (NEU 06.07.2026,
@@ -1277,6 +1542,41 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
         if C_ANTEIL < len(t.columns):
             set_cell_text(summen_row.cells[C_ANTEIL],
                           fmt_pct(total if total > 0 else 1.0), is_bold=True)
+
+    # ── Layout (NEU 09.07.2026) ────────────────────────────────────────────
+    # Reihenfolge ist wichtig: erst leere Zeilen raus, dann Abstandszeile,
+    # dann skalieren (die Skalierung rechnet mit der finalen Zeilenzahl).
+    try:
+        # 1. Leere Datenzeilen entfernen (7-Spalten-Layout: 0/2/4/6).
+        #    Sonst bleiben bei kurzen Portfolios leere Zeilen MIT Linien stehen.
+        tabelle_leere_zeilen_entfernen(t, daten_spalten=(C_NAME, C_WAEHRUNG,
+                                                         C_WKN, C_ANTEIL))
+
+        # 1b. Dicke Abschlusslinie an die (nun) letzte Datenzeile übernehmen —
+        #     sonst endet die Tabelle bei kurzen Portfolios mit einer dünnen
+        #     0.25pt-Linie und wirkt unten offen. VOR der Abstandszeile!
+        tabelle_abschlusslinie_sichern(t)
+
+        # 2. Linienlose Abstandszeile vor die Gesamt-Zeile.
+        tabelle_abstandszeile_einfuegen(t)
+
+        # 3. Zeilenhöhen + Schrift dynamisch an den Platz anpassen; die
+        #    Tabelle endet garantiert oberhalb der blauen Abschlusslinie.
+        info = tabelle_dynamisch_skalieren(
+            tabelle, max_bottom_inch=EINZELTITEL_MAX_BOTTOM_INCH)
+
+        # 4. Gesamt-Zeile EXPLIZIT setzen. In der Vorlage hat die Zelle
+        #    "Gesamt" kein sz-Attribut und erbt sonst ~18pt → der Text quillt
+        #    über die Zeile und durchkreuzt die blaue Rahmenlinie.
+        summen_font = min(EINZELTITEL_MAX_FONT_PT,
+                          (info.get("font_pt") or EINZELTITEL_MIN_FONT_PT) + 0.5)
+        _zeile_schrift_setzen(t.rows[len(t.rows) - 1], summen_font, bold=True)
+
+        if info.get("warnung"):
+            EINZELTITEL_WARNUNGEN.append(info["warnung"])
+    except Exception as exc:      # Layout-Kosmetik darf den Export nie killen
+        EINZELTITEL_WARNUNGEN.append(
+            f"Einzeltitel {strategy_name}: Layout-Anpassung übersprungen ({exc})")
 
 
 # Sammelt Kapazitäts-Warnungen der Einzeltitel-Themen-Folie (analog zum
