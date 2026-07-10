@@ -523,7 +523,10 @@ _CVV_CONFIG = {
     # Zeiträume YTD/1/3/5/10 Jahre in den Zeilen, Strategien in den Spalten.
     # Quelle: compute_rollierend_data() je Strategie — dieselbe Mathematik wie
     # die Themen-Broschüren-Tabelle (Konsistenz-Doktrin).
-    "einmal_folien": {"uebersicht": 17},
+    # F19 = Linien-Chart "Klassische VV Strategien im Vergleich (nach Kosten)",
+    # 5 Serien, Index 100 je Strategie ab ihrem EIGENEN Start (Dynamic beginnt
+    # später → Lücke, keine Nulllinie).
+    "einmal_folien": {"uebersicht": 17, "vergleich": 19},
 }
 
 # Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
