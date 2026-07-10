@@ -421,11 +421,27 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 container.insert(list(container).index(referenz) + 1, neu)
                 dlbls[i] = neu
 
+    # ABSOLUTE Positionierung statt Offset (Fix 10.07.2026).
+    #
+    # Vorher schrieb der Code einen Offset RELATIV zur PowerPoint-Default-
+    # Position und nahm an, diese sei die Ring-Band-Mitte des Segments.
+    # Das stimmt NICHT, sobald PowerPoint die Labels selbst nach außen holt
+    # und entzerrt — bei holeSize 79 % passt kein Text ins Band, und bei eng
+    # benachbarten Segmenten (z.B. 341,4° und 358,1°) spreizt PowerPoint sie
+    # zusätzlich. Der Offset addierte sich dann auf einen unbekannten Nullpunkt.
+    # Am echten Export nachgemessen: bis zu 0,57" Abweichung.
+    #
+    # Mit xMode/yMode = "edge" sind x/y KEINE Offsets mehr, sondern die
+    # absolute Position der linken oberen Ecke des Labels, als Anteil der
+    # Chart-Fläche. Damit ist die berechnete Geometrie das, was PowerPoint
+    # zeichnet — unabhängig von jeder Automatik.
+    #
+    # Schema-Reihenfolge in CT_ManualLayout:
+    #   layoutTarget, xMode, yMode, wMode, hMode, x, y, w, h
     for i in range(len(mids)):
-        md = math.radians(mids[i])
         tx, ty = ziel[i]
-        dx, dy = cx + band_center * math.sin(md), cy - band_center * math.cos(md)
-        ox, oy = (tx - dx) / frame_w_in, (ty - dy) / frame_h_in
+        x_edge = (tx - HALB_W) / frame_w_in     # linke Kante des Labels
+        y_edge = (ty - HALB_H) / frame_h_in     # obere  Kante des Labels
         d = dlbls.get(i)
         if d is None:
             continue
@@ -433,13 +449,13 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         if layout is None:
             layout = etree.Element(_q("layout")); d.insert(1, layout)
         ml = layout.find(_q("manualLayout"))
-        if ml is None:
-            ml = etree.SubElement(layout, _q("manualLayout"))
-        for tag, val in (("x", ox), ("y", oy)):
-            e = ml.find(_q(tag))
-            if e is None:
-                e = etree.SubElement(ml, _q(tag))
-            e.set("val", f"{val:.4f}")
+        if ml is not None:
+            layout.remove(ml)
+        ml = etree.SubElement(layout, _q("manualLayout"))
+        for tag, val in (("xMode", "edge"), ("yMode", "edge")):
+            e = etree.SubElement(ml, _q(tag)); e.set("val", val)
+        for tag, val in (("x", x_edge), ("y", y_edge)):
+            e = etree.SubElement(ml, _q(tag)); e.set("val", f"{val:.5f}")
     # überzählige Label-Slots (idx >= Segmentzahl) entfernen
     for idx, d in list(dlbls.items()):
         if idx >= len(vals):
