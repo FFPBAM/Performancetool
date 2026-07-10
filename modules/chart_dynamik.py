@@ -7,6 +7,8 @@ import datetime as dt
 _C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 def _q(t): return f"{{{_C}}}{t}"
 
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+
 
 def _root(chart):
     # python-pptx: chart._chartSpace ist der lxml-Wurzelknoten des Charts
@@ -347,7 +349,258 @@ def _hat_dateax(chart):
     return _root(chart).find(".//" + _q("dateAx")) is not None
 
 
-def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14):
+
+# ─────────────────────────────────────────────────────────────────────────
+# Segmentfarben, Führungslinien und Label-Farben (NEU 10.07.2026)
+#
+# PROBLEM: Die <c:dPt>-Farben der Vorlage hängen am INDEX, nicht am Namen.
+# Die CVV-Vorlage hatte EDELMETALLE/RENTEN/LIQUIDITÄT (gold/blau/hellblau);
+# nach dem Befüllen steht AKTIEN auf idx 0 und erbt Gold. Die Farbe muss
+# deshalb datenbasiert je ASSETKLASSE gesetzt werden.
+#
+# Die Palette stammt aus den Vorlagen selbst (nicht erfunden):
+#   14355C dunkelblau · 66A4CE hellblau · 9FD0EF helleres blau
+#   BB9256 gold       · 808080 grau
+# ─────────────────────────────────────────────────────────────────────────
+
+ASSET_FARBEN = {
+    "AKTIEN":       "14355C",   # dunkelblau
+    "RENTEN":       "66A4CE",   # hellblau
+    "EDELMETALLE":  "BB9256",   # gold
+    "LIQUIDITÄT":   "9FD0EF",   # noch helleres blau
+    "SONSTIGE":     "808080",   # grau
+}
+
+# Textfarbe des Prozent-Labels je Assetklasse. Entspricht der Segmentfarbe,
+# ausser bei LIQUIDITÄT: 9FD0EF ist auf weiss zu kontrastarm zum Lesen —
+# dort wird die nächstdunklere Palettenfarbe verwendet.
+ASSET_LABEL_FARBEN = dict(ASSET_FARBEN, **{"LIQUIDITÄT": "66A4CE"})
+
+LEADER_GRAU = "A6A6A6"          # dezentes Grau für die Führungslinien
+LEADER_BREITE_EMU = 9525        # 0.75 pt
+
+_KERNKLASSEN = {"AKTIEN", "RENTEN", "EDELMETALLE", "LIQUIDITÄT"}
+_FILL_TAGS = ("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill")
+
+
+def _kategorien(ser):
+    """Liest die Kategorienamen (idx-Reihenfolge) einer Serie."""
+    cat = ser.find(_q("cat"))
+    if cat is None:
+        return []
+    namen = {}
+    for pt in cat.iter(_q("pt")):
+        try:
+            i = int(pt.get("idx"))
+        except (TypeError, ValueError):
+            continue
+        v = pt.find(_q("v"))
+        if v is not None and v.text:
+            namen[i] = v.text.strip()
+    return [namen.get(i, "") for i in range(max(namen) + 1)] if namen else []
+
+
+def _ist_assetklassen_ring(kategorien):
+    """True, wenn ALLE Kategorien Assetklassen sind und mindestens eine
+    Kernklasse dabei ist.
+
+    Damit fassen wir die Sektoren- und Regionen-Ringe der Themen-Broschüren
+    NICHT an — deren Kategorien ("Informationstechnologie", "Nordamerika", …)
+    stehen nicht in der Palette. Selbstselektierende Regel, kein Schalter.
+    """
+    if not kategorien:
+        return False
+    oben = [k.strip().upper() for k in kategorien if k.strip()]
+    if not oben:
+        return False
+    return all(k in ASSET_FARBEN for k in oben) and any(k in _KERNKLASSEN for k in oben)
+
+
+def _setze_fill(spPr, hexfarbe):
+    """Ersetzt die Füllung eines <c:spPr> durch solidFill(hexfarbe).
+
+    Schema-Reihenfolge in CT_ShapeProperties: (xfrm, geometry, FILL, ln, …).
+    Die Füllung wird deshalb VOR ein evtl. vorhandenes <a:ln> gesetzt.
+    """
+    from lxml import etree
+    for tag in _FILL_TAGS:
+        for el in spPr.findall(_A + tag):
+            spPr.remove(el)
+    fill = etree.Element(_A + "solidFill")
+    clr = etree.SubElement(fill, _A + "srgbClr")
+    clr.set("val", hexfarbe)
+    ln = spPr.find(_A + "ln")
+    if ln is not None:
+        ln.addprevious(fill)
+    else:
+        spPr.insert(0, fill)
+
+
+def ring_segmentfarben(chart):
+    """Setzt die Segmentfarben eines Assetklassen-Rings NAMENSBASIERT.
+
+    Ohne diesen Schritt erbt jedes Segment die Farbe des Vorlagen-<c:dPt> an
+    seiner INDEX-Position — dann ist z.B. AKTIEN gold statt dunkelblau.
+
+    Rührt Ringe an, deren Kategorien KEINE Assetklassen sind, nicht an.
+    Returns: dict {kategorie: hexfarbe} der gesetzten Segmente (leer = nichts getan).
+    """
+    from copy import deepcopy
+    from lxml import etree
+    root = _root(chart)
+    ser = root.find(".//" + _q("ser"))
+    if ser is None:
+        return {}
+    kats = _kategorien(ser)
+    if not _ist_assetklassen_ring(kats):
+        return {}
+
+    vorhandene = {}
+    for dpt in ser.findall(_q("dPt")):
+        i = dpt.find(_q("idx"))
+        if i is not None:
+            vorhandene[int(i.get("val"))] = dpt
+    if not vorhandene:
+        return {}
+    muster = vorhandene[min(vorhandene)]
+
+    gesetzt = {}
+    for i, name in enumerate(kats):
+        schluessel = name.strip().upper()
+        farbe = ASSET_FARBEN.get(schluessel)
+        if not farbe:
+            continue
+        dpt = vorhandene.get(i)
+        if dpt is None:
+            # Vorlage hat weniger dPt als Segmente → aus einem vorhandenen
+            # klonen (gleiche Falle wie bei den <c:dLbl>, siehe TW #26).
+            dpt = deepcopy(muster)
+            dpt.find(_q("idx")).set("val", str(i))
+            letztes = ser.findall(_q("dPt"))[-1]
+            letztes.addnext(dpt)
+            vorhandene[i] = dpt
+        spPr = dpt.find(_q("spPr"))
+        if spPr is None:
+            spPr = etree.SubElement(dpt, _q("spPr"))
+        _setze_fill(spPr, farbe)
+        gesetzt[name] = farbe
+
+    # Überzählige dPt (Vorlage hatte mehr Segmente als jetzt) entfernen —
+    # sonst färbt PowerPoint nicht existierende Punkte.
+    for i, dpt in list(vorhandene.items()):
+        if i >= len(kats):
+            ser.remove(dpt)
+    return gesetzt
+
+
+def ring_leaderlines(chart, farbe=LEADER_GRAU, breite_emu=LEADER_BREITE_EMU):
+    """Färbt die Führungslinien dezent (Default: Grau 0.75pt) statt Schwarz.
+
+    ACHTUNG (OOXML-Grenze): <c:leaderLines> gilt für die GANZE Serie — eine
+    Führungslinie pro Segment einzufärben ist im Chart-XML NICHT möglich.
+    Die farbliche Zuordnung übernimmt deshalb der Labeltext (ring_label_farben).
+
+    Schema-Reihenfolge in CT_DLbls: … showLeaderLines, dann leaderLines.
+    """
+    from lxml import etree
+    root = _root(chart)
+    ser = root.find(".//" + _q("ser"))
+    if ser is None:
+        return False
+    dLbls = ser.find(_q("dLbls"))
+    if dLbls is None:
+        return False
+
+    sll = dLbls.find(_q("showLeaderLines"))
+    if sll is None:
+        sll = etree.SubElement(dLbls, _q("showLeaderLines"))
+    sll.set("val", "1")
+
+    for el in dLbls.findall(_q("leaderLines")):
+        dLbls.remove(el)
+    ll = etree.SubElement(dLbls, _q("leaderLines"))
+    spPr = etree.SubElement(ll, _q("spPr"))
+    ln = etree.SubElement(spPr, _A + "ln")
+    ln.set("w", str(int(breite_emu)))
+    fill = etree.SubElement(ln, _A + "solidFill")
+    clr = etree.SubElement(fill, _A + "srgbClr")
+    clr.set("val", farbe)
+    return True
+
+
+def ring_label_farben(chart):
+    """Färbt jeden Prozent-Labeltext in der Farbe seines Segments.
+
+    Das ist die einzige native Möglichkeit, Label und Segment farblich zu
+    verbinden (Führungslinien lassen sich nur serienweit färben). LIQUIDITÄT
+    bekommt die nächstdunklere Palettenfarbe, damit der Text lesbar bleibt.
+    """
+    from lxml import etree
+    root = _root(chart)
+    ser = root.find(".//" + _q("ser"))
+    if ser is None:
+        return 0
+    kats = _kategorien(ser)
+    if not _ist_assetklassen_ring(kats):
+        return 0
+    dLbls = ser.find(_q("dLbls"))
+    if dLbls is None:
+        return 0
+
+    n = 0
+    for dLbl in dLbls.findall(_q("dLbl")):
+        i = dLbl.find(_q("idx"))
+        if i is None:
+            continue
+        idx = int(i.get("val"))
+        if idx >= len(kats):
+            continue
+        farbe = ASSET_LABEL_FARBEN.get(kats[idx].strip().upper())
+        if not farbe:
+            continue
+        # CT_DLbl-Reihenfolge: idx, layout, tx, numFmt, spPr, txPr, dLblPos, …
+        txPr = dLbl.find(_q("txPr"))
+        if txPr is None:
+            txPr = etree.Element(_q("txPr"))
+            etree.SubElement(txPr, _A + "bodyPr")
+            etree.SubElement(txPr, _A + "lstStyle")
+            p = etree.SubElement(txPr, _A + "p")
+            pPr = etree.SubElement(p, _A + "pPr")
+            etree.SubElement(pPr, _A + "defRPr")
+            etree.SubElement(p, _A + "endParaRPr")
+            spPr = dLbl.find(_q("spPr"))
+            (spPr.addnext(txPr) if spPr is not None
+             else dLbl.find(_q("idx")).addnext(txPr))
+        for rpr in txPr.iter(_A + "defRPr"):
+            for tag in _FILL_TAGS:
+                for el in rpr.findall(_A + tag):
+                    rpr.remove(el)
+            fill = etree.Element(_A + "solidFill")
+            clr = etree.SubElement(fill, _A + "srgbClr")
+            clr.set("val", farbe)
+            rpr.insert(0, fill)
+        n += 1
+    return n
+
+
+def _kleine_segmente(chart, schwelle=0.08):
+    """Anzahl Segmente unter `schwelle` (Anteil). Für adaptives Entzerren."""
+    root = _root(chart)
+    vals = [float(v.text) for v in root.iter(_q("v"))
+            if v.getparent().getparent().tag == _q("numCache") and v.text]
+    ser = root.find(".//" + _q("ser"))
+    val = ser.find(_q("val")) if ser is not None else None
+    if val is None:
+        return 0
+    zahlen = [float(v.text) for v in val.iter(_q("v")) if v.text]
+    s = sum(zahlen)
+    if s <= 0:
+        return 0
+    return sum(1 for z in zahlen if z / s < schwelle)
+
+def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
+                   min_gap_deg=24.0, min_gap_deg_klein=32.0,
+                   leader_farbe=LEADER_GRAU, label_farben=True):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
@@ -361,7 +614,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14):
     Rührt NICHTS an der Download-Logik an — arbeitet nur an Chart-XML.
     Gibt eine kleine Statistik zurück (für optionales Logging).
     """
-    stat = {"ringe": 0, "linien": 0}
+    stat = {"ringe": 0, "linien": 0, "ringe_gefaerbt": 0, "labels_gefaerbt": 0}
     for slide in prs.slides:
         for shape in slide.shapes:
             if not getattr(shape, "has_chart", False):
@@ -371,11 +624,36 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14):
             try:
                 if "DOUGHNUT" in typ:
                     ring_holesize(chart, hole_size)
+
+                    # NEU 10.07.2026 — Segmentfarben NAMENSBASIERT setzen.
+                    # Gibt {} zurück, wenn es kein Assetklassen-Ring ist
+                    # (Sektoren/Regionen bleiben damit unangetastet).
+                    gesetzt = ring_segmentfarben(chart)
+                    if gesetzt:
+                        stat["ringe_gefaerbt"] += 1
+
                     # Rahmenmaße in Zoll (EMU/914400) für die geometrische
                     # Label-Platzierung.
                     _fw = shape.width / 914400.0
                     _fh = shape.height / 914400.0
-                    ring_labels_aussen_dynamisch(chart, _fw, _fh, gap_in=label_gap_in)
+
+                    # Adaptives Entzerren: NUR bei Assetklassen-Ringen mit
+                    # mehreren kleinen Segmenten (dort drängeln sich die
+                    # Labels oben). Sektoren-Ringe behalten min_gap_deg=24.
+                    _gap = min_gap_deg
+                    if gesetzt and _kleine_segmente(chart) >= 2:
+                        _gap = min_gap_deg_klein
+
+                    ring_labels_aussen_dynamisch(chart, _fw, _fh,
+                                                 gap_in=label_gap_in,
+                                                 min_gap_deg=_gap)
+
+                    # Führungslinien dezent grau statt schwarz; Labeltext in
+                    # der Segmentfarbe (einzige native Zuordnungsmöglichkeit).
+                    if leader_farbe:
+                        ring_leaderlines(chart, farbe=leader_farbe)
+                    if gesetzt and label_farben:
+                        stat["labels_gefaerbt"] += ring_label_farben(chart)
                     stat["ringe"] += 1
                 elif "LINE" in typ and _hat_dateax(chart):
                     datumsachse_an_daten(chart)
