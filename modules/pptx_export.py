@@ -106,6 +106,7 @@ try:
         fill_zusammenstellung_slide,
         fill_rollierend_slide,
         fill_einzeltitel_themen_slide,
+        fill_uebersicht_slide,
     )
 except ImportError:
     from pptx_slides import (
@@ -128,6 +129,7 @@ except ImportError:
         fill_zusammenstellung_slide,
         fill_rollierend_slide,
         fill_einzeltitel_themen_slide,
+        fill_uebersicht_slide,
     )
 
 
@@ -357,6 +359,17 @@ def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame,
     """
     return fill_anlagevorschlag_slides(prs, slide_7_idx, df, strategy_name,
                                         eval_date=eval_date, **opt)
+
+
+def _fill_uebersicht_slide(prs, slide_idx: int, rollierend_liste,
+                           stand_date_str=None, **opt):
+    """Wrapper für pptx_slides.fill_uebersicht_slide (NEU 10.07.2026).
+
+    Strategieübergreifende Tabelle (CVV Folie 17) — läuft EINMAL, bekommt die
+    rollierenden Daten ALLER Strategien in Spaltenreihenfolge.
+    """
+    return fill_uebersicht_slide(prs, slide_idx, rollierend_liste,
+                                 stand_date_str=stand_date_str, **opt)
 
 
 def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance_data=None,
@@ -1165,6 +1178,34 @@ def generate_portfolioanalyse_pptx(
                 _update_quelle_datum(prs, datum_str)
         except Exception:
             pass
+
+    # ── Schritt 3b: Folien, die EINMAL für ALLE Strategien laufen ──────────
+    # (NEU 10.07.2026, für CVV Folie 17: Wertentwicklung aller fünf Strategien
+    # nebeneinander.) Konfiguration:
+    #     cfg["einmal_folien"] = {"uebersicht": 17}   # 1-indexiert
+    # Fehlt der Schlüssel, passiert nichts — Standard/Themen unberührt.
+    for rolle, pos in (cfg.get("einmal_folien") or {}).items():
+        idx = pos - 1
+        try:
+            if rolle == "uebersicht":
+                roll_liste = [_build_rollierend_data(performance_inputs, k)
+                              for k in range(len(portfolios))]
+                if not any(roll_liste):
+                    _record_build_error(
+                        f"Folie {pos}",
+                        ValueError("Keine Performance-Zeitreihen übergeben — "
+                                   "Übersichtstabelle behält die Vorlagen-Werte."))
+                    continue
+                _stand = _stand_str(portfolios[0][2]) if portfolios else None
+                _fill_uebersicht_slide(prs, idx, roll_liste,
+                                       stand_date_str=_stand,
+                                       **(rollen_optionen.get(rolle, {})))
+            else:
+                _record_build_error(
+                    f"Folie {pos}",
+                    ValueError(f"Unbekannte Einmal-Rolle '{rolle}'"))
+        except Exception as _ex:
+            _record_build_error(f"Folie {pos} ({rolle})", _ex)
 
     # Foliennummern dynamisch setzen (NACH allen Add/Remove/Duplicate-Operationen,
     # VOR dem Speichern). Korrigiert die statischen Werte aus der Vorlage
