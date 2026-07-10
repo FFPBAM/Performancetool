@@ -87,7 +87,8 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
 
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                  gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
-                                 tangential_in=0.14, rand_oben_in=None):
+                                 tangential_in=0.14, rand_oben_in=None,
+                                 kopf_frei_in=None):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -205,6 +206,10 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     # Oberer Rand separat steuerbar (NEU 10.07.2026): über dem Ring sitzt der
     # Überschriftenbalken ("AKTUELLE STRUKTUR"). rand_in=0.12 ließ die oberen
     # Labels fast am Balken kleben. rand_oben_in=None → altes Verhalten.
+    # ACHTUNG: _rand_oben klemmt die Label-MITTE. Oberkante = Mitte - HALB_H.
+    # Muss in ALLEN nachfolgenden Durchläufen benutzt werden (De-overlap,
+    # Leader-Garantie, Mindest-Ringabstand) — sonst schiebt der letzte Pass
+    # das Label wieder bis rand_in hoch und es landet im Überschriftenbalken.
     _rand_oben = rand_in if rand_oben_in is None else float(rand_oben_in)
 
     ziel = []
@@ -265,7 +270,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 ny = ziel[i][1] + korr * perp_y
                 # im Rahmen halten
                 ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, nx))
-                ziel[i][1] = max(rand_in, min(frame_h_in - rand_in, ny))
+                ziel[i][1] = max(_rand_oben, min(frame_h_in - rand_in, ny))
         # Überlappung erneut auflösen (Tangential-Schub kann welche erzeugt haben)
         for _ in range(60):
             bewegt = False
@@ -276,7 +281,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                     if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
                         schub = (min_v - abs(ziel[i][1] - ziel[j][1])) / 2.0 + 0.005
                         hoch, runter = (i, j) if ziel[i][1] <= ziel[j][1] else (j, i)
-                        ziel[hoch][1] = max(rand_in, ziel[hoch][1] - schub)
+                        ziel[hoch][1] = max(_rand_oben, ziel[hoch][1] - schub)
                         ziel[runter][1] = min(frame_h_in - rand_in, ziel[runter][1] + schub)
                         bewegt = True
             if not bewegt:
@@ -296,7 +301,91 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
             if inner < min_clear:
                 schub = min_clear - inner
                 ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, ziel[i][0] + schub * lvx / rad))
-                ziel[i][1] = max(rand_in, min(frame_h_in - rand_in, ziel[i][1] + schub * lvy / rad))
+                ziel[i][1] = max(_rand_oben, min(frame_h_in - rand_in, ziel[i][1] + schub * lvy / rad))
+
+    # 6d) KOPF-FREIHALTUNG (NEU 10.07.2026) — harte Garantie gegen Kollision
+    #     mit dem Überschriftenbalken.
+    #
+    #     Ein Label, das oben am Ring sitzt, lässt sich RADIAL nicht nach unten
+    #     schieben: dort ist der Ring (r_use = max(r_use, R_out+0.05) gewinnt).
+    #     Ein größerer oberer Rand bewegt es deshalb kaum.
+    #
+    #     Lösung: das Label auf SEINEM Radius entlang der Ringkurve wegdrehen,
+    #     bis die geforderte Oberkante erreicht ist. Der Abstand zum Ring bleibt
+    #     dabei exakt erhalten, die Führungslinie zeigt weiter auf sein Segment.
+    #
+    #         y = cy - r*cos(a)  →  cos(a) = (cy - y_ziel) / r
+    #
+    #     kopf_frei_in = Mindest-Oberkante des Labels (None → Pass aus).
+    if kopf_frei_in is not None:
+        y_soll = float(kopf_frei_in) + HALB_H          # gewünschte Label-MITTE
+        for i in range(len(mids)):
+            if ziel[i][1] >= y_soll - 1e-6:
+                continue                                # tief genug
+            dx0, dy0 = ziel[i][0] - cx, ziel[i][1] - cy
+            r_i = math.hypot(dx0, dy0)
+            if r_i < 1e-6:
+                continue
+            seite = 1.0 if dx0 >= 0 else -1.0           # Seite beibehalten
+            # Winkel UND Radius gemeinsam lösen: beim Herunterdrehen zeigt die
+            # Textbox stärker mit ihrer BREITE zum Ring (HALB_W statt HALB_H),
+            # der Radius muss also mitwachsen — sonst berührt das Label den Ring.
+            r = r_i
+            gefunden = False
+            for _ in range(8):
+                c = (cy - y_soll) / r
+                if abs(c) > 1.0:
+                    break
+                a = math.acos(max(-1.0, min(1.0, c)))
+                sx, sy = seite * math.sin(a), -math.cos(a)
+                r_noetig = R_out + gap_in + HALB_W * abs(sx) + HALB_H * abs(sy)
+                r_neu = max(r, r_noetig)
+                if abs(r_neu - r) < 1e-4:
+                    gefunden = True
+                    break
+                r = r_neu
+            if not gefunden and abs((cy - y_soll) / r) > 1.0:
+                # Radius reicht nicht: so tief wie möglich (waagerecht daneben)
+                ziel[i][1] = cy
+                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
+                                              cx + seite * r))
+                continue
+            c = max(-1.0, min(1.0, (cy - y_soll) / r))
+            a = math.acos(c)
+            ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
+                                          cx + seite * r * math.sin(a)))
+            ziel[i][1] = cy - r * c
+
+        # Danach nur noch NACH UNTEN entzerren — nie wieder nach oben.
+        for _ in range(60):
+            bewegt = False
+            reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
+            for a_ in range(len(reihenfolge)):
+                for b_ in range(a_ + 1, len(reihenfolge)):
+                    i, j = reihenfolge[a_], reihenfolge[b_]
+                    if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
+                        schub = (min_v - abs(ziel[i][1] - ziel[j][1])) + 0.005
+                        runter = j if ziel[j][1] >= ziel[i][1] else i
+                        ziel[runter][1] = min(frame_h_in - rand_in,
+                                              ziel[runter][1] + schub)
+                        bewegt = True
+            if not bewegt:
+                break
+
+        # Das Nach-unten-Schieben kann ein Label auf den Ring drücken.
+        # Deshalb noch einmal radial nach außen — aber nie über die Kopf-Grenze.
+        for i in range(len(mids)):
+            lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
+            rad = math.hypot(lvx, lvy)
+            if rad < 1e-6:
+                continue
+            inner = rad - (HALB_W * abs(lvx) + HALB_H * abs(lvy)) / rad - R_out
+            if inner < min_clear:
+                schub = min_clear - inner
+                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
+                                              ziel[i][0] + schub * lvx / rad))
+                ziel[i][1] = max(y_soll, min(frame_h_in - rand_in,
+                                             ziel[i][1] + schub * lvy / rad))
 
     # 7) Offsets schreiben (Nullpunkt = Ring-Band-Mitte des Segments; so
     #    rechnet PowerPoint den manualLayout-Offset bei vorhandenem
@@ -347,6 +436,47 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
             d.getparent().remove(d)
     return {"segmente": len(vals), "R_out": round(R_out, 3)}
 
+
+
+def kopf_sperre_aus_usershapes(chart, frame_h_in, luft_in=0.30):
+    """Liest die Unterkante des Überschriften-Balkens AUS DEM CHART.
+
+    Der Balken ("AKTUELLE STRUKTUR") ist kein Folien-Shape, sondern ein
+    <cdr:relSizeAnchor> in ppt/drawings/drawingN.xml (chartUserShapes) des
+    Charts. Gemessen an der CVV-Vorlage: y 0.02"…0.25" bei 3.39" Rahmenhöhe.
+
+    Statt die Sperre fest zu verdrahten, lesen wir sie hier — dann stimmt sie
+    auch, wenn jemand den Balken in der Vorlage verschiebt.
+
+    Returns: Mindest-Oberkante für Labels (Zoll ab Chartrahmen-Oberkante)
+             oder None, wenn kein Balken gefunden wurde.
+    """
+    CDR = "{http://schemas.openxmlformats.org/drawingml/2006/chartDrawing}"
+    try:
+        from lxml import etree
+        for rel in chart.part.rels.values():
+            if "chartUserShapes" not in rel.reltype:
+                continue
+            root = etree.fromstring(rel.target_part.blob)
+            unten = None
+            for anchor in root:
+                f = anchor.find(CDR + "from")
+                t = anchor.find(CDR + "to")
+                if f is None or t is None:
+                    continue
+                fx = float(f.find(CDR + "x").text)
+                fy = float(f.find(CDR + "y").text)
+                tx = float(t.find(CDR + "x").text)
+                ty = float(t.find(CDR + "y").text)
+                # oberes, nahezu rahmenbreites Rechteck = Überschriftenbalken
+                if fy < 0.15 and (tx - fx) > 0.8:
+                    kante = ty * frame_h_in
+                    unten = kante if unten is None else max(unten, kante)
+            if unten is not None:
+                return unten + luft_in
+    except Exception:
+        pass
+    return None
 
 def ring_holesize(chart, hole=79):
     """Setzt die Ring-Dicke (holeSize = Lochanteil in %). 79 ≈ dünner
@@ -609,9 +739,9 @@ def _kleine_segmente(chart, schwelle=0.08):
     return sum(1 for z in zahlen if z / s < schwelle)
 
 def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
-                   min_gap_deg=24.0, min_gap_deg_klein=44.0,
+                   min_gap_deg=24.0, min_gap_deg_klein=60.0,
                    tangential_in=0.14, tangential_klein=0.24,
-                   rand_oben_klein=0.34,
+                   rand_oben_klein=0.52, kopf_frei_klein=0.60,
                    leader_farbe=LEADER_GRAU,
                    label_schriftfarbe=LABEL_SCHRIFTFARBE):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
@@ -655,23 +785,37 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                     # Labels oben). Sektoren-Ringe behalten min_gap_deg=24.
                     #
                     # Drei Stellschrauben gleichzeitig (10.07.2026):
-                    #   min_gap_deg  spreizt die Winkel → Labels wandern
-                    #                seitlich auseinander (oben wirkt das stark)
-                    #   rand_oben_in hält Abstand zum Überschriftenbalken
+                    #   min_gap_deg  spreizt die Winkel → DER wirksame Hebel.
+                    #                r_use = max(r_use, R_out+0.05) verhindert,
+                    #                dass ein Label radial nach unten in den Ring
+                    #                rutscht — ein größerer rand_oben_in allein
+                    #                bewegt oben stehende Labels daher kaum.
+                    #                Nur der Winkel dreht sie vom Balken weg.
+                    #   rand_oben_in Untergrenze der Label-MITTE (Oberkante =
+                    #                Mitte - 0.10"). Muss in allen Pässen gelten.
                     #   tangential_in längerer, weniger steiler Führungsstrich
                     _gap = min_gap_deg
                     _rand_oben = None
                     _tang = tangential_in
+                    _kopf = None
                     if gesetzt and _kleine_segmente(chart) >= 2:
                         _gap = min_gap_deg_klein
                         _rand_oben = rand_oben_klein
                         _tang = tangential_klein
+                        # Balkenunterkante aus dem Chart lesen (robust gegen
+                        # Vorlagen-Änderungen); Konstante nur als Fallback.
+                        # Nie unter den Mindestwert, aber nach oben anpassen,
+                        # falls der Balken in der Vorlage tiefer sitzt.
+                        _gemessen = kopf_sperre_aus_usershapes(chart, _fh)
+                        _kopf = (max(_gemessen, kopf_frei_klein)
+                                 if _gemessen is not None else kopf_frei_klein)
 
                     ring_labels_aussen_dynamisch(chart, _fw, _fh,
                                                  gap_in=label_gap_in,
                                                  min_gap_deg=_gap,
                                                  tangential_in=_tang,
-                                                 rand_oben_in=_rand_oben)
+                                                 rand_oben_in=_rand_oben,
+                                                 kopf_frei_in=_kopf)
 
                     # Führungslinien dezent grau statt schwarz; Labeltext in
                     # der Segmentfarbe (einzige native Zuordnungsmöglichkeit).
