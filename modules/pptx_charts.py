@@ -483,3 +483,145 @@ def update_chart_values_inplace(chart_shape, categories: list, series_data: list
             pt_count = ser_elem.find(f".//c:{tag}//c:ptCount", NS_CHART)
             if pt_count is not None:
                 pt_count.set("val", str(len(values) if tag == "val" else len(categories)))
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Linien-Chart mit LÜCKEN und variabler Punktzahl (NEU 10.07.2026)
+#
+# update_chart_values_inplace() überschreibt nur VORHANDENE <c:pt>-Elemente —
+# es kann weder wachsen noch schrumpfen noch Lücken lassen. Für die
+# CVV-Vergleichsfolie (F19) brauchen wir beides:
+#   • variable Punktzahl (Monatswerte seit 2009, wächst mit jedem Monat)
+#   • LÜCKEN: Strategien mit späterem Start haben keine frühen Werte.
+#     Im Chart-XML wird das über FEHLENDE <c:pt idx="…"> gelöst
+#     (nicht über 0 oder leere Werte!) zusammen mit dispBlanksAs="gap".
+# ─────────────────────────────────────────────────────────────────────────
+
+_C_NS = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+_A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+
+
+def _cq(tag):
+    return _C_NS + tag
+
+
+def _numcache_neu_aufbauen(num_ref, werte_nach_idx: dict, ptcount: int,
+                           format_code: str):
+    """Baut den <c:numCache> eines <c:numRef> komplett neu auf.
+
+    werte_nach_idx: {index: wert} — nur diese Indizes bekommen ein <c:pt>.
+    Fehlende Indizes bleiben LEER → PowerPoint zeichnet dort nichts
+    (dispBlanksAs="gap"). Das ist der Mechanismus für später startende Reihen.
+    """
+    from lxml import etree
+    cache = num_ref.find(_cq("numCache"))
+    if cache is None:
+        cache = etree.SubElement(num_ref, _cq("numCache"))
+    for kind in list(cache):
+        cache.remove(kind)
+    fc = etree.SubElement(cache, _cq("formatCode"))
+    fc.text = format_code
+    pc = etree.SubElement(cache, _cq("ptCount"))
+    pc.set("val", str(int(ptcount)))
+    for i in sorted(werte_nach_idx):
+        pt = etree.SubElement(cache, _cq("pt"))
+        pt.set("idx", str(int(i)))
+        v = etree.SubElement(pt, _cq("v"))
+        wert = werte_nach_idx[i]
+        v.text = f"{float(wert):.6f}" if isinstance(wert, float) else str(wert)
+    return cache
+
+
+def set_line_series_sparse(chart_shape, kategorien, serien,
+                           cat_format_code="m/d/yyyy",
+                           val_format_code="0.00%"):
+    """Schreibt Kategorien und Werte eines Linien-Charts mit Lücken.
+
+    Args:
+        kategorien: Liste der X-Werte (Excel-Seriennummern für eine dateAx).
+        serien: Liste (in Reihenfolge der <c:ser> im Chart!) von
+            (name_oder_None, {kategorie_index: wert}).
+            name=None → Serienname der Vorlage bleibt stehen.
+            Ein Index, der fehlt, erzeugt eine LÜCKE.
+
+    Setzt zusätzlich dispBlanksAs="gap", damit PowerPoint Lücken nicht als
+    Null interpretiert.
+
+    Returns: Anzahl beschriebener Serien (0 = Chart passte nicht).
+    """
+    from lxml import etree
+    chart = chart_shape.chart
+    root = chart._chartSpace
+    ser_elems = root.findall(".//" + _cq("ser"))
+    if not ser_elems or len(ser_elems) != len(serien):
+        return 0
+
+    n = len(kategorien)
+    kat_nach_idx = {i: k for i, k in enumerate(kategorien)}
+
+    for ser, (name, werte) in zip(ser_elems, serien):
+        if name:
+            tx_v = ser.find(".//" + _cq("tx") + "//" + _cq("v"))
+            if tx_v is not None:
+                tx_v.text = str(name)
+        cat = ser.find(_cq("cat"))
+        if cat is not None:
+            ref = cat.find(_cq("numRef"))          # explizit: lxml-Elemente
+            if ref is not None:                    # nie per "or" testen!
+                _numcache_neu_aufbauen(ref, kat_nach_idx, n, cat_format_code)
+        val = ser.find(_cq("val"))
+        if val is not None:
+            ref = val.find(_cq("numRef"))
+            if ref is not None:
+                _numcache_neu_aufbauen(ref, werte, n, val_format_code)
+
+    # Lücken als Lücken zeichnen, nicht als Null
+    plot = root.find(".//" + _cq("chart"))
+    if plot is not None:
+        for el in plot.findall(_cq("dispBlanksAs")):
+            plot.remove(el)
+        dba = etree.SubElement(plot, _cq("dispBlanksAs"))
+        dba.set("val", "gap")
+    return len(ser_elems)
+
+
+def set_series_line_colors(chart_shape, farben_nach_name: dict,
+                           breite_emu: int = None):
+    """Setzt die Linienfarbe je Serie NAMENSBASIERT (statt Theme-Akzent).
+
+    Die CVV-Vorlage nutzt schemeClr accent1..5 — das sind die Office-Standard-
+    farben (Blau/Orange/Grau/Gelb), nicht das Corporate Design. Farben werden
+    deshalb explizit als srgbClr gesetzt.
+
+    Serien, deren Name nicht im Dict steht, bleiben unangetastet.
+    Returns: Anzahl gefärbter Serien.
+    """
+    from lxml import etree
+    root = chart_shape.chart._chartSpace
+    n = 0
+    for ser in root.findall(".//" + _cq("ser")):
+        tx_v = ser.find(".//" + _cq("tx") + "//" + _cq("v"))
+        name = tx_v.text.strip() if (tx_v is not None and tx_v.text) else None
+        farbe = farben_nach_name.get(name)
+        if not farbe:
+            continue
+        spPr = ser.find(_cq("spPr"))
+        if spPr is None:
+            spPr = etree.Element(_cq("spPr"))
+            tx = ser.find(_cq("tx"))
+            (tx.addnext(spPr) if tx is not None else ser.insert(0, spPr))
+        ln = spPr.find(_A_NS + "ln")
+        if ln is None:
+            ln = etree.SubElement(spPr, _A_NS + "ln")
+        if breite_emu:
+            ln.set("w", str(int(breite_emu)))
+        # vorhandene Füllungen der Linie entfernen (schemeClr/srgbClr/noFill)
+        for tag in ("noFill", "solidFill", "gradFill", "pattFill"):
+            for el in ln.findall(_A_NS + tag):
+                ln.remove(el)
+        fill = etree.Element(_A_NS + "solidFill")
+        clr = etree.SubElement(fill, _A_NS + "srgbClr")
+        clr.set("val", farbe)
+        ln.insert(0, fill)
+        n += 1
+    return n
