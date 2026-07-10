@@ -529,10 +529,6 @@ _CVV_CONFIG = {
     "einmal_folien": {"uebersicht": 17, "vergleich": 19},
 }
 
-# Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
-# Nur Familien mit EIGENER Vorlage hier eintragen. Familien ohne Eintrag
-# (oder leere Familie) → Standard-Vorlage (Vorlage_FFPB.pptx, config None).
-# ETF / ESG bekommen ihre Einträge, sobald ihre Vorlagen existieren.
 # Struktur der ESG-Broschüre ("ESG Infoboard", NEU 10.07.2026).
 #
 # Gleicher Bauplan wie CVV (feste Blöcke, Kästen unterscheiden sich je
