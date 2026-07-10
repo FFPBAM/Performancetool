@@ -371,10 +371,10 @@ ASSET_FARBEN = {
     "SONSTIGE":     "808080",   # grau
 }
 
-# Textfarbe des Prozent-Labels je Assetklasse. Entspricht der Segmentfarbe,
-# ausser bei LIQUIDITÄT: 9FD0EF ist auf weiss zu kontrastarm zum Lesen —
-# dort wird die nächstdunklere Palettenfarbe verwendet.
-ASSET_LABEL_FARBEN = dict(ASSET_FARBEN, **{"LIQUIDITÄT": "66A4CE"})
+# Schriftfarbe der Prozent-Labels: IMMER Schwarz, unabhängig vom Segment.
+# (Anforderung 10.07.2026 — die Zuordnung Label→Segment läuft über Position
+# und Führungslinie, NICHT über die Schriftfarbe. Farbe gehört an den Ring.)
+LABEL_SCHRIFTFARBE = "000000"
 
 LEADER_GRAU = "A6A6A6"          # dezentes Grau für die Führungslinien
 LEADER_BREITE_EMU = 9525        # 0.75 pt
@@ -528,20 +528,21 @@ def ring_leaderlines(chart, farbe=LEADER_GRAU, breite_emu=LEADER_BREITE_EMU):
     return True
 
 
-def ring_label_farben(chart):
-    """Färbt jeden Prozent-Labeltext in der Farbe seines Segments.
+def ring_label_schriftfarbe(chart, farbe=LABEL_SCHRIFTFARBE):
+    """Setzt die Schriftfarbe ALLER Prozent-Labels einheitlich (Default schwarz).
 
-    Das ist die einzige native Möglichkeit, Label und Segment farblich zu
-    verbinden (Führungslinien lassen sich nur serienweit färben). LIQUIDITÄT
-    bekommt die nächstdunklere Palettenfarbe, damit der Text lesbar bleibt.
+    Die Vorlagen setzen keine explizite Textfarbe (die Labels erben Schwarz aus
+    dem Theme). Wir setzen sie trotzdem explizit — dann bleibt der Text schwarz,
+    egal welches Theme die Vorlage mitbringt.
+
+    Die Schriftfarbe hängt bewusst NICHT von der Segmentfarbe ab: Die Zuordnung
+    Label→Segment erfolgt über die Position und die Führungslinie. Farbe gehört
+    an den Ring, nicht an die Zahl.
     """
     from lxml import etree
     root = _root(chart)
     ser = root.find(".//" + _q("ser"))
     if ser is None:
-        return 0
-    kats = _kategorien(ser)
-    if not _ist_assetklassen_ring(kats):
         return 0
     dLbls = ser.find(_q("dLbls"))
     if dLbls is None:
@@ -549,14 +550,7 @@ def ring_label_farben(chart):
 
     n = 0
     for dLbl in dLbls.findall(_q("dLbl")):
-        i = dLbl.find(_q("idx"))
-        if i is None:
-            continue
-        idx = int(i.get("val"))
-        if idx >= len(kats):
-            continue
-        farbe = ASSET_LABEL_FARBEN.get(kats[idx].strip().upper())
-        if not farbe:
+        if dLbl.find(_q("idx")) is None:
             continue
         # CT_DLbl-Reihenfolge: idx, layout, tx, numFmt, spPr, txPr, dLblPos, …
         txPr = dLbl.find(_q("txPr"))
@@ -600,7 +594,8 @@ def _kleine_segmente(chart, schwelle=0.08):
 
 def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                    min_gap_deg=24.0, min_gap_deg_klein=32.0,
-                   leader_farbe=LEADER_GRAU, label_farben=True):
+                   leader_farbe=LEADER_GRAU,
+                   label_schriftfarbe=LABEL_SCHRIFTFARBE):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
@@ -614,7 +609,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
     Rührt NICHTS an der Download-Logik an — arbeitet nur an Chart-XML.
     Gibt eine kleine Statistik zurück (für optionales Logging).
     """
-    stat = {"ringe": 0, "linien": 0, "ringe_gefaerbt": 0, "labels_gefaerbt": 0}
+    stat = {"ringe": 0, "linien": 0, "ringe_gefaerbt": 0, "labels_schwarz": 0}
     for slide in prs.slides:
         for shape in slide.shapes:
             if not getattr(shape, "has_chart", False):
@@ -652,8 +647,9 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                     # der Segmentfarbe (einzige native Zuordnungsmöglichkeit).
                     if leader_farbe:
                         ring_leaderlines(chart, farbe=leader_farbe)
-                    if gesetzt and label_farben:
-                        stat["labels_gefaerbt"] += ring_label_farben(chart)
+                    if label_schriftfarbe:
+                        stat["labels_schwarz"] += ring_label_schriftfarbe(
+                            chart, farbe=label_schriftfarbe)
                     stat["ringe"] += 1
                 elif "LINE" in typ and _hat_dateax(chart):
                     datumsachse_an_daten(chart)
