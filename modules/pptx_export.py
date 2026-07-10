@@ -71,6 +71,7 @@ try:
         replace_chart_data, update_cache_elements,
         replace_chart_data_safe, restore_data_label_format,
         update_chart_values_inplace,
+            set_line_series_sparse, set_series_line_colors,
     )
 except ImportError:
     from pptx_charts import (
@@ -78,6 +79,7 @@ except ImportError:
         replace_chart_data, update_cache_elements,
         replace_chart_data_safe, restore_data_label_format,
         update_chart_values_inplace,
+            set_line_series_sparse, set_series_line_colors,
     )
 
 # Slide-Befüllungs-Logik (Domain: Anlagevorschlag, Wertentwicklung, Performance,
@@ -908,6 +910,84 @@ def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
         return None
 
 
+
+# ── CVV Folie 19: Vergleichs-Chart der fünf Strategien ────────────────────
+# Farben laut Corporate Design (aus den Vorlagen extrahiert), NAMENSBASIERT —
+# die Vorlage nutzt sonst Office-Standard-Akzente (Blau/Orange/Grau/Gelb).
+VERGLEICH_FARBEN = {
+    "Konservativ":   "9FD0EF",   # sehr helles Blau
+    "Defensiv":      "66A4CE",   # helles Blau
+    "Defensiv Plus": "5F8CA1",   # mittleres Blau
+    "Ausgewogen":    "14355C",   # dunkles Marineblau
+    "Dynamic":       "BB9256",   # Gold/Braun
+}
+VERGLEICH_LINIENBREITE_EMU = 15875   # 1.25 pt (wie Vorlage)
+
+_EXCEL_EPOCHE = dt.date(1899, 12, 30)
+
+
+def _excel_serial(datum) -> int:
+    """Datum → Excel-Seriennummer (für die Datums-Achse des Charts)."""
+    d = datum.date() if hasattr(datum, "date") else datum
+    return (d - _EXCEL_EPOCHE).days
+
+
+def _monats_index_nach_kosten(timeseries_df, fee_dec: float):
+    """Monatsend-Indexreihe NACH KOSTEN, normiert auf 1.0 am ERSTEN eigenen
+    Datenpunkt (1.0 = 100 %).
+
+    Returns: dict {date: float} oder {} wenn keine Daten.
+
+    Wichtig: Die Normierung erfolgt je Strategie auf ihren EIGENEN Start —
+    eine später startende Strategie (z.B. Dynamic) beginnt ebenfalls bei 100 %,
+    nicht bei dem Wert, den die anderen zu diesem Zeitpunkt schon haben.
+    """
+    if timeseries_df is None or len(timeseries_df) == 0:
+        return {}
+    ts = timeseries_df.sort_index()
+    r = pd.to_numeric(ts["ret_port"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    if len(r) == 0:
+        return {}
+    idx_werte = _make_index_after_fee(r, fee_dec, startwert=1.0)   # len = n+1
+    daten = pd.to_datetime(ts.index)
+    reihe = pd.Series(idx_werte[1:], index=daten)
+    # letzter Wert je Monat = Monatsende
+    monats = reihe.groupby([daten.year, daten.month]).last()
+    letzte_daten = pd.Series(daten).groupby([daten.year, daten.month]).last()
+    ergebnis = {}
+    basis = None
+    for schluessel, wert in monats.items():
+        tag = letzte_daten.loc[schluessel]
+        if basis is None:
+            basis = wert
+        ergebnis[tag.date()] = float(wert / basis)
+    return ergebnis
+
+
+def _build_vergleich_data(performance_inputs, n_strategien: int):
+    """Baut Kategorien (Excel-Serials) + Serien mit LÜCKEN für Folie 19.
+
+    Returns: (kategorien, serien) — serien = [(None, {idx: wert}), …] in der
+    Reihenfolge der Strategien. (None = Serienname der Vorlage behalten.)
+    Gibt (None, None) zurück, wenn keine verwertbaren Zeitreihen da sind.
+    """
+    reihen = []
+    for k in range(n_strategien):
+        pi = (performance_inputs[k]
+              if performance_inputs and k < len(performance_inputs) else None)
+        if not pi:
+            reihen.append({})
+            continue
+        reihen.append(_monats_index_nach_kosten(pi.get("timeseries_df"),
+                                                pi.get("fee_dec", 0.0)))
+    alle_daten = sorted({d for r in reihen for d in r})
+    if not alle_daten:
+        return None, None
+    pos = {d: i for i, d in enumerate(alle_daten)}
+    kategorien = [_excel_serial(d) for d in alle_daten]
+    serien = [(None, {pos[d]: w for d, w in r.items()}) for r in reihen]
+    return kategorien, serien
+
 def _build_rollierend_data(performance_inputs, idx: int) -> Optional[dict]:
     """Helfer (NEU 06.07.2026): rollierende Perioden-Renditen für die
     Themen-Broschüren-Tabelle aus performance_inputs[idx].
@@ -1200,6 +1280,25 @@ def generate_portfolioanalyse_pptx(
                 _fill_uebersicht_slide(prs, idx, roll_liste,
                                        stand_date_str=_stand,
                                        **(rollen_optionen.get(rolle, {})))
+            elif rolle == "vergleich":
+                # Linien-Chart aller Strategien, Index 100 je eigenem Start.
+                kat, serien = _build_vergleich_data(performance_inputs,
+                                                    len(portfolios))
+                if not kat:
+                    _record_build_error(
+                        f"Folie {pos}",
+                        ValueError("Keine Performance-Zeitreihen übergeben — "
+                                   "Vergleichs-Chart behält die Vorlagen-Werte."))
+                    continue
+                shape = _find_shape_by_name(prs.slides[idx], "Diagramm")
+                if shape is None or not getattr(shape, "has_chart", False):
+                    _record_build_error(
+                        f"Folie {pos}",
+                        ValueError("Chart-Shape 'Diagramm' nicht gefunden."))
+                    continue
+                set_line_series_sparse(shape, kat, serien)
+                set_series_line_colors(shape, VERGLEICH_FARBEN,
+                                       breite_emu=VERGLEICH_LINIENBREITE_EMU)
             else:
                 _record_build_error(
                     f"Folie {pos}",
