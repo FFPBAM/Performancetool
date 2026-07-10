@@ -356,36 +356,46 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                           cx + seite * r * math.sin(a)))
             ziel[i][1] = cy - r * c
 
-        # Danach nur noch NACH UNTEN entzerren — nie wieder nach oben.
-        for _ in range(60):
-            bewegt = False
-            reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
-            for a_ in range(len(reihenfolge)):
-                for b_ in range(a_ + 1, len(reihenfolge)):
-                    i, j = reihenfolge[a_], reihenfolge[b_]
-                    if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
-                        schub = (min_v - abs(ziel[i][1] - ziel[j][1])) + 0.005
-                        runter = j if ziel[j][1] >= ziel[i][1] else i
-                        ziel[runter][1] = min(frame_h_in - rand_in,
-                                              ziel[runter][1] + schub)
-                        bewegt = True
-            if not bewegt:
-                break
+        # Entzerren (nur nach unten) und radiales Ausschieben BEEINFLUSSEN
+        # SICH GEGENSEITIG: das Nach-unten-Schieben drückt Labels auf den Ring,
+        # der Ausschub schiebt zwei Labels wieder zusammen. Einmal nacheinander
+        # reicht nicht — gemessen an [0.94, 0.03, 0.02, 0.01]. Deshalb im
+        # Wechsel, und mit dem Entzerren als LETZTEM Schritt.
+        def _entzerren_nach_unten():
+            for _ in range(60):
+                bewegt = False
+                reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
+                for a_ in range(len(reihenfolge)):
+                    for b_ in range(a_ + 1, len(reihenfolge)):
+                        i, j = reihenfolge[a_], reihenfolge[b_]
+                        if (abs(ziel[i][1] - ziel[j][1]) < min_v
+                                and abs(ziel[i][0] - ziel[j][0]) < min_h):
+                            schub = (min_v - abs(ziel[i][1] - ziel[j][1])) + 0.005
+                            runter = j if ziel[j][1] >= ziel[i][1] else i
+                            ziel[runter][1] = min(frame_h_in - rand_in,
+                                                  ziel[runter][1] + schub)
+                            bewegt = True
+                if not bewegt:
+                    break
 
-        # Das Nach-unten-Schieben kann ein Label auf den Ring drücken.
-        # Deshalb noch einmal radial nach außen — aber nie über die Kopf-Grenze.
-        for i in range(len(mids)):
-            lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
-            rad = math.hypot(lvx, lvy)
-            if rad < 1e-6:
-                continue
-            inner = rad - (HALB_W * abs(lvx) + HALB_H * abs(lvy)) / rad - R_out
-            if inner < min_clear:
-                schub = min_clear - inner
-                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
-                                              ziel[i][0] + schub * lvx / rad))
-                ziel[i][1] = max(y_soll, min(frame_h_in - rand_in,
-                                             ziel[i][1] + schub * lvy / rad))
+        def _radial_ausschieben():
+            for i in range(len(mids)):
+                lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
+                rad = math.hypot(lvx, lvy)
+                if rad < 1e-6:
+                    continue
+                inner = rad - (HALB_W * abs(lvx) + HALB_H * abs(lvy)) / rad - R_out
+                if inner < min_clear:
+                    schub = min_clear - inner
+                    ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
+                                                  ziel[i][0] + schub * lvx / rad))
+                    ziel[i][1] = max(y_soll, min(frame_h_in - rand_in,
+                                                 ziel[i][1] + schub * lvy / rad))
+
+        for _ in range(4):
+            _entzerren_nach_unten()
+            _radial_ausschieben()
+        _entzerren_nach_unten()
 
     # 7) Offsets schreiben (Nullpunkt = Ring-Band-Mitte des Segments; so
     #    rechnet PowerPoint den manualLayout-Offset bei vorhandenem
@@ -723,20 +733,34 @@ def ring_label_schriftfarbe(chart, farbe=LABEL_SCHRIFTFARBE):
     return n
 
 
-def _kleine_segmente(chart, schwelle=0.08):
-    """Anzahl Segmente unter `schwelle` (Anteil). Für adaptives Entzerren."""
+def _enge_labelwinkel(chart, schwelle_deg=30.0):
+    """True, wenn zwei benachbarte Segment-MITTELWINKEL naeher als schwelle_deg
+    beieinander liegen.
+
+    Ersetzt die alte Prozent-Schwelle ("Segment < 8 %"). Entscheidend ist nicht,
+    wie klein ein Segment ist, sondern wie nah seine Label-Richtung an der des
+    Nachbarn liegt. Ein 8,19 %-Segment fiel durch die alte Schwelle — und der
+    ganze Entzerrungs-Pass wurde uebersprungen.
+    """
     root = _root(chart)
-    vals = [float(v.text) for v in root.iter(_q("v"))
-            if v.getparent().getparent().tag == _q("numCache") and v.text]
     ser = root.find(".//" + _q("ser"))
     val = ser.find(_q("val")) if ser is not None else None
     if val is None:
-        return 0
+        return False
     zahlen = [float(v.text) for v in val.iter(_q("v")) if v.text]
     s = sum(zahlen)
-    if s <= 0:
-        return 0
-    return sum(1 for z in zahlen if z / s < schwelle)
+    if s <= 0 or len(zahlen) < 2:
+        return False
+    mitten, lauf = [], 0.0
+    for z in zahlen:
+        mitten.append((lauf + z / 2.0) / s * 360.0)
+        lauf += z
+    mitten.sort()
+    for k in range(len(mitten)):
+        luecke = (mitten[(k + 1) % len(mitten)] - mitten[k]) % 360.0
+        if 0 < luecke < schwelle_deg:
+            return True
+    return False
 
 def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                    min_gap_deg=24.0, min_gap_deg_klein=60.0,
@@ -794,21 +818,25 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                     #   rand_oben_in Untergrenze der Label-MITTE (Oberkante =
                     #                Mitte - 0.10"). Muss in allen Pässen gelten.
                     #   tangential_in längerer, weniger steiler Führungsstrich
+                    # (1) KOPF-FREIHALTUNG: BEDINGUNGSLOS fuer jeden Ring.
+                    #     Die Sperre wird aus dem Chart GEMESSEN (der Balken ist
+                    #     ein chartUserShape). Pass 6d verschiebt nur Labels,
+                    #     die sie tatsaechlich verletzen — keine Prozentschwelle,
+                    #     kein Sonderfall pro Strategie.
+                    _kopf = kopf_sperre_aus_usershapes(chart, _fh)
+                    if _kopf is None and gesetzt:
+                        _kopf = kopf_frei_klein      # Fallback, falls kein Balken
+
+                    # (2) STAERKERE ENTZERRUNG: strukturell + geometrisch statt
+                    #     prozentual. Assetklassen-Ring UND benachbarte
+                    #     Mittelwinkel unter 30 Grad.
                     _gap = min_gap_deg
                     _rand_oben = None
                     _tang = tangential_in
-                    _kopf = None
-                    if gesetzt and _kleine_segmente(chart) >= 2:
+                    if gesetzt and _enge_labelwinkel(chart):
                         _gap = min_gap_deg_klein
                         _rand_oben = rand_oben_klein
                         _tang = tangential_klein
-                        # Balkenunterkante aus dem Chart lesen (robust gegen
-                        # Vorlagen-Änderungen); Konstante nur als Fallback.
-                        # Nie unter den Mindestwert, aber nach oben anpassen,
-                        # falls der Balken in der Vorlage tiefer sitzt.
-                        _gemessen = kopf_sperre_aus_usershapes(chart, _fh)
-                        _kopf = (max(_gemessen, kopf_frei_klein)
-                                 if _gemessen is not None else kopf_frei_klein)
 
                     ring_labels_aussen_dynamisch(chart, _fw, _fh,
                                                  gap_in=label_gap_in,
