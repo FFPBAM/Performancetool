@@ -57,12 +57,23 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
     # ── Y-ACHSE (valAx) datenbasiert skalieren ──────────────────────────────
     # Feste Vorlagen-Grenzen (z.B. 0.8-1.4) schneiden stark gestiegene
     # Strategien (Offensiv: Index bis 2.8) oben ab → halber Chart leer.
-    yvals = [float(v.text) for v in root.find(".//" + _q("val")).iter(_q("v")) if v.text]
+    # ALLE Serien berücksichtigen, nicht nur die erste (Fix 10.07.2026):
+    # root.find(".//c:val") liefert nur <c:val> der ERSTEN Serie. Bei der
+    # CVV-Vergleichsfolie (5 Serien) skalierte die Achse auf den Bereich von
+    # "Konservativ" — vier Linien liefen aus dem Chart heraus.
+    # Bei 1-2 Serien (Wertentwicklungs-Folien) ändert sich nichts (gemessen).
+    yvals = [float(v.text)
+             for val in root.findall(".//" + _q("val"))
+             for v in val.iter(_q("v")) if v.text]
     if yvals:
         import math as _m
         dmin, dmax = min(yvals), max(yvals)
         ymin = _m.floor(dmin * 10) / 10.0          # z.B. 0.897 -> 0.8
         ymax = _m.ceil(dmax * 10) / 10.0           # z.B. 2.872 -> 2.9
+        # Luft über der höchsten Linie: klebt sie an der Achsengrenze,
+        # eine 10%-Stufe drauflegen.
+        if ymax - dmax < 0.02:
+            ymax += 0.1
         vax = root.find(".//" + _q("valAx"))
         if vax is not None:
             vsc = vax.find(_q("scaling"))
