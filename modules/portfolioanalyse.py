@@ -533,36 +533,86 @@ _CVV_CONFIG = {
 # Nur Familien mit EIGENER Vorlage hier eintragen. Familien ohne Eintrag
 # (oder leere Familie) → Standard-Vorlage (Vorlage_FFPB.pptx, config None).
 # ETF / ESG bekommen ihre Einträge, sobald ihre Vorlagen existieren.
+# Struktur der ESG-Broschüre ("ESG Infoboard", NEU 10.07.2026).
+#
+# Gleicher Bauplan wie CVV (feste Blöcke, Kästen unterscheiden sich je
+# Strategie), aber VIER Strategien und OHNE Vergleichs-Linienchart.
+# Verifiziert an der echten Vorlage (39 Folien):
+#   F16/18/20/22 : Titel + Anlagekriterien-Kasten + C_Kennzahlen (Ring)
+#                  + T_Kennzahlen (11 Spalten)
+#   F17/19/21/23 : Rolle "wertentwicklung"
+#   F24          : Übersichtstabelle 8x11, Strategien in den Spalten 4/6/8/10
+_ESG_STRATEGIEN = [
+    "ESG defensiv",
+    "ESG defensiv+",      # Folientitel: "ESG Defensiv Plus"
+    "ESG ausgewogen",
+    "ESG offensiv",
+]
+"""Feste Reihenfolge — MUSS zur Foliennummerierung passen (Defensiv=F16,
+Defensiv Plus=F18, Ausgewogen=F20, Offensiv=F22). Namen wie in der
+Mapping-Spalte 'Strategie auswählen'."""
+
+_ESG_CONFIG = {
+    "erwartete_folien": 39,
+    "entfernen": [],
+    "feste_bloecke": [
+        {"anlagevorschlag": 16, "wertentwicklung": 17},
+        {"anlagevorschlag": 18, "wertentwicklung": 19},
+        {"anlagevorschlag": 20, "wertentwicklung": 21},
+        {"anlagevorschlag": 22, "wertentwicklung": 23},
+    ],
+    "rollen_optionen": {
+        # Abschlusslinie bei 6.38", Zeilenhöhe 0.192" — wie CVV.
+        "anlagevorschlag": {"titel_text": "", "max_bottom_inch": 6.20,
+                            "original_row_h_inch": 0.192},
+        # NUR VIER Strategien → eine Wertspalte weniger als bei CVV.
+        "uebersicht": {"spalten": [4, 6, 8, 10]},
+    },
+    "einmal_folien": {"uebersicht": 24},
+}
+
+# Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
+# Nur Familien mit EIGENER Vorlage hier eintragen. Familien ohne Eintrag
+# (oder leere Familie) → Standard-Vorlage (Vorlage_FFPB.pptx, config None).
 VORLAGEN_FAMILIEN = {
     "Thema": ("Vorlage_Thema.pptx", _THEMA_CONFIG),
     "CVV": ("Vorlage_cVV_Infoboard.pptx", _CVV_CONFIG),
+    "ESG": ("Vorlage_ESG.pptx", _ESG_CONFIG),
+}
+
+# Familien, deren Broschüre IMMER alle Strategien enthält (Variante A).
+# Wählt der Berater eine davon, lädt die App automatisch alle — in dieser
+# Reihenfolge. Neue Familie? Nur hier und in VORLAGEN_FAMILIEN eintragen.
+FAMILIE_ALLE_STRATEGIEN = {
+    "CVV": _CVV_STRATEGIEN,
+    "ESG": _ESG_STRATEGIEN,
 }
 
 
-def _cvv_portfolios(display_names_pf, display_to_csv_pf, pf_data,
-                    duration_info_fn):
-    """Stellt die FÜNF CVV-Portfolios in der festen Reihenfolge der Vorlage
-    zusammen (NEU 09.07.2026).
+def _familien_portfolios(strategien, display_names_pf, display_to_csv_pf,
+                         pf_data, duration_info_fn):
+    """Stellt ALLE Portfolios einer Broschüren-Familie in fester Reihenfolge
+    zusammen (generisch seit 10.07.2026, vorher _cvv_portfolios).
 
-    Die CVV-Broschüre ist ein Gesamtdokument über alle fünf klassischen
-    Vermögensverwaltungs-Strategien. Der Berater wählt nur EINE Strategie —
-    geladen werden trotzdem alle fünf ("Variante A": keine Zusatzauswahl,
-    keine Fehlbedienung). Fehlt eine, gibt es eine klare Diagnose statt einer
-    halben Broschüre.
+    CVV- und ESG-Broschüren sind Gesamtdokumente über alle Strategien ihrer
+    Familie. Der Berater wählt nur EINE — geladen werden trotzdem alle
+    ("Variante A": keine Zusatzauswahl, keine Fehlbedienung). Fehlt eine, gibt
+    es eine klare Diagnose statt einer halben Broschüre.
+
+    Args:
+        strategien: Namen in der Reihenfolge der VORLAGEN-Folien.
+                    MUSS zur Foliennummerierung passen.
 
     Returns:
         (portfolios, fehlende) — portfolios: Liste von
-        (display_name, df, auswertungsdatum, duration_info) in der Reihenfolge
-        _CVV_STRATEGIEN; fehlende: Liste nicht gefundener Strategienamen.
+        (display_name, df, auswertungsdatum, duration_info).
     """
     def _norm_s(s):
         return "".join(str(s).lower().split())
 
-    # Anzeigenamen tolerant auf die erwarteten CVV-Namen abbilden
     vorhanden = {_norm_s(n): n for n in display_names_pf}
-
     portfolios, fehlende = [], []
-    for wunsch in _CVV_STRATEGIEN:
+    for wunsch in strategien:
         treffer = vorhanden.get(_norm_s(wunsch))
         if treffer is None:
             fehlende.append(wunsch)
@@ -784,21 +834,21 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 # Die CVV-Vorlage ist ein Gesamtdokument über alle fünf
                 # klassischen VV-Strategien mit fest vorgebauten Folien. Die
                 # Vergleichsauswahl wird hier bewusst ignoriert.
-                _cvv_fehlend = []
                 # name_mapping ist bereits geladen (oben in der Ansicht)
                 _fam_vorab = _familie_fuer_strategie(name_mapping, pf_sel_1)
-                if _fam_vorab == "CVV":
-                    _cvv_pfs, _cvv_fehlend = _cvv_portfolios(
-                        display_names_pf, display_to_csv_pf, pf_data,
+                _alle = FAMILIE_ALLE_STRATEGIEN.get(_fam_vorab)
+                if _alle:
+                    _fam_pfs, _fehlend = _familien_portfolios(
+                        _alle, display_names_pf, display_to_csv_pf, pf_data,
                         duration_info_aus_bestand)
-                    if _cvv_fehlend:
+                    if _fehlend:
                         st.error(
-                            "❌ CVV-Broschüre: Für diese Strategien fehlen die "
-                            f"Portfolio-Daten: {', '.join(_cvv_fehlend)}.\n\n"
-                            "Die Broschüre enthält immer alle fünf Strategien — "
+                            f"❌ {_fam_vorab}-Broschüre: Für diese Strategien fehlen "
+                            f"die Portfolio-Daten: {', '.join(_fehlend)}.\n\n"
+                            f"Die Broschüre enthält immer alle {len(_alle)} Strategien — "
                             "bitte die fehlenden CSVs in `Daten_PF/` ergänzen.")
                         st.stop()
-                    portfolios = _cvv_pfs
+                    portfolios = _fam_pfs
 
                 # ── Performance-Inputs für die Folien 8+9 zusammenbauen ──
                 # Priorität 1: aus session_state (gefüllt vom Performance-Tab)
