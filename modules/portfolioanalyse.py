@@ -518,6 +518,12 @@ _CVV_CONFIG = {
         "anlagevorschlag": {"titel_text": "", "max_bottom_inch": 6.20,
                             "original_row_h_inch": 0.192},
     },
+    # Folien, die EINMAL für alle fünf Strategien laufen (nicht je Strategie):
+    # F17 = "Wertentwicklung der klassischen Vermögensverwaltungsstrategien",
+    # Zeiträume YTD/1/3/5/10 Jahre in den Zeilen, Strategien in den Spalten.
+    # Quelle: compute_rollierend_data() je Strategie — dieselbe Mathematik wie
+    # die Themen-Broschüren-Tabelle (Konsistenz-Doktrin).
+    "einmal_folien": {"uebersicht": 17},
 }
 
 # Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
