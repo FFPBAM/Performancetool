@@ -765,7 +765,9 @@ def maybe_narrow_bond_columns(table_shape, has_renten: bool) -> None:
     )
 
 
-def fit_shape_to_table(table_shape, max_row_scale: float = 3.0) -> Optional[str]:
+def fit_shape_to_table(table_shape, max_row_scale: float = 3.0,
+                       max_bottom_inch: Optional[float] = None,
+                       original_row_h_inch: Optional[float] = None) -> Optional[str]:
     """Passt die Höhe der Tabellen-Shape UND die Zeilenhöhen an die tatsächlich
     genutzte Zeilenanzahl an. Symmetrisch:
 
@@ -788,7 +790,17 @@ def fit_shape_to_table(table_shape, max_row_scale: float = 3.0) -> Optional[str]
     """
     table = table_shape.table
 
-    MAX_TABLE_BOTTOM_INCH_LOCAL = MAX_TABLE_BOTTOM_INCH
+    # max_bottom_inch=None → modulweiter Default (Standard-Vorlage, 6.60").
+    # Andere Vorlagen der Familie (z.B. CVV: Abschlusslinie bei 6.38") reichen
+    # ihre eigene Unterkante durch.
+    MAX_TABLE_BOTTOM_INCH_LOCAL = (MAX_TABLE_BOTTOM_INCH if max_bottom_inch is None
+                                   else float(max_bottom_inch))
+    # Vorlagen-Zeilenhöhe: ORIGINAL_DATA_ROW_H_EMU ist auf die STANDARD-Vorlage
+    # kalibriert (0.1424"). Andere Vorlagen der Familie haben andere Zeilen
+    # (CVV: 0.192") — sonst greift die Stauchungs-Untergrenze zu früh und die
+    # Tabelle läuft über die Abschlusslinie.
+    ORIG_ROW_H_EMU = (ORIGINAL_DATA_ROW_H_EMU if original_row_h_inch is None
+                      else int(float(original_row_h_inch) * 914400))
     shape_top_inch = table_shape.top / 914400
     max_available_h_emu = int((MAX_TABLE_BOTTOM_INCH_LOCAL - shape_top_inch) * 914400)
 
@@ -810,11 +822,11 @@ def fit_shape_to_table(table_shape, max_row_scale: float = 3.0) -> Optional[str]
         # ── NEU: viele Zeilen -> proportional stauchen, mit Untergrenze ──
         target_h = max_available_h_emu - SHAPE_PADDING_EMU
         scale = target_h / total_row_h
-        implied_data_row_h = ORIGINAL_DATA_ROW_H_EMU * scale
+        implied_data_row_h = ORIG_ROW_H_EMU * scale
 
         if implied_data_row_h < MIN_ROW_H_EMU:
             # An Zeilenhöhen-Untergrenze klemmen statt weiter zu stauchen
-            floor_scale = MIN_ROW_H_EMU / ORIGINAL_DATA_ROW_H_EMU
+            floor_scale = MIN_ROW_H_EMU / ORIG_ROW_H_EMU
             for row in table.rows:
                 row.height = int(row.height * floor_scale)
             total_row_h = sum(row.height for row in table.rows)
@@ -1049,7 +1061,10 @@ def fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0
 
 def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
                                  df: pd.DataFrame, strategy_name: str,
-                                 eval_date=None) -> Optional[str]:
+                                 eval_date=None,
+                                 titel_text: Optional[str] = None,
+                                 max_bottom_inch: Optional[float] = None,
+                                 original_row_h_inch: Optional[float] = None) -> Optional[str]:
     """Befüllt Slide 7 (Anlagevorschlag/Strategieentwurf) mit Portfolio-Daten.
 
     Seit Juni 2026 (Performance-Folie als Slide 8): Es gibt nur noch EINE
@@ -1067,6 +1082,14 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
         eval_date: Auswertungsdatum (für Source-Annotation im Ring-Chart).
             Optional — das Quelle-Datum wird zentral über
             pptx_export._update_quelle_datum gesetzt (steht statisch im Template).
+        titel_text: NEU (09.07.2026) — expliziter Folientitel. None (Default)
+            = bisheriges Verhalten ("Strategieentwurf … - <Name>").
+            "" = Titel gar nicht anfassen (CVV: die Vorlage trägt bereits
+            "Anlagestrategie Konservativ" o.ä. und soll ihn behalten).
+        max_bottom_inch: NEU (09.07.2026) — Unterkante der Tabelle in Zoll.
+            None (Default) = modulweites MAX_TABLE_BOTTOM_INCH (6.60,
+            Standard-Vorlage). Die CVV-Vorlage hat ihre Abschlusslinie schon
+            bei 6.38" und braucht deshalb einen kleineren Wert.
 
     Returns:
         Warnhinweis (str) falls die Tabelle selbst bei Minimalgröße nicht
@@ -1092,10 +1115,14 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
 
     # 3. Slide 7 befüllen
     slide_7 = prs.slides[slide_7_idx]
-    # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance)
-    title = find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or find_shape_by_name(slide_7, SHAPE_TITLE)
-    if title:
-        set_title_with_autoscale(title, f"{STRATEGIEENTWURF_TITLE} - {strategy_name}")
+    # Titel: Strategieentwurf-Hinweis (Email-Anforderung Juni 2026, Compliance).
+    # titel_text="" → Titel der Vorlage unangetastet lassen (CVV).
+    _titel = (f"{STRATEGIEENTWURF_TITLE} - {strategy_name}"
+              if titel_text is None else titel_text)
+    if _titel:
+        title = find_shape_by_name(slide_7, SHAPE_TITLE_ALT) or find_shape_by_name(slide_7, SHAPE_TITLE)
+        if title:
+            set_title_with_autoscale(title, _titel)
 
     # Ring-Chart: NATIVER PowerPoint-Donut (Daten ersetzen, Template-Styling
     # bleibt: Banner, Legende, Quelle, Datenlabels). Werte sind Anteile (0..1);
@@ -1126,7 +1153,9 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
         # Shape-Höhe an tatsächliche Zeilenanzahl anpassen (staucht/streckt je
         # nach Bedarf; ensure_table_capacity in fill_table_with_positions hat
         # vorher bereits ggf. zusätzliche Zeilen geklont)
-        capacity_warning = fit_shape_to_table(table_shape)
+        capacity_warning = fit_shape_to_table(
+            table_shape, max_bottom_inch=max_bottom_inch,
+            original_row_h_inch=original_row_h_inch)
 
     return capacity_warning
 
