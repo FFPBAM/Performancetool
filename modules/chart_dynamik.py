@@ -87,7 +87,7 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
 
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                  gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
-                                 tangential_in=0.14):
+                                 tangential_in=0.14, rand_oben_in=None):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -202,6 +202,11 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     #    Versatz (seitlich zur Radial-Richtung), damit KEIN Label exakt auf der
     #    radialen Linie zu seinem Segment sitzt → PowerPoint zeichnet dann für
     #    JEDES Label einen Leader-Strich (auch freistehende Segmente).
+    # Oberer Rand separat steuerbar (NEU 10.07.2026): über dem Ring sitzt der
+    # Überschriftenbalken ("AKTUELLE STRUKTUR"). rand_in=0.12 ließ die oberen
+    # Labels fast am Balken kleben. rand_oben_in=None → altes Verhalten.
+    _rand_oben = rand_in if rand_oben_in is None else float(rand_oben_in)
+
     ziel = []
     for i in range(len(mids)):
         la = math.radians(label_ang[i])
@@ -215,7 +220,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         if sx > 1e-6:    r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
         elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
         if sy > 1e-6:    r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
-        elif sy < -1e-6: r_use = min(r_use, (rand_in - cy) / sy)
+        elif sy < -1e-6: r_use = min(r_use, (_rand_oben - cy) / sy)
         r_use = max(r_use, R_out + 0.05)              # nie innerhalb des Rings
         tx = cx + r_use * sx + tangential_in * tsx
         ty = cy + r_use * sy + tangential_in * tsy
@@ -236,7 +241,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
                     schub = (min_v - abs(ziel[i][1] - ziel[j][1])) / 2.0 + 0.005
                     hoch, runter = (i, j) if ziel[i][1] <= ziel[j][1] else (j, i)
-                    ziel[hoch][1] = max(rand_in, ziel[hoch][1] - schub)
+                    ziel[hoch][1] = max(_rand_oben, ziel[hoch][1] - schub)
                     ziel[runter][1] = min(frame_h_in - rand_in, ziel[runter][1] + schub)
                     bewegt = True
         if not bewegt:
@@ -604,7 +609,9 @@ def _kleine_segmente(chart, schwelle=0.08):
     return sum(1 for z in zahlen if z / s < schwelle)
 
 def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
-                   min_gap_deg=24.0, min_gap_deg_klein=32.0,
+                   min_gap_deg=24.0, min_gap_deg_klein=44.0,
+                   tangential_in=0.14, tangential_klein=0.24,
+                   rand_oben_klein=0.34,
                    leader_farbe=LEADER_GRAU,
                    label_schriftfarbe=LABEL_SCHRIFTFARBE):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
@@ -646,13 +653,25 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                     # Adaptives Entzerren: NUR bei Assetklassen-Ringen mit
                     # mehreren kleinen Segmenten (dort drängeln sich die
                     # Labels oben). Sektoren-Ringe behalten min_gap_deg=24.
+                    #
+                    # Drei Stellschrauben gleichzeitig (10.07.2026):
+                    #   min_gap_deg  spreizt die Winkel → Labels wandern
+                    #                seitlich auseinander (oben wirkt das stark)
+                    #   rand_oben_in hält Abstand zum Überschriftenbalken
+                    #   tangential_in längerer, weniger steiler Führungsstrich
                     _gap = min_gap_deg
+                    _rand_oben = None
+                    _tang = tangential_in
                     if gesetzt and _kleine_segmente(chart) >= 2:
                         _gap = min_gap_deg_klein
+                        _rand_oben = rand_oben_klein
+                        _tang = tangential_klein
 
                     ring_labels_aussen_dynamisch(chart, _fw, _fh,
                                                  gap_in=label_gap_in,
-                                                 min_gap_deg=_gap)
+                                                 min_gap_deg=_gap,
+                                                 tangential_in=_tang,
+                                                 rand_oben_in=_rand_oben)
 
                     # Führungslinien dezent grau statt schwarz; Labeltext in
                     # der Segmentfarbe (einzige native Zuordnungsmöglichkeit).
