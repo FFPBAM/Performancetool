@@ -397,6 +397,51 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
             _radial_ausschieben()
         _entzerren_nach_unten()
 
+    # 6e) ANTI-KREUZUNG (NEU 10.07.2026) — letzte Garantie, dass sich keine
+    #     zwei Führungslinien überkreuzen.
+    #
+    #     Ursache der Kreuzung: die vorherigen Pässe (De-overlap, Leader-
+    #     Garantie) verschieben Labels tangential, ohne die Winkelreihenfolge
+    #     der Segmente zu respektieren. Sitzen zwei kleine Segmente eng
+    #     beieinander (z.B. Versorger 321° / Elektro 347° oben), kann das Label
+    #     des einen auf die Seite des anderen geraten → die Leader kreuzen sich
+    #     (im Screenshot bei 6,96%/7,03% sichtbar).
+    #
+    #     Lösung: Kreuzung ist ein rein GEOMETRISCHES Kriterium (schneiden sich
+    #     die Strecken Segment→Label?). Wir erkennen jedes kreuzende Paar und
+    #     TAUSCHEN die beiden Label-Positionen. Nach dem Tausch zeigt jeder
+    #     Leader auf sein eigenes Segment über die Box des Partners — das
+    #     entwirrt die Kreuzung, ohne neue Überlappung zu erzeugen (die Boxen
+    #     standen ja schon kollisionsfrei). Wiederholen bis kreuzungsfrei.
+    #
+    #     Generisch für jede Segmentzahl und -verteilung; hart nach oben
+    #     begrenzt, damit es unter allen Umständen terminiert.
+    def _seg_end(i):
+        m = math.radians(mids[i])
+        return (cx + R_out * math.sin(m), cy - R_out * math.cos(m))
+
+    def _ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+    def _kreuzt(i, j):
+        p1, p2 = _seg_end(i), ziel[i]
+        p3, p4 = _seg_end(j), ziel[j]
+        return (_ccw(p1, p3, p4) != _ccw(p2, p3, p4)
+                and _ccw(p1, p2, p3) != _ccw(p1, p2, p4))
+
+    for _entwirren in range(len(ziel) * len(ziel) + 5):
+        getauscht = False
+        for a_ in range(len(ziel)):
+            for b_ in range(a_ + 1, len(ziel)):
+                if _kreuzt(a_, b_):
+                    ziel[a_], ziel[b_] = ziel[b_], ziel[a_]
+                    getauscht = True
+                    break
+            if getauscht:
+                break
+        if not getauscht:
+            break
+
     # 7) Offsets schreiben (Nullpunkt = Ring-Band-Mitte des Segments; so
     #    rechnet PowerPoint den manualLayout-Offset bei vorhandenem
     #    manualLayout — empirisch bestätigt).
