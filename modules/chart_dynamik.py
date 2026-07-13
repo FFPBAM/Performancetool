@@ -419,7 +419,10 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     #      Findet sich keine solche Position (dreifach eingeklemmt), bleibt das
     #      Label wo es ist — nichts wird schlechter. Generisch für jeden Ring.
     MIN_LEADER = 0.30      # Mindest-Leader-Länge, damit PP zeichnet (empirisch)
-    OFFSET_OK = 12.0       # Ziel: Winkel-Offset unter diesem Wert = Leader
+    OFFSET_OK = 8.0        # Ziel: Winkel-Offset unter diesem Wert = Leader.
+    #                        Belegt: NA/EU/DE zeichnen bei 7,3°, Asien nicht bei
+    #                        14,9°. 10° war unsicher (kein Messpunkt) — deshalb
+    #                        zielen wir strikt auf den belegten ≤7,3°-Bereich.
 
     ob_grenze = kopf_frei_in if kopf_frei_in is not None else _rand_oben
 
@@ -456,13 +459,15 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         seg = mids[i] % 360
         sx = cx + R_out * math.sin(math.radians(seg))
         sy = cy - R_out * math.cos(math.radians(seg))
-        # Kandidaten: Winkel nahe Segment (beide Seiten), Radius von innen nach
-        # außen. Wähle den mit KLEINSTEM Offset, der alle Kriterien erfüllt.
+        # Kandidaten: Winkel nahe Segment (beide Seiten), Radius fein gerastert.
+        # Wähle den mit KLEINSTEM Offset, der alle Kriterien erfüllt.
         bestpos = None
         best_off = 1e9
-        for off_grad in (0, 4, 7, 10, 12):
+        for off_grad in (0, 3, 5, 7):
             for seite in (-1, 1):
-                for r in (R_out + 0.16, R_out + 0.26, R_out + 0.36, R_out + 0.46):
+                for r_delta in (0.12, 0.16, 0.20, 0.24, 0.28, 0.32,
+                                0.36, 0.40, 0.44):
+                    r = R_out + r_delta
                     a = math.radians(seg + seite * off_grad)
                     x = cx + r * math.sin(a)
                     y = cy - r * math.cos(a)
