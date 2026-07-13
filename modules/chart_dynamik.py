@@ -1181,34 +1181,28 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_GRAU,
         sx = cx + R_out * math.sin(sm)                # Segment-Außenpunkt
         sy = cy - R_out * math.cos(sm)
 
-        # GEKNICKTE Führung (radialer Teil + horizontaler Stub zur Zahl):
-        #   1) radialer Stub: vom Segment-Außenrand ein kurzes Stück ENTLANG des
-        #      Mittelwinkel-Strahls nach außen → die Linie tritt sauber senkrecht
-        #      aus dem Ring aus.
-        #   2) horizontaler Stub: auf Label-Höhe waagerecht zur dem Segment
-        #      zugewandten Seitenmitte der Zahl-Box.
-        #   Knick K liegt am Ende des Radialteils, auf Label-Höhe gezogen.
-        p_rx = cx + (R_out + _LEADER_RADIAL_STUB) * math.sin(sm)
-        p_ry = cy - (R_out + _LEADER_RADIAL_STUB) * math.cos(sm)
-
-        # Seite, auf der die Zahl relativ zum Radialstub-Ende liegt
-        side = 1.0 if mx >= p_rx else -1.0
-        e_x = mx - side * HALB_W                       # zugewandte Seitenmitte
+        # GEKNICKTE Führung — radialer Teil + horizontaler Stub zur Zahl:
+        #   Seite = relativ zur RING-MITTE (robust; der frühere Vergleich mit
+        #   dem Radialstub kippte bei oberen Segmenten die Knick-Richtung).
+        #   e_x = die dem Ring ZUGEWANDTE Seitenkante der Zahl-Box → der Stub
+        #   setzt immer auf der richtigen Seite an.
+        side = 1.0 if mx >= cx else -1.0
+        e_x = mx - side * HALB_W
         e_y = my
 
-        # Knick: waagerechter Stub trifft die Zahl auf ihrer Höhe. Der Knick
-        # sitzt am Radialstub-Ende, aber auf Label-Höhe (damit Teil 2 exakt
-        # horizontal ist).
-        k_x = p_rx
-        k_y = e_y
-
-        # Wenn Zahl und Segment fast senkrecht übereinander liegen (kaum
-        # horizontaler Versatz), entartet der Stub — dann eine gerade Linie
-        # vom Radialstub-Ende zur Box-Kante.
-        if abs(e_x - k_x) < _LEADER_MIN_STUB:
-            punkte = [(sx, sy), (p_rx, p_ry), (e_x, e_y)]
-        else:
-            punkte = [(sx, sy), (k_x, k_y), (e_x, e_y)]
+        # Knick auf dem RADIALSTRAHL des Segments, auf Label-Höhe: so ist Teil 1
+        # (S→Knick) echt radial und Teil 2 (Knick→Zahl) exakt horizontal.
+        # Punkt auf dem Strahl mit y = my:  r = (cy - my) / cos(mid)
+        cos_m = math.cos(sm)
+        punkte = [(sx, sy), (e_x, e_y)]        # Default: gerade Linie
+        if abs(cos_m) > 0.30:
+            r = (cy - my) / cos_m
+            if R_out < r < R_out + 1.5:
+                k_x = cx + r * math.sin(sm)
+                # Stub muss vom Knick ZUR Zahl zeigen (dem Ring zugewandte
+                # Seite). Nur dann knicken; sonst bleibt es die gerade Linie.
+                if side * (e_x - k_x) > _LEADER_MIN_STUB:
+                    punkte = [(sx, sy), (k_x, my), (e_x, e_y)]
 
         # Segmente als einzelne gerade Connectoren zeichnen (durchgehende
         # Polylinie, volle Kontrolle über den Knick).
@@ -1381,9 +1375,12 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                         _rand_oben = rand_oben_klein
                         _tang = tangential_klein
 
-                    ring_labels_kompakt(chart, _fw, _fh,
-                                        kopf_frei_in=(_kopf if _kopf
-                                                      is not None else 0.54))
+                    ring_labels_aussen_dynamisch(chart, _fw, _fh,
+                                                 gap_in=label_gap_in,
+                                                 min_gap_deg=_gap,
+                                                 tangential_in=_tang,
+                                                 rand_oben_in=_rand_oben,
+                                                 kopf_frei_in=_kopf)
 
                     # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
                     # stattdessen EIGENE Linien als Connector zeichnen — die
