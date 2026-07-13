@@ -397,38 +397,75 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
             _radial_ausschieben()
         _entzerren_nach_unten()
 
-    # 6d2) SEKTOR-RÜCKHOLUNG mit RADIUS-SUCHE (NEU 10.07.2026) — holt kleine
-    #      obere Labels aus dem „Niemandsland" zurück in ihren Sektor, damit
-    #      PowerPoint eine Führungslinie zeichnet.
+    # 6d2) BOGENGRENZEN-ABSTAND (NEU 13.07.2026) — sichert, dass PowerPoint für
+    #      jedes Label eine Führungslinie zeichnet.
     #
-    #      Am realen Chart rückgemessen (8,33%-Fall Regionen, Balken bei 0,54"):
-    #      PowerPoint zeichnet den Leader, wenn das Label ENG an seinem Segment
-    #      sitzt (kleiner Winkel-Offset, wie die großen Segmente ~7°) ODER klar
-    #      weit weg (~1"). Im mittleren Bereich (~15° schräg raus) lässt es den
-    #      Strich weg — genau dort landen kleine Segmente nahe 12 Uhr, weil sie
-    #      radial nicht raus können (Kopfbalken) und der Algorithmus sie seitlich
-    #      ins Niemandsland schiebt.
+    #      SYSTEMATISCH am realen Chart nachgewiesen (alle 5 Regionen-Labels):
+    #      PowerPoint zeichnet den radialen Leader nur, wenn er EINDEUTIG einem
+    #      Segment zuzuordnen ist. Das ist der Fall, wenn der POSITIONSWINKEL des
+    #      Labels (Winkel vom Ringmittelpunkt zur Label-Mitte)
+    #        (a) INNERHALB des eigenen Segmentbogens liegt, mit Mindestabstand zu
+    #            beiden Bogengrenzen, ODER
+    #        (b) klar AUSSERHALB (langer Leader, z.B. winziges 12-Uhr-Segment).
     #
-    #      Der Schlüssel: Winkel UND Radius GEMEINSAM wählen. Bei KLEINEREM
-    #      Radius sitzt ein oberes Label TIEFER und bleibt unter dem Balken,
-    #      während es zugleich in seinen Sektor zurückkommt. Wir suchen für jedes
-    #      zu schräg stehende Label die Position mit dem kleinsten Winkel-Offset,
-    #      die (a) unter dem Balken bleibt, (b) einen sichtbaren Leader behält
-    #      (Länge ≥ MIN_LEADER) und (c) keine Überlappung erzeugt.
+    #      Der 8,33%-Fall (Asien) hatte seinen Positionswinkel mit 0,1° EXAKT auf
+    #      der Naht zwischen Asien und Deutschland → der Leader hätte auf der
+    #      Segmentgrenze geendet → mehrdeutig → PowerPoint zeichnete nichts.
+    #      Alle anderen Labels (auch alle Branchen) lagen ≥11,9° von jeder Grenze
+    #      → alle hatten Leader. Regel gegen alle belegten Fälle verifiziert.
     #
-    #      Findet sich keine solche Position (dreifach eingeklemmt), bleibt das
-    #      Label wo es ist — nichts wird schlechter. Generisch für jeden Ring.
-    MIN_LEADER = 0.30      # Mindest-Leader-Länge, damit PP zeichnet (empirisch)
-    OFFSET_OK = 8.0        # Ziel: Winkel-Offset unter diesem Wert = Leader.
-    #                        Belegt: NA/EU/DE zeichnen bei 7,3°, Asien nicht bei
-    #                        14,9°. 10° war unsicher (kein Messpunkt) — deshalb
-    #                        zielen wir strikt auf den belegten ≤7,3°-Bereich.
+    #      Frühere Fixes drehten am Winkel-OFFSET zum Mittelwinkel — die falsche
+    #      Größe. Die richtige ist der Abstand zur GRENZE. Ist ausschließlich aus
+    #      der Segmentgeometrie berechenbar und daher OHNE Rendern prüfbar.
+    #
+    #      Fix: Für jedes Label, dessen Positionswinkel zu nah an einer eigenen
+    #      Bogengrenze liegt (und das nicht ohnehin klar außerhalb sitzt), suche
+    #      die nächstgelegene Position, deren Positionswinkel GRENZ_ABSTAND von
+    #      beiden Grenzen hält — unter Balken, ohne Überlappung, ohne Ring-
+    #      Berührung. Findet sich keine, bleibt das Label (nichts wird schlechter).
+    GRENZ_ABSTAND = 6.0    # Mindest-Winkelabstand des Positionswinkels zur
+    #                        Bogengrenze. Belegt: Leader ab ~11,9° sicher, kein
+    #                        Leader bei 0,1°. 6° ist ein konservativer Mittelwert
+    #                        mit Sicherheitsmarge zur belegten Nicht-Zeichnung.
+    MIN_LEADER = 0.28      # Mindest-Leader-Länge (Label klar außerhalb des Rings)
 
     ob_grenze = kopf_frei_in if kopf_frei_in is not None else _rand_oben
 
-    def _offset_von_segment(i, x, y):
-        pang = math.degrees(math.atan2(x - cx, -(y - cy))) % 360
-        return abs((pang - mids[i] + 180) % 360 - 180)
+    # Segmentbögen (Start/Ende in Grad) aus kumulierten Werten + firstSliceAng.
+    # (mids wurde oben genau so gebildet; hier rekonstruieren wir die Grenzen.)
+    _summe = sum(vals) or 1.0
+    _bogen = []
+    _kum = 0.0
+    for _v in vals:
+        _f = _v / _summe
+        _bogen.append(((fsa + _kum * 360) % 360, (fsa + (_kum + _f) * 360) % 360))
+        _kum += _f
+
+    def _pos_winkel(x, y):
+        return math.degrees(math.atan2(x - cx, -(y - cy))) % 360
+
+    def _abstand_grenze(i, x, y):
+        """Kleinster Winkelabstand des Positionswinkels zu den Bögen-Grenzen
+        von Segment i. Positiv, in Grad."""
+        pang = _pos_winkel(x, y)
+        a, b = _bogen[i]
+        d_a = min(abs(pang - a), 360 - abs(pang - a))
+        d_b = min(abs(pang - b), 360 - abs(pang - b))
+        return min(d_a, d_b)
+
+    def _im_bogen(i, x, y):
+        pang = _pos_winkel(x, y)
+        a, b = _bogen[i]
+        if a <= b:
+            return a <= pang <= b
+        return pang >= a or pang <= b          # Bogen über 0° hinweg
+
+    def _leader_sicher(i, x, y):
+        """PowerPoint zeichnet: entweder klar im Bogen mit Grenzabstand, oder
+        klar außerhalb (dann ist die Zuordnung über die Länge eindeutig)."""
+        if not _im_bogen(i, x, y):
+            return True                        # außerhalb → langer Leader
+        return _abstand_grenze(i, x, y) >= GRENZ_ABSTAND
 
     def _frei(i, x, y):
         if not (rand_in <= x <= frame_w_in - rand_in):
@@ -436,8 +473,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         if not (ob_grenze <= y - HALB_H and y <= frame_h_in - rand_in):
             return False
         # Ring-Abstand positionsabhängig: seitlich zählt die Box-Breite,
-        # oben/unten die Höhe. Sonst ragt ein seitlich platziertes Label in
-        # den Ring, obwohl sein Mittelpunkt außerhalb liegt.
+        # oben/unten die Höhe.
         lvx, lvy = x - cx, y - cy
         rad = math.hypot(lvx, lvy)
         if rad > 1e-6:
@@ -453,17 +489,18 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         return True
 
     for i in range(len(mids)):
-        # nur Labels, die zu schräg stehen (Niemandsland-Kandidaten)
-        if _offset_von_segment(i, ziel[i][0], ziel[i][1]) < OFFSET_OK:
+        # nur eingreifen, wenn der Leader aktuell NICHT sicher ist
+        if _leader_sicher(i, ziel[i][0], ziel[i][1]) and _frei(i, ziel[i][0],
+                                                               ziel[i][1]):
             continue
         seg = mids[i] % 360
         sx = cx + R_out * math.sin(math.radians(seg))
         sy = cy - R_out * math.cos(math.radians(seg))
-        # Kandidaten: Winkel nahe Segment (beide Seiten), Radius fein gerastert.
-        # Wähle den mit KLEINSTEM Offset, der alle Kriterien erfüllt.
+        # Suche die Position mit dem GRÖSSTEN Grenzabstand, die alle
+        # Constraints erfüllt. Winkel um den Mittelwinkel, Radius fein gerastert.
         bestpos = None
-        best_off = 1e9
-        for off_grad in (0, 3, 5, 7):
+        best_abstand = -1.0
+        for off_grad in (0, 2, 4, 6, 8, 10, 12):
             for seite in (-1, 1):
                 for r_delta in (0.12, 0.16, 0.20, 0.24, 0.28, 0.32,
                                 0.36, 0.40, 0.44):
@@ -471,17 +508,19 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                     a = math.radians(seg + seite * off_grad)
                     x = cx + r * math.sin(a)
                     y = cy - r * math.cos(a)
-                    leader = math.hypot(x - sx, y - sy)
-                    if leader < MIN_LEADER:
+                    if math.hypot(x - sx, y - sy) < MIN_LEADER:
                         continue
                     if not _frei(i, x, y):
                         continue
-                    tatsaechlich = _offset_von_segment(i, x, y)
-                    if tatsaechlich < best_off:
-                        best_off = tatsaechlich
+                    if not _leader_sicher(i, x, y):
+                        continue
+                    ab = _abstand_grenze(i, x, y)
+                    if ab > best_abstand:
+                        best_abstand = ab
                         bestpos = (x, y)
-        # nur übernehmen, wenn es die Lage VERBESSERT (kleinerer Offset)
-        if bestpos is not None and best_off < _offset_von_segment(
+        # übernehmen, wenn eine sichere Position gefunden wurde und sie den
+        # Grenzabstand VERBESSERT
+        if bestpos is not None and best_abstand > _abstand_grenze(
                 i, ziel[i][0], ziel[i][1]):
             ziel[i][0], ziel[i][1] = bestpos
 
