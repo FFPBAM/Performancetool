@@ -934,25 +934,43 @@ def consolidate_small_segments(agg_series: pd.Series,
 def build_ring_series(df: pd.DataFrame, dim_col: str) -> pd.Series:
     """Baut die Werte-Serie für einen Ring auf Slide 9 (Regionen oder Branchen).
 
-    - Aggregiert 'Gewicht' nach `dim_col` (z.B. 'Region' oder 'Segment')
-    - Positionen ohne Eintrag in `dim_col` werden ignoriert (z.B. Liquidität
-      hat typischerweise keine Region/Branche zugeordnet)
-    - Konsolidiert kleine Kategorien zu 'Sonstige'
-    - Hängt anschließend die Summe der NICHT klassifizierten Gewichte als
-      Kategorie 'Liquidität' an — damit der Ring auf 100% summiert.
+    Regionen- und Branchen-Ringe zeigen ausschliesslich die INVESTIERTEN
+    Anteile (Aktien/Renten/…), skaliert auf 100%. Liquidität hat weder eine
+    Region noch eine Branche und wird deshalb HERAUSGERECHNET — analog zur
+    VBA-Makrolösung (Stand 10.07.2026, Option B). Der frühere Ansatz, die
+    Liquidität als eigenes Segment anzuhängen, führte je nach Daten dazu, dass
+    der Ring auf ~98% statt 100% summierte (Liquiditätszeile trug teils eine
+    Region → wurde als klassifiziert gewertet, fiel aber unter den 3%-Threshold
+    und verschwand in 'Sonstige' oder ganz).
 
-    Liquidität wird nach der Konsolidierung angehängt, damit sie NICHT in
-    'Sonstige' einsortiert wird, auch wenn sie unter dem 3%-Threshold liegt.
+    Ablauf:
+    1. Liquidität per Gattung erkennen und komplett entfernen
+       (nicht per leerer Region raten — das war die alte, fragile Annahme).
+    2. Nach `dim_col` aggregieren; Positionen ohne Eintrag ignorieren.
+    3. Auf 100% normieren (Summe der verbleibenden, investierten Gewichte).
+    4. Kleine Kategorien zu 'Sonstige' konsolidieren.
+
+    Die Normierung passiert VOR der Konsolidierung, damit die 'Sonstige'-
+    Schwelle sich auf die bereits skalierten Anteile bezieht.
     """
     if dim_col not in df.columns or "Gewicht" not in df.columns:
         return pd.Series(dtype=float)
 
-    # Normalisierung: leere/NaN-Strings als Platzhalter
-    col = df[dim_col].astype(str).replace(["nan", "NaT", "None"], "")
-    has_value = col.str.strip() != ""
-    classified = df[has_value]
-    unclassified_weight = float(df.loc[~has_value, "Gewicht"].sum())
+    work = df.copy()
 
+    # ── 1) Liquidität herausrechnen (Option B) ────────────────────────────
+    # Primär über die Gattung (robust, unabhängig von der Region-Spalte).
+    # Fallback: fehlt die Gattung-Spalte, greifen wir auf leere dim_col-Werte
+    # zurück (altes Verhalten der Nicht-Klassifizierung).
+    if "Gattung" in work.columns:
+        ist_liquide = work["Gattung"].apply(
+            lambda g: classify_gattung(g) == GROUP_LIQUIDITAET)
+        work = work[~ist_liquide]
+
+    # ── 2) Nach Dimension aggregieren ─────────────────────────────────────
+    col = work[dim_col].astype(str).replace(["nan", "NaT", "None"], "")
+    has_value = col.str.strip() != ""
+    classified = work[has_value]
     if classified.empty:
         return pd.Series(dtype=float)
 
@@ -961,11 +979,13 @@ def build_ring_series(df: pd.DataFrame, dim_col: str) -> pd.Series:
     if agg.empty:
         return pd.Series(dtype=float)
 
-    agg = consolidate_small_segments(agg)
+    # ── 3) Auf 100% normieren (nur investierte Anteile) ───────────────────
+    gesamt = float(agg.sum())
+    if gesamt > 0.0001:
+        agg = agg / gesamt
 
-    # Liquidität / nicht-klassifiziertes Gewicht als eigenes Segment am Ende
-    if unclassified_weight > 0.0001:
-        agg["Liquidität"] = unclassified_weight
+    # ── 4) Kleine Kategorien konsolidieren ────────────────────────────────
+    agg = consolidate_small_segments(agg)
 
     return agg
 
