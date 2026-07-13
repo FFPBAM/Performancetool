@@ -722,6 +722,10 @@ LABEL_SCHRIFTFARBE = "000000"
 
 LEADER_GRAU = "A6A6A6"          # dezentes Grau für die Führungslinien
 LEADER_BREITE_EMU = 9525        # 0.75 pt
+_LEADER_RADIAL_STUB = 0.16      # Zoll: Länge des radialen Teils (aus dem Ring)
+_LEADER_MIN_STUB = 0.06         # Zoll: unter diesem horizontalen Versatz wird
+#                                 der Stub weggelassen (Zahl fast senkrecht überm
+#                                 Segment) → gerade Linie statt Knick
 
 _KERNKLASSEN = {"AKTIEN", "RENTEN", "EDELMETALLE", "LIQUIDITÄT"}
 _FILL_TAGS = ("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill")
@@ -992,21 +996,49 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_GRAU,
         sm = math.radians(mids[ixv])
         sx = cx + R_out * math.sin(sm)                # Segment-Außenpunkt
         sy = cy - R_out * math.cos(sm)
-        dx, dy = sx - mx, sy - my
-        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
-            continue
-        # Schnittpunkt der Verbindungslinie mit dem Rand der Label-Box:
-        # so endet der Strich an der Box-Kante statt mitten im Text.
-        tt = min(HALB_W / abs(dx) if abs(dx) > 1e-9 else 1e9,
-                 HALB_H / abs(dy) if abs(dy) > 1e-9 else 1e9)
-        ex, ey = mx + tt * dx, my + tt * dy
-        conn = slide.shapes.add_connector(
-            MSO_CONNECTOR.STRAIGHT, _ex(sx), _ey(sy), _ex(ex), _ey(ey))
-        conn.line.color.rgb = RGBColor(int(farbe[0:2], 16),
-                                       int(farbe[2:4], 16),
-                                       int(farbe[4:6], 16))
-        conn.line.width = Emu(int(breite_emu))
-        conn.name = "%s%d" % (praefix, ixv)
+
+        # GEKNICKTE Führung (radialer Teil + horizontaler Stub zur Zahl):
+        #   1) radialer Stub: vom Segment-Außenrand ein kurzes Stück ENTLANG des
+        #      Mittelwinkel-Strahls nach außen → die Linie tritt sauber senkrecht
+        #      aus dem Ring aus.
+        #   2) horizontaler Stub: auf Label-Höhe waagerecht zur dem Segment
+        #      zugewandten Seitenmitte der Zahl-Box.
+        #   Knick K liegt am Ende des Radialteils, auf Label-Höhe gezogen.
+        p_rx = cx + (R_out + _LEADER_RADIAL_STUB) * math.sin(sm)
+        p_ry = cy - (R_out + _LEADER_RADIAL_STUB) * math.cos(sm)
+
+        # Seite, auf der die Zahl relativ zum Radialstub-Ende liegt
+        side = 1.0 if mx >= p_rx else -1.0
+        e_x = mx - side * HALB_W                       # zugewandte Seitenmitte
+        e_y = my
+
+        # Knick: waagerechter Stub trifft die Zahl auf ihrer Höhe. Der Knick
+        # sitzt am Radialstub-Ende, aber auf Label-Höhe (damit Teil 2 exakt
+        # horizontal ist).
+        k_x = p_rx
+        k_y = e_y
+
+        # Wenn Zahl und Segment fast senkrecht übereinander liegen (kaum
+        # horizontaler Versatz), entartet der Stub — dann eine gerade Linie
+        # vom Radialstub-Ende zur Box-Kante.
+        if abs(e_x - k_x) < _LEADER_MIN_STUB:
+            punkte = [(sx, sy), (p_rx, p_ry), (e_x, e_y)]
+        else:
+            punkte = [(sx, sy), (k_x, k_y), (e_x, e_y)]
+
+        # Segmente als einzelne gerade Connectoren zeichnen (durchgehende
+        # Polylinie, volle Kontrolle über den Knick).
+        for teil, ((ax, ay), (bx, by)) in enumerate(
+                zip(punkte[:-1], punkte[1:])):
+            if abs(ax - bx) < 1e-4 and abs(ay - by) < 1e-4:
+                continue
+            conn = slide.shapes.add_connector(
+                MSO_CONNECTOR.STRAIGHT, _ex(ax), _ey(ay), _ex(bx), _ey(by))
+            conn.line.color.rgb = RGBColor(int(farbe[0:2], 16),
+                                           int(farbe[2:4], 16),
+                                           int(farbe[4:6], 16))
+            conn.line.width = Emu(int(breite_emu))
+            conn.name = "%s%d_%d" % (praefix, ixv, teil)
         gezeichnet += 1
     return gezeichnet
 
