@@ -872,6 +872,145 @@ def ring_leaderlines(chart, farbe=LEADER_GRAU, breite_emu=LEADER_BREITE_EMU):
     return True
 
 
+def ring_leaderlines_aus(chart):
+    """Schaltet PowerPoints automatische Führungslinien AB (showLeaderLines=0).
+
+    Hintergrund (13.07.2026): PowerPoint zeichnet radiale Leader nach einer
+    undokumentierten, nicht steuerbaren Regel — mal ja, mal nein (z.B. wenn ein
+    Label auf einer Segmentnaht sitzt oder die Linie quer durchs Ring-Loch
+    liefe). Das ist im XML nicht verlässlich vorhersagbar. Statt darauf zu
+    vertrauen, schalten wir die Auto-Leader ab und zeichnen sie selbst
+    (ring_leader_zeichnen) als echte Verbinder-Shapes auf die Folie.
+    """
+    from lxml import etree
+    root = _root(chart)
+    ser = root.find(".//" + _q("ser"))
+    if ser is None:
+        return False
+    dLbls = ser.find(_q("dLbls"))
+    if dLbls is None:
+        return False
+    sll = dLbls.find(_q("showLeaderLines"))
+    if sll is None:
+        sll = etree.SubElement(dLbls, _q("showLeaderLines"))
+    sll.set("val", "0")
+    for el in dLbls.findall(_q("leaderLines")):
+        dLbls.remove(el)
+    return True
+
+
+def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_GRAU,
+                         breite_emu=LEADER_BREITE_EMU):
+    """Zeichnet für jedes Ring-Label eine EIGENE Führungslinie als Connector.
+
+    Läuft vom Außenrand des Segments (R_out am Segment-Mittelwinkel) zur der
+    Kante der Label-Box, die dem Segment zugewandt ist. Weil wir die Linie
+    selbst setzen, erscheint sie IMMER — unabhängig von PowerPoints Auto-Regel.
+
+    Voraussetzung: ring_labels_aussen_dynamisch hat die Label-Positionen bereits
+    als manualLayout (xMode/yMode=edge) geschrieben, und ring_leaderlines_aus
+    hat die nativen Leader abgeschaltet.
+
+    Idempotent: vorhandene eigene Leader dieses Charts werden zuerst entfernt,
+    damit ein erneuter Lauf keine doppelten Linien erzeugt.
+
+    Koordinaten: Die Label-/Ring-Geometrie wird in Rahmen-Zoll gerechnet; ein
+    Punkt (xi, yi) in Rahmen-Zoll liegt auf der Folie bei
+    (shape.left + xi*914400, shape.top + yi*914400) EMU, weil die Rahmenbreite
+    in Zoll exakt shape.width/914400 entspricht (1:1-Abbildung).
+    """
+    import math
+    from pptx.util import Emu
+    from pptx.enum.shapes import MSO_CONNECTOR
+    from pptx.dml.color import RGBColor
+
+    root = _root(chart)
+    fw = shape.width / 914400.0
+    fh = shape.height / 914400.0
+    left, top = shape.left, shape.top
+
+    pa = root.find(".//" + _q("plotArea") + "/" + _q("layout")
+                   + "/" + _q("manualLayout"))
+    if pa is None:
+        return 0
+
+    def _g(t):
+        e = pa.find(_q(t))
+        return float(e.get("val")) if e is not None else None
+
+    px, py, pw, ph = _g("x"), _g("y"), _g("w"), _g("h")
+    if None in (px, py, pw, ph):
+        return 0
+
+    l, r = px * fw, (px + pw) * fw
+    t_, b = py * fh, (py + ph) * fh
+    cx, cy = (l + r) / 2, (t_ + b) / 2
+    R_out = min(r - l, b - t_) / 2
+
+    vals = [float(v.text)
+            for v in root.findall(".//" + _q("val") + "//" + _q("pt")
+                                  + "/" + _q("v"))]
+    if not vals:
+        return 0
+    tot = sum(vals) or 1.0
+    mids, kum = [], 0.0
+    for v in vals:
+        f = v / tot
+        mids.append((kum + f / 2) * 360)
+        kum += f
+
+    ser = root.find(".//" + _q("ser"))
+    HALB_W, HALB_H = 0.33, 0.10
+
+    # Idempotenz: alte eigene Leader dieses Charts entfernen
+    praefix = "RingLeader_%s_" % shape.name
+    for sp in list(slide.shapes):
+        if sp.name and sp.name.startswith(praefix):
+            sp._element.getparent().remove(sp._element)
+
+    def _ex(xi):
+        return int(left + xi * 914400)
+
+    def _ey(yi):
+        return int(top + yi * 914400)
+
+    gezeichnet = 0
+    for d in ser.findall(".//" + _q("dLbl")):
+        ix = d.find(_q("idx"))
+        ml = d.find(".//" + _q("manualLayout"))
+        if ix is None or ml is None:
+            continue
+        ixv = int(ix.get("val"))
+        if ixv >= len(mids):
+            continue
+        xe = ml.find(_q("x"))
+        ye = ml.find(_q("y"))
+        if xe is None or ye is None:
+            continue
+        mx = float(xe.get("val")) * fw + HALB_W       # Label-Box-Mitte
+        my = float(ye.get("val")) * fh + HALB_H
+        sm = math.radians(mids[ixv])
+        sx = cx + R_out * math.sin(sm)                # Segment-Außenpunkt
+        sy = cy - R_out * math.cos(sm)
+        dx, dy = sx - mx, sy - my
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            continue
+        # Schnittpunkt der Verbindungslinie mit dem Rand der Label-Box:
+        # so endet der Strich an der Box-Kante statt mitten im Text.
+        tt = min(HALB_W / abs(dx) if abs(dx) > 1e-9 else 1e9,
+                 HALB_H / abs(dy) if abs(dy) > 1e-9 else 1e9)
+        ex, ey = mx + tt * dx, my + tt * dy
+        conn = slide.shapes.add_connector(
+            MSO_CONNECTOR.STRAIGHT, _ex(sx), _ey(sy), _ex(ex), _ey(ey))
+        conn.line.color.rgb = RGBColor(int(farbe[0:2], 16),
+                                       int(farbe[2:4], 16),
+                                       int(farbe[4:6], 16))
+        conn.line.width = Emu(int(breite_emu))
+        conn.name = "%s%d" % (praefix, ixv)
+        gezeichnet += 1
+    return gezeichnet
+
+
 def ring_label_schriftfarbe(chart, farbe=LABEL_SCHRIFTFARBE):
     """Setzt die Schriftfarbe ALLER Prozent-Labels einheitlich (Default schwarz).
 
@@ -1033,10 +1172,15 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                                  rand_oben_in=_rand_oben,
                                                  kopf_frei_in=_kopf)
 
-                    # Führungslinien dezent grau statt schwarz; Labeltext in
-                    # der Segmentfarbe (einzige native Zuordnungsmöglichkeit).
+                    # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
+                    # stattdessen EIGENE Linien als Connector zeichnen — die
+                    # erscheinen zuverlässig, unabhängig von PowerPoints
+                    # undurchschaubarer Auto-Regel (Naht/Loch-Fälle). Labeltext
+                    # bleibt schwarz; Zuordnung über Position + eigene Linie.
                     if leader_farbe:
-                        ring_leaderlines(chart, farbe=leader_farbe)
+                        ring_leaderlines_aus(chart)
+                        ring_leader_zeichnen(slide, shape, chart,
+                                             farbe=leader_farbe)
                     if label_schriftfarbe:
                         stat["labels_schwarz"] += ring_label_schriftfarbe(
                             chart, farbe=label_schriftfarbe)
