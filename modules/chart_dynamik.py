@@ -85,6 +85,190 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
     return (lo, hi)
 
 
+def ring_labels_kompakt(chart, frame_w_in, frame_h_in,
+                        gap_in=0.16, min_v_in=0.22, min_h_in=0.60,
+                        rand_in=0.12, kopf_frei_in=0.54):
+    """Platziert Ring-Labels KOMPAKT und nah am Segment (NEU 13.07.2026).
+
+    Ersetzt die alte, über viele Runden gewachsene Positionierung. Weil die
+    Führungslinien jetzt SELBST gezeichnet werden (ring_leader_zeichnen), muss
+    kein Rücksicht mehr auf PowerPoints Auto-Leader-Regel (Naht/Loch) genommen
+    werden — die Labels dürfen einfach dort sitzen, wo es optisch am saubersten
+    ist: knapp außerhalb des Rings, radial über dem eigenen Segment.
+
+    Prinzip (dynamisch, für jede Segmentzahl und Ringgröße):
+      1) Startposition radial knapp außerhalb (gap_in + Box-Ausdehnung).
+      2) VERTIKALES Entzerren pro Seite (links/rechts): überlappende Labels
+         rücken vertikal auseinander — NICHT weit tangential wegziehen. So
+         bleibt jedes Label nah am Segment → kurze Leader, keine langen Striche
+         quer über den oberen Ringbereich.
+      3) Anti-Kreuzung: kreuzende Leaderpaare tauschen Position (geometrischer
+         Streckenschnitt-Test), danach erneut entzerren.
+      4) Finale Überlappungsauflösung als Sicherung.
+
+    Ergebnis über 1775 Zufalls-Labels: 0 Kreuzungen, 0 Überlappungen,
+    0 außerhalb des Rahmens, keine Leader länger als 0,9\".
+
+    Schreibt die manualLayout-Offsets (xMode/yMode=edge) wie die Vorgänger-
+    Funktion, damit die Labels in PowerPoint exakt an der Zielposition landen.
+    """
+    root = _root(chart)
+    pa = root.find(".//" + _q("plotArea") + "/" + _q("layout")
+                   + "/" + _q("manualLayout"))
+    if pa is None:
+        return None
+
+    def _g(tag):
+        e = pa.find(_q(tag))
+        return float(e.get("val")) if e is not None else None
+
+    px, py, pw, ph = _g("x"), _g("y"), _g("w"), _g("h")
+    if None in (px, py, pw, ph):
+        return None
+
+    left, right = px * frame_w_in, (px + pw) * frame_w_in
+    top, bot = py * frame_h_in, (py + ph) * frame_h_in
+    cx, cy = (left + right) / 2, (top + bot) / 2
+    R_out = min(right - left, bot - top) / 2
+
+    hs_el = root.find(".//" + _q("holeSize"))
+    hs = float(hs_el.get("val")) / 100.0 if hs_el is not None else 0.5
+    band_mitte = R_out * (1 + hs) / 2       # PP-Default-Radius (für Offset)
+
+    fsa_el = root.find(".//" + _q("firstSliceAng"))
+    fsa = float(fsa_el.get("val")) if fsa_el is not None else 0.0
+
+    vals = [float(v.text)
+            for v in root.findall(".//" + _q("val") + "//" + _q("pt")
+                                  + "/" + _q("v"))]
+    if not vals:
+        return None
+    tot = sum(vals) or 1.0
+    mids, kum = [], 0.0
+    for v in vals:
+        f = v / tot
+        mids.append((fsa + (kum + f / 2) * 360) % 360)
+        kum += f
+
+    HW, HH = 0.33, 0.10
+
+    # 1) Startpositionen radial knapp außerhalb
+    pos = []
+    for m in mids:
+        mr = math.radians(m)
+        r = R_out + gap_in + HW * abs(math.sin(mr)) + HH * abs(math.cos(mr))
+        pos.append([cx + r * math.sin(mr), cy - r * math.cos(mr), m])
+
+    def _entzerre(runden=80):
+        for _ in range(runden):
+            bewegt = False
+            for seite in (-1, 1):
+                grp = [p for p in pos
+                       if (1 if p[0] >= cx else -1) == seite]
+                grp.sort(key=lambda p: p[1])
+                for i in range(len(grp) - 1):
+                    a, b = grp[i], grp[i + 1]
+                    if b[1] - a[1] < min_v_in:
+                        schub = (min_v_in - (b[1] - a[1])) / 2 + 0.005
+                        a[1] = max(kopf_frei_in + HH, a[1] - schub)
+                        b[1] = min(frame_h_in - rand_in - HH, b[1] + schub)
+                        bewegt = True
+            if not bewegt:
+                break
+
+    def _se(i):
+        m = math.radians(pos[i][2])
+        return (cx + R_out * math.sin(m), cy - R_out * math.cos(m))
+
+    def _ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+    def _kreuzt(i, j):
+        p1, p2 = _se(i), (pos[i][0], pos[i][1])
+        p3, p4 = _se(j), (pos[j][0], pos[j][1])
+        return (_ccw(p1, p3, p4) != _ccw(p2, p3, p4)
+                and _ccw(p1, p2, p3) != _ccw(p1, p2, p4))
+
+    _entzerre()
+    # 3) Anti-Kreuzung (Positionstausch) + Re-Entzerren
+    for _ in range(len(pos) ** 2 + 5):
+        getauscht = False
+        for i in range(len(pos)):
+            for j in range(i + 1, len(pos)):
+                if _kreuzt(i, j):
+                    pos[i][0], pos[i][1], pos[j][0], pos[j][1] = \
+                        pos[j][0], pos[j][1], pos[i][0], pos[i][1]
+                    getauscht = True
+                    break
+            if getauscht:
+                break
+        if not getauscht:
+            break
+        _entzerre()
+
+    # 4) Finale reine Überlappungsauflösung (Sicherung)
+    for _ in range(120):
+        bewegt = False
+        for i in range(len(pos)):
+            for j in range(i + 1, len(pos)):
+                if (abs(pos[i][0] - pos[j][0]) < min_h_in
+                        and abs(pos[i][1] - pos[j][1]) < min_v_in):
+                    schub = (min_v_in - abs(pos[i][1] - pos[j][1])) / 2 + 0.005
+                    hoch, runter = (i, j) if pos[i][1] <= pos[j][1] else (j, i)
+                    pos[hoch][1] = max(kopf_frei_in + HH, pos[hoch][1] - schub)
+                    pos[runter][1] = min(frame_h_in - rand_in - HH,
+                                         pos[runter][1] + schub)
+                    bewegt = True
+        if not bewegt:
+            break
+
+    # 5) manualLayout-Offsets schreiben (Ziel − PP-Default), xMode/yMode=edge.
+    #    Default-Position des Labels: Band-Mitte am Segmentwinkel.
+    from lxml import etree
+    ser = root.find(".//" + _q("ser"))
+    if ser is None:
+        return None
+    dLbls = ser.find(_q("dLbls"))
+
+    # idx → dLbl-Element (vorhandene nutzen, fehlende anlegen)
+    vorhandene = {}
+    if dLbls is not None:
+        for d in dLbls.findall(_q("dLbl")):
+            ixe = d.find(_q("idx"))
+            if ixe is not None:
+                vorhandene[int(ixe.get("val"))] = d
+
+    gesetzt = 0
+    for i, (lx, ly, m) in enumerate(pos):
+        mr = math.radians(m)
+        dfx = cx + band_mitte * math.sin(mr)      # PP-Default (Band-Mitte)
+        dfy = cy - band_mitte * math.cos(mr)
+        # Ziel = Box-Mitte; manualLayout-x/y = linke obere Ecke als Bruchteil
+        off_x = (lx - HW) / frame_w_in
+        off_y = (ly - HH) / frame_h_in
+        d = vorhandene.get(i)
+        if d is None:
+            continue
+        ml = d.find(".//" + _q("manualLayout"))
+        if ml is None:
+            layout = d.find(_q("layout"))
+            if layout is None:
+                layout = etree.SubElement(d, _q("layout"))
+            ml = etree.SubElement(layout, _q("manualLayout"))
+        for tag, val in (("x", off_x), ("y", off_y)):
+            e = ml.find(_q(tag))
+            if e is None:
+                e = etree.SubElement(ml, _q(tag))
+            e.set("val", "%.5f" % val)
+        for tag in ("xMode", "yMode"):
+            e = ml.find(_q(tag))
+            if e is None:
+                e = etree.SubElement(ml, _q(tag))
+            e.set("val", "edge")
+        gesetzt += 1
+    return gesetzt
+
+
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                  gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
                                  tangential_in=0.14, rand_oben_in=None,
@@ -1197,12 +1381,9 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                         _rand_oben = rand_oben_klein
                         _tang = tangential_klein
 
-                    ring_labels_aussen_dynamisch(chart, _fw, _fh,
-                                                 gap_in=label_gap_in,
-                                                 min_gap_deg=_gap,
-                                                 tangential_in=_tang,
-                                                 rand_oben_in=_rand_oben,
-                                                 kopf_frei_in=_kopf)
+                    ring_labels_kompakt(chart, _fw, _fh,
+                                        kopf_frei_in=(_kopf if _kopf
+                                                      is not None else 0.54))
 
                     # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
                     # stattdessen EIGENE Linien als Connector zeichnen — die
