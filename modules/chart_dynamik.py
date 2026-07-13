@@ -397,6 +397,89 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
             _radial_ausschieben()
         _entzerren_nach_unten()
 
+    # 6d2) SEKTOR-RÜCKHOLUNG mit RADIUS-SUCHE (NEU 10.07.2026) — holt kleine
+    #      obere Labels aus dem „Niemandsland" zurück in ihren Sektor, damit
+    #      PowerPoint eine Führungslinie zeichnet.
+    #
+    #      Am realen Chart rückgemessen (8,33%-Fall Regionen, Balken bei 0,54"):
+    #      PowerPoint zeichnet den Leader, wenn das Label ENG an seinem Segment
+    #      sitzt (kleiner Winkel-Offset, wie die großen Segmente ~7°) ODER klar
+    #      weit weg (~1"). Im mittleren Bereich (~15° schräg raus) lässt es den
+    #      Strich weg — genau dort landen kleine Segmente nahe 12 Uhr, weil sie
+    #      radial nicht raus können (Kopfbalken) und der Algorithmus sie seitlich
+    #      ins Niemandsland schiebt.
+    #
+    #      Der Schlüssel: Winkel UND Radius GEMEINSAM wählen. Bei KLEINEREM
+    #      Radius sitzt ein oberes Label TIEFER und bleibt unter dem Balken,
+    #      während es zugleich in seinen Sektor zurückkommt. Wir suchen für jedes
+    #      zu schräg stehende Label die Position mit dem kleinsten Winkel-Offset,
+    #      die (a) unter dem Balken bleibt, (b) einen sichtbaren Leader behält
+    #      (Länge ≥ MIN_LEADER) und (c) keine Überlappung erzeugt.
+    #
+    #      Findet sich keine solche Position (dreifach eingeklemmt), bleibt das
+    #      Label wo es ist — nichts wird schlechter. Generisch für jeden Ring.
+    MIN_LEADER = 0.30      # Mindest-Leader-Länge, damit PP zeichnet (empirisch)
+    OFFSET_OK = 12.0       # Ziel: Winkel-Offset unter diesem Wert = Leader
+
+    ob_grenze = kopf_frei_in if kopf_frei_in is not None else _rand_oben
+
+    def _offset_von_segment(i, x, y):
+        pang = math.degrees(math.atan2(x - cx, -(y - cy))) % 360
+        return abs((pang - mids[i] + 180) % 360 - 180)
+
+    def _frei(i, x, y):
+        if not (rand_in <= x <= frame_w_in - rand_in):
+            return False
+        if not (ob_grenze <= y - HALB_H and y <= frame_h_in - rand_in):
+            return False
+        # Ring-Abstand positionsabhängig: seitlich zählt die Box-Breite,
+        # oben/unten die Höhe. Sonst ragt ein seitlich platziertes Label in
+        # den Ring, obwohl sein Mittelpunkt außerhalb liegt.
+        lvx, lvy = x - cx, y - cy
+        rad = math.hypot(lvx, lvy)
+        if rad > 1e-6:
+            pa_ang = math.atan2(lvx, -lvy)
+            rext = HALB_W * abs(math.sin(pa_ang)) + HALB_H * abs(math.cos(pa_ang))
+            if rad - rext - R_out < 0.05:
+                return False
+        for j in range(len(ziel)):
+            if j == i:
+                continue
+            if abs(x - ziel[j][0]) < min_h and abs(y - ziel[j][1]) < min_v:
+                return False
+        return True
+
+    for i in range(len(mids)):
+        # nur Labels, die zu schräg stehen (Niemandsland-Kandidaten)
+        if _offset_von_segment(i, ziel[i][0], ziel[i][1]) < OFFSET_OK:
+            continue
+        seg = mids[i] % 360
+        sx = cx + R_out * math.sin(math.radians(seg))
+        sy = cy - R_out * math.cos(math.radians(seg))
+        # Kandidaten: Winkel nahe Segment (beide Seiten), Radius von innen nach
+        # außen. Wähle den mit KLEINSTEM Offset, der alle Kriterien erfüllt.
+        bestpos = None
+        best_off = 1e9
+        for off_grad in (0, 4, 7, 10, 12):
+            for seite in (-1, 1):
+                for r in (R_out + 0.16, R_out + 0.26, R_out + 0.36, R_out + 0.46):
+                    a = math.radians(seg + seite * off_grad)
+                    x = cx + r * math.sin(a)
+                    y = cy - r * math.cos(a)
+                    leader = math.hypot(x - sx, y - sy)
+                    if leader < MIN_LEADER:
+                        continue
+                    if not _frei(i, x, y):
+                        continue
+                    tatsaechlich = _offset_von_segment(i, x, y)
+                    if tatsaechlich < best_off:
+                        best_off = tatsaechlich
+                        bestpos = (x, y)
+        # nur übernehmen, wenn es die Lage VERBESSERT (kleinerer Offset)
+        if bestpos is not None and best_off < _offset_von_segment(
+                i, ziel[i][0], ziel[i][1]):
+            ziel[i][0], ziel[i][1] = bestpos
+
     # 6e) ANTI-KREUZUNG (NEU 10.07.2026) — letzte Garantie, dass sich keine
     #     zwei Führungslinien überkreuzen.
     #
