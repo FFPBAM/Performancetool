@@ -1,5 +1,5 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: 09.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau, Chart-/Tabellen-Dynamik)
+## Stand: 20.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau, Chart-/Tabellen-Dynamik, Ring-Optik & Einzeltitel-Datenlogik)
 
 > Vorgänger-Stand: Juni 2026 (Phase 2: Performance-PPTX-Export). Alle
 > Transferwissen-Einträge #1–#17 aus Phase 2 bleiben gültig und stehen
@@ -23,6 +23,7 @@
 | 04.–06.07. | **Lokaler Batch** `erstelle_broschueren.py` (streamlit-frei, bewiesen; aktuell pausiert wg. IT-Paketinstallation); **Themen-Broschüren** (Familie „Thema" via Mapping-Spalte „Powerpoint Familie", `Vorlage_Thema.pptx` 21 Folien, 24 MB → 3,95 MB); PDF-Export im Portfolioanalyse-Bereich entfernt |
 | 06.07. | **Streamlit-Cloud-Versionsfalle**: `>=`-requirements zog Streamlit 1.59.0 + pandas 3.0; Downgrade-Versuch hing unter Python 3.14 → zurück auf `>=` (Pinnen offen, siehe Backlog) |
 | 07.07. | **Navigations-Umbau**: `st.tabs` → `st.segmented_control` (Tab-Rücksprung-Bug strukturell gelöst); Keep-Alive für Widget-States; zentrale Datenbereitstellung vor der Navigation. Per AppTest unter 1.59.0 verifiziert, im Deploy bestätigt |
+| 20.07. | **Ring-Optik final**: Cluster-Engine verworfen, (7)-Positionierung + schwarze Leader bleiben; `ring_labels_stub_fix` (Leader-Richtung); Punkte am Label-Ende (Assetklassen+Branchen der Thema-Familie); Familien-/Ringtyp-Erkennung. **Datenlogik-Bugs**: Themen-Einzeltitel-Ring wurde nie befüllt (EDELMETALLE fehlte) → GROUP_ORDER-Feed ergänzt; Legendenbox zu klein → `ensure_ring_legend_fits`. Transferwissen #29–#34 |
 
 ---
 
@@ -1165,6 +1166,121 @@ Aufrufgraph prüfen: Wer ruft die Funktion sonst noch auf? Geteilte Helfer nie �
 
 ---
 
+### 29. Ring-Führungslinien & Außen-Labels — der Endstand (NEU 20.07.2026)
+
+**Modul:** `modules/chart_dynamik.py` · **Einstieg:** `nachbearbeiten(prs)` (in `pptx_export.py`, direkt vor `prs.save()`).
+
+**WICHTIGSTE ENTSCHEIDUNG (nicht rückgängig machen):** Es gab zwei konkurrierende Positionierungs-Engines. Die **(7)-basierte ALT-Positionierung** (`ring_labels_aussen_dynamisch`) ist die **gültige, abgenommene Lösung**. Eine spätere **Cluster-Engine** (`ring_labels_cluster` / intern „V2": luftigere Anordnung, graue Leader, Punkte am Segment) wurde gebaut, getestet — und von Philip als **„sieht noch schlimmer aus"** verworfen. `ring_labels_cluster` und `ring_labels_kompakt` stehen nur noch als **UNGENUTZT** markierter Referenzcode in der Datei. **Nicht wiederbeleben.** Wer die Anordnung ändern will, arbeitet an `ring_labels_aussen_dynamisch`.
+
+**Aufbau der Datei (für gezielte Änderungen):** Ganz oben steht ein **WEGWEISER** (Problem → Funktion), ein **CONFIG-Block** (alle Stellschrauben) und eine **FALLSTRICKE**-Liste. So findet man ohne Suchen die richtige Stelle: „Führungslinie anpassen" → `ring_leader_zeichnen` + CONFIG; „Labels stehen falsch" → `ring_labels_aussen_dynamisch`; „Punkt/Farbe" → CONFIG.
+
+**Pipeline in `nachbearbeiten` pro Doughnut (Reihenfolge ist wichtig):**
+1. `ring_holesize(79)` — dünner Ring.
+2. `ring_segmentfarben` — Assetklassen-Farben namensbasiert (nur Assetklassen-Ringe; Rückgabe leer → Sektoren/Regionen bleiben unangetastet).
+3. `kopf_sperre_aus_usershapes` — misst die Unterkante des Überschriftenbalkens.
+4. `_enge_labelwinkel` → schaltet bei engen Assetklassen-Ringen stärkere Spreizung zu.
+5. **`ring_labels_aussen_dynamisch`** — Label-Positionen (8 Pässe, s. #26).
+6. `ring_leaderlines_aus` — PowerPoints Auto-Leader ABSCHALTEN.
+7. **`ring_labels_stub_fix`** — Führungslinien-Richtung reparieren (s. #30).
+8. **`ring_leader_zeichnen`** — eigene Leader als Connector + optional Punkt (s. #31).
+9. `ring_label_schriftfarbe` — Prozentzahlen schwarz.
+
+**Leader-Optik:** Die Führungslinien sind **eigene Connector-Shapes** (`add_connector`), **schwarz** (`LEADER_FARBE = "000000"` — Philip bevorzugt Schwarz gegenüber dem früheren Grau `A6A6A6`). Geknickte Führung: radialer Austritt am Segment → horizontaler Stub zur Zahl. Der Knick liegt auf dem **Radialstrahl** des Segments auf Label-Höhe; die dem Ring **zugewandte** Kante der Zahl-Box ist der Stub-Ansatz.
+
+**FALLSTRICK (teuer, mehrfach):** **LibreOffice ist KEIN Beweis für die Leader-Optik.** LibreOffice ignoriert `showLeaderLines=0` und zeichnet ZUSÄTZLICH eigene Auto-Leader → im Render erscheinen **Doppel-Linien**. Die Leader-Optik ist nur an **echten PowerPoint-Screenshots** prüfbar. Die **Geometrie** (Koordinaten, Längen, Kreuzungen, Knick-Richtung) ist dagegen zuverlässig **aus dem XML** verifizierbar — genau so wurde jede Änderung dieser Session abgenommen (numerisch, nicht per LO-Bild).
+
+**FALLSTRICK Koordinaten:** Ein Punkt `(xi, yi)` in Rahmen-Zoll liegt auf der Folie bei `(shape.left + xi*914400, shape.top + yi*914400)` EMU. Label-Positionen werden als **absolute** `manualLayout` mit `xMode/yMode="edge"` geschrieben: `stored_x = (mx − 0.33)/frame_w`, `stored_y = (my − 0.10)/frame_h` (0,33/0,10 = halbe Text-Box). NICHT als Offset (der Offset-Nullpunkt ist unbekannt, s. #26 Falle 2).
+
+---
+
+### 30. Führungslinien-Richtung reparieren: `ring_labels_stub_fix` (NEU 20.07.2026)
+
+**Symptom (echter PowerPoint-Screenshot):** Bei manchen Ringen fehlt einzelnen Labels die „Richtung" — statt eines sauberen Knicks (radialer Austritt + horizontaler Stub zur Zahl) bekommen sie nur eine **gerade, fast senkrechte Diagonale**. Betroffen sind **obere Segmente** (nahe 12 Uhr), deren Zahl fast senkrecht ÜBER dem Segment sitzt.
+
+**Ursache (am XML nachgewiesen):** In `ring_leader_zeichnen` scheitert für solche Labels die Knick-Bedingung `side·(e_x − k_x) > _LEADER_MIN_STUB` — der berechnete Stub ist **negativ** (Knie läge auf der falschen Seite der Zahl-Innenkante), weil die Zahl-Innenkante fast auf dem Segment-x liegt. Der Code fällt dann korrekt auf eine gerade Linie zurück — die aber richtungslos wirkt.
+
+**Lösung:** Eigene Funktion `ring_labels_stub_fix`, aufgerufen ZWISCHEN Positionierung und Leader-Zeichnen. Sie schiebt betroffene Labels **minimal weiter nach außen** (horizontal vom Segment weg), bis ein sauberer Radial-Knick möglich ist — der Leader-Pfad wird dann x-monoton (kein Haken). Zielposition: `mx_neu = k_x + side·(HW + _LEADER_MIN_STUB + 0.05)`.
+
+**Sicherungen (damit der (7)-Look erhalten bleibt):**
+- Wirkt NUR, wenn `|cos(mid)| > 0.30` (seitliche Labels bekommen ohnehin eine korrekte, fast waagerechte Gerade) UND der saubere Stub sonst fehlschlägt.
+- Nur nach AUSSEN schieben (`|mx−cx|` darf nicht kleiner werden — sonst zöge man Labels in den Ring).
+- Verschiebung gedeckelt: `max_nudge_in = 0.50` (Ø real ~0,24"). Größere Sprünge würden den Look zu stark ändern → dann bleibt die gerade Linie.
+- Nicht in ein anderes Label und nicht über Rand/Header schieben.
+
+**Verifikation (numerisch):** 96 richtungslose Leader über alle Broschüren repariert, 0 neue Überlappungen. Verbleibende gerade obere Linien sind legitim (`r < R_out` → Label auf Segment-Höhe → horizontale Linie hat Richtung).
+
+---
+
+### 31. Punkte/Marker am Label-Ende — Ringtyp- + Familien-Regel (NEU 20.07.2026)
+
+**Zielbild:** Kleiner **schwarzer, gefüllter Kreis** am **äußeren Ende** der Führungslinie, direkt VOR der Prozentzahl (nicht am Ring). Markiert den Abschluss des Leaders beim Label. Genau ein Punkt je Leader, klein und einheitlich.
+
+**FALLSTRICK Position:** Zuerst wurde der Punkt am **Segment-Ansatz** `(sx, sy)` gezeichnet — dann wirkt er wie eine Markierung AUF dem Ring (unruhig). Richtig ist das **Label-Ende** = `punkte[-1]` (die dem Ring zugewandte Kante der Zahl-Box). Verifiziert: Abstand zur Zahl 0,00", Abstand zum Ring ~0,29".
+
+**Regel (konfigurierbar im CONFIG-Block):** Punkte erscheinen nur
+- auf Ringtypen in `PUNKT_RINGTYPEN = ("ANLAGEKLASSEN", "BRANCHEN")` — Regionen-Ring bewusst OHNE, UND
+- nur in der **Thema-Familie** (`PUNKT_NUR_THEMA = True`).
+
+Also: Assetklassen-Ring (Einzeltitel) + Branchen-Ring (Zusammenstellung) der Thema-Broschüren bekommen Punkte; Regionen-Ring und ALLE ESG/CVV/Standard-Ringe nicht. Erweitern = Ringtyp in `PUNKT_RINGTYPEN` ergänzen (z.B. `"REGIONEN"`). Weitere CONFIG: `PUNKT_AN`, `PUNKT_FARBE = "000000"`, `PUNKT_DURCHMESSER = 0.055"`.
+
+**Umsetzung:** `ring_leader_zeichnen` bekam Parameter `punkt_zeichnen` (Entscheidung trifft `nachbearbeiten` anhand `_ring_typ` + `ist_thema`), zeichnet ein gefülltes OVAL ohne Kontur, benannt `RingLeaderDot_<chart>_<idx>` (idempotent: alte Punkte werden vor Neuzeichnen entfernt).
+
+---
+
+### 32. Familien- & Ringtyp-Erkennung (datengetrieben, NEU 20.07.2026)
+
+**Ringtyp** — `_ring_typ(chart, shape)` → `ANLAGEKLASSEN` | `BRANCHEN` | `REGIONEN`:
+- ANLAGEKLASSEN: Kategorien sind Assetklassen (`_ist_assetklassen_ring`: alle in der Palette + mind. eine Kernklasse AKTIEN/RENTEN/EDELMETALLE/LIQUIDITÄT).
+- BRANCHEN/REGIONEN: über den Shape-Namen (`C_Kennzahlen2` endet auf „2" = Branchen, `C_Kennzahlen1` auf „1" = Regionen) als Rückfall. FALLSTRICK: nicht allein auf den Namen verlassen — Assetklassen immer über die Kategorien erkennen.
+
+**Familie** — `_familie_aus_prs(prs)` → `Thema` | `CVV` | `ESG` | `ETF` | None, aus dem Mapping (`_STRATEGIE_FAMILIE`, gespiegelt aus `Mapping_Namen.xlsx` Spalte „Powerpoint Familie"), gematcht gegen den **Folientitel**:
+- **FALLSTRICK Überlappung:** Strategienamen überlappen zwischen Familien — „Offensiv" = Thema, aber „ESG Offensiv" = ESG. Deshalb **längster Treffer zuerst** (`sorted(..., key=-len)`) → „esg offensiv" schlägt „offensiv".
+- **FALLSTRICK cVV-Prefix:** cVV-Broschüren lassen im Titel den Prefix WEG („Anlagestrategie Ausgewogen", nicht „cVV Ausgewogen"). Deshalb sind die nackten Formen (konservativ/defensiv/ausgewogen/…) als CVV im Mapping hinterlegt, ESG mit Prefix.
+- Es werden NUR echte Titelzeilen durchsucht (Text mit „Anlagestrategie"/„Portfoliozusammenstellung"), damit Fließtext wie „Die Strategie Pro stellt…" kein False Positive erzeugt.
+- `_ist_thema_familie` = `_familie_aus_prs == "Thema"`, mit **strukturellem Rückfall** (nur Thema hat Regionen-/Branchen-Ringe), falls das Titel-Matching mal leer ausgeht.
+
+Verifiziert über alle 18 Broschüren: ESG→ESG, Offensiv/Pro/Pro Dividende→Thema, cVV→CVV.
+
+---
+
+### 33. Themen-Einzeltitel: Assetklassen-Ring wurde nie mit Daten befüllt (BUG, NEU 20.07.2026)
+
+**Modul:** `modules/pptx_slides.py` — **Datenlogik**, NICHT chart_dynamik.
+
+**Symptom:** Auf der Einzeltitel-Folie der Offensiv-Broschüre zeigte der Assetklassen-Ring nur **AKTIEN 98,09 % + LIQUIDITÄT 1,91 %** — EDELMETALLE (XETRA Gold 5,93 %) fehlte, obwohl es in der Tabelle rechts korrekt stand. Zusätzlich stimmte die Ring-Liquidität (1,91 %) nicht mit der Tabelle (4,76 %) überein.
+
+**Diagnose (Kette Quelldaten → Klassifizierung → Aggregation → Befüllung):**
+- `classify_gattung` (gold/edelmetall/silber → EDELMETALLE) und `group_portfolio_positions` (Gruppierung + implizite Liquidität = 1 − Σ Gewicht) sind **korrekt** — die Tabelle nutzt sie und stimmt.
+- Ring-Befüllung liegt in `pptx_slides.py` per `replace_chart_data(C_Kennzahlen, categories, values)`. `fill_anlagevorschlag_slides` (Standard-Pfad) füllt den Ring **korrekt** über die `GROUP_ORDER`-Aggregation.
+- **ROOT CAUSE:** `fill_einzeltitel_themen_slide` (der Thema-Pfad) füllte **NUR die Tabelle** — es gab **keinen einzigen `replace_chart_data`-Aufruf für den Ring**. Die Orchestrierung ruft für die Block-Rolle `einzeltitel_themen` auch keinen separaten Ring-Feed auf. Ergebnis: Der Ring behielt die **Platzhalter-Daten der Vorlage** (AKTIEN 98,09 % / LIQUIDITÄT 1,91 %).
+
+**Fix:** In `fill_einzeltitel_themen_slide` direkt nach `group_portfolio_positions(df)` denselben `GROUP_ORDER`-Aggregations-Feed wie im Standard ergänzt (`alloc_labels`/`alloc_values` → `replace_chart_data`, `if ring and has_chart and sum>0`). Datengetrieben, generisch für alle Thema-Strategien, `if`-Guard macht ihn risikofrei. Verifiziert mit den echten Funktionen: Ring → AKTIEN 89,32 % / EDELMETALLE 5,93 % / LIQUIDITÄT 4,75 %, Summe 100 %, deckungsgleich mit der Tabelle.
+
+**Merksatz:** Der Assetklassen-Ring ist ein **eigener Datenpfad** neben der Tabelle — beide können auseinanderlaufen. `chart_dynamik.py` ändert nie Werte; Datenfehler sitzen immer in `pptx_slides.py`.
+
+---
+
+### 34. Legenden-Box eines Ringes datenbasiert dimensionieren (BUG, NEU 20.07.2026)
+
+**Modul:** `modules/pptx_slides.py` → Helfer `ensure_ring_legend_fits`, aufgerufen nur im Thema-Einzeltitel-Pfad nach `replace_chart_data`.
+
+**Symptom (nach dem Ring-Fix #33):** Der Ring zeigte korrekt 3 Segmente, die **Legende** unten links aber nur AKTIEN — EDELMETALLE/LIQUIDITÄT fehlten. Später (nach Höhen-Fix) brach „EDELMETALLE" auf zwei Zeilen um und LIQUIDITÄT fiel weiter raus.
+
+**Diagnose:** Bei einem nativen Donut leitet PowerPoint die Legende **automatisch aus den Kategorien** ab; `replace_chart_data` fasst die Legende NICHT an (nur cat/val-Caches), es gibt keine `legendEntry`-Löschungen und keine Filterung. Ursache war die **feste `manualLayout`-Box** der Legende:
+- Thema-Einzeltitel-Vorlage: **0,99" breit × 0,49" hoch** — dimensioniert für die 2 Platzhalter-Kategorien.
+- Funktionierende ESG/CVV-Ringe: 0,83–0,84" hoch → zeigen alle 4.
+- Bei 9pt-Schrift braucht jeder Eintrag **~0,21" Höhe**; „EDELMETALLE" **~1,07" Breite**. → Höhe zu klein schneidet Einträge ab, Breite zu klein bricht lange Labels um (Umbruch frisst die Höhe).
+
+**Fix `ensure_ring_legend_fits(chart_shape, categories)`:** vergrößert die Legenden-Box bei Bedarf
+- **Höhe** nach OBEN (Unterkante bleibt am Rahmenboden → Legende bleibt im Bild): `n·per_entry_in(0,22) + pad`,
+- **Breite** nach RECHTS (linke Kante bleibt): `swatch + max_label_chars·char_w(0,078) + pad`.
+
+Vergrößert **nur**, verkleinert nie → adäquate Legenden (ESG/CVV) bleiben unangetastet; wird **nur im Thema-Pfad** aufgerufen. Generisch: skaliert mit Kategorienzahl UND längstem Label (keine hartcodierten Kategorien). Ergebnis Offensiv: 0,99×0,49" → **1,22×0,72"**, alle 3 Einträge einzeilig, rechte Kante 1,22" (klar vor Ring ~2,6" und Quelle-Notiz ~2,8").
+
+**Nebeneffekt (gewollt):** Weil die Legende höher wird, verkleinert `chart_dynamik` (Pass 2b von `ring_labels_aussen_dynamisch`) den Ring auf dieser Folie minimal — konsistent mit den ESG/CVV-Folien.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -1987,6 +2103,16 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 20.07.2026 – Ring-Optik (Leader/Punkte) + Themen-Einzeltitel-Datenlogik + Legende
+- **Führungslinien-Endstand:** Die Cluster-Engine („V2", luftig/grau/Punkte-am-Segment) wurde als „schlimmer" **verworfen**; gültig bleibt die **(7)-basierte** `ring_labels_aussen_dynamisch`. Leader jetzt **schwarz** (war grau), als eigene Connector-Shapes. `chart_dynamik.py` neu strukturiert (WEGWEISER + CONFIG + FALLSTRICKE-Kopf) für gezielte Änderungen. Transferwissen #29
+- **Stub-Fix:** `ring_labels_stub_fix` repariert die richtungslosen Leader oberer Labels (Zahl fast senkrecht überm Segment) durch minimales Nach-außen-Schieben bis zum sauberen Knick; gedeckelt auf 0,50". 96 Leader repariert, 0 neue Überlappungen. Transferwissen #30
+- **Punkte am Label-Ende:** kleiner schwarzer Kreis am äußeren Leader-Ende (vor der Zahl, nicht am Ring). Regel per CONFIG: `PUNKT_RINGTYPEN=("ANLAGEKLASSEN","BRANCHEN")` + nur Thema-Familie → Assetklassen- + Branchen-Ring der Thema-Broschüren, Regionen + ESG/CVV ohne. Transferwissen #31
+- **Familien-/Ringtyp-Erkennung:** `_familie_aus_prs` (aus `Mapping_Namen.xlsx`, längster Titel-Treffer, cVV ohne Prefix) + `_ring_typ`. Über 18 Broschüren verifiziert. Transferwissen #32
+- **BUG Themen-Einzeltitel-Ring:** `fill_einzeltitel_themen_slide` füllte nur die Tabelle, NIE den Assetklassen-Ring → Ring behielt Vorlagen-Platzhalter (EDELMETALLE fehlte, Werte ≠ Tabelle). Fix: `GROUP_ORDER`-Aggregations-Feed ergänzt (wie Standard). Ring nun deckungsgleich mit Tabelle (AKTIEN 89,32/EDELMETALLE 5,93/LIQUIDITÄT 4,75). Transferwissen #33
+- **BUG Legende:** die kleine Vorlagen-Legendenbox (0,99×0,49") schnitt Einträge ab / brach „EDELMETALLE" um. `ensure_ring_legend_fits` vergrößert Höhe (alle Einträge) + Breite (längstes Label ohne Umbruch), nur bei Bedarf, nur im Thema-Pfad. Transferwissen #34
+- **Verifikationsmethode dieser Session:** durchgängig **numerisch am Chart-XML** (LibreOffice-Render zeigt Doppel-Leader und ist kein Beweis); echte PowerPoint-Screenshots von Philip als finale Abnahme.
+- **Geänderte Dateien:** `modules/chart_dynamik.py`, `modules/pptx_slides.py`
+
 ### 07.07.2026 – Gateway-Download gelöst (clientseitiger Blob-Download)
 - **Problem:** PPTX-Download hinter dem Atruvia/Skyhigh-Gateway lieferte
   `progress.htm` statt der Datei; Kern: JEDER Server-Abruf läuft durch den
@@ -2128,6 +2254,17 @@ markieren · ein konkreter Prüfstein je Lieferung.
 - Bei "Reparieren"-Dialog: Multi-Layer-Validierung (#16)
 - Große .pptx im Repo NIE per Web-UI umbenennen; Dateigröße nach Upload prüfen (#23)
 
+**Wichtig bei Ring-Optik (Leader/Labels/Punkte) — chart_dynamik.py:**
+- Endstand ist die **(7)-basierte** `ring_labels_aussen_dynamisch`; die Cluster-Engine ist VERWORFEN — nicht wiederbeleben (#29)
+- Anordnung ändern → `ring_labels_aussen_dynamisch`; Leader/Punkt/Farbe → `ring_leader_zeichnen` + CONFIG-Block oben in der Datei; Knick-Richtung → `ring_labels_stub_fix` (#30)
+- Punkte-Regel steht im CONFIG (`PUNKT_RINGTYPEN`, `PUNKT_NUR_THEMA`) — eine Stelle (#31)
+- **Leader-Optik NUR an echten PowerPoint-Screenshots prüfen** (LibreOffice zeichnet Doppel-Leader); Geometrie numerisch aus dem XML verifizieren (#29)
+
+**Wichtig bei Ring-DATEN (nicht Optik!) — pptx_slides.py:**
+- Der Assetklassen-Ring ist ein EIGENER Datenpfad neben der Tabelle; Datenfehler sitzen in `pptx_slides.py`, nie in chart_dynamik (#33)
+- Standard-Ring: `fill_anlagevorschlag_slides`; Themen-Einzeltitel-Ring: `fill_einzeltitel_themen_slide`; Regionen/Branchen: `fill_zusammenstellung_slide` via `build_ring_series`
+- Legende zu klein/abgeschnitten → `ensure_ring_legend_fits` (#34)
+
 **Wichtig bei Streamlit-Änderungen:**
 - Navigation/State: #18 + #19 lesen, BEVOR an nav_view/Keep-Alive geschraubt wird
 - Reihenfolge in streamlit_app.py (Abschnitt 7) nicht durcheinanderbringen —
@@ -2136,4 +2273,4 @@ markieren · ein konkreter Prüfstein je Lieferung.
 - Chat-Praktisches: `.py`-Uploads kommen in sehr langen Chats teils leer an →
   als `.txt` hochladen oder Code einfügen; bei wiederholt leeren Uploads neue Session
 
-*Stand: 07.07.2026 (Phase 3)*
+*Stand: 20.07.2026 (Phase 3)*
