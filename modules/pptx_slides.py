@@ -1520,25 +1520,32 @@ def tabelle_dynamisch_skalieren(table_shape, max_bottom_inch: float,
             "warnung": warnung}
 
 
-def ensure_ring_legend_fits(chart_shape, n_categories: int,
+def ensure_ring_legend_fits(chart_shape, categories,
                             per_entry_in: float = 0.22,
-                            pad_in: float = 0.06) -> bool:
-    """Vergrößert die Legenden-Box eines Ring-Charts, falls sie zu niedrig ist,
-    um ALLE Kategorien anzuzeigen.
+                            pad_in: float = 0.06,
+                            char_w_in: float = 0.078,
+                            swatch_in: float = 0.22,
+                            wpad_in: float = 0.14) -> bool:
+    """Vergrößert die Legenden-Box eines Ring-Charts, falls sie zu klein ist,
+    um ALLE Kategorien vollständig (ohne Zeilenumbruch) anzuzeigen.
 
     Hintergrund (BUGFIX 20.07.2026): Die Themen-Einzeltitel-Vorlage hat eine
     Legenden-manualLayout, die nur für die 2 Platzhalter-Kategorien dimensioniert
-    war (Höhe ~0,49"). Nachdem der Ring jetzt datengetrieben befüllt wird (bis zu
-    5 Assetklassen), reichte die Höhe nicht mehr — PowerPoint schnitt die Legende
-    ab und zeigte nur den ersten Eintrag (AKTIEN); EDELMETALLE/LIQUIDITÄT fehlten.
+    war (0,99" breit × 0,49" hoch). Nachdem der Ring datengetrieben befüllt wird:
+      • HÖHE zu klein  → PowerPoint schnitt untere Einträge ab (LIQUIDITÄT fehlte)
+      • BREITE zu klein → lange Labels wie 'EDELMETALLE' (~1,07") brachen auf zwei
+        Zeilen um; der Umbruch fraß die Höhe → wieder ein Eintrag zu wenig.
 
-    Fix: Box bei Bedarf NACH OBEN vergrößern (Unterkante bleibt erhalten, damit
-    die Legende im Rahmen bleibt). Vergrößert NUR, verkleinert nie → bereits
-    ausreichend große Legenden (ESG/CVV mit 0,83") bleiben unangetastet.
-    Generisch: skaliert mit der Kategorienzahl, keine hartcodierten Werte.
+    Fix: Box bei Bedarf vergrößern —
+      • HÖHE nach OBEN (Unterkante bleibt am Rahmenboden → bleibt im Bild),
+      • BREITE nach RECHTS (linke Kante bleibt bei x; horizontal ist links viel
+        Platz bis zum Ring/zur Quelle-Notiz).
+    Vergrößert NUR, verkleinert nie → bereits ausreichende Legenden (ESG/CVV)
+    bleiben unangetastet. Generisch: skaliert mit Kategorienzahl UND längstem
+    Label, keine hartcodierten Kategorien.
 
-    per_entry_in: Höhe pro Legendeneintrag. Belegt: 9pt-Font ≈ 0,21"/Eintrag
-    (ESG/CVV zeigen 4 Einträge in 0,84"); 0,22 mit kleiner Reserve.
+    per_entry_in: Höhe pro Eintrag (9pt-Font ≈ 0,21"; ESG/CVV: 4 Einträge in 0,84").
+    char_w_in/swatch_in/wpad_in: Breitenschätzung Text + Farb-Swatch + Rand.
     """
     try:
         root = chart_shape.chart._chartSpace
@@ -1552,21 +1559,39 @@ def ensure_ring_legend_fits(chart_shape, n_categories: int,
     if ml is None:
         return False                      # ohne manualLayout sizet PP selbst
     ye, he = ml.find(C + "y"), ml.find(C + "h")
-    if ye is None or he is None or n_categories <= 0:
+    xe, we = ml.find(C + "x"), ml.find(C + "w")
+    if ye is None or he is None or not categories:
         return False
+    frame_w_in = chart_shape.width / 914400.0
     frame_h_in = chart_shape.height / 914400.0
-    if frame_h_in <= 0:
+    if frame_w_in <= 0 or frame_h_in <= 0:
         return False
+    n = len(categories)
+    geaendert = False
+
+    # ── HÖHE: alle Einträge (je eine Zeile) müssen passen ──────────────────
     y = float(ye.get("val"))
     h = float(he.get("val"))
-    noetig = (n_categories * per_entry_in + pad_in) / frame_h_in
-    if h >= noetig:
-        return False                      # groß genug → nichts anfassen
-    unterkante = y + h                     # bleibt (Legende bleibt im Rahmen)
-    neu_y = max(0.0, unterkante - noetig)
-    ye.set("val", "%.5f" % neu_y)
-    he.set("val", "%.5f" % (unterkante - neu_y))
-    return True
+    noetig_h = (n * per_entry_in + pad_in) / frame_h_in
+    if h < noetig_h:
+        unterkante = y + h                 # bleibt (Legende bleibt im Rahmen)
+        neu_y = max(0.0, unterkante - noetig_h)
+        ye.set("val", "%.5f" % neu_y)
+        he.set("val", "%.5f" % (unterkante - neu_y))
+        geaendert = True
+
+    # ── BREITE: längstes Label ohne Zeilenumbruch ──────────────────────────
+    if xe is not None and we is not None:
+        x = float(xe.get("val"))
+        w = float(we.get("val"))
+        max_chars = max(len(str(c).strip()) for c in categories)
+        noetig_w = (swatch_in + max_chars * char_w_in + wpad_in) / frame_w_in
+        if w < noetig_w:
+            neu_w = min(noetig_w, 1.0 - x)  # nach rechts, im Rahmen bleiben
+            we.set("val", "%.5f" % neu_w)
+            geaendert = True
+
+    return geaendert
 
 
 def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
@@ -1639,9 +1664,9 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
             values=list(alloc_values),
             series_name="Anteil",
         )
-        # Legende an die Kategorienzahl anpassen: die kleine Vorlagen-Legenden-
-        # box (für 2 Platzhalter) schnitt sonst EDELMETALLE/LIQUIDITÄT ab.
-        ensure_ring_legend_fits(ring, len(alloc_labels))
+        # Legende an Kategorienzahl UND längstes Label anpassen: sonst schnitt
+        # die kleine Vorlagen-Box LIQUIDITÄT ab bzw. brach 'EDELMETALLE' um.
+        ensure_ring_legend_fits(ring, alloc_labels)
 
     # Flache Zeilenliste bauen: pro Gruppe eine Header-Zeile + Positionen
     zeilen = []  # (typ, dict)
