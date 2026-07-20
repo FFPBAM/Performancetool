@@ -72,10 +72,13 @@ _LEADER_MIN_STUB    = 0.06       # Zoll: darunter gerade Linie statt Knick
 LEADER_GRAU         = LEADER_FARBE
 
 # ── Punkt am Label-Ende der Führungslinie (kleiner gefüllter Kreis) ─────────
-# NUR beim Branchen-Ring der Thema-Familie (Wunsch 20.07.). BEIDE Bedingungen
-# müssen zutreffen. Ausweiten: PUNKT_NUR_BRANCHEN / PUNKT_NUR_THEMA = False.
+# Punkte erscheinen nur auf bestimmten Ringtypen UND nur in der Thema-Familie
+# (Wunsch 20.07.). PUNKT_RINGTYPEN = erlaubte Ringtypen (aus _ring_typ):
+# 'ANLAGEKLASSEN' (Assetklassen-Ring/Einzeltitel), 'BRANCHEN', 'REGIONEN'.
+# Zum Erweitern einfach den gewünschten Typ ergänzen; für alle Ringe leere
+# Prüfung via PUNKT_ALLE_RINGTYPEN=True; Thema-Bindung über PUNKT_NUR_THEMA.
 PUNKT_AN            = True
-PUNKT_NUR_BRANCHEN  = True
+PUNKT_RINGTYPEN     = ("ANLAGEKLASSEN", "BRANCHEN")   # Regionen bewusst OHNE
 PUNKT_NUR_THEMA     = True
 PUNKT_FARBE         = "000000"
 PUNKT_DURCHMESSER   = 0.055      # Zoll
@@ -1717,14 +1720,14 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                         stat["stub_fix"] += ring_labels_stub_fix(
                             chart, _fw, _fh,
                             kopf_frei_in=(_kopf if _kopf is not None else 0.54))
-                        # Punkt-Regel (Wunsch 20.07.): nur Branchen-Ring UND
-                        # nur Thema-Familie — beide Bedingungen konfigurierbar
-                        # im CONFIG-Block. So bekommt z.B. der Regionen-Ring oder
-                        # ein ESG/CVV-Anlageklassen-Ring KEINE Punkte.
+                        # Punkt-Regel (Wunsch 20.07.): Punkte nur auf den in
+                        # PUNKT_RINGTYPEN gelisteten Ringtypen UND nur in der
+                        # Thema-Familie — konfigurierbar im CONFIG-Block. So
+                        # bekommen aktuell Assetklassen- + Branchen-Ring Punkte,
+                        # der Regionen-Ring und alle ESG/CVV-Ringe nicht.
                         _typ = _ring_typ(chart, shape)
                         _punkt = (PUNKT_AN
-                                  and (not PUNKT_NUR_BRANCHEN
-                                       or _typ == "BRANCHEN")
+                                  and _typ in PUNKT_RINGTYPEN
                                   and (not PUNKT_NUR_THEMA or ist_thema))
                         ring_leader_zeichnen(slide, shape, chart,
                                              farbe=leader_farbe,
