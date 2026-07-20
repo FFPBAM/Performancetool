@@ -1520,6 +1520,55 @@ def tabelle_dynamisch_skalieren(table_shape, max_bottom_inch: float,
             "warnung": warnung}
 
 
+def ensure_ring_legend_fits(chart_shape, n_categories: int,
+                            per_entry_in: float = 0.22,
+                            pad_in: float = 0.06) -> bool:
+    """Vergrößert die Legenden-Box eines Ring-Charts, falls sie zu niedrig ist,
+    um ALLE Kategorien anzuzeigen.
+
+    Hintergrund (BUGFIX 20.07.2026): Die Themen-Einzeltitel-Vorlage hat eine
+    Legenden-manualLayout, die nur für die 2 Platzhalter-Kategorien dimensioniert
+    war (Höhe ~0,49"). Nachdem der Ring jetzt datengetrieben befüllt wird (bis zu
+    5 Assetklassen), reichte die Höhe nicht mehr — PowerPoint schnitt die Legende
+    ab und zeigte nur den ersten Eintrag (AKTIEN); EDELMETALLE/LIQUIDITÄT fehlten.
+
+    Fix: Box bei Bedarf NACH OBEN vergrößern (Unterkante bleibt erhalten, damit
+    die Legende im Rahmen bleibt). Vergrößert NUR, verkleinert nie → bereits
+    ausreichend große Legenden (ESG/CVV mit 0,83") bleiben unangetastet.
+    Generisch: skaliert mit der Kategorienzahl, keine hartcodierten Werte.
+
+    per_entry_in: Höhe pro Legendeneintrag. Belegt: 9pt-Font ≈ 0,21"/Eintrag
+    (ESG/CVV zeigen 4 Einträge in 0,84"); 0,22 mit kleiner Reserve.
+    """
+    try:
+        root = chart_shape.chart._chartSpace
+    except Exception:
+        return False
+    C = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+    leg = root.find(".//" + C + "legend")
+    if leg is None:
+        return False
+    ml = leg.find(".//" + C + "manualLayout")
+    if ml is None:
+        return False                      # ohne manualLayout sizet PP selbst
+    ye, he = ml.find(C + "y"), ml.find(C + "h")
+    if ye is None or he is None or n_categories <= 0:
+        return False
+    frame_h_in = chart_shape.height / 914400.0
+    if frame_h_in <= 0:
+        return False
+    y = float(ye.get("val"))
+    h = float(he.get("val"))
+    noetig = (n_categories * per_entry_in + pad_in) / frame_h_in
+    if h >= noetig:
+        return False                      # groß genug → nichts anfassen
+    unterkante = y + h                     # bleibt (Legende bleibt im Rahmen)
+    neu_y = max(0.0, unterkante - noetig)
+    ye.set("val", "%.5f" % neu_y)
+    he.set("val", "%.5f" % (unterkante - neu_y))
+    return True
+
+
 def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
                                    eval_date=None):
     """Befüllt die Einzeltitel-Folie der THEMEN-Broschüren (NEU 06.07.2026,
@@ -1590,6 +1639,9 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
             values=list(alloc_values),
             series_name="Anteil",
         )
+        # Legende an die Kategorienzahl anpassen: die kleine Vorlagen-Legenden-
+        # box (für 2 Platzhalter) schnitt sonst EDELMETALLE/LIQUIDITÄT ab.
+        ensure_ring_legend_fits(ring, len(alloc_labels))
 
     # Flache Zeilenliste bauen: pro Gruppe eine Header-Zeile + Positionen
     zeilen = []  # (typ, dict)
