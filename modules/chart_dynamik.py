@@ -1234,6 +1234,128 @@ def ring_leaderlines(chart, farbe=LEADER_FARBE, breite_emu=LEADER_BREITE_EMU):
     return True
 
 
+def ring_labels_stub_fix(chart, frame_w_in, frame_h_in,
+                         rand_in=0.12, kopf_frei_in=0.54,
+                         max_nudge_in=0.50):
+    """Repariert die FÜHRUNGSLINIEN-RICHTUNG oberer Labels (Wunsch 20.07.2026).
+
+    Problem: Sitzt eine Zahl fast senkrecht ÜBER ihrem Segment (obere kleine
+    Segmente), kann ring_leader_zeichnen keinen sauberen horizontalen Stub
+    setzen — der Knick zeigte auf die falsche Seite, daher fiel die Linie auf
+    eine gerade, richtungslose Diagonale zurück (im PowerPoint sichtbar).
+
+    Lösung: das betroffene Label MINIMAL weiter nach außen schieben (horizontal
+    vom Segment weg), bis der Radial-Knick sauber wird. So bleibt der (7)-Look
+    erhalten und nur die wenigen Problemlabels bekommen ihre Richtung zurück.
+
+    Wirkt NUR, wenn:
+      • das Segment eher oben/unten steht (|cos| > 0,30 — bei seitlichen Labels
+        ist eine gerade, fast waagerechte Linie ohnehin richtig), UND
+      • der saubere Stub sonst fehlschlägt.
+    Sicherungen: nur nach AUSSEN schieben (|mx−cx| wächst), im Rahmen bleiben,
+    nicht in ein anderes Label hineinschieben.
+
+    FALLSTRICK: Die x-Position im manualLayout ist die LINKE Boxkante als
+    Bruchteil → stored_x = (mx − HALB_W) / frame_w. Nicht die Box-Mitte.
+    """
+    from lxml import etree
+    root = _root(chart)
+    pa = root.find(".//" + _q("plotArea") + "/" + _q("layout")
+                   + "/" + _q("manualLayout"))
+    if pa is None:
+        return 0
+
+    def _g(tag):
+        e = pa.find(_q(tag))
+        return float(e.get("val")) if e is not None else None
+
+    px, py, pw, ph = _g("x"), _g("y"), _g("w"), _g("h")
+    if None in (px, py, pw, ph):
+        return 0
+    left, right = px * frame_w_in, (px + pw) * frame_w_in
+    top, bot = py * frame_h_in, (py + ph) * frame_h_in
+    cx, cy = (left + right) / 2, (top + bot) / 2
+    R = min(right - left, bot - top) / 2
+
+    fsa_el = root.find(".//" + _q("firstSliceAng"))
+    fsa = float(fsa_el.get("val")) if fsa_el is not None else 0.0
+    vals = [float(v.text)
+            for v in root.findall(".//" + _q("val") + "//" + _q("pt")
+                                  + "/" + _q("v"))]
+    if not vals:
+        return 0
+    tot = sum(vals) or 1.0
+    mids, kum = [], 0.0
+    for v in vals:
+        f = v / tot
+        mids.append((fsa + (kum + f / 2) * 360) % 360)
+        kum += f
+
+    ser = root.find(".//" + _q("ser"))
+    if ser is None:
+        return 0
+    HW, HH = 0.33, 0.10
+
+    # Alle Label-Boxen einlesen (idx → [mx, my, dLbl-Element])
+    boxen = {}
+    for d in ser.findall(".//" + _q("dLbl")):
+        ix = d.find(_q("idx"))
+        ml = d.find(".//" + _q("manualLayout"))
+        if ix is None or ml is None:
+            continue
+        xe, ye = ml.find(_q("x")), ml.find(_q("y"))
+        if xe is None or ye is None:
+            continue
+        ixv = int(ix.get("val"))
+        if ixv >= len(mids):
+            continue
+        mx = float(xe.get("val")) * frame_w_in + HW
+        my = float(ye.get("val")) * frame_h_in + HH
+        boxen[ixv] = [mx, my, ml, xe]
+
+    def _kollision(ixv, mx_neu, my):
+        for j, (jx, jy, *_ ) in boxen.items():
+            if j == ixv:
+                continue
+            if abs(mx_neu - jx) < 2 * HW and abs(my - jy) < 2 * HH:
+                return True
+        return False
+
+    verschoben = 0
+    for ixv, (mx, my, ml, xe) in boxen.items():
+        sm = math.radians(mids[ixv])
+        cos_m = math.cos(sm)
+        if abs(cos_m) <= 0.30:
+            continue                              # seitlich → gerade Linie ok
+        r = (cy - my) / cos_m
+        if not (R < r < R + 1.5):
+            continue
+        side = 1.0 if mx >= cx else -1.0
+        e_x = mx - side * HW
+        k_x = cx + r * math.sin(sm)
+        if side * (e_x - k_x) > _LEADER_MIN_STUB:
+            continue                              # Knick schon sauber
+        # Nudge-Ziel: Label so weit nach außen, dass der Stub sauber wird
+        mx_neu = k_x + side * (HW + _LEADER_MIN_STUB + 0.05)
+        # nur nach AUSSEN (|mx−cx| darf nicht kleiner werden)
+        if abs(mx_neu - cx) <= abs(mx - cx):
+            continue
+        # Verschiebung deckeln: große Sprünge würden den Look zu stark ändern →
+        # dann lieber die gerade Linie behalten.
+        if abs(mx_neu - mx) > max_nudge_in:
+            continue
+        # im Rahmen bleiben
+        if mx_neu - HW < rand_in or mx_neu + HW > frame_w_in - rand_in:
+            continue
+        # nicht in ein anderes Label schieben
+        if _kollision(ixv, mx_neu, my):
+            continue
+        xe.set("val", "%.5f" % ((mx_neu - HW) / frame_w_in))
+        boxen[ixv][0] = mx_neu
+        verschoben += 1
+    return verschoben
+
+
 def ring_leaderlines_aus(chart):
     """Schaltet PowerPoints automatische Führungslinien AB (showLeaderLines=0).
 
@@ -1511,7 +1633,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
     Gibt eine kleine Statistik zurück (für optionales Logging).
     """
     stat = {"ringe": 0, "linien": 0, "ringe_gefaerbt": 0, "labels_schwarz": 0,
-            "punkte": 0}
+            "punkte": 0, "stub_fix": 0}
     # Familie EINMAL bestimmen (für die Punkt-Regel: Punkte nur in Thema).
     ist_thema = _ist_thema_familie(prs)
     for slide in prs.slides:
@@ -1584,6 +1706,14 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                     # bleibt schwarz; Zuordnung über Position + eigene Linie.
                     if leader_farbe:
                         ring_leaderlines_aus(chart)
+                        # Führungslinien-Richtung reparieren: obere Labels, die
+                        # sonst nur eine richtungslose gerade Linie bekämen (Zahl
+                        # fast senkrecht überm Segment), minimal nach außen
+                        # schieben → sauberer horizontaler Stub. Muss VOR dem
+                        # Zeichnen laufen (verschiebt die Label-Position).
+                        stat["stub_fix"] += ring_labels_stub_fix(
+                            chart, _fw, _fh,
+                            kopf_frei_in=(_kopf if _kopf is not None else 0.54))
                         # Punkt-Regel (Wunsch 20.07.): nur Branchen-Ring UND
                         # nur Thema-Familie — beide Bedingungen konfigurierbar
                         # im CONFIG-Block. So bekommt z.B. der Regionen-Ring oder
