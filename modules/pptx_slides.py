@@ -1562,6 +1562,35 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
 
     groups = group_portfolio_positions(df)
 
+    # ── Assetklassen-Ring (C_Kennzahlen) befüllen ──────────────────────────
+    # BUGFIX 20.07.2026: Diese Funktion füllte bisher NUR die Tabelle. Der
+    # Assetklassen-Ring der Themen-Broschüre wurde von KEINER Funktion mit
+    # Daten versorgt (die Orchestrierung ruft für die Rolle 'einzeltitel_themen'
+    # nur diese Funktion auf) und behielt daher die PLATZHALTER-Daten der
+    # Vorlage (z.B. AKTIEN 98,09% / LIQUIDITÄT 1,91%). Folge: EDELMETALLE fehlte
+    # und die Ring-Werte passten nicht zur Tabelle.
+    #
+    # Fix: den Ring mit DERSELBEN Aggregation wie der Standard-Anlagevorschlag
+    # befüllen (GROUP_ORDER, inkl. EDELMETALLE) — dieselben `groups`, also
+    # garantiert konsistent mit der Tabelle. Datengetrieben und generisch:
+    # jede in den Positionen vorhandene Assetklasse erscheint als eigenes
+    # Segment; keine Strategie ist hartcodiert.
+    alloc_labels, alloc_values = [], []
+    for g in GROUP_ORDER:
+        if g in groups:
+            gsum = sum(safe_float(p["gewicht"], 0.0) for p in groups[g])
+            if gsum > 0.0001:
+                alloc_labels.append(g)
+                alloc_values.append(float(gsum))
+    ring = find_shape_by_name(slide, SHAPE_CHART_ALLOCATION)
+    if ring and getattr(ring, "has_chart", False) and sum(alloc_values) > 0:
+        replace_chart_data(
+            ring,
+            categories=list(alloc_labels),
+            values=list(alloc_values),
+            series_name="Anteil",
+        )
+
     # Flache Zeilenliste bauen: pro Gruppe eine Header-Zeile + Positionen
     zeilen = []  # (typ, dict)
     total = 0.0
