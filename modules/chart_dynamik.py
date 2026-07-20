@@ -71,7 +71,7 @@ _LEADER_MIN_STUB    = 0.06       # Zoll: darunter gerade Linie statt Knick
 # Alter Name für Rückwärtskompatibilität (falls extern referenziert):
 LEADER_GRAU         = LEADER_FARBE
 
-# ── Punkt am Segment (kleiner gefüllter Kreis am Leader-Ansatz) ────────────
+# ── Punkt am Label-Ende der Führungslinie (kleiner gefüllter Kreis) ─────────
 # NUR beim Branchen-Ring der Thema-Familie (Wunsch 20.07.). BEIDE Bedingungen
 # müssen zutreffen. Ausweiten: PUNKT_NUR_BRANCHEN / PUNKT_NUR_THEMA = False.
 PUNKT_AN            = True
@@ -1515,15 +1515,18 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
             conn.line.width = Emu(int(breite_emu))
             conn.name = "%s%d_%d" % (praefix, ixv, teil)
 
-        # Punkt am Segment-Ansatz (nur wenn vom Aufrufer gewünscht — z.B.
-        # Branchen-Ring der Thema-Familie). Kleiner gefüllter Kreis, ohne Kontur.
+        # Punkt am LABEL-ENDE der Führungslinie (Wunsch 20.07.2026) — direkt vor
+        # der Prozentzahl, NICHT am Ring. punkte[-1] ist die dem Ring zugewandte
+        # Kante der Zahl-Box, also das äußere Ende der Linie. Nur wenn vom
+        # Aufrufer gewünscht (z.B. Branchen-Ring der Thema-Familie).
         if punkt_zeichnen:
             pr = RGBColor(int(punkt_farbe[0:2], 16), int(punkt_farbe[2:4], 16),
                           int(punkt_farbe[4:6], 16))
             halb = punkt_durchmesser / 2.0
+            ende_x, ende_y = punkte[-1]          # Linien-Ende beim Label
             dot = slide.shapes.add_shape(
                 MSO_SHAPE.OVAL,
-                _ex(sx - halb), _ey(sy - halb),
+                _ex(ende_x - halb), _ey(ende_y - halb),
                 Emu(int(punkt_durchmesser * 914400)),
                 Emu(int(punkt_durchmesser * 914400)))
             dot.fill.solid()
