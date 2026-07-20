@@ -3,6 +3,7 @@
 Aufruf jeweils NACH dem Daten-Schreiben (replace_chart_data)."""
 import math
 import datetime as dt
+import re
 
 _C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 def _q(t): return f"{{{_C}}}{t}"
@@ -13,6 +14,173 @@ _A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 def _root(chart):
     # python-pptx: chart._chartSpace ist der lxml-Wurzelknoten des Charts
     return chart._chartSpace
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  WEGWEISER FÜR KÜNFTIGE CHATS  —  bitte zuerst lesen
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  Diese Datei zieht ALLE Charts einer fertigen Präsentation datenbasiert nach
+#  (native PowerPoint-Objekte, KEIN Bild). Einstieg ist immer `nachbearbeiten`
+#  ganz unten — von dort aus die Kette lesen.
+#
+#  ── SO ARBEITEST DU GEZIELT AN EINEM PROBLEM ──────────────────────────────
+#  „Passe die Führungslinie im Ring an"      → ring_leader_zeichnen  + CONFIG
+#  „Labels stehen falsch / überlappen"        → ring_labels_aussen_dynamisch
+#  „Punkt am Segment / Farbe / Stub-Länge"    → CONFIG-Block unten
+#  „Nur bei Branchen / nur bei Thema"         → _ring_typ / _ist_thema_familie
+#  „Segmentfarben falsch"                     → ring_segmentfarben
+#  „Kurve hat Leerraum / Achse falsch"        → datumsachse_an_daten
+#
+#  ── RINGTYPEN (datengetrieben erkannt, KEINE Prozent-Sonderfälle) ─────────
+#  ANLAGEKLASSEN : Kategorien = AKTIEN/RENTEN/EDELMETALLE/LIQUIDITÄT
+#                  (ESG, CVV, ETF — der „AKTUELLE STRUKTUR"-Ring)
+#  REGIONEN      : Kategorien = Länder/Regionen   (Thema-Broschüren, Ring links)
+#  BRANCHEN      : Kategorien = Sektoren          (Thema-Broschüren, Ring rechts)
+#  → Regionen/Branchen gibt es NUR in der Thema-Familie (Offensiv/Pro/Pro Div.).
+#
+#  ── FALLSTRICKE (teuer gelernt — nicht erneut hineinlaufen) ───────────────
+#  1) LibreOffice-Rendering ist KEIN Beweis für PowerPoints Leader-Optik.
+#     LibreOffice ignoriert showLeaderLines=0 und zeichnet ZUSÄTZLICH eigene
+#     Auto-Leader → im Render sieht man Doppel-Linien. Prüfe die Optik nur an
+#     echten PowerPoint-Screenshots. Geometrie prüft man dagegen zuverlässig
+#     im XML (Koordinaten, Längen, Kreuzungen).
+#  2) PowerPoints AUTO-Leader folgen einer undokumentierten Regel und fehlen
+#     mal (Label auf Segmentnaht ODER Linie quert das Ring-Loch). Deshalb
+#     schalten wir sie AB (ring_leaderlines_aus) und zeichnen SELBST
+#     (ring_leader_zeichnen). Niemals wieder auf die Auto-Leader verlassen.
+#  3) KOORDINATEN: Ein Punkt (xi, yi) in Rahmen-Zoll liegt auf der Folie bei
+#     (shape.left + xi*914400, shape.top + yi*914400) EMU. Exakt 1:1, weil die
+#     Rahmenbreite in Zoll = shape.width/914400.
+#  4) root.find(".//c:val") liefert nur die ERSTE Serie. Bei Mehr-Serien-Charts
+#     (CVV-Vergleich) über findall(".//c:val") ALLE Serien nehmen.
+#  5) Segmentfarben erben sonst die INDEX-Position der Vorlagen-dPt → AKTIEN
+#     würde gold statt blau. Deshalb ring_segmentfarben NAMENSbasiert.
+#  6) Ein defektes Einzelchart darf den Export nie abbrechen → try/except in
+#     nachbearbeiten. Beim Debuggen das except temporär entfernen.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+#  KONFIGURATION  —  zentrale Stellschrauben (hier ändern, nicht im Code suchen)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Führungslinien (Leader) ────────────────────────────────────────────────
+LEADER_FARBE        = "000000"   # SCHWARZ (früher grau A6A6A6) — Wunsch 20.07.
+LEADER_BREITE_EMU   = 9525       # 0,75 pt
+_LEADER_RADIAL_STUB = 0.16       # Zoll: radialer Austritt aus dem Ring
+_LEADER_MIN_STUB    = 0.06       # Zoll: darunter gerade Linie statt Knick
+# Alter Name für Rückwärtskompatibilität (falls extern referenziert):
+LEADER_GRAU         = LEADER_FARBE
+
+# ── Punkt am Segment (kleiner gefüllter Kreis am Leader-Ansatz) ────────────
+# NUR beim Branchen-Ring der Thema-Familie (Wunsch 20.07.). BEIDE Bedingungen
+# müssen zutreffen. Ausweiten: PUNKT_NUR_BRANCHEN / PUNKT_NUR_THEMA = False.
+PUNKT_AN            = True
+PUNKT_NUR_BRANCHEN  = True
+PUNKT_NUR_THEMA     = True
+PUNKT_FARBE         = "000000"
+PUNKT_DURCHMESSER   = 0.055      # Zoll
+
+# ── Label-Text ─────────────────────────────────────────────────────────────
+LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
+
+# ── Familien-Zuordnung (aus Mapping_Namen.xlsx, Spalte "Powerpoint Familie") ─
+# Strategie → Familie, wie im Mapping. Wird über den Folientitel gematcht
+# (_familie_aus_prs). WICHTIG zu den Schlüsseln:
+#   • cVV-Broschüren lassen im Titel den Prefix WEG ("Anlagestrategie
+#     Ausgewogen", nicht "cVV Ausgewogen") → die "nackten" Formen
+#     (konservativ/defensiv/ausgewogen/…) sind hier als CVV hinterlegt.
+#   • ESG behält den Prefix im Titel ("ESG Ausgewogen") → als "esg …" hinterlegt.
+#   • Überlappung: "Offensiv"=Thema, aber "ESG Offensiv"=ESG. Das Matching nimmt
+#     den LÄNGSTEN Treffer, deshalb gewinnt "esg offensiv" vor "offensiv".
+_STRATEGIE_FAMILIE = {
+    # Thema (kein Prefix im Titel)
+    "pro dividende": "Thema", "offensiv": "Thema", "pro": "Thema",
+    # ESG (mit "ESG"-Prefix im Titel)
+    "esg defensiv plus": "ESG", "esg defensiv": "ESG",
+    "esg ausgewogen": "ESG", "esg offensiv": "ESG",
+    # CVV (Titel OHNE "cVV"-Prefix → nackte Formen)
+    "konservativ": "CVV", "defensiv plus": "CVV", "defensiv": "CVV",
+    "ausgewogen": "CVV", "dynamic": "CVV",
+    # ETF
+    "etf ausgewogen": "ETF", "etf wachstum": "ETF",
+}
+
+
+def _familie_aus_prs(prs):
+    """Powerpoint-Familie aus dem Mapping ableiten — anhand des Strategienamens
+    im Folientitel. Rückgabe 'Thema'|'CVV'|'ESG'|'ETF' oder None.
+
+    Es werden NUR echte Titelzeilen durchsucht (Text mit 'Anlagestrategie' oder
+    'Portfoliozusammenstellung'), damit Fließtext wie 'Die Strategie Pro …' kein
+    False Positive erzeugt. Der LÄNGSTE passende Strategiename gewinnt (löst die
+    Überlappung 'ESG Offensiv' vs 'Offensiv').
+    """
+    hay = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                t = shape.text_frame.text.strip().lower()
+                if "anlagestrategie" in t or "portfoliozusammenstellung" in t:
+                    hay.append(t)
+    text = " ".join(hay)
+    if not text:
+        return None
+    for strat, fam in sorted(_STRATEGIE_FAMILIE.items(),
+                             key=lambda kv: -len(kv[0])):
+        if re.search(r"\b" + re.escape(strat) + r"\b", text):
+            return fam
+    return None
+
+
+def _ist_thema_familie(prs):
+    """True, wenn die Präsentation zur Thema-Familie gehört (Offensiv/Pro/
+    Pro Dividende). PRIMÄR aus dem Mapping (_familie_aus_prs, über den Titel).
+
+    Fällt das Titel-Matching aus (kein Treffer), STRUKTURELLE Rückfallebene:
+    nur Thema-Broschüren haben Regionen-/Branchen-Ringe (ESG/CVV/ETF haben
+    Anlageklassen-Ringe).
+
+    FALLSTRICK: Strategienamen überlappen zwischen Familien ('Offensiv'=Thema,
+    'ESG Offensiv'=ESG) und cVV-Titel lassen den Prefix weg — deshalb im
+    Mapping die nackten cVV-Formen + längster Treffer zuerst (_familie_aus_prs).
+    """
+    fam = _familie_aus_prs(prs)
+    if fam is not None:
+        return fam == "Thema"
+    # Rückfall: strukturell (nur Thema hat Regionen-/Branchen-Ringe)
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if getattr(shape, "has_chart", False):
+                chart = shape.chart
+                typ = chart.chart_type.name if chart.chart_type else ""
+                if "DOUGHNUT" in typ and _ring_typ(chart, shape) in (
+                        "BRANCHEN", "REGIONEN"):
+                    return True
+    return False
+
+
+def _ring_typ(chart, shape):
+    """Klassifiziert den Ring datengetrieben: 'ANLAGEKLASSEN' | 'BRANCHEN' |
+    'REGIONEN' | 'UNBEKANNT'. Grundlage sind die Kategorienamen; der Shape-Name
+    (C_Kennzahlen1=Regionen, C_Kennzahlen2=Branchen) dient nur als Rückfall.
+
+    FALLSTRICK: Verlass dich nicht allein auf den Shape-Namen — Vorlagen können
+    ihn ändern. Assetklassen werden immer über die Kategorien erkannt.
+    """
+    ser = _root(chart).find(".//" + _q("ser"))
+    if ser is None:
+        return "UNBEKANNT"
+    kats = _kategorien(ser)
+    if _ist_assetklassen_ring(kats):
+        return "ANLAGEKLASSEN"
+    name = (shape.name or "")
+    if name.endswith("2"):
+        return "BRANCHEN"
+    if name.endswith("1"):
+        return "REGIONEN"
+    return "UNBEKANNT"
+
+
 
 
 def datumsachse_an_daten(chart, auf_monat_runden=True):
@@ -85,282 +253,12 @@ def datumsachse_an_daten(chart, auf_monat_runden=True):
     return (lo, hi)
 
 
-def _ring_geometrie(chart, frame_w_in, frame_h_in):
-    """Liest Ring-Mitte, Radius, Segment-Mittelwinkel + Werte aus dem Chart.
-    Rückgabe (cx, cy, R, mids, vals) in Rahmen-Zoll — oder None."""
-    root = _root(chart)
-    pa = root.find(".//" + _q("plotArea") + "/" + _q("layout")
-                   + "/" + _q("manualLayout"))
-    if pa is None:
-        return None
-
-    def _g(tag):
-        e = pa.find(_q(tag))
-        return float(e.get("val")) if e is not None else None
-
-    px, py, pw, ph = _g("x"), _g("y"), _g("w"), _g("h")
-    if None in (px, py, pw, ph):
-        return None
-    left, right = px * frame_w_in, (px + pw) * frame_w_in
-    top, bot = py * frame_h_in, (py + ph) * frame_h_in
-    cx, cy = (left + right) / 2, (top + bot) / 2
-    R_out = min(right - left, bot - top) / 2
-
-    fsa_el = root.find(".//" + _q("firstSliceAng"))
-    fsa = float(fsa_el.get("val")) if fsa_el is not None else 0.0
-    vals = [float(v.text)
-            for v in root.findall(".//" + _q("val") + "//" + _q("pt")
-                                  + "/" + _q("v"))]
-    if not vals:
-        return None
-    tot = sum(vals) or 1.0
-    mids, kum = [], 0.0
-    for v in vals:
-        f = v / tot
-        mids.append((fsa + (kum + f / 2) * 360) % 360)
-        kum += f
-
-    # Legenden-Box (für die Footer-/Legenden-Sperre). Liegt typ. unten links.
-    # Rückgabe als (x0, y0, x1, y1) in Rahmen-Zoll oder None.
-    legende = None
-    leg = root.find(".//" + _q("legend"))
-    if leg is not None:
-        lml = leg.find(".//" + _q("manualLayout"))
-        if lml is not None:
-            def _lg(tag):
-                e = lml.find(_q(tag))
-                return float(e.get("val")) if e is not None else None
-            lx, ly, lw, lh = _lg("x"), _lg("y"), _lg("w"), _lg("h")
-            if None not in (lx, ly) and lw is not None and lh is not None:
-                legende = (lx * frame_w_in, ly * frame_h_in,
-                           (lx + lw) * frame_w_in, (ly + lh) * frame_h_in)
-    return cx, cy, R_out, mids, vals, legende
-
-
-def _cluster_kern(mids, vals, cx, cy, R, fw, fh,
-                  radial, HW, HH, min_v, min_h, kopf, rand, legende=None):
-    """Ein Positionierungs-Durchlauf (ohne Fallback). Siehe ring_labels_cluster."""
-    tot = sum(vals) or 1.0
-    n = len(mids)
-    top_y = kopf + HH
-    bot_y = fh - rand - HH
-
-    def bot_grenze(x):
-        """Untere Grenze für die Box-Mitte an x-Position — respektiert die
-        Legenden-/Footer-Zone (Label darf nicht in die Legende ragen)."""
-        if legende is not None:
-            lx0, ly0, lx1, ly1 = legende
-            # Box (x±HW) überlappt Legende horizontal? → oberhalb der Legende halten
-            if x + HW > lx0 - 0.05 and x - HW < lx1 + 0.05:
-                return min(bot_y, ly0 - HH - 0.04)
-        return bot_y
-
-    pos = []
-    for m, v in zip(mids, vals):
-        mr = math.radians(m)
-        rr = R + radial
-        pos.append([cx + rr * math.sin(mr), cy - rr * math.cos(mr),
-                    m, v / tot * 100])
-
-    def side(p):
-        return 1 if math.sin(math.radians(p[2])) >= 0 else -1
-
-    # Header-/Rahmen-/Footer-Klemmung + Seite halten (nie über die Mittelachse)
-    for p in pos:
-        p[1] = min(max(p[1], top_y), bot_grenze(p[0]))
-        sd = side(p)
-        if sd == 1:
-            p[0] = max(p[0], cx + 0.02)
-        else:
-            p[0] = min(p[0], cx - 0.02)
-        p[0] = min(max(p[0], HW + rand), fw - HW - rand)
-
-    # Vertikales Stapeln je Seite in Winkelreihenfolge → keine Kreuzung
-    for sd in (-1, 1):
-        grp = [p for p in pos if side(p) == sd]
-        grp.sort(key=lambda p: p[2] if sd == 1 else -p[2])
-        for k in range(1, len(grp)):
-            if grp[k][1] < grp[k - 1][1] + min_v:
-                grp[k][1] = grp[k - 1][1] + min_v
-        # unten raus (Rahmen ODER Legende) → von unten nach oben zurückdrücken
-        if grp:
-            untere = bot_grenze(grp[-1][0])
-            if grp[-1][1] > untere:
-                grp[-1][1] = untere
-                for k in range(len(grp) - 2, -1, -1):
-                    if grp[k][1] > grp[k + 1][1] - min_v:
-                        grp[k][1] = grp[k + 1][1] - min_v
-
-    # Cross-Seiten-Cluster (oben/unten) horizontal auffächern — Seite bleibt
-    for _ in range(80):
-        bewegt = False
-        for i in range(n):
-            for j in range(i + 1, n):
-                if side(pos[i]) == side(pos[j]):
-                    continue
-                dx = abs(pos[i][0] - pos[j][0])
-                dy = abs(pos[i][1] - pos[j][1])
-                if dx < min_h and dy < min_v:
-                    d = (min_h - dx) / 2 + 0.005
-                    li, re = (i, j) if pos[i][0] <= pos[j][0] else (j, i)
-                    pos[li][0] = max(HW + rand, pos[li][0] - d)
-                    pos[re][0] = min(fw - HW - rand, pos[re][0] + d)
-                    bewegt = True
-        if not bewegt:
-            break
-
-    for p in pos:
-        p[1] = min(max(p[1], top_y), bot_grenze(p[0]))
-        p[0] = min(max(p[0], HW + rand), fw - HW - rand)
-    return pos
-
-
-def ring_qualitaet(pos, mids, cx, cy, R, kopf=0.54, HH=0.10):
-    """Automatische Qualitätsprüfung der Label-Positionen.
-    Rückgabe (kreuzungen, ueberlappungen, header_verletzungen, max_leader)."""
-    def se(i):
-        m = math.radians(mids[i])
-        return (cx + R * math.sin(m), cy - R * math.cos(m))
-
-    def ccw(a, b, c):
-        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
-
-    kr = ov = hd = 0
-    mx = 0.0
-    for i in range(len(pos)):
-        sx, sy = se(i)
-        mx = max(mx, math.hypot(pos[i][0] - sx, pos[i][1] - sy))
-        if pos[i][1] - HH < kopf - 0.01:
-            hd += 1
-        for j in range(i + 1, len(pos)):
-            if (abs(pos[i][0] - pos[j][0]) < 0.60
-                    and abs(pos[i][1] - pos[j][1]) < 0.20):
-                ov += 1
-            p1, p2 = se(i), (pos[i][0], pos[i][1])
-            p3, p4 = se(j), (pos[j][0], pos[j][1])
-            if (ccw(p1, p3, p4) != ccw(p2, p3, p4)
-                    and ccw(p1, p2, p3) != ccw(p1, p2, p4)):
-                kr += 1
-    return kr, ov, hd, mx
-
-
-def ring_labels_cluster(chart, frame_w_in, frame_h_in,
-                        radial_in=0.60, min_v_in=0.24, min_h_in=0.62,
-                        kopf_frei_in=0.54, rand_in=0.12,
-                        min_leader_in=0.18, max_leader_in=1.05):
-    """Cluster-basierte Label-Positionierung für Ringdiagramme (NEU 13.07.2026).
-
-    Datengetrieben für ALLE Strategien/Ringe — keine hartcodierten Prozentwerte.
-    Ablauf:
-      1) Radiale Startposition am Segment-Mittelwinkel (kurze Leader).
-      2) Header-Sperre: kein Label ragt in den Überschriftenbalken (kopf_frei_in).
-      3) Vertikales Stapeln je Seite (links/rechts) in Winkelreihenfolge — das
-         garantiert, dass sich Führungslinien auf einer Seite nicht kreuzen.
-      4) Cluster oben/unten (Segmente knapp links & rechts der 12-/6-Uhr-Achse):
-         horizontales Auffächern in Winkelreihenfolge, ohne die Mittelachse zu
-         überschreiten (→ keine Kreuzung zwischen den Seiten).
-      5) Fallback: bleibt etwas unsauber, werden die Labels schrittweise weiter
-         nach außen gesetzt (radial+) und neu berechnet — bis Kreuzungen,
-         Überlappungen und Header-Verletzungen verschwinden.
-
-    Getestet: 52 echte Ringe + 3000 Zufallsverteilungen → 0 Kreuzungen,
-    0 Überlappungen, 0 Header-Verletzungen, Leader ≤ 0,73\".
-
-    Schreibt manualLayout-Offsets (xMode/yMode=edge). Gibt (anzahl, quali)
-    zurück, wobei quali = (kreuzungen, ueberlappungen, header, max_leader).
-    """
-    geo = _ring_geometrie(chart, frame_w_in, frame_h_in)
-    if geo is None:
-        return None
-    cx, cy, R, mids, vals, legende = geo
-    HW, HH = 0.33, 0.10
-
-    def _min_leader_erzwingen(pos):
-        """Zu kurze Leader auf Mindestlänge bringen, damit jede Linie sichtbar
-        abgesetzt vom Ring ist. Primär radial nach außen; wenn der Header das
-        blockiert (obere Segmente), stattdessen SEITLICH von der Ringmitte weg
-        (nach außen), sodass die Linie trotzdem sichtbar wird."""
-        for p in pos:
-            mr = math.radians(p[2])
-            sx, sy = cx + R * math.sin(mr), cy - R * math.cos(mr)
-            ll = math.hypot(p[0] - sx, p[1] - sy)
-            if ll >= min_leader_in:
-                continue
-            dx, dy = p[0] - sx, p[1] - sy
-            d = math.hypot(dx, dy) or 1e-6
-            fehl = min_leader_in - ll
-            nx = p[0] + dx / d * fehl
-            ny = p[1] + dy / d * fehl
-            ny_c = min(max(ny, kopf_frei_in + HH), frame_h_in - rand_in - HH)
-            nx_c = min(max(nx, HW + rand_in), frame_w_in - HW - rand_in)
-            p[0], p[1] = nx_c, ny_c
-            # Blockierte der Header die Verlängerung? Dann seitlich nachschieben.
-            rest = min_leader_in - math.hypot(p[0] - sx, p[1] - sy)
-            if rest > 0.01:
-                sd = 1.0 if p[0] >= cx else -1.0
-                p[0] = min(max(p[0] + sd * rest, HW + rand_in),
-                           frame_w_in - HW - rand_in)
-
-    # Fallback-Schleife: Labels bei Restproblemen weiter nach außen
-    bester = None
-    bester_score = None
-    for extra in (0.0, 0.12, 0.24, 0.40, 0.60):
-        pos = _cluster_kern(mids, vals, cx, cy, R, frame_w_in, frame_h_in,
-                            radial_in + extra, HW, HH,
-                            min_v_in, min_h_in, kopf_frei_in, rand_in, legende)
-        _min_leader_erzwingen(pos)
-        kr, ov, hd, mx = ring_qualitaet(pos, mids, cx, cy, R,
-                                        kopf_frei_in, HH)
-        score = (kr + ov + hd, mx)
-        if bester_score is None or score < bester_score:
-            bester_score, bester = score, pos
-        if kr == 0 and ov == 0 and hd == 0:
-            bester = pos
-            break
-    pos = bester
-    quali = ring_qualitaet(pos, mids, cx, cy, R, kopf_frei_in, HH)
-
-    # manualLayout-Offsets schreiben (xMode/yMode=edge)
-    from lxml import etree
-    root = _root(chart)
-    ser = root.find(".//" + _q("ser"))
-    if ser is None:
-        return None
-    dLbls = ser.find(_q("dLbls"))
-    vorhandene = {}
-    if dLbls is not None:
-        for d in dLbls.findall(_q("dLbl")):
-            ixe = d.find(_q("idx"))
-            if ixe is not None:
-                vorhandene[int(ixe.get("val"))] = d
-
-    gesetzt = 0
-    for i, (lx, ly, m, pct) in enumerate(pos):
-        d = vorhandene.get(i)
-        if d is None:
-            continue
-        ml = d.find(".//" + _q("manualLayout"))
-        if ml is None:
-            layout = d.find(_q("layout"))
-            if layout is None:
-                layout = etree.SubElement(d, _q("layout"))
-            ml = etree.SubElement(layout, _q("manualLayout"))
-        off_x = (lx - HW) / frame_w_in
-        off_y = (ly - HH) / frame_h_in
-        for tag, val in (("x", off_x), ("y", off_y)):
-            e = ml.find(_q(tag))
-            if e is None:
-                e = etree.SubElement(ml, _q(tag))
-            e.set("val", "%.5f" % val)
-        for tag in ("xMode", "yMode"):
-            e = ml.find(_q(tag))
-            if e is None:
-                e = etree.SubElement(ml, _q(tag))
-            e.set("val", "edge")
-        gesetzt += 1
-    return gesetzt, quali
-
-
+# ─────────────────────────────────────────────────────────────────────────
+# UNGENUTZT (Stand 20.07.2026): ring_labels_kompakt war ein Alternativ-Ansatz
+# (kompakt am Ring). Aktiv ist ring_labels_aussen_dynamisch. Nur behalten als
+# Referenz — NICHT aufgerufen. Vor dem Löschen prüfen, dass nachbearbeiten es
+# nicht referenziert.
+# ─────────────────────────────────────────────────────────────────────────
 def ring_labels_kompakt(chart, frame_w_in, frame_h_in,
                         gap_in=0.16, min_v_in=0.22, min_h_in=0.60,
                         rand_in=0.12, kopf_frei_in=0.54):
@@ -1178,14 +1076,9 @@ ASSET_FARBEN = {
 # Schriftfarbe der Prozent-Labels: IMMER Schwarz, unabhängig vom Segment.
 # (Anforderung 10.07.2026 — die Zuordnung Label→Segment läuft über Position
 # und Führungslinie, NICHT über die Schriftfarbe. Farbe gehört an den Ring.)
-LABEL_SCHRIFTFARBE = "000000"
+# HINWEIS: LABEL_SCHRIFTFARBE, LEADER_FARBE, LEADER_BREITE_EMU,
+# _LEADER_RADIAL_STUB, _LEADER_MIN_STUB stehen jetzt im CONFIG-Block ganz oben.
 
-LEADER_GRAU = "A6A6A6"          # dezentes Grau für die Führungslinien
-LEADER_BREITE_EMU = 9525        # 0.75 pt
-_LEADER_RADIAL_STUB = 0.16      # Zoll: Länge des radialen Teils (aus dem Ring)
-_LEADER_MIN_STUB = 0.06         # Zoll: unter diesem horizontalen Versatz wird
-#                                 der Stub weggelassen (Zahl fast senkrecht überm
-#                                 Segment) → gerade Linie statt Knick
 
 _KERNKLASSEN = {"AKTIEN", "RENTEN", "EDELMETALLE", "LIQUIDITÄT"}
 _FILL_TAGS = ("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill")
@@ -1301,7 +1194,12 @@ def ring_segmentfarben(chart):
     return gesetzt
 
 
-def ring_leaderlines(chart, farbe=LEADER_GRAU, breite_emu=LEADER_BREITE_EMU):
+# ─────────────────────────────────────────────────────────────────────────
+# UNGENUTZT (Stand 20.07.2026): ring_leaderlines färbte PowerPoints AUTO-Leader.
+# Wir zeichnen Leader jetzt SELBST (ring_leader_zeichnen) — siehe Fallstrick 2.
+# Nur als Referenz behalten, NICHT aufrufen.
+# ─────────────────────────────────────────────────────────────────────────
+def ring_leaderlines(chart, farbe=LEADER_FARBE, breite_emu=LEADER_BREITE_EMU):
     """Färbt die Führungslinien dezent (Default: Grau 0.75pt) statt Schwarz.
 
     ACHTUNG (OOXML-Grenze): <c:leaderLines> gilt für die GANZE Serie — eine
@@ -1363,22 +1261,21 @@ def ring_leaderlines_aus(chart):
     return True
 
 
-def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_GRAU,
-                         breite_emu=LEADER_BREITE_EMU):
+def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
+                         breite_emu=LEADER_BREITE_EMU,
+                         punkt_zeichnen=False,
+                         punkt_farbe=PUNKT_FARBE,
+                         punkt_durchmesser=PUNKT_DURCHMESSER):
     """Zeichnet für jedes Ring-Label eine EIGENE Führungslinie als Connector.
 
     Läuft vom Außenrand des Segments (R_out am Segment-Mittelwinkel) zur der
     Kante der Label-Box, die dem Segment zugewandt ist. Weil wir die Linie
     selbst setzen, erscheint sie IMMER — unabhängig von PowerPoints Auto-Regel.
 
-    Voraussetzung: ring_labels_aussen_dynamisch hat die Label-Positionen bereits
-    als manualLayout (xMode/yMode=edge) geschrieben, und ring_leaderlines_aus
-    hat die nativen Leader abgeschaltet.
-
-    Idempotent: vorhandene eigene Leader dieses Charts werden zuerst entfernt,
-    damit ein erneuter Lauf keine doppelten Linien erzeugt.
-
-    Koordinaten: Die Label-/Ring-Geometrie wird in Rahmen-Zoll gerechnet; ein
+    punkt_zeichnen: setzt zusätzlich einen kleinen gefüllten Kreis am Segment-
+    Ansatz (wie im Makro-Zielbild). Die ENTSCHEIDUNG, ob Punkte gezeichnet
+    werden, trifft der Aufrufer (nachbearbeiten) anhand von Ringtyp + Familie —
+    hier wird nur das Flag umgesetzt.
     Punkt (xi, yi) in Rahmen-Zoll liegt auf der Folie bei
     (shape.left + xi*914400, shape.top + yi*914400) EMU, weil die Rahmenbreite
     in Zoll exakt shape.width/914400 entspricht (1:1-Abbildung).
@@ -1426,15 +1323,13 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_GRAU,
     ser = root.find(".//" + _q("ser"))
     HALB_W, HALB_H = 0.33, 0.10
 
-    # Idempotenz: alte eigene Leader UND Punkte dieses Charts entfernen
+    # Idempotenz: alte eigene Leader dieses Charts entfernen
     praefix = "RingLeader_%s_" % shape.name
     dot_praefix = "RingLeaderDot_%s_" % shape.name
     for sp in list(slide.shapes):
         if sp.name and (sp.name.startswith(praefix)
                         or sp.name.startswith(dot_praefix)):
             sp._element.getparent().remove(sp._element)
-
-    _DOT_D = 0.055  # Zoll: Durchmesser des Punkts am Segment (wie im Makro)
 
     def _ex(xi):
         return int(left + xi * 914400)
@@ -1498,19 +1393,22 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_GRAU,
             conn.line.width = Emu(int(breite_emu))
             conn.name = "%s%d_%d" % (praefix, ixv, teil)
 
-        # Punkt am Segment-Außenrand (gefüllter Kreis, wie im Makro-Zielbild).
-        rgb = RGBColor(int(farbe[0:2], 16), int(farbe[2:4], 16),
-                       int(farbe[4:6], 16))
-        halb = _DOT_D / 2.0
-        dot = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL,
-            _ex(sx - halb), _ey(sy - halb),
-            Emu(int(_DOT_D * 914400)), Emu(int(_DOT_D * 914400)))
-        dot.fill.solid()
-        dot.fill.fore_color.rgb = rgb
-        dot.line.fill.background()          # keine Kontur
-        dot.shadow.inherit = False
-        dot.name = "%s%d" % (dot_praefix, ixv)
+        # Punkt am Segment-Ansatz (nur wenn vom Aufrufer gewünscht — z.B.
+        # Branchen-Ring der Thema-Familie). Kleiner gefüllter Kreis, ohne Kontur.
+        if punkt_zeichnen:
+            pr = RGBColor(int(punkt_farbe[0:2], 16), int(punkt_farbe[2:4], 16),
+                          int(punkt_farbe[4:6], 16))
+            halb = punkt_durchmesser / 2.0
+            dot = slide.shapes.add_shape(
+                MSO_SHAPE.OVAL,
+                _ex(sx - halb), _ey(sy - halb),
+                Emu(int(punkt_durchmesser * 914400)),
+                Emu(int(punkt_durchmesser * 914400)))
+            dot.fill.solid()
+            dot.fill.fore_color.rgb = pr
+            dot.line.fill.background()
+            dot.shadow.inherit = False
+            dot.name = "%s%d" % (dot_praefix, ixv)
         gezeichnet += 1
     return gezeichnet
 
@@ -1597,7 +1495,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                    min_gap_deg=24.0, min_gap_deg_klein=60.0,
                    tangential_in=0.14, tangential_klein=0.24,
                    rand_oben_klein=0.52, kopf_frei_klein=0.60,
-                   leader_farbe=LEADER_GRAU,
+                   leader_farbe=LEADER_FARBE,
                    label_schriftfarbe=LABEL_SCHRIFTFARBE):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
@@ -1613,8 +1511,9 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
     Gibt eine kleine Statistik zurück (für optionales Logging).
     """
     stat = {"ringe": 0, "linien": 0, "ringe_gefaerbt": 0, "labels_schwarz": 0,
-            "leader_kreuzungen": 0, "leader_ueberlappungen": 0,
-            "leader_header": 0, "leader_max_in": 0.0}
+            "punkte": 0}
+    # Familie EINMAL bestimmen (für die Punkt-Regel: Punkte nur in Thema).
+    ist_thema = _ist_thema_familie(prs)
     for slide in prs.slides:
         for shape in slide.shapes:
             if not getattr(shape, "has_chart", False):
@@ -1671,19 +1570,12 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                         _rand_oben = rand_oben_klein
                         _tang = tangential_klein
 
-                    _erg = ring_labels_cluster(
-                        chart, _fw, _fh,
-                        kopf_frei_in=(_kopf if _kopf is not None else 0.54))
-                    # Automatische Qualitätsprüfung mitschreiben (Punkt 7):
-                    # summiert Kreuzungen/Überlappungen/Header-Verletzungen und
-                    # den längsten Leader über alle Ringe. Bei sauberer Lösung
-                    # bleiben die drei Fehlerzähler 0.
-                    if _erg is not None:
-                        _n, (_kr, _ov, _hd, _mx) = _erg
-                        stat["leader_kreuzungen"] += _kr
-                        stat["leader_ueberlappungen"] += _ov
-                        stat["leader_header"] += _hd
-                        stat["leader_max_in"] = max(stat["leader_max_in"], _mx)
+                    ring_labels_aussen_dynamisch(chart, _fw, _fh,
+                                                 gap_in=label_gap_in,
+                                                 min_gap_deg=_gap,
+                                                 tangential_in=_tang,
+                                                 rand_oben_in=_rand_oben,
+                                                 kopf_frei_in=_kopf)
 
                     # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
                     # stattdessen EIGENE Linien als Connector zeichnen — die
@@ -1692,8 +1584,20 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                     # bleibt schwarz; Zuordnung über Position + eigene Linie.
                     if leader_farbe:
                         ring_leaderlines_aus(chart)
+                        # Punkt-Regel (Wunsch 20.07.): nur Branchen-Ring UND
+                        # nur Thema-Familie — beide Bedingungen konfigurierbar
+                        # im CONFIG-Block. So bekommt z.B. der Regionen-Ring oder
+                        # ein ESG/CVV-Anlageklassen-Ring KEINE Punkte.
+                        _typ = _ring_typ(chart, shape)
+                        _punkt = (PUNKT_AN
+                                  and (not PUNKT_NUR_BRANCHEN
+                                       or _typ == "BRANCHEN")
+                                  and (not PUNKT_NUR_THEMA or ist_thema))
                         ring_leader_zeichnen(slide, shape, chart,
-                                             farbe=leader_farbe)
+                                             farbe=leader_farbe,
+                                             punkt_zeichnen=_punkt)
+                        if _punkt:
+                            stat["punkte"] += 1
                     if label_schriftfarbe:
                         stat["labels_schwarz"] += ring_label_schriftfarbe(
                             chart, farbe=label_schriftfarbe)
