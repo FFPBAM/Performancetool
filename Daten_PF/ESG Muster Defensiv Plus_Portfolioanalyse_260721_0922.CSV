@@ -1,0 +1,28 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+20.07.2026;AbbVie Inc.;A1J84E;4,240%;USD;0,572%;15,939%;-;0%;-;-;Chemie,Pharma;Nordamerika;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Allianz SE;840400;2,573%;EUR;0,303%;13,252%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Artificial Intelligence ETF (WisdomTree);A2N7KX;2,593%;USD;-0,432%;-14,343%;-;0%;-;-;Nachhaltigkeit;Global;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Commerzbank IHS 0,5 % 04.12.26;CZ45VC;4,377%;EUR;0,056%;1,279%;04.12.2026;0,5000%;0,3726;2,6269%;Financials;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Deutschland Green Bond 0 % 15.08.31;103073;4,003%;EUR;-0,023%;-0,593%;15.08.2031;0%;5,0685;2,8677%;Staat/ Governments;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Dt. Bahn IHS 1,875 % 24.05.30;A30VH4;3,403%;EUR;-0,006%;-0,194%;24.05.2030;1,8750%;3,7306;3,1409%;Corporates;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Dt. Pfandbriefbk. Green Bond IHS 5 % 05.02.27;A30WF8;2,012%;EUR;0,027%;1,290%;05.02.2027;5,0000%;0,5452;3,7067%;Financials;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;E.ON Green Bond IHS 3,875 % 12.01.35;A30V8B;2,404%;EUR;-0,003%;-0,184%;12.01.2035;3,8750%;7,3211;3,8594%;Corporates;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;E.ON SE;ENAG99;3,605%;EUR;0,697%;22,987%;-;0%;-;-;Versorger;Deutschland;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;EnBW Green Bond IHS 4,3 % 23.05.34;A3LREF;3,320%;EUR;0,024%;0,650%;23.05.2034;4,3000%;6,8479;3,8304%;Corporates;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Global Active ESG Equity ETF (Invesco);A2PHJT;9,795%;USD;1,542%;18,150%;-;0%;-;-;Index;Global;Aktien;4;ESG Muster Defensiv Plus
+20.07.2026;Goldman Sachs IHS 2 % 01.11.28;A19340;1,715%;EUR;0,006%;0,308%;01.11.2028;2,0000%;2,2233;3,1055%;Financials;Nordamerika;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Heidelberg Mat. Green Bd. IHS 3,95 % 19.07.34;A383EX;3,650%;EUR;0,021%;0,516%;19.07.2034;3,9500%;7,0640;3,9443%;Corporates;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Hochtief IHS 1,25 % 03.09.31;A2YN2V;3,050%;EUR;-0,060%;-1,899%;03.09.2031;1,2500%;4,9305;3,8589%;Corporates;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Johnson & Johnson;853260;1,898%;USD;-0,084%;-4,248%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Knorr-Bremse AG;KBX100;3,135%;EUR;0,272%;8,931%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;London Stock Exchange GroupPLC;A0JEJF;1,479%;GBP;0,035%;2,421%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Europa ohne Deutschland;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Mercedes-Benz Green Bond IHS 3,7 % 30.05.31;A3LH6U;3,791%;EUR;-0,048%;-1,251%;30.05.2031;3,7000%;4,5240;3,4550%;Corporates;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Microsoft Corp.;870747;2,395%;USD;-0,396%;-13,991%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Nikkei 225 ETF Acc. (iShares);A0YEDQ;2,762%;JPY;0,605%;27,056%;-;0%;-;-;Index;Japan;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Novartis AG;904278;2,371%;CHF;0,349%;16,404%;-;0%;-;-;Chemie,Pharma;Europa ohne Deutschland;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;Physical Gold ETC (Invesco);A1AA5X;9,334%;EUR;-0,602%;-6,126%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;4;ESG Muster Defensiv Plus
+20.07.2026;Procter & Gamble Co., The;852062;2,530%;USD;0,073%;3,046%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;ESG Muster Defensiv Plus
+20.07.2026;RWE Green Bond IHS 0,5 % 26.11.28;A3MP70;4,413%;EUR;0,033%;0,716%;26.11.2028;0,5000%;2,3353;3,0539%;Corporates;Deutschland;Renten;3;ESG Muster Defensiv Plus
+20.07.2026;Stoxx Europe Select Dividend 30 ETF (Amundi);LYX0Y9;4,916%;EUR;0,734%;17,101%;-;0%;-;-;Index;Europa;Aktien;4;ESG Muster Defensiv Plus
+20.07.2026;US Equity Research Enhanced ETF (Fidelity);A2P0ZN;3,011%;USD;0,033%;1,113%;-;0%;-;-;Index;Nordamerika;Aktien;4;ESG Muster Defensiv Plus
+;;;;;;;;;;;;;;;
