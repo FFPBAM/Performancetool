@@ -612,6 +612,44 @@ _ETF_CONFIG = {
     "einmal_folien": {"uebersicht": 20},
 }
 
+# Struktur der comdirect-Broschüre ("Klassische Portfolioverwaltung", NEU 21.07.2026).
+#
+# Gleicher Bauplan wie ESG/CVV (feste Blöcke), aber DREI Strategien und
+# BESONDERS EINFACH: T_Kennzahlen ist 11-spaltig (Standard-Layout → KEIN
+# spalten_map nötig) und es gibt KEINE dynamische Vergleichsfolie (F5 =
+# statische Strategie-Beschreibung, F21 = Firmen-AuM-Wachstum → beide statisch,
+# also KEIN einmal_folien). Damit ist es eine reine Config-Ergänzung.
+# Verifiziert an der echten Vorlage (27 Folien):
+#   F6/8/10 : Titel "Anlagestrategie Portfolioverwaltung 30/70/100"
+#             + Anlagekriterien-Kasten + C_Kennzahlen (Ring)
+#             + T_Kennzahlen (11 Spalten, mit Marktrisikowert)
+#   F7/9/11 : Rolle "wertentwicklung" (Diagramm links/rechts + Kennzahlen)
+_COMDIRECT_STRATEGIEN = [
+    "Comdirect_30",
+    "Comdirect_70",
+    "Comdirect_100",
+]
+"""Feste Reihenfolge — MUSS zur Foliennummerierung passen (30=F6, 70=F8,
+100=F10). Namen wie in der Mapping-Spalte 'Strategie auswählen'."""
+
+_COMDIRECT_CONFIG = {
+    "erwartete_folien": 27,
+    "entfernen": [],
+    "feste_bloecke": [
+        {"anlagevorschlag": 6,  "wertentwicklung": 7},
+        {"anlagevorschlag": 8,  "wertentwicklung": 9},
+        {"anlagevorschlag": 10, "wertentwicklung": 11},
+    ],
+    # titel_text="": Vorlagen-Titel behalten. max_bottom_inch/row_h an der
+    # Vorlage gemessen (Tabelle endet bei 6.36", Zeilenhöhe ~0.21") — nach
+    # echtem Deploy ggf. feinjustieren. KEIN spalten_map (11 Spalten wie ESG).
+    "rollen_optionen": {
+        "anlagevorschlag": {"titel_text": "", "max_bottom_inch": 6.20,
+                            "original_row_h_inch": 0.21},
+    },
+    # KEIN einmal_folien — comdirect hat keine dynamische Vergleichsfolie.
+}
+
 # Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
 # Nur Familien mit EIGENER Vorlage hier eintragen. Familien ohne Eintrag
 # (oder leere Familie) → Standard-Vorlage (Vorlage_FFPB.pptx, config None).
@@ -620,6 +658,7 @@ VORLAGEN_FAMILIEN = {
     "CVV": ("Vorlage_cVV_Infoboard.pptx", _CVV_CONFIG),
     "ESG": ("Vorlage_ESG.pptx", _ESG_CONFIG),
     "ETF": ("Vorlage_ETF.pptx", _ETF_CONFIG),
+    "comdirect": ("Vorlage_comdirect.pptx", _COMDIRECT_CONFIG),
 }
 
 # Familien, deren Broschüre IMMER alle Strategien enthält (Variante A).
@@ -629,6 +668,7 @@ FAMILIE_ALLE_STRATEGIEN = {
     "CVV": _CVV_STRATEGIEN,
     "ESG": _ESG_STRATEGIEN,
     "ETF": _ETF_STRATEGIEN,
+    "comdirect": _COMDIRECT_STRATEGIEN,
 }
 
 
