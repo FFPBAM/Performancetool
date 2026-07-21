@@ -215,6 +215,34 @@ COL_RATING = 10
 COL_SPACERS = [1, 3, 5, 7, 9]
 """Spalten-Indizes der Spacer-Spalten (immer leer)."""
 
+# ─── Spalten-Layout als Map (NEU 20.07.2026, für die ETF-Vorlage) ───────────
+# Die Standard-/Themen-/CVV-/ESG-Tabellen haben 11 Spalten (obige Konstanten).
+# Die ETF-Vorlage hat nur 7 Spalten: WERTPAPIER, WKN, Anteil, Marktrisikowert
+# — OHNE KUPON/FÄLLIGKEIT (ETFs sind keine Renten). Damit dieselbe Fill-Logik
+# beide Layouts bedienen kann, wird das Layout als Map übergeben; fehlt sie,
+# gilt DEFAULT_SPALTEN_MAP → exakt das bisherige 11-Spalten-Verhalten.
+# Schlüssel None (kupon/faelligkeit bei ETF) → die Fill-Logik überspringt sie.
+DEFAULT_SPALTEN_MAP = {
+    "wertpapier": COL_WERTPAPIER,   # 0
+    "kupon":       COL_KUPON,        # 2
+    "faelligkeit": COL_FAELLIGKEIT,  # 4
+    "wkn":         COL_WKN,          # 6
+    "anteil":      COL_ANTEIL,       # 8
+    "rating":      COL_RATING,       # 10  (Marktrisikowert)
+    "spacers":     COL_SPACERS,      # [1, 3, 5, 7, 9]
+}
+ETF_SPALTEN_MAP = {
+    "wertpapier": 0, "kupon": None, "faelligkeit": None,
+    "wkn": 2, "anteil": 4, "rating": 6, "spacers": [1, 3, 5],
+}
+
+
+def _belegte_spalten(sm: dict):
+    """Nicht-None Datenspalten des Layouts (zum Leeren/zur Leer-Prüfung).
+    Für DEFAULT_SPALTEN_MAP genau [0, 2, 4, 6, 8, 10] wie bisher."""
+    return [sm[k] for k in ("wertpapier", "kupon", "faelligkeit",
+                            "wkn", "anteil", "rating") if sm[k] is not None]
+
 
 # ─── Kennzahlen-Tabelle der Wertentwicklungs-Folie (7×3) ────────────────────
 # Row 0: Header "KENNZAHLEN" | Row 1: Spacer | Rows 2-5: Kennzahlen | Row 6: Spacer
@@ -638,17 +666,22 @@ gibt fit_shape_to_table eine Warnung zurück statt weiter zu schrumpfen oder
 (schlimmer) Positionen abzuschneiden."""
 
 
-def remove_empty_table_rows(table):
+def remove_empty_table_rows(table, spalten_map=None):
     """Entfernt leere Daten-Zeilen aus der Anlagevorschlag-Tabelle.
 
     Eine Zeile gilt als 'leer' wenn alle relevanten Daten-Spalten leer sind
     (WERTPAPIER, KUPON, FÄLLIGKEIT, WKN, ANTEIL, RATING).
     Header (Zeile 0) bleibt immer erhalten.
 
+    spalten_map: Layout-Map (Default = 11-Spalten-Layout). ETF (7 Spalten,
+    ohne Kupon/Fälligkeit) übergibt sein eigenes Map — dann werden nur die
+    tatsächlich belegten Spalten geprüft.
+
     WICHTIG: Anschließend muss fit_shape_to_table aufgerufen werden, damit
     die Shape-Höhe an die jetzt geringere Zeilenanzahl angepasst wird
     (sonst stretcht LibreOffice die verbleibenden Zeilen).
     """
+    sm = spalten_map or DEFAULT_SPALTEN_MAP
     n_rows = len(table.rows)
     if n_rows <= 1:
         return
@@ -657,7 +690,7 @@ def remove_empty_table_rows(table):
     for i in range(1, n_rows):  # Header (Zeile 0) immer behalten
         row = table.rows[i]
         is_empty = True
-        for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
+        for col_idx in _belegte_spalten(sm):
             text = row.cells[col_idx].text_frame.text.strip()
             # NBSP wird auch als leer betrachtet
             if text and text != "\u00a0":
@@ -735,7 +768,8 @@ _ORIGINAL_FAELLIGKEIT_W_EMU = 571500
 _MIN_BOND_COL_W_EMU = 91440  # ~0.1" — schmale, aber sichere Nicht-Null-Breite
 
 
-def maybe_narrow_bond_columns(table_shape, has_renten: bool) -> None:
+def maybe_narrow_bond_columns(table_shape, has_renten: bool,
+                              spalten_map=None) -> None:
     """Macht die KUPON- und FÄLLIGKEIT-Spalten schmal, wenn kein RENTEN-Anteil
     im Portfolio vorhanden ist, und gibt den freiwerdenden Platz an die
     WERTPAPIER-Spalte weiter (Juni 2026, auf Wunsch: bei reinen Aktien-/
@@ -750,7 +784,12 @@ def maybe_narrow_bond_columns(table_shape, has_renten: bool) -> None:
         table_shape: Die Tabellen-Shape (mit .table)
         has_renten: True wenn das Portfolio RENTEN-Positionen enthält.
             Bei True: Original-Spaltenbreiten bleiben unverändert.
+        spalten_map: Layout-Map. Hat das Layout keine Kupon-/Fälligkeit-Spalten
+            (z.B. ETF, 7 Spalten), passiert gar nichts.
     """
+    sm = spalten_map or DEFAULT_SPALTEN_MAP
+    if sm["kupon"] is None or sm["faelligkeit"] is None:
+        return  # Layout ohne Bond-Spalten (z.B. ETF) → nichts zu verschmälern
     if has_renten:
         return  # Original-Layout beibehalten — Kupon/Fälligkeit werden gebraucht
 
@@ -758,10 +797,10 @@ def maybe_narrow_bond_columns(table_shape, has_renten: bool) -> None:
     freed = (_ORIGINAL_KUPON_W_EMU - _MIN_BOND_COL_W_EMU) + \
             (_ORIGINAL_FAELLIGKEIT_W_EMU - _MIN_BOND_COL_W_EMU)
 
-    table.columns[COL_KUPON].width = Emu(_MIN_BOND_COL_W_EMU)
-    table.columns[COL_FAELLIGKEIT].width = Emu(_MIN_BOND_COL_W_EMU)
-    table.columns[COL_WERTPAPIER].width = Emu(
-        table.columns[COL_WERTPAPIER].width + freed
+    table.columns[sm["kupon"]].width = Emu(_MIN_BOND_COL_W_EMU)
+    table.columns[sm["faelligkeit"]].width = Emu(_MIN_BOND_COL_W_EMU)
+    table.columns[sm["wertpapier"]].width = Emu(
+        table.columns[sm["wertpapier"]].width + freed
     )
 
 
@@ -995,7 +1034,7 @@ def build_ring_series(df: pd.DataFrame, dim_col: str) -> pd.Series:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0,
-                              shape_height: int = 0):
+                              shape_height: int = 0, spalten_map=None):
     """Befüllt die Anlagevorschlag-Tabelle (Slide 7) mit Positionen.
 
     Die Tabellen-Struktur der Vorlage bleibt UNVERÄNDERT (keine Zeilen entfernt,
@@ -1022,10 +1061,11 @@ def fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0
     summary_row_idx = n_rows_initial - 1
     max_data_rows = n_rows_initial - 2
 
-    # Erst alle Datenzeilen leeren (nur Spalten 0, 2, 4, 6, 8, 10 - Spacer bleiben)
+    # Erst alle Datenzeilen leeren (nur belegte Datenspalten - Spacer bleiben)
+    sm = spalten_map or DEFAULT_SPALTEN_MAP
     for row_idx in range(1, n_rows_initial):
         row = table.rows[row_idx]
-        for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
+        for col_idx in _belegte_spalten(sm):
             set_cell_text(row.cells[col_idx], "")
 
     # Zeilen befüllen
@@ -1039,40 +1079,42 @@ def fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0
         if row_def["type"] in ("group_header", "liquidity"):
             # Gruppen-Header: Name in Spalte 0, alle anderen leer, fett
             name = row_def["data"]["name"]
-            set_cell_text(row.cells[COL_WERTPAPIER], name, is_bold=True)
-            # Bei RENTEN: "KUPON" und "FÄLLIGKEIT" als Sub-Header in Spalten 2 und 4
-            if name == GROUP_RENTEN:
-                set_cell_text(row.cells[COL_KUPON], "KUPON", is_bold=True)
-                set_cell_text(row.cells[COL_FAELLIGKEIT], "FÄLLIGKEIT", is_bold=True)
+            set_cell_text(row.cells[sm["wertpapier"]], name, is_bold=True)
+            # Bei RENTEN: "KUPON" und "FÄLLIGKEIT" als Sub-Header (nur wenn das
+            # Layout diese Spalten hat — ETF hat sie nicht)
+            if name == GROUP_RENTEN and sm["kupon"] is not None:
+                set_cell_text(row.cells[sm["kupon"]], "KUPON", is_bold=True)
+                set_cell_text(row.cells[sm["faelligkeit"]], "FÄLLIGKEIT", is_bold=True)
             # Bei LIQUIDITÄT: Wert direkt in der Header-Zeile
             if name == GROUP_LIQUIDITAET and "liq_value" in row_def["data"]:
-                set_cell_text(row.cells[COL_ANTEIL], fmt_pct(row_def["data"]["liq_value"]), is_bold=True)
+                set_cell_text(row.cells[sm["anteil"]], fmt_pct(row_def["data"]["liq_value"]), is_bold=True)
 
         elif row_def["type"] == "position":
             data = row_def["data"]
             # Alle Felder einer Position: explizit NICHT BOLD
-            set_cell_text(row.cells[COL_WERTPAPIER], data["wertpapier"], is_bold=False)
-            set_cell_text(row.cells[COL_WKN], data["wkn"], is_bold=False)
-            set_cell_text(row.cells[COL_ANTEIL], fmt_pct(data["gewicht"]), is_bold=False)
-            set_cell_text(row.cells[COL_RATING], data.get("rating", "-"), is_bold=False)
-            # Kupon (nur wenn vorhanden)
-            if data.get("kupon") is not None and not pd.isna(data["kupon"]) and data["kupon"] != 0:
-                set_cell_text(row.cells[COL_KUPON], fmt_pct(data["kupon"]), is_bold=False)
-            else:
-                set_cell_text(row.cells[COL_KUPON], "", is_bold=False)
-            # Fälligkeit (nur wenn vorhanden)
-            if data.get("faelligkeit") is not None and not pd.isna(data["faelligkeit"]):
-                set_cell_text(row.cells[COL_FAELLIGKEIT], fmt_date_de(data["faelligkeit"]), is_bold=False)
-            else:
-                set_cell_text(row.cells[COL_FAELLIGKEIT], "", is_bold=False)
+            set_cell_text(row.cells[sm["wertpapier"]], data["wertpapier"], is_bold=False)
+            set_cell_text(row.cells[sm["wkn"]], data["wkn"], is_bold=False)
+            set_cell_text(row.cells[sm["anteil"]], fmt_pct(data["gewicht"]), is_bold=False)
+            set_cell_text(row.cells[sm["rating"]], data.get("rating", "-"), is_bold=False)
+            # Kupon/Fälligkeit nur, wenn das Layout diese Spalten hat (ETF: nein)
+            if sm["kupon"] is not None:
+                if data.get("kupon") is not None and not pd.isna(data["kupon"]) and data["kupon"] != 0:
+                    set_cell_text(row.cells[sm["kupon"]], fmt_pct(data["kupon"]), is_bold=False)
+                else:
+                    set_cell_text(row.cells[sm["kupon"]], "", is_bold=False)
+            if sm["faelligkeit"] is not None:
+                if data.get("faelligkeit") is not None and not pd.isna(data["faelligkeit"]):
+                    set_cell_text(row.cells[sm["faelligkeit"]], fmt_date_de(data["faelligkeit"]), is_bold=False)
+                else:
+                    set_cell_text(row.cells[sm["faelligkeit"]], "", is_bold=False)
 
     # Summen-Zeile: nur auf letzter Slide
     summary_row = table.rows[summary_row_idx]
-    for col_idx in [COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL, COL_RATING]:
+    for col_idx in _belegte_spalten(sm):
         set_cell_text(summary_row.cells[col_idx], "")
 
     if is_last:
-        set_cell_text(summary_row.cells[COL_ANTEIL], fmt_pct(total_weight))
+        set_cell_text(summary_row.cells[sm["anteil"]], fmt_pct(total_weight))
 
     # WICHTIG: Tabellen-Struktur der Vorlage bleibt UNVERÄNDERT.
     # Frühere Versuche, leere Zeilen zu entfernen, haben LibreOffice
@@ -1084,7 +1126,8 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
                                  eval_date=None,
                                  titel_text: Optional[str] = None,
                                  max_bottom_inch: Optional[float] = None,
-                                 original_row_h_inch: Optional[float] = None) -> Optional[str]:
+                                 original_row_h_inch: Optional[float] = None,
+                                 spalten_map: Optional[dict] = None) -> Optional[str]:
     """Befüllt Slide 7 (Anlagevorschlag/Strategieentwurf) mit Portfolio-Daten.
 
     Seit Juni 2026 (Performance-Folie als Slide 8): Es gibt nur noch EINE
@@ -1164,12 +1207,13 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
         # NEU (Juni 2026): Kupon/Fälligkeit-Spalten schmal machen, wenn keine
         # RENTEN-Positionen vorhanden sind — sonst bleiben sie bei reinen
         # Aktien-Strategien komplett leer und wirken wie unnötige Lücken.
-        maybe_narrow_bond_columns(table_shape, has_renten=(GROUP_RENTEN in groups))
+        maybe_narrow_bond_columns(table_shape, has_renten=(GROUP_RENTEN in groups),
+                                  spalten_map=spalten_map)
 
         fill_table_with_positions(table_shape.table, slide_distribution[0], total_weight,
-                                  shape_height=table_shape.height)
+                                  shape_height=table_shape.height, spalten_map=spalten_map)
         # Leere Zeilen entfernen (nur relevant falls Kapazität > benötigt)
-        remove_empty_table_rows(table_shape.table)
+        remove_empty_table_rows(table_shape.table, spalten_map=spalten_map)
         # Shape-Höhe an tatsächliche Zeilenanzahl anpassen (staucht/streckt je
         # nach Bedarf; ensure_table_capacity in fill_table_with_positions hat
         # vorher bereits ggf. zusätzliche Zeilen geklont)
