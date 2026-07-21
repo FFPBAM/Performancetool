@@ -1,5 +1,5 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: 20.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau, Chart-/Tabellen-Dynamik, Ring-Optik & Einzeltitel-Datenlogik)
+## Stand: 21.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau, Chart-/Tabellen-Dynamik, Ring-Optik & Einzeltitel-Datenlogik)
 
 > Vorgänger-Stand: Juni 2026 (Phase 2: Performance-PPTX-Export). Alle
 > Transferwissen-Einträge #1–#17 aus Phase 2 bleiben gültig und stehen
@@ -1281,6 +1281,32 @@ Vergrößert **nur**, verkleinert nie → adäquate Legenden (ESG/CVV) bleiben u
 
 ---
 
+### 35. Neue PowerPoint-Familie hinzufügen — das Playbook (NEU 21.07.2026, erprobt an ETF)
+
+Diese Sequenz hat die ETF-Familie sauber und ohne Regression eingebaut. Für jede weitere Familie (es kommen noch welche) genau so vorgehen.
+
+**Grundarchitektur (Wiederholung):** Familien-Configs stehen in `portfolioanalyse.py` → `VORLAGEN_FAMILIEN = {Familie: (Vorlage_<X>.pptx, config)}` und `FAMILIE_ALLE_STRATEGIEN`. Der Export `generate_portfolioanalyse_pptx(portfolios, performance_inputs, template_path, template_config)` befüllt N Strategien in zwei Modi:
+- **Normal** (Standard/Themen): Block wird dupliziert (`_normalisiere_vorlage` + `_vervielfaeltige_block`).
+- **`feste_bloecke`** (Infoboards CVV/ESG/ETF): Vorlage hat alle Strategie-Folien vorgebaut → wird an FESTEN 1-indexierten Positionen befüllt, keine Duplikation.
+- **`einmal_folien`** = `{uebersicht: N, vergleich: M}` läuft einmal für alle Strategien (Vergleichstabelle / Linien-Chart „Diagramm").
+- Rollen: `anlagevorschlag` (Ring `C_Kennzahlen` + Tabelle `T_Kennzahlen`), `wertentwicklung` (Diagramm links/rechts + Kennzahlen — die Folie heißt in der Vorlage „Performance", die Code-Rolle ist aber `wertentwicklung`!), `performance`, `zusammenstellung`, `rollierend`, `einzeltitel_themen`. `rollen_optionen[rolle]` reicht kwargs durch.
+
+**Schritt 1 — Vorlage analysieren.** Folienzahl; je Folie Charts/Tabellen + Shape-Namen + Titel. Entscheidend: Welche Folien unterscheiden sich zwischen Infoboard und Einzel-Broschüre (bzw. je Auswertungsdatum) → **dynamisch**; identischer Inhalt → **statisch**. Mit der nächstähnlichen Familie (ESG/CVV) vergleichen, um das Muster zu finden.
+
+**Schritt 2 — Folien→Rollen mappen.** Welche Folie ist `anlagevorschlag`, welche `wertentwicklung`, welche die Vergleichsfolie (`uebersicht`-Tabelle bzw. `vergleich`-Chart).
+
+**Schritt 3 — Config additiv schreiben** (`portfolioanalyse.py`): `_<FAM>_STRATEGIEN` (exakte Mapping-Namen aus „Strategie auswählen", in Folienreihenfolge), `_<FAM>_CONFIG` (`erwartete_folien`, `feste_bloecke` = [{Rolle: 1-indexierte Position} je Strategie], `einmal_folien`, `rollen_optionen`), dann Einträge in `VORLAGEN_FAMILIEN` und `FAMILIE_ALLE_STRATEGIEN`. **Ziel: 0 gelöschte Zeilen.** Der Loader `_familien_portfolios` ist generisch — greift automatisch, sobald die Familie registriert ist und die CSVs existieren.
+
+**Schritt 4 — Layout-Abweichungen NIE durch Forken lösen.** Weicht die Vorlage ab (ETF: `T_Kennzahlen` hat 7 statt 11 Spalten, ohne Kupon/Fälligkeit), dann der geteilten Funktion einen **optionalen Parameter mit Default = altem Verhalten** geben (bei ETF: `spalten_map`, Default `DEFAULT_SPALTEN_MAP`), über `rollen_optionen` durchreichen und **byte-identisch belegen**: altes Modul vs. neues Modul (mit Default) dieselbe Tabelle/df füllen, Zellen vergleichen. Zusätzlich beide Dateien diffen — die bestehenden Familien-Configs müssen **0 geänderte/entfernte Zeilen** zeigen.
+
+**Schritt 5 — Vorlage verkleinern + benennen.** Bilder-Komprimierung (siehe Transferwissen zur PNG/JPEG-Optimierung; ETF 55 MB → 12 MB). Datei zeichengenau `Vorlage_<FAM>.pptx` benennen (passend zu `VORLAGEN_FAMILIEN`), **nicht per GitHub-Web-UI umbenennen** (#23). Nutzer liefert: Vorlage im Ordner `Vorlage/` + Positions-CSVs der Strategien (mit Marktrisikowert). Tuning-Werte (`max_bottom_inch`, `original_row_h_inch`) an der Vorlage messen und nach echtem Deploy kalibrieren.
+
+**Blast-Radius-Disziplin (der Grund, warum es reibungslos lief):** Erst analysieren, was existiert; additiv NEBEN dem laufenden Pfad bauen; Defaults byte-identisch halten; per Diff + Byte-Vergleich beweisen; jede Datei mit einem konkreten Verifikationssignal ausliefern.
+
+**ETF-Konkret (Referenz):** 2 Strategien `ETF_ausgewogen`/`ETF_Wachstum`, `Vorlage_ETF.pptx` (35 Folien), spiegelt ESG ohne Vergleichs-Chart. `feste_bloecke=[{anlagevorschlag:16,wertentwicklung:17},{anlagevorschlag:18,wertentwicklung:19}]`, `einmal_folien={uebersicht:20}` mit `spalten=[4,6]`. Der 7-Spalten-Spalten-Map: `{wertpapier:0, kupon:None, faelligkeit:None, wkn:2, anteil:4, rating:6, spacers:[1,3,5]}`.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -2102,6 +2128,13 @@ mehr nötig.
 ---
 
 ## 16. Changelog
+
+### 21.07.2026 – ETF-Familie eingebaut (additiv, byte-identisch belegt)
+- **ETF-Familie** (2 Strategien ETF_ausgewogen/ETF_Wachstum, Infoboard `Vorlage_ETF.pptx`, 35 Folien) in `portfolioanalyse.py` registriert — reine Config-Ergänzung (0 Zeilen entfernt), spiegelt ESG ohne Vergleichs-Chart. Transferwissen #35
+- **7-Spalten-`T_Kennzahlen`**: ETF-Tabelle hat kein Kupon/Fälligkeit → optionaler `spalten_map`-Parameter an `fill_anlagevorschlag_slides`/`fill_table_with_positions`/`maybe_narrow_bond_columns`/`remove_empty_table_rows`, Default = bisherige 11-Spalten-Konstanten. **Byte-identisch für ESG/CVV/Standard belegt** (Alt-Modul vs. Neu-Modul mit Default). ETF übergibt sein Map via `rollen_optionen`.
+- **Vorlagen-Komprimierung**: 55 MB → 12 MB (Bilder auf max 1920px, opake PNGs → JPEG q82, transparente PNGs/Vektoren unberührt).
+- **Playbook** für weitere Familien als Transferwissen #35 dokumentiert.
+- **Geänderte Dateien:** `portfolioanalyse.py`, `modules/pptx_slides.py`
 
 ### 20.07.2026 – Ring-Optik (Leader/Punkte) + Themen-Einzeltitel-Datenlogik + Legende
 - **Führungslinien-Endstand:** Die Cluster-Engine („V2", luftig/grau/Punkte-am-Segment) wurde als „schlimmer" **verworfen**; gültig bleibt die **(7)-basierte** `ring_labels_aussen_dynamisch`. Leader jetzt **schwarz** (war grau), als eigene Connector-Shapes. `chart_dynamik.py` neu strukturiert (WEGWEISER + CONFIG + FALLSTRICKE-Kopf) für gezielte Änderungen. Transferwissen #29
