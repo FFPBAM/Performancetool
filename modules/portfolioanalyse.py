@@ -567,6 +567,51 @@ _ESG_CONFIG = {
     "einmal_folien": {"uebersicht": 24},
 }
 
+# Struktur der ETF-Broschüre ("ETF Infoboard", NEU 20.07.2026).
+#
+# Gleicher Bauplan wie ESG (feste Blöcke, kein Vergleichs-Linienchart), aber
+# ZWEI Strategien. BESONDERHEIT: Die ETF-T_Kennzahlen-Tabelle hat nur 7 Spalten
+# (WERTPAPIER/WKN/Anteil/Marktrisikowert) OHNE KUPON/FÄLLIGKEIT — ETFs sind
+# keine Renten. Deshalb bekommt die Rolle "anlagevorschlag" ein eigenes
+# spalten_map (Schema siehe pptx_slides.DEFAULT_SPALTEN_MAP); die restliche
+# Fill-Logik ist identisch.
+# Verifiziert an der echten Vorlage (35 Folien):
+#   F16/18 : Titel + Anlagekriterien-Kasten + C_Kennzahlen (Ring)
+#            + T_Kennzahlen (7 Spalten, mit Marktrisikowert)
+#   F17/19 : Rolle "wertentwicklung" (Diagramm links/rechts + Kennzahlen)
+#   F20    : Übersichtstabelle 8x8, Strategien in den Spalten 4/6
+_ETF_STRATEGIEN = [
+    "ETF_ausgewogen",
+    "ETF_Wachstum",
+]
+"""Feste Reihenfolge — MUSS zur Foliennummerierung passen (Ausgewogen=F16,
+Wachstum=F18). Namen wie in der Mapping-Spalte 'Strategie auswählen'."""
+
+_ETF_CONFIG = {
+    "erwartete_folien": 35,
+    "entfernen": [],
+    "feste_bloecke": [
+        {"anlagevorschlag": 16, "wertentwicklung": 17},
+        {"anlagevorschlag": 18, "wertentwicklung": 19},
+    ],
+    "rollen_optionen": {
+        # titel_text="": Vorlagen-Titel ("Anlagestrategie ESG-ETF Ausgewogen")
+        #   behalten. max_bottom_inch/row_h an der ETF-Vorlage kalibrieren.
+        # spalten_map: 7-Spalten-Layout OHNE Kupon/Fälligkeit (ETF-spezifisch).
+        "anlagevorschlag": {
+            "titel_text": "", "max_bottom_inch": 6.20,
+            "original_row_h_inch": 0.34,
+            "spalten_map": {
+                "wertpapier": 0, "kupon": None, "faelligkeit": None,
+                "wkn": 2, "anteil": 4, "rating": 6, "spacers": [1, 3, 5],
+            },
+        },
+        # NUR ZWEI Strategien → Ausgewogen=Spalte 4, Wachstum=Spalte 6.
+        "uebersicht": {"spalten": [4, 6]},
+    },
+    "einmal_folien": {"uebersicht": 20},
+}
+
 # Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
 # Nur Familien mit EIGENER Vorlage hier eintragen. Familien ohne Eintrag
 # (oder leere Familie) → Standard-Vorlage (Vorlage_FFPB.pptx, config None).
@@ -574,6 +619,7 @@ VORLAGEN_FAMILIEN = {
     "Thema": ("Vorlage_Thema.pptx", _THEMA_CONFIG),
     "CVV": ("Vorlage_cVV_Infoboard.pptx", _CVV_CONFIG),
     "ESG": ("Vorlage_ESG.pptx", _ESG_CONFIG),
+    "ETF": ("Vorlage_ETF.pptx", _ETF_CONFIG),
 }
 
 # Familien, deren Broschüre IMMER alle Strategien enthält (Variante A).
@@ -582,6 +628,7 @@ VORLAGEN_FAMILIEN = {
 FAMILIE_ALLE_STRATEGIEN = {
     "CVV": _CVV_STRATEGIEN,
     "ESG": _ESG_STRATEGIEN,
+    "ETF": _ETF_STRATEGIEN,
 }
 
 
