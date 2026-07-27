@@ -102,13 +102,15 @@ FAMILIE_RING_FORMAT = {
         "hole": 68,                 # dickerer, markanterer Ring (Default 79)
         "leader_breite_emu": 19050, # 1,5 pt Führungslinien (Default 0,75 pt)
         "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
-        "punkt_durchmesser": 0.075, # größere Punkte, falls welche (CVV: keine)
+        "punkte": True,             # Punkte an den Leader-Enden (Wunsch 27.07.)
+        "punkt_durchmesser": 0.075, # größere Punkte, passend zur kräftigen Optik
     },
 }
 _RING_FORMAT_DEFAULT = {
     "hole": None,                   # None → der hole_size-Parameter von nachbearbeiten
     "leader_breite_emu": LEADER_BREITE_EMU,
     "label_fett": False,
+    "punkte": False,                # nur Familien mit punkte=True bekommen Punkte
     "punkt_durchmesser": PUNKT_DURCHMESSER,
 }
 
@@ -1767,15 +1769,15 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                         stat["stub_fix"] += ring_labels_stub_fix(
                             chart, _fw, _fh,
                             kopf_frei_in=(_kopf if _kopf is not None else 0.54))
-                        # Punkt-Regel (Wunsch 20.07.): Punkte nur auf den in
-                        # PUNKT_RINGTYPEN gelisteten Ringtypen UND nur in der
-                        # Thema-Familie — konfigurierbar im CONFIG-Block. So
-                        # bekommen aktuell Assetklassen- + Branchen-Ring Punkte,
-                        # der Regionen-Ring und alle ESG/CVV-Ringe nicht.
+                        # Punkt-Regel: auf den erlaubten Ringtypen, wenn Thema
+                        # ODER die Familie punkte=True gesetzt hat (CVV, Wunsch
+                        # 27.07.) — konfigurierbar im CONFIG-Block. Andere
+                        # Familien (ESG/ETF/comdirect) bleiben ohne Punkte.
                         _typ = _ring_typ(chart, shape)
                         _punkt = (PUNKT_AN
                                   and _typ in PUNKT_RINGTYPEN
-                                  and (not PUNKT_NUR_THEMA or ist_thema))
+                                  and ((not PUNKT_NUR_THEMA or ist_thema)
+                                       or _fmt["punkte"]))
                         ring_leader_zeichnen(slide, shape, chart,
                                              farbe=leader_farbe,
                                              breite_emu=_fmt["leader_breite_emu"],
