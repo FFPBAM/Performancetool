@@ -672,6 +672,47 @@ FAMILIE_ALLE_STRATEGIEN = {
 }
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  AUSGABE-DATEINAMEN DER BROSCHÜRE — hier frei anpassbar
+# ══════════════════════════════════════════════════════════════════════════
+# Der Name der heruntergeladenen PowerPoint wird aus diesen drei Dicts gebaut.
+# NUR HIER etwas ändern — der restliche Code bleibt gleich.
+#
+# Auflösung in dieser Reihenfolge (erster Treffer gewinnt):
+#   1. EXPORT_NAME_STRATEGIE[<Strategie>]   – einzelne Strategie (höchste Prio)
+#   2. EXPORT_NAME_FAMILIE[<Familie>]        – ganze Familie
+#   3. EXPORT_NAME_DEFAULT                   – alles ohne eigenen Eintrag
+#
+# Platzhalter im Muster:  {datum}  {strategie}  {familie}
+# Die Endung ".pptx" wird AUTOMATISCH angehängt — NICHT ins Muster schreiben.
+#
+# Datum: standardmäßig EXPORT_DATUM_FORMAT (strftime). Ein Eintrag kann ein
+# eigenes Format bekommen, indem statt "Muster" ein Tupel ("Muster", "%Y%m%d")
+# angegeben wird (siehe comdirect). {datum} = Auswertungsdatum der Portfolio-
+# analyse; fehlt es, wird der Date-Tag aus dem UI (yyMMdd) eingesetzt.
+
+EXPORT_DATUM_FORMAT = "%d.%m.%Y"          # z.B. 07.07.2026
+
+EXPORT_NAME_DEFAULT = "Portfolioanalyse_{strategie}_{datum}"
+
+# Ganze Familie → ein Name (Wert = "Muster" ODER ("Muster", "datumsformat")).
+EXPORT_NAME_FAMILIE = {
+    "CVV":       "cVV Broschüre_Infoboard_{datum}",
+    "ETF":       "ETF Broschüre Infoboard {datum}",
+    "ESG":       "ESG Broschüre Inforboard{datum}",
+    "comdirect": ("Klassische Portfolioverwaltung_{datum}", "%Y%m%d"),
+    "Thema":     "{strategie} Broschüre_{datum}",   # → "Pro Broschüre_…", "Pro Dividende Broschüre_…"
+}
+
+# Einzelne Strategie → eigener Name (schlägt die Familie). Beispiel: die
+# Thema-Strategie heißt "Offensiv", der Broschürenname soll aber "Offensive"
+# sein. Weitere Ausnahmen einfach hier ergänzen.
+EXPORT_NAME_STRATEGIE = {
+    "Offensiv": "Offensive Broschüre_{datum}",
+}
+# ══════════════════════════════════════════════════════════════════════════
+
+
 def _familien_portfolios(strategien, display_names_pf, display_to_csv_pf,
                          pf_data, duration_info_fn):
     """Stellt ALLE Portfolios einer Broschüren-Familie in fester Reihenfolge
@@ -792,6 +833,60 @@ def _vorlage_fuer_familie(familie):
             return pfad, config
     # Keiner existiert → Standard (kein Crash). Der aufrufende Code meldet das.
     return None, None
+
+
+def _export_name_saeubern(name: str) -> str:
+    """Entfernt NUR dateisystem-illegale Zeichen (\\ / : * ? " < > |) und
+    verdichtet Mehrfach-Leerzeichen. Punkte und Leerzeichen bleiben ERHALTEN
+    (die konfigurierten Namen nutzen genau die). Der clientseitige Download
+    (download_helfer.py) übernimmt den Namen anschließend unverändert."""
+    import re as _re
+    name = _re.sub(r'[\\/:*?"<>|]+', "_", name)
+    name = _re.sub(r"\s+", " ", name).strip().strip(".")
+    return name or "Broschuere"
+
+
+def _export_dateiname(name_mapping, strategie, datum, fallback_tag) -> str:
+    """Baut den Dateinamen der exportierten Broschüre aus der Konfiguration
+    oben (EXPORT_NAME_STRATEGIE / EXPORT_NAME_FAMILIE / EXPORT_NAME_DEFAULT).
+
+    strategie   : gewählte Strategie (Anzeigename = pf_sel_1)
+    datum       : Auswertungsdatum (date/Timestamp) ODER None
+    fallback_tag: Ersatz-Datumsstring (yyMMdd aus dem UI), falls kein
+                  Auswertungsdatum vorliegt
+
+    Rückgabe inkl. ".pptx". Bricht NIE hart ab — bei defektem Muster
+    (z.B. unbekannter Platzhalter) wird auf den Default zurückgefallen.
+    """
+    familie = ""
+    try:
+        familie = _familie_fuer_strategie(name_mapping, strategie) or ""
+    except Exception:
+        familie = ""
+
+    eintrag = (EXPORT_NAME_STRATEGIE.get(strategie)
+               or EXPORT_NAME_FAMILIE.get(familie)
+               or EXPORT_NAME_DEFAULT)
+    if isinstance(eintrag, (tuple, list)) and len(eintrag) >= 2:
+        muster, datum_fmt = eintrag[0], eintrag[1]
+    else:
+        muster, datum_fmt = eintrag, EXPORT_DATUM_FORMAT
+
+    if datum is not None:
+        try:
+            datum_str = datum.strftime(datum_fmt)
+        except Exception:
+            datum_str = str(fallback_tag)
+    else:
+        datum_str = str(fallback_tag)
+
+    try:
+        name = muster.format(datum=datum_str, strategie=strategie, familie=familie)
+    except Exception:
+        # Defektes Muster (unbekannter Platzhalter o.ä.) → sicherer Default
+        name = EXPORT_NAME_DEFAULT.format(datum=datum_str, strategie=strategie,
+                                          familie=familie)
+    return _export_name_saeubern(name) + ".pptx"
 
 
 def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
@@ -1080,7 +1175,10 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
                 st.warning(f"⚠️ {_diag_msg}")
 
-            _dateiname = f"Portfolioanalyse_{pf_sel_1}_{fmt_date_de(ad1) if ad1 else date_tag_pf}.pptx"
+            # Dateiname aus der konfigurierbaren Sektion oben (EXPORT_NAME_*).
+            # Familie/Strategie/Datum werden dort zum finalen Namen aufgelöst;
+            # ad1 = Auswertungsdatum, date_tag_pf = Fallback (yyMMdd aus UI).
+            _dateiname = _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf)
             # Kompletter Download-Bereich (Neuer-Tab-Varianten für den
             # Atruvia-Gateway-Scan + klassischer In-Page-Fallback) liegt in
             # modules/download_helfer.py → download_bereich(). Künftige
