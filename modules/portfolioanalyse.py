@@ -889,6 +889,27 @@ def _export_dateiname(name_mapping, strategie, datum, fallback_tag) -> str:
     return _export_name_saeubern(name) + ".pptx"
 
 
+def _render_familien_hinweis(name_mapping, strategie):
+    """Zeigt NUR bei Familien-Strategien einen Hinweis, dass die Broschüre immer
+    ALLE Strategien der Familie enthält — auch wenn nur eine ausgewählt ist.
+    Kontextbezogen (nennt Familie + alle Strategien). Bei Einzel-Strategien
+    (keine Familie in FAMILIE_ALLE_STRATEGIEN) wird nichts angezeigt."""
+    import streamlit as st
+    try:
+        familie = _familie_fuer_strategie(name_mapping, strategie) or ""
+    except Exception:
+        familie = ""
+    strategien = FAMILIE_ALLE_STRATEGIEN.get(familie)
+    if not strategien:
+        return
+    liste = ", ".join(strategien)
+    st.info(
+        f'ℹ️ **{familie}-Broschüre:** Enthält immer **alle '
+        f'{len(strategien)} Strategien** der {familie}-Familie ({liste}) — '
+        f'auch wenn oben nur „{strategie}“ ausgewählt ist.'
+    )
+
+
 def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
     use_volume = anlagevolumen > 0
 
@@ -959,34 +980,6 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
     st.info(f"📅 **Momentaufnahme per {auswertung_str}** – "
             f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag.")
-
-    # Render
-    _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1, suffix="pf1")
-    if show_compare_pf and df_pf_2 is not None:
-        st.markdown("---")
-        _render_single_portfolio(pf_sel_2, df_pf_2, ad2, anlagevolumen, use_volume, show_ytd, dur_2, suffix="pf2")
-
-    # Disclaimer
-    st.markdown("---")
-    st.markdown("##### Disclaimer")
-    st.markdown(
-        "Die dargestellten Daten zeigen den Portfoliobestand zu einem bestimmten Stichtag. "
-        "Die tatsächlichen Gewichtungen können zum Zeitpunkt der Betrachtung durch Käufe, Verkäufe "
-        "und Kursveränderungen bereits abweichen, da keine Live-Daten verwendet werden. "
-        "Auch die Zuordnung zu Gattungen, Segmenten und Regionen basiert auf der zum Stichtag "
-        "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern."
-    )
-    st.markdown(
-        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der "
-        "Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr."
-    )
-    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
-    st.markdown("**Ansprechpartner:** PBAM")
-
-    # Export: PDF und PowerPoint nebeneinander
-    # Pattern: Session-State Cache für Export-Daten, verhindert Re-Generierung bei jedem Rerun.
-    # Cache-Key enthält die aktuelle Auswahl - bei Änderungen wird alter Cache invalidiert.
-    st.markdown("---")
 
     # Cache-Key aus aktueller Auswahl (ändert sich → Cache ungültig → Download-Button verschwindet)
     compare_key = pf_sel_2 if (show_compare_pf and df_pf_2 is not None) else "single"
@@ -1184,6 +1177,38 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             # modules/download_helfer.py → download_bereich(). Künftige
             # Anpassungen am Download passieren NUR dort, nicht hier.
             download_bereich(st.session_state["pf_pptx_bytes"], _dateiname)
+        # Kontextbezogener Familien-Hinweis (immer unter dem Button).
+        _render_familien_hinweis(name_mapping, pf_sel_1)
+
+    # Render
+    _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1, suffix="pf1")
+    if show_compare_pf and df_pf_2 is not None:
+        st.markdown("---")
+        _render_single_portfolio(pf_sel_2, df_pf_2, ad2, anlagevolumen, use_volume, show_ytd, dur_2, suffix="pf2")
+
+    # Disclaimer
+    st.markdown("---")
+    st.markdown("##### Disclaimer")
+    st.markdown(
+        "Die dargestellten Daten zeigen den Portfoliobestand zu einem bestimmten Stichtag. "
+        "Die tatsächlichen Gewichtungen können zum Zeitpunkt der Betrachtung durch Käufe, Verkäufe "
+        "und Kursveränderungen bereits abweichen, da keine Live-Daten verwendet werden. "
+        "Auch die Zuordnung zu Gattungen, Segmenten und Regionen basiert auf der zum Stichtag "
+        "gültigen Klassifizierung und kann sich durch Umstrukturierungen oder Neuzuordnungen verändern."
+    )
+    st.markdown(
+        "Diese Portfolioanalyse dient ausschließlich der unverbindlichen Veranschaulichung der "
+        "Vermögensverwaltungsstrategien im Kundengespräch. Alle Angaben sind ohne Gewähr."
+    )
+    st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
+    st.markdown("**Ansprechpartner:** PBAM")
+
+    # Export: PDF und PowerPoint nebeneinander
+    # Pattern: Session-State Cache für Export-Daten, verhindert Re-Generierung bei jedem Rerun.
+    # Cache-Key enthält die aktuelle Auswahl - bei Änderungen wird alter Cache invalidiert.
+    st.markdown("---")
+
+
 
 
 def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info, suffix="pf1"):
