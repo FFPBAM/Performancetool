@@ -86,6 +86,42 @@ PUNKT_DURCHMESSER   = 0.055      # Zoll
 # ── Label-Text ─────────────────────────────────────────────────────────────
 LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
 
+# ── Familien-spezifische Ring-Optik (NEU 27.07.2026) ────────────────────────
+# NUR die hier gelisteten Familien weichen von den globalen Defaults ab; alle
+# anderen nutzen die Defaults → deren Ringe bleiben UNVERÄNDERT. Steuerbar:
+#   hole               – Loch-Prozent: KLEINER = DICKERER Ring (Default 79)
+#   leader_breite_emu  – Strichstärke der Führungslinien (Default 9525 = 0,75 pt;
+#                        12700 EMU = 1 pt, also 19050 = 1,5 pt)
+#   label_fett         – Prozentzahlen fett (bleiben schwarz)
+#   punkt_durchmesser  – Punkt-Größe in Zoll, FALLS die Familie Punkte hat
+#                        (CVV hat per PUNKT_NUR_THEMA aktuell KEINE)
+# Wunsch 27.07.: CVV-Ringe insgesamt kräftiger — dickerer Ring, fettere
+# Führungslinien, fette Prozentzahlen.
+FAMILIE_RING_FORMAT = {
+    "CVV": {
+        "hole": 68,                 # dickerer, markanterer Ring (Default 79)
+        "leader_breite_emu": 19050, # 1,5 pt Führungslinien (Default 0,75 pt)
+        "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
+        "punkt_durchmesser": 0.075, # größere Punkte, falls welche (CVV: keine)
+    },
+}
+_RING_FORMAT_DEFAULT = {
+    "hole": None,                   # None → der hole_size-Parameter von nachbearbeiten
+    "leader_breite_emu": LEADER_BREITE_EMU,
+    "label_fett": False,
+    "punkt_durchmesser": PUNKT_DURCHMESSER,
+}
+
+
+def _ring_format(fam, hole_size):
+    """Format-Werte für eine Familie: Familien-Override über Default gelegt.
+    'hole' fällt bei None auf den hole_size-Parameter zurück (globaler Default)."""
+    f = dict(_RING_FORMAT_DEFAULT)
+    f.update(FAMILIE_RING_FORMAT.get(fam, {}))
+    if f["hole"] is None:
+        f["hole"] = hole_size
+    return f
+
 # ── Familien-Zuordnung (aus Mapping_Namen.xlsx, Spalte "Powerpoint Familie") ─
 # Strategie → Familie, wie im Mapping. Wird über den Folientitel gematcht
 # (_familie_aus_prs). WICHTIG zu den Schlüsseln:
@@ -1541,12 +1577,16 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
     return gezeichnet
 
 
-def ring_label_schriftfarbe(chart, farbe=LABEL_SCHRIFTFARBE):
+def ring_label_schriftfarbe(chart, farbe=LABEL_SCHRIFTFARBE, fett=False):
     """Setzt die Schriftfarbe ALLER Prozent-Labels einheitlich (Default schwarz).
 
     Die Vorlagen setzen keine explizite Textfarbe (die Labels erben Schwarz aus
     dem Theme). Wir setzen sie trotzdem explizit — dann bleibt der Text schwarz,
     egal welches Theme die Vorlage mitbringt.
+
+    fett=True setzt die Zahlen zusätzlich FETT (b="1"); die Farbe bleibt davon
+    unberührt (schwarz). Bei fett=False wird das Fett-Attribut NICHT angefasst
+    → Familien ohne Fett-Wunsch bleiben unverändert.
 
     Die Schriftfarbe hängt bewusst NICHT von der Segmentfarbe ab: Die Zuordnung
     Label→Segment erfolgt über die Position und die Führungslinie. Farbe gehört
@@ -1586,6 +1626,8 @@ def ring_label_schriftfarbe(chart, farbe=LABEL_SCHRIFTFARBE):
             clr = etree.SubElement(fill, _A + "srgbClr")
             clr.set("val", farbe)
             rpr.insert(0, fill)
+            if fett:
+                rpr.set("b", "1")   # Prozentzahlen fett (nur wenn gewünscht)
         n += 1
     return n
 
@@ -1642,6 +1684,11 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
             "punkte": 0, "stub_fix": 0}
     # Familie EINMAL bestimmen (für die Punkt-Regel: Punkte nur in Thema).
     ist_thema = _ist_thema_familie(prs)
+    # Familienspezifische Ring-Optik EINMAL bestimmen (Wunsch 27.07.: CVV
+    # kräftiger). Für Nicht-CVV liefert _ring_format die Defaults → deren
+    # Ringe bleiben exakt wie bisher.
+    _fam = _familie_aus_prs(prs)
+    _fmt = _ring_format(_fam, hole_size)
     for slide in prs.slides:
         for shape in slide.shapes:
             if not getattr(shape, "has_chart", False):
@@ -1650,7 +1697,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
             typ = chart.chart_type.name if chart.chart_type else ""
             try:
                 if "DOUGHNUT" in typ:
-                    ring_holesize(chart, hole_size)
+                    ring_holesize(chart, _fmt["hole"])
 
                     # NEU 10.07.2026 — Segmentfarben NAMENSBASIERT setzen.
                     # Gibt {} zurück, wenn es kein Assetklassen-Ring ist
@@ -1731,12 +1778,14 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                   and (not PUNKT_NUR_THEMA or ist_thema))
                         ring_leader_zeichnen(slide, shape, chart,
                                              farbe=leader_farbe,
-                                             punkt_zeichnen=_punkt)
+                                             breite_emu=_fmt["leader_breite_emu"],
+                                             punkt_zeichnen=_punkt,
+                                             punkt_durchmesser=_fmt["punkt_durchmesser"])
                         if _punkt:
                             stat["punkte"] += 1
                     if label_schriftfarbe:
                         stat["labels_schwarz"] += ring_label_schriftfarbe(
-                            chart, farbe=label_schriftfarbe)
+                            chart, farbe=label_schriftfarbe, fett=_fmt["label_fett"])
                     stat["ringe"] += 1
                 elif "LINE" in typ and _hat_dateax(chart):
                     datumsachse_an_daten(chart)
