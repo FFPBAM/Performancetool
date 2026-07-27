@@ -549,40 +549,55 @@ Vorlage passen (Konservativ=F7, Defensiv=F9, Defensiv Plus=F11,
 Ausgewogen=F13, Dynamic=F15). Namen wie in der Mapping-Spalte
 'Strategie auswählen'."""
 
-_CVV_CONFIG = {
-    "erwartete_folien": 37,
-    "entfernen": [],
-    # Ein Eintrag je Strategie, in der Reihenfolge von _CVV_STRATEGIEN.
-    # Werte sind 1-indexierte Vorlagen-Positionen.
-    "feste_bloecke": [
-        {"anlagevorschlag": 7,  "wertentwicklung": 8},
-        {"anlagevorschlag": 9,  "wertentwicklung": 10},
-        {"anlagevorschlag": 11, "wertentwicklung": 12},
-        {"anlagevorschlag": 13, "wertentwicklung": 14},
-        {"anlagevorschlag": 15, "wertentwicklung": 16},
+_CVV_CONFIG = _folien_config(
+    # Broschüre Folie für Folie (Position = Listenindex+1). Neue statische
+    # Folie? Einfach EINEN ("S", "…")-Eintrag einfügen — Positionen
+    # verschieben sich automatisch. Labels = echte Vorlagentitel (nur Doku).
+    folien=[
+        ("S", "Titelseite – Unabhängig. Werteorientiert. Persönlich."),
+        ("S", "Unsere Vermögensverwaltung"),
+        ("S", "Vermögenserhalt und langfristiges Wachstum"),
+        ("S", "Aufteilung zur Risikobegrenzung"),
+        ("S", "Strategie-Einführung (Risikoklassen)"),
+        ("S", "Unsere fünf klassischen Strategien (Übersicht)"),
+        ("anlagevorschlag", 0, "Konservativ – Struktur (Ring + Positionen)"),
+        ("wertentwicklung", 0, "Konservativ – Performance"),
+        ("anlagevorschlag", 1, "Defensiv – Struktur"),
+        ("wertentwicklung", 1, "Defensiv – Performance"),
+        ("anlagevorschlag", 2, "Defensiv Plus – Struktur"),
+        ("wertentwicklung", 2, "Defensiv Plus – Performance"),
+        ("anlagevorschlag", 3, "Ausgewogen – Struktur"),
+        ("wertentwicklung", 3, "Ausgewogen – Performance"),
+        ("anlagevorschlag", 4, "Dynamic – Struktur"),
+        ("wertentwicklung", 4, "Dynamic – Performance"),
+        ("uebersicht", "*", "Wertentwicklung-Vergleich (Tabelle, alle 5)"),
+        ("S", "Größte Monatsverluste (Übersicht)"),
+        ("vergleich", "*", "Klassische VV Strategien im Vergleich (Linien-Chart)"),
+        ("S", "Exklusive Erweiterung mit individuellen Kriterien"),
+        ("S", "all-in-fee-Honorar"),
+        ("S", "Honorar (inkl. USt.)"),
+        ("S", "Steuerlicher Hinweis zum Honorar"),
+        ("S", "Langfristiger Vermögenserhalt"),
+        ("S", "Die optimale Vermögensverwaltungsstrategie"),
+        ("S", "Zinsänderungsrisiko"),
+        ("S", "Kombination verschiedener Anlageklassen"),
+        ("S", "Regelmäßige Berichte"),
+        ("S", "Wesentliche Finanzkennzahlen (AuM-Wachstum)"),
+        ("S", "Ansprechpartner Private Banking"),
+        ("S", "Standort Friedrichsplatz"),
+        ("S", "Standort Theodor-Heuss-Str."),
+        ("S", "Individuell. Unabhängig. Vertrauensvoll."),
+        ("S", "Anschreiben"),
+        ("S", "Kluge Investitionen (ländlicher Grundbesitz)"),
+        ("S", "Stand"),
+        ("S", "Rückseite / Stand"),
     ],
-    # Vorlagenspezifische Optionen je Rolle:
-    # - titel_text="": Vorlagen-Titel ("Anlagestrategie Konservativ") behalten,
-    #   statt ihn durch "Strategieentwurf …" zu ersetzen.
-    # - max_bottom_inch=6.20: die blaue Abschlusslinie liegt bei 6.38"
-    #   (Standard-Vorlage: 6.60").
-    # - original_row_h_inch=0.192: die CVV-Tabelle hat höhere Zeilen als die
-    #   Standard-Vorlage (0.1424"); sonst greift die Stauchungs-Untergrenze
-    #   zu früh und die Tabelle läuft über die Abschlusslinie.
-    "rollen_optionen": {
+    rollen_optionen={
         "anlagevorschlag": {"titel_text": "", "max_bottom_inch": 6.20,
                             "original_row_h_inch": 0.192},
     },
-    # Folien, die EINMAL für alle fünf Strategien laufen (nicht je Strategie):
-    # F17 = "Wertentwicklung der klassischen Vermögensverwaltungsstrategien",
-    # Zeiträume YTD/1/3/5/10 Jahre in den Zeilen, Strategien in den Spalten.
-    # Quelle: compute_rollierend_data() je Strategie — dieselbe Mathematik wie
-    # die Themen-Broschüren-Tabelle (Konsistenz-Doktrin).
-    # F19 = Linien-Chart "Klassische VV Strategien im Vergleich (nach Kosten)",
-    # 5 Serien, Index 100 je Strategie ab ihrem EIGENEN Start (Dynamic beginnt
-    # später → Lücke, keine Nulllinie).
-    "einmal_folien": {"uebersicht": 17, "vergleich": 19},
-}
+)
+
 
 # Struktur der ESG-Broschüre ("ESG Infoboard", NEU 10.07.2026).
 #
@@ -603,24 +618,58 @@ _ESG_STRATEGIEN = [
 Defensiv Plus=F18, Ausgewogen=F20, Offensiv=F22). Namen wie in der
 Mapping-Spalte 'Strategie auswählen'."""
 
-_ESG_CONFIG = {
-    "erwartete_folien": 39,
-    "entfernen": [],
-    "feste_bloecke": [
-        {"anlagevorschlag": 16, "wertentwicklung": 17},
-        {"anlagevorschlag": 18, "wertentwicklung": 19},
-        {"anlagevorschlag": 20, "wertentwicklung": 21},
-        {"anlagevorschlag": 22, "wertentwicklung": 23},
+_ESG_CONFIG = _folien_config(
+    # Broschüre Folie für Folie (Position = Listenindex+1). Neue statische
+    # Folie? Einfach EINEN ("S", "…")-Eintrag einfügen — Positionen
+    # verschieben sich automatisch. Labels = echte Vorlagentitel (nur Doku).
+    folien=[
+        ("S", "Titelseite"),
+        ("S", "ESG Basisinformationen"),
+        ("S", "ESG Kriterien"),
+        ("S", "ESG Basis-Informationen"),
+        ("S", "Governance"),
+        ("S", "MSCI Abdeckung"),
+        ("S", "ESG-Vermögensverwaltungen"),
+        ("S", "Normbasierte Ausschlüsse"),
+        ("S", "17 Ziele (Bildquelle)"),
+        ("S", "Nachhaltigkeits- und Investmentkonzept"),
+        ("S", "Nachhaltigkeitsprozess / Offenlegungsverordnung"),
+        ("S", "Leitfaden (Bildquelle)"),
+        ("S", "Umwelt"),
+        ("S", "Anlagerichtlinien"),
+        ("S", "Unsere ESG-Strategien"),
+        ("anlagevorschlag", 0, "ESG Defensiv – Struktur"),
+        ("wertentwicklung", 0, "ESG Defensiv – Performance"),
+        ("anlagevorschlag", 1, "ESG Defensiv Plus – Struktur"),
+        ("wertentwicklung", 1, "ESG Defensiv Plus – Performance"),
+        ("anlagevorschlag", 2, "ESG Ausgewogen – Struktur"),
+        ("wertentwicklung", 2, "ESG Ausgewogen – Performance"),
+        ("anlagevorschlag", 3, "ESG Offensiv – Struktur"),
+        ("wertentwicklung", 3, "ESG Offensiv – Performance"),
+        ("uebersicht", "*", "Wertentwicklung-Vergleich (Tabelle, alle 4)"),
+        ("S", "Standorte (Titel)"),
+        ("S", "Unsere Standorte"),
+        ("S", "Unsere Standorte"),
+        ("S", "Anlage"),
+        ("S", "Kombination verschiedener Anlageklassen"),
+        ("S", "Konservativer Baustein"),
+        ("S", "Vermögensverwaltungsbericht"),
+        ("S", "Steuerservice"),
+        ("S", "Honorarübersicht"),
+        ("S", "Risikohinweise"),
+        ("S", "Rechtliche Hinweise und Impressum"),
+        ("S", "Unser Reporting"),
+        ("S", "Rechtliche Hinweise und Impressum"),
+        ("S", "Meinungsäußerungen (Disclaimer)"),
+        ("S", "Vielen Dank"),
     ],
-    "rollen_optionen": {
-        # Abschlusslinie bei 6.38", Zeilenhöhe 0.192" — wie CVV.
+    rollen_optionen={
         "anlagevorschlag": {"titel_text": "", "max_bottom_inch": 6.20,
                             "original_row_h_inch": 0.192},
-        # NUR VIER Strategien → eine Wertspalte weniger als bei CVV.
         "uebersicht": {"spalten": [4, 6, 8, 10]},
     },
-    "einmal_folien": {"uebersicht": 24},
-}
+)
+
 
 # Struktur der ETF-Broschüre ("ETF Infoboard", NEU 20.07.2026).
 #
@@ -642,17 +691,48 @@ _ETF_STRATEGIEN = [
 """Feste Reihenfolge — MUSS zur Foliennummerierung passen (Ausgewogen=F16,
 Wachstum=F18). Namen wie in der Mapping-Spalte 'Strategie auswählen'."""
 
-_ETF_CONFIG = {
-    "erwartete_folien": 35,
-    "entfernen": [],
-    "feste_bloecke": [
-        {"anlagevorschlag": 16, "wertentwicklung": 17},
-        {"anlagevorschlag": 18, "wertentwicklung": 19},
+_ETF_CONFIG = _folien_config(
+    # Broschüre Folie für Folie (Position = Listenindex+1). Neue statische
+    # Folie? Einfach EINEN ("S", "…")-Eintrag einfügen — Positionen
+    # verschieben sich automatisch. Labels = echte Vorlagentitel (nur Doku).
+    folien=[
+        ("S", "Titelseite"),
+        ("S", "ESG Basisinformationen"),
+        ("S", "ESG Basis-Informationen"),
+        ("S", "ESG Kriterien"),
+        ("S", "Governance"),
+        ("S", "MSCI Abdeckung"),
+        ("S", "ESG-Vermögensverwaltungen"),
+        ("S", "Normbasierte Ausschlüsse"),
+        ("S", "Investmentprozess und Risiken"),
+        ("S", "Nachhaltigkeits- und Investmentkonzept"),
+        ("S", "Nachhaltigkeitsprozess / Offenlegungsverordnung"),
+        ("S", "Leitfaden (Bildquelle)"),
+        ("S", "Umwelt"),
+        ("S", "Anlagerichtlinien"),
+        ("S", "Unsere ESG-ETF Strategien"),
+        ("anlagevorschlag", 0, "ESG-ETF Ausgewogen – Struktur"),
+        ("wertentwicklung", 0, "ESG-ETF Ausgewogen – Performance"),
+        ("anlagevorschlag", 1, "ESG-ETF Wachstum – Struktur"),
+        ("wertentwicklung", 1, "ESG-ETF Wachstum – Performance"),
+        ("uebersicht", "*", "Wertentwicklung-Vergleich (Tabelle, beide)"),
+        ("S", "Standorte (Titel)"),
+        ("S", "Unsere Standorte"),
+        ("S", "Unsere Standorte"),
+        ("S", "Anlage"),
+        ("S", "Kombination verschiedener Anlageklassen"),
+        ("S", "Konservativer Baustein"),
+        ("S", "Vermögensverwaltungsbericht"),
+        ("S", "Steuerservice"),
+        ("S", "Honorarübersicht"),
+        ("S", "Honorarbelastung"),
+        ("S", "Unser Reporting"),
+        ("S", "Rechtliche Hinweise und Impressum"),
+        ("S", "Risikohinweise"),
+        ("S", "Rechtliche Hinweise und Impressum"),
+        ("S", "Vielen Dank"),
     ],
-    "rollen_optionen": {
-        # titel_text="": Vorlagen-Titel ("Anlagestrategie ESG-ETF Ausgewogen")
-        #   behalten. max_bottom_inch/row_h an der ETF-Vorlage kalibrieren.
-        # spalten_map: 7-Spalten-Layout OHNE Kupon/Fälligkeit (ETF-spezifisch).
+    rollen_optionen={
         "anlagevorschlag": {
             "titel_text": "", "max_bottom_inch": 6.20,
             "original_row_h_inch": 0.34,
@@ -661,11 +741,10 @@ _ETF_CONFIG = {
                 "wkn": 2, "anteil": 4, "rating": 6, "spacers": [1, 3, 5],
             },
         },
-        # NUR ZWEI Strategien → Ausgewogen=Spalte 4, Wachstum=Spalte 6.
         "uebersicht": {"spalten": [4, 6]},
     },
-    "einmal_folien": {"uebersicht": 20},
-}
+)
+
 
 # Struktur der comdirect-Broschüre ("Klassische Portfolioverwaltung", NEU 21.07.2026).
 #
