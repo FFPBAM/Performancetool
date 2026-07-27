@@ -104,6 +104,13 @@ FAMILIE_RING_FORMAT = {
         "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
         "punkte": True,             # Punkte an den Leader-Enden (Wunsch 27.07.)
         "punkt_durchmesser": 0.075, # größere Punkte, passend zur kräftigen Optik
+        # PowerPoint zeichnet den Ring-Außenrand ein Stück weiter außen als das
+        # aus der plotArea berechnete R_out. Beim dünnen Ring unauffällig, beim
+        # dicken CVV-Ring starten die Leader sonst sichtbar IM Band. Dieser
+        # Faktor hebt den Leader-Ansatz auf den echten Außenrand (an PowerPoint
+        # kalibriert; 1.0 = kein Versatz). Verschiebt NUR den Leader-Start, nicht
+        # Labels oder Punkte.
+        "leader_aussen_faktor": 1.13,
     },
 }
 _RING_FORMAT_DEFAULT = {
@@ -112,6 +119,7 @@ _RING_FORMAT_DEFAULT = {
     "label_fett": False,
     "punkte": False,                # nur Familien mit punkte=True bekommen Punkte
     "punkt_durchmesser": PUNKT_DURCHMESSER,
+    "leader_aussen_faktor": 1.0,    # 1.0 = Leader-Ansatz unverändert bei R_out
 }
 
 
@@ -1428,7 +1436,8 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
                          breite_emu=LEADER_BREITE_EMU,
                          punkt_zeichnen=False,
                          punkt_farbe=PUNKT_FARBE,
-                         punkt_durchmesser=PUNKT_DURCHMESSER):
+                         punkt_durchmesser=PUNKT_DURCHMESSER,
+                         aussen_faktor=1.0):
     """Zeichnet für jedes Ring-Label eine EIGENE Führungslinie als Connector.
 
     Läuft vom Außenrand des Segments (R_out am Segment-Mittelwinkel) zur der
@@ -1470,6 +1479,10 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
     t_, b = py * fh, (py + ph) * fh
     cx, cy = (l + r) / 2, (t_ + b) / 2
     R_out = min(r - l, b - t_) / 2
+    # PowerPoint-Außenrand-Korrektur (nur wenn Familie einen Faktor >1 setzt):
+    # hebt Leader-Ansatz UND Knick-Referenz einheitlich auf den echten
+    # Außenrand. Labels/Punkte bleiben unberührt (die werden anderswo gesetzt).
+    R_out *= aussen_faktor
 
     vals = [float(v.text)
             for v in root.findall(".//" + _q("val") + "//" + _q("pt")
@@ -1782,7 +1795,8 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                              farbe=leader_farbe,
                                              breite_emu=_fmt["leader_breite_emu"],
                                              punkt_zeichnen=_punkt,
-                                             punkt_durchmesser=_fmt["punkt_durchmesser"])
+                                             punkt_durchmesser=_fmt["punkt_durchmesser"],
+                                             aussen_faktor=_fmt["leader_aussen_faktor"])
                         if _punkt:
                             stat["punkte"] += 1
                     if label_schriftfarbe:
