@@ -448,6 +448,61 @@ def _mpl_ring_chart(alloc_df, group_col, title):
 
 SPALTE_PP_FAMILIE = "Powerpoint Familie"
 
+
+def _folien_config(folien, rollen_optionen=None, entfernen=None):
+    """Baut ein ``template_config`` aus einer GEORDNETEN Folienliste.
+
+    Idee: Man beschreibt die Broschüre Folie für Folie in Reihenfolge — die
+    Folienposition ergibt sich automatisch aus dem Listenindex (Position =
+    Index + 1). Kommt eine statische Folie dazu, fügt man EINEN Eintrag ein;
+    alle folgenden Positionen verschieben sich von allein. Kein Umnummerieren.
+
+    Jeder Eintrag ist ein Tupel (das Label am Ende ist REINE Dokumentation und
+    fließt NICHT in die Logik ein — ein Tippfehler im Label kann die
+    Generierung also nie brechen):
+
+        ("S", "Label")            – statische Folie (Generator fasst sie nie an)
+        ("<rolle>", n, "Label")   – dynamische Folie der Strategie n (0-basiert)
+        ("<rolle>", "*", "Label") – Einmal-Folie (läuft einmal für alle Strategien)
+
+    Rollen wie im Export-Dispatch: anlagevorschlag, wertentwicklung, performance,
+    zusammenstellung, rollierend, einzeltitel_themen (dynamisch) bzw.
+    uebersicht, vergleich (einmal).
+
+    Erzeugt EXAKT die Struktur, die pptx_export.generate_portfolioanalyse_pptx
+    schon versteht (erwartete_folien / feste_bloecke / einmal_folien /
+    rollen_optionen / entfernen) — der Export bleibt unangetastet.
+    """
+    feste = {}    # strategie-index (int) -> {rolle: 1-indexierte Position}
+    einmal = {}   # rolle -> 1-indexierte Position
+    for i, eintrag in enumerate(folien):
+        pos = i + 1
+        rolle = eintrag[0]
+        if str(rolle).upper() == "S":          # statische Folie -> ueberspringen
+            continue
+        strat = eintrag[1]
+        if strat == "*":
+            einmal[rolle] = pos
+        else:
+            feste.setdefault(int(strat), {})[rolle] = pos
+
+    if feste:
+        # Liste in Strategie-Reihenfolge 0,1,2,... (fehlende Indizes -> leerer Block)
+        feste_bloecke = [feste.get(k, {}) for k in range(max(feste) + 1)]
+    else:
+        feste_bloecke = []
+
+    cfg = {
+        "erwartete_folien": len(folien),
+        "entfernen": list(entfernen or []),
+        "feste_bloecke": feste_bloecke,
+        "rollen_optionen": dict(rollen_optionen or {}),
+    }
+    # einmal_folien NUR anlegen, wenn es Einmal-Folien gibt.
+    if einmal:
+        cfg["einmal_folien"] = einmal
+    return cfg
+
 # Struktur-Block der THEMEN-Broschüren (Pro / Pro Dividende / Offensiv teilen
 # sich diese eine Vorlage + Struktur). Verifiziert an der echten Vorlage:
 # 21 Folien, dynamischer Block F10-F13 mit den Rollen einzeltitel_themen /
@@ -632,23 +687,48 @@ _COMDIRECT_STRATEGIEN = [
 """Feste Reihenfolge — MUSS zur Foliennummerierung passen (30=F6, 70=F8,
 100=F10). Namen wie in der Mapping-Spalte 'Strategie auswählen'."""
 
-_COMDIRECT_CONFIG = {
-    "erwartete_folien": 27,
-    "entfernen": [],
-    "feste_bloecke": [
-        {"anlagevorschlag": 6,  "wertentwicklung": 7},
-        {"anlagevorschlag": 8,  "wertentwicklung": 9},
-        {"anlagevorschlag": 10, "wertentwicklung": 11},
+_COMDIRECT_CONFIG = _folien_config(
+    # Broschüre Folie für Folie (Position = Listenindex+1). Neue statische
+    # Folie? Einfach EINEN ("S", "…")-Eintrag an der richtigen Stelle einfügen —
+    # alle folgenden Positionen verschieben sich von allein. Labels sind reine
+    # Doku (Titel der echten Vorlagenfolien), ändern die Logik nicht.
+    folien=[
+        ("S", "Titelseite – Unabhängig. Werteorientiert. Persönlich."),
+        ("S", "Unsere Portfolioverwaltung"),
+        ("S", "Vermögenserhalt und langfristiges Wachstum"),
+        ("S", "Aufteilung zur Risikobegrenzung"),
+        ("S", "Die drei klassischen Strategien (Übersicht)"),
+        ("anlagevorschlag", 0, "PV 30 – Anlagestrategie (Ring + Positionen)"),
+        ("wertentwicklung", 0, "PV 30 – Performance"),
+        ("anlagevorschlag", 1, "PV 70 – Anlagestrategie (Ring + Positionen)"),
+        ("wertentwicklung", 1, "PV 70 – Performance"),
+        ("anlagevorschlag", 2, "PV 100 – Anlagestrategie (Ring + Positionen)"),
+        ("wertentwicklung", 2, "PV 100 – Performance"),
+        ("S", "Verwaltungsvergütung"),
+        ("S", "Transaktionskosten"),
+        ("S", "Unser Honorar"),
+        ("S", "Steuerlicher Hinweis zum Honorar"),
+        ("S", "Langfristiger Vermögenserhalt"),
+        ("S", "Die optimale Vermögensverwaltungsstrategie"),
+        ("S", "Zinsänderungsrisiko"),
+        ("S", "Kombination verschiedener Anlageklassen"),
+        ("S", "Regelmäßige Berichte"),
+        ("S", "Wesentliche Finanzkennzahlen (AuM-Wachstum)"),
+        ("S", "Individuell. Unabhängig. Vertrauensvoll."),
+        ("S", "Anschreiben"),
+        ("S", "Kluge Investitionen (ländlicher Grundbesitz)"),
+        ("S", "Risikohinweise"),
+        ("S", "Rechtliche Hinweise und Impressum"),
+        ("S", "Stand / Rückseite"),
     ],
     # titel_text="": Vorlagen-Titel behalten. max_bottom_inch/row_h an der
     # Vorlage gemessen (Tabelle endet bei 6.36", Zeilenhöhe ~0.21") — nach
     # echtem Deploy ggf. feinjustieren. KEIN spalten_map (11 Spalten wie ESG).
-    "rollen_optionen": {
+    rollen_optionen={
         "anlagevorschlag": {"titel_text": "", "max_bottom_inch": 6.20,
                             "original_row_h_inch": 0.21},
     },
-    # KEIN einmal_folien — comdirect hat keine dynamische Vergleichsfolie.
-}
+)
 
 # Familie → (Vorlagen-Dateiname im Ordner Vorlage/, template_config).
 # Nur Familien mit EIGENER Vorlage hier eintragen. Familien ohne Eintrag
