@@ -97,31 +97,28 @@ LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
 #                        (CVV hat per PUNKT_NUR_THEMA aktuell KEINE)
 # Wunsch 27.07.: CVV-Ringe insgesamt kräftiger — dickerer Ring, fettere
 # Führungslinien, fette Prozentzahlen.
+# Kräftige Ring-Optik (Feinschliff 27.-28.07.): dickerer Ring, ruhige GERADE
+# Leader mittig im Band, kleine dezente Punkte, fette schwarze Prozente, etwas
+# luftigere Labels. CVV, ESG, ETF und Thema teilen dieselbe Optik — deshalb hier
+# EINMAL definiert. Soll EINE Familie abweichen, gib ihr unten statt
+# _RING_KRAEFTIG einen eigenen dict-Block mit anderen Zahlen.
+_RING_KRAEFTIG = {
+    "hole": 68,                 # dickerer, markanterer Ring (Default 79)
+    "leader_breite_emu": 15875, # 1,25 pt: kräftig, aber nicht zu dominant
+    "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
+    "punkte": True,             # Punkte an den Leader-Enden
+    "punkt_durchmesser": 0.05,  # klein/dezent
+    "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
+    "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
+    "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
+}
 FAMILIE_RING_FORMAT = {
-    # CVV und ESG teilen aktuell dieselbe kräftige Optik. Jede Familie hat ihren
-    # EIGENEN Block — willst du eine allein justieren, änderst du nur deren Zahlen.
-    # Feinschliff 27.07.: ruhigere, gleichmäßige Leader (kein harter Knick),
-    # Ansatz in der Mitte des Ringbands, kleinere Punkte, etwas luftigere Labels.
-    "CVV": {
-        "hole": 68,                 # dickerer, markanterer Ring (Default 79)
-        "leader_breite_emu": 15875, # 1,25 pt: kräftig, aber nicht zu dominant
-        "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
-        "punkte": True,             # Punkte an den Leader-Enden
-        "punkt_durchmesser": 0.05,  # kleiner/dezenter (vorher 0,075)
-        "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
-        "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
-        "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
-    },
-    "ESG": {
-        "hole": 68,
-        "leader_breite_emu": 15875,
-        "label_fett": True,
-        "punkte": True,
-        "punkt_durchmesser": 0.05,
-        "leader_start_tiefe": 0.5,
-        "leader_gerade": True,
-        "label_gap_in": 0.18,
-    },
+    "CVV": _RING_KRAEFTIG,
+    "ESG": _RING_KRAEFTIG,
+    "ETF": _RING_KRAEFTIG,
+    "Thema": _RING_KRAEFTIG,
+    # comdirect + Standard NICHT gelistet → bewusst der bisherige Look.
+    # (Bei Bedarf einfach "comdirect": _RING_KRAEFTIG, ergänzen.)
 }
 _RING_FORMAT_DEFAULT = {
     "hole": None,                   # None → der hole_size-Parameter von nachbearbeiten
