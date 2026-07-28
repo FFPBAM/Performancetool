@@ -117,8 +117,10 @@ FAMILIE_RING_FORMAT = {
     "ESG": _RING_KRAEFTIG,
     "ETF": _RING_KRAEFTIG,
     "Thema": _RING_KRAEFTIG,
-    # comdirect + Standard NICHT gelistet → bewusst der bisherige Look.
-    # (Bei Bedarf einfach "comdirect": _RING_KRAEFTIG, ergänzen.)
+    "comdirect": _RING_KRAEFTIG,
+    # Nur "Standard" (Strategien ohne Familie) ist NICHT gelistet → bewusst der
+    # bisherige Look. (Bei Bedarf einfach "Standard": _RING_KRAEFTIG, ergänzen —
+    # der Familien-String ist dort allerdings leer, siehe _familie_aus_prs.)
 }
 _RING_FORMAT_DEFAULT = {
     "hole": None,                   # None → der hole_size-Parameter von nachbearbeiten
@@ -164,12 +166,19 @@ _STRATEGIE_FAMILIE = {
     "ausgewogen": "CVV", "dynamic": "CVV",
     # ETF
     "etf ausgewogen": "ETF", "etf wachstum": "ETF",
+    # comdirect (Titel: "Anlagestrategie Portfolioverwaltung 30/70/100" auf den
+    # Struktur-Folien bzw. "Comdirect 30/70/100 | Wertentwicklung"). Beide Formen
+    # hinterlegt, damit die Familie sicher erkannt wird.
+    "portfolioverwaltung 30": "comdirect", "portfolioverwaltung 70": "comdirect",
+    "portfolioverwaltung 100": "comdirect",
+    "comdirect 30": "comdirect", "comdirect 70": "comdirect",
+    "comdirect 100": "comdirect",
 }
 
 
 def _familie_aus_prs(prs):
     """Powerpoint-Familie aus dem Mapping ableiten — anhand des Strategienamens
-    im Folientitel. Rückgabe 'Thema'|'CVV'|'ESG'|'ETF' oder None.
+    im Folientitel. Rückgabe 'Thema'|'CVV'|'ESG'|'ETF'|'comdirect' oder None.
 
     Es werden NUR echte Titelzeilen durchsucht (Text mit 'Anlagestrategie' oder
     'Portfoliozusammenstellung'), damit Fließtext wie 'Die Strategie Pro …' kein
