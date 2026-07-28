@@ -98,6 +98,8 @@ LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
 # Wunsch 27.07.: CVV-Ringe insgesamt kräftiger — dickerer Ring, fettere
 # Führungslinien, fette Prozentzahlen.
 FAMILIE_RING_FORMAT = {
+    # CVV und ESG teilen aktuell dieselbe kräftige Optik. Jede Familie hat ihren
+    # EIGENEN Block — willst du eine allein justieren, änderst du nur deren Zahlen.
     "CVV": {
         "hole": 68,                 # dickerer, markanterer Ring (Default 79)
         "leader_breite_emu": 19050, # 1,5 pt Führungslinien (Default 0,75 pt)
@@ -108,6 +110,15 @@ FAMILIE_RING_FORMAT = {
         # Ringsegment und laufen von dort nach außen zum Label — der Leader-
         # Ansatz bei R_out (der optisch IM PowerPoint-Band liegt) ist genau so
         # gewollt. Kein Außenrand-Versatz.
+    },
+    "ESG": {
+        "hole": 68,                 # dickerer, markanterer Ring (Default 79)
+        "leader_breite_emu": 19050, # 1,5 pt Führungslinien (Default 0,75 pt)
+        "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
+        "punkte": True,             # Punkte an den Leader-Enden (Wunsch 27.07.)
+        "punkt_durchmesser": 0.075, # größere Punkte, passend zur kräftigen Optik
+        # Wie CVV: Führungslinien starten BEWUSST im farbigen Ringsegment und
+        # laufen nach außen zum Label. Kein Außenrand-Versatz.
     },
 }
 _RING_FORMAT_DEFAULT = {
