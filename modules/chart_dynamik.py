@@ -100,25 +100,27 @@ LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
 FAMILIE_RING_FORMAT = {
     # CVV und ESG teilen aktuell dieselbe kräftige Optik. Jede Familie hat ihren
     # EIGENEN Block — willst du eine allein justieren, änderst du nur deren Zahlen.
+    # Feinschliff 27.07.: ruhigere, gleichmäßige Leader (kein harter Knick),
+    # Ansatz in der Mitte des Ringbands, kleinere Punkte, etwas luftigere Labels.
     "CVV": {
         "hole": 68,                 # dickerer, markanterer Ring (Default 79)
-        "leader_breite_emu": 19050, # 1,5 pt Führungslinien (Default 0,75 pt)
+        "leader_breite_emu": 15875, # 1,25 pt: kräftig, aber nicht zu dominant
         "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
-        "punkte": True,             # Punkte an den Leader-Enden (Wunsch 27.07.)
-        "punkt_durchmesser": 0.075, # größere Punkte, passend zur kräftigen Optik
-        # Gewünscht (27.07.): Die Führungslinien starten BEWUSST im farbigen
-        # Ringsegment und laufen von dort nach außen zum Label — der Leader-
-        # Ansatz bei R_out (der optisch IM PowerPoint-Band liegt) ist genau so
-        # gewollt. Kein Außenrand-Versatz.
+        "punkte": True,             # Punkte an den Leader-Enden
+        "punkt_durchmesser": 0.05,  # kleiner/dezenter (vorher 0,075)
+        "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
+        "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
+        "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
     },
     "ESG": {
-        "hole": 68,                 # dickerer, markanterer Ring (Default 79)
-        "leader_breite_emu": 19050, # 1,5 pt Führungslinien (Default 0,75 pt)
-        "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
-        "punkte": True,             # Punkte an den Leader-Enden (Wunsch 27.07.)
-        "punkt_durchmesser": 0.075, # größere Punkte, passend zur kräftigen Optik
-        # Wie CVV: Führungslinien starten BEWUSST im farbigen Ringsegment und
-        # laufen nach außen zum Label. Kein Außenrand-Versatz.
+        "hole": 68,
+        "leader_breite_emu": 15875,
+        "label_fett": True,
+        "punkte": True,
+        "punkt_durchmesser": 0.05,
+        "leader_start_tiefe": 0.5,
+        "leader_gerade": True,
+        "label_gap_in": 0.18,
     },
 }
 _RING_FORMAT_DEFAULT = {
@@ -127,16 +129,22 @@ _RING_FORMAT_DEFAULT = {
     "label_fett": False,
     "punkte": False,                # nur Familien mit punkte=True bekommen Punkte
     "punkt_durchmesser": PUNKT_DURCHMESSER,
+    "leader_start_tiefe": 0.0,      # 0.0 = Ansatz am Außenrand (bisheriges Verhalten)
+    "leader_gerade": False,         # False = bisherige geknickte Führung
+    "label_gap_in": None,           # None → der label_gap_in-Parameter von nachbearbeiten
 }
 
 
-def _ring_format(fam, hole_size):
+def _ring_format(fam, hole_size, label_gap_in):
     """Format-Werte für eine Familie: Familien-Override über Default gelegt.
-    'hole' fällt bei None auf den hole_size-Parameter zurück (globaler Default)."""
+    'hole' und 'label_gap_in' fallen bei None auf die übergebenen globalen
+    Defaults (hole_size bzw. label_gap_in von nachbearbeiten) zurück."""
     f = dict(_RING_FORMAT_DEFAULT)
     f.update(FAMILIE_RING_FORMAT.get(fam, {}))
     if f["hole"] is None:
         f["hole"] = hole_size
+    if f["label_gap_in"] is None:
+        f["label_gap_in"] = label_gap_in
     return f
 
 # ── Familien-Zuordnung (aus Mapping_Namen.xlsx, Spalte "Powerpoint Familie") ─
@@ -1443,7 +1451,9 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
                          breite_emu=LEADER_BREITE_EMU,
                          punkt_zeichnen=False,
                          punkt_farbe=PUNKT_FARBE,
-                         punkt_durchmesser=PUNKT_DURCHMESSER):
+                         punkt_durchmesser=PUNKT_DURCHMESSER,
+                         start_tiefe=0.0,
+                         gerade=False):
     """Zeichnet für jedes Ring-Label eine EIGENE Führungslinie als Connector.
 
     Läuft vom Außenrand des Segments (R_out am Segment-Mittelwinkel) zur der
@@ -1485,6 +1495,13 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
     t_, b = py * fh, (py + ph) * fh
     cx, cy = (l + r) / 2, (t_ + b) / 2
     R_out = min(r - l, b - t_) / 2
+    # Leader-Ansatz-Radius: start_tiefe schiebt den Ansatz vom Außenrand (0.0)
+    # nach INNEN ins Ringband (0.5 = Mitte der Ringdicke, 1.0 = Innenkante).
+    # So kommen die Linien sichtbar AUS dem farbigen Segment heraus.
+    _hs_el = root.find(".//" + _q("holeSize"))
+    _hs = float(_hs_el.get("val")) / 100.0 if _hs_el is not None else 0.68
+    R_in = R_out * _hs
+    R_start = R_out - start_tiefe * (R_out - R_in)
 
     vals = [float(v.text)
             for v in root.findall(".//" + _q("val") + "//" + _q("pt")
@@ -1531,8 +1548,8 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
         mx = float(xe.get("val")) * fw + HALB_W       # Label-Box-Mitte
         my = float(ye.get("val")) * fh + HALB_H
         sm = math.radians(mids[ixv])
-        sx = cx + R_out * math.sin(sm)                # Segment-Außenpunkt
-        sy = cy - R_out * math.cos(sm)
+        sx = cx + R_start * math.sin(sm)              # Ansatz IM Ringband
+        sy = cy - R_start * math.cos(sm)
 
         # GEKNICKTE Führung — radialer Teil + horizontaler Stub zur Zahl:
         #   Seite = relativ zur RING-MITTE (robust; der frühere Vergleich mit
@@ -1546,9 +1563,11 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
         # Knick auf dem RADIALSTRAHL des Segments, auf Label-Höhe: so ist Teil 1
         # (S→Knick) echt radial und Teil 2 (Knick→Zahl) exakt horizontal.
         # Punkt auf dem Strahl mit y = my:  r = (cy - my) / cos(mid)
+        # gerade=True: bewusst KEIN Knick → eine ruhige, gerade Linie vom Band
+        # zur Zahl (gleichmäßiger, nicht wie harte technische Haken).
         cos_m = math.cos(sm)
         punkte = [(sx, sy), (e_x, e_y)]        # Default: gerade Linie
-        if abs(cos_m) > 0.30:
+        if not gerade and abs(cos_m) > 0.30:
             r = (cy - my) / cos_m
             if R_out < r < R_out + 1.5:
                 k_x = cx + r * math.sin(sm)
@@ -1705,7 +1724,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
     # kräftiger). Für Nicht-CVV liefert _ring_format die Defaults → deren
     # Ringe bleiben exakt wie bisher.
     _fam = _familie_aus_prs(prs)
-    _fmt = _ring_format(_fam, hole_size)
+    _fmt = _ring_format(_fam, hole_size, label_gap_in)
     for slide in prs.slides:
         for shape in slide.shapes:
             if not getattr(shape, "has_chart", False):
@@ -1763,7 +1782,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                         _tang = tangential_klein
 
                     ring_labels_aussen_dynamisch(chart, _fw, _fh,
-                                                 gap_in=label_gap_in,
+                                                 gap_in=_fmt["label_gap_in"],
                                                  min_gap_deg=_gap,
                                                  tangential_in=_tang,
                                                  rand_oben_in=_rand_oben,
@@ -1797,7 +1816,9 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                              farbe=leader_farbe,
                                              breite_emu=_fmt["leader_breite_emu"],
                                              punkt_zeichnen=_punkt,
-                                             punkt_durchmesser=_fmt["punkt_durchmesser"])
+                                             punkt_durchmesser=_fmt["punkt_durchmesser"],
+                                             start_tiefe=_fmt["leader_start_tiefe"],
+                                             gerade=_fmt["leader_gerade"])
                         if _punkt:
                             stat["punkte"] += 1
                     if label_schriftfarbe:
