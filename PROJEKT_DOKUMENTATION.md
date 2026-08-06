@@ -1,5 +1,5 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: 21.07.2026 (Phase 3: Themen-Broschüren, Modul-Architektur, Navigations-Umbau, Chart-/Tabellen-Dynamik, Ring-Optik & Einzeltitel-Datenlogik)
+## Stand: 28.07.2026 (Phase 3: Familien-Ausbau [comdirect], Folienlisten-Config, konfigurierbare Export-Namen, Download-Umzug & familienspezifische kräftigere Ring-Optik)
 
 > Vorgänger-Stand: Juni 2026 (Phase 2: Performance-PPTX-Export). Alle
 > Transferwissen-Einträge #1–#17 aus Phase 2 bleiben gültig und stehen
@@ -1307,6 +1307,77 @@ Diese Sequenz hat die ETF-Familie sauber und ohne Regression eingebaut. Für jed
 
 ---
 
+### 36. comdirect-Familie — reine Config, wenn keine Layout-Abweichung (NEU 21.07.2026)
+
+comdirect („Klassische Portfolioverwaltung", 27 Folien, 3 Strategien Comdirect_30/70/100) war die einfachste Familie: **reine Config-Ergänzung, kein Eingriff in geteilte Funktionen**. Grund: `T_Kennzahlen` ist das Standard-11-Spalten-Layout (kein `spalten_map` nötig) UND es gibt keine dynamische Vergleichsfolie (F5 = statische Strategie-Beschreibung, F21 = Firmen-AuM-Wachstum → beide statisch, also kein `einmal_folien`). Dynamisch sind nur F6/8/10 (`anlagevorschlag`) + F7/9/11 (`wertentwicklung`).
+
+**Mapping-Falle:** Die drei Strategien standen im Mapping (Comdirect_30/70/100), aber die Spalte „Powerpoint Familie" war leer → der Nutzer trug „comdirect" ein (Familien-Auflösung ist case-insensitiv). **Komprimierungs-Falle:** 20 MB → 7 MB, dabei fehlte in `[Content_Types].xml` der `jpg`-Default (anders als bei ETF) → nach PNG→JPG-Umbenennung ließ sich die Datei nicht öffnen, bis `<Default Extension="jpg" ContentType="image/jpeg"/>` vor `</Types>` ergänzt wurde.
+
+---
+
+### 37. Konfigurierbare Export-Dateinamen je Familie/Strategie (NEU 21.07.2026)
+
+Der Broschüren-Dateiname wird an EINER Stelle aus einer editierbaren Konfig-Sektion in `portfolioanalyse.py` gebaut (`_export_dateiname`). Auflösung in dieser Reihenfolge: `EXPORT_NAME_STRATEGIE[Strategie]` (Vorrang) → `EXPORT_NAME_FAMILIE[Familie]` → `EXPORT_NAME_DEFAULT`. Platzhalter `{datum}`, `{strategie}`, `{familie}`; Datumsformat global (`EXPORT_DATUM_FORMAT`) oder je Eintrag als Tupel `("Muster", "%Y%m%d")` — comdirect nutzt `yyyymmdd`, die übrigen `dd.mm.yyyy`. Die Endung `.pptx` wird automatisch angehängt; ein Sanitizer entfernt nur dateisystem-illegale Zeichen (`\ / : * ? " < > |`), behält Punkte/Leerzeichen.
+
+**Abhängigkeit (wichtig):** `download_helfer.py` reicht den Namen 1:1 durch (`a.download = json.dumps(dateiname)`), säubert NICHT — d. h. Punkte und Leerzeichen im Wunschnamen kommen exakt so an. Die tricky clientseitige Blob-Download-Mechanik blieb unangetastet (nur der übergebene String änderte sich).
+
+---
+
+### 38. Download-Button nach oben + kontextbezogener Familien-Hinweis (NEU 21.07.2026)
+
+Der komplette Export-Block (Cache-Invalidierung + „PowerPoint erstellen" + Download) wurde direkt UNTER den „📅 Momentaufnahme per …"-Hinweis verschoben, noch vor die Tabellen/Charts. Voraussetzung war ein **Abhängigkeits-Check**: alle genutzten Variablen (`pf_sel_1`, `df_pf_1`, `ad1`, `dur_1`, `pf_sel_2`, `show_compare_pf`, `pf_brutto_mwst` …) sind schon vor dem Hinweis verfügbar; `portfolios`/`perf_timeseries`/`performance_inputs` baut der Block selbst. Die **Cache-Invalidierung MUSS mitwandern** (sie entscheidet, ob der Download-Button erscheint) — sonst zeigt der Button veraltete Daten.
+
+Darunter ein **kontextbezogener Hinweis** (`_render_familien_hinweis`): nur bei Familien-Strategien, nennt Familie + alle Strategien (z. B. „Die CVV-Broschüre enthält immer alle 5 Strategien …, auch wenn oben nur ‚Konservativ' gewählt ist"). Der Text wird automatisch aus `FAMILIE_ALLE_STRATEGIEN` gezogen — neue Familie? Hinweis stimmt von allein. Bei Einzel-Strategien erscheint nichts. `download_bereich` byte-identisch, nur an anderer Stelle aufgerufen.
+
+---
+
+### 39. `_folien_config` — statische/dynamische Folien als geordnete Liste (NEU 21.07.2026, löst die Positions-Handarbeit aus #35 ab)
+
+Statt Positionen von Hand in `feste_bloecke`/`einmal_folien` zu pflegen (fehleranfällig, sobald eine Folie eingefügt wird), beschreibt man die Broschüre jetzt **Folie für Folie als geordnete Liste**; die Position ergibt sich aus dem Listenindex. Helfer `_folien_config(folien, rollen_optionen, entfernen)` in `portfolioanalyse.py`. Einträge (Label immer am Ende, REINE Doku — fließt nie in die Logik):
+
+- `("S", "Label")` — statische Folie (Generator fasst sie nie an)
+- `("<rolle>", n, "Label")` — dynamische Folie der Strategie n (0-basiert)
+- `("<rolle>", "*", "Label")` — Einmal-Folie (uebersicht / vergleich)
+
+**Neue statische Folie = EIN Eintrag einfügen** → alle folgenden Positionen verschieben sich automatisch, `erwartete_folien` stimmt von allein. Kein Umnummerieren mehr; die Config liest sich wie eine Landkarte der Broschüre (mit echten Folientiteln als Labels).
+
+comdirect, CVV, ESG, ETF sind umgestellt — je Familie per dict-Vergleich bewiesen, dass `_folien_config(...)` **exakt** die alte Hand-Config erzeugt (null Verhaltensänderung), und die Blöcke wurden aus den bewiesenen Listen generiert (kein Abtippfehler). `pptx_export.py` bleibt unangetastet. **Thema** läuft weiter im normalen Dupliziermodus (`block_reihenfolge`/`block_positionen`) und ist NICHT umgestellt (passt nicht 1:1 in die Liste).
+
+---
+
+### 40. Familienspezifische Ring-Optik — `FAMILIE_RING_FORMAT` (NEU 27.–28.07.2026) ⭐ die Grafik-Insights
+
+Die Ring-Optik (Grafik) ist jetzt **je Familie überschreibbar**, über einen CONFIG-Block in `chart_dynamik.py`. Nur gelistete Familien weichen ab; alle anderen nutzen `_RING_FORMAT_DEFAULT` → deren Ringe bleiben **byte-identisch** (per ALT-vs-NEU-XML-Vergleich bewiesen). CVV, ESG, ETF, Thema und comdirect teilen ein gemeinsames Dict `_RING_KRAEFTIG`; nur „Standard" (Strategien ohne Familie) bleibt auf dem Default-Look.
+
+**Die kräftige Optik (`_RING_KRAEFTIG`):**
+- `hole: 68` — dickerer, markanterer Ring (Default 79; kleiner = dicker)
+- `leader_breite_emu: 15875` — Führungslinien 1,25 pt (kräftig, aber nicht dominant)
+- `label_fett: True` — Prozentzahlen fett, bleiben schwarz (keine Größenänderung)
+- `punkte: True`, `punkt_durchmesser: 0.05` — kleine dezente Punkte am Label-Ende
+- `leader_start_tiefe: 0.5` — Ansatz auf die MITTE der Ringdicke
+- `leader_gerade: True` — ruhige gerade Linien statt harter Haken
+- `label_gap_in: 0.18` — Labels etwas luftiger außerhalb
+
+**Die zentralen Insights (teils per Screenshot-Iteration teuer erkauft):**
+
+1. **Leader starten BEWUSST im Ringband, nicht am Außenrand.** Der Ansatz liegt (per `leader_start_tiefe`, R_start = R_out − tiefe·(R_out−R_in)) in der Bandmitte; die Linie kommt sichtbar aus dem farbigen Segment. Ein Versuch, den Ansatz nach außen auf den „echten" Rand zu schieben (`leader_aussen_faktor`), wurde **ausdrücklich verworfen** — genau der Start IM Band ist gewollt. **Merke: das ist kein Bug, nicht „reparieren".**
+
+2. **PowerPoint zeichnet den Ring-Außenrand weiter außen als das aus `plotArea` berechnete `R_out`.** Beim dünnen Ring unauffällig, beim dicken Ring sichtbar. Das war die Quelle der Verwirrung „Linien starten im Ring" — es ist aber der gewünschte Effekt. (Diagnose: Bildvermessung + Render; LibreOffice taugt nicht, s. #28.)
+
+3. **Gerade, gleichartige Linien.** Der frühere Knick (radialer Teil + horizontaler Stub) wirkte als „harte technische Haken" und war uneinheitlich (mal Knick, mal gerade). `leader_gerade=True` macht ALLE Linien gerade → ruhig, gleichmäßig, bewusst gesetzt.
+
+4. **Punkte gehören ans Label-Ende** (`punkte[-1]`), nie an den Ring; klein/dezent (0,05").
+
+5. **Familien-Erkennungs-Falle (comdirect):** Die Ring-Optik greift über `_familie_aus_prs`, das die Familie am **Folientitel** erkennt (`_STRATEGIE_FAMILIE`, GETRENNT von `portfolioanalyse.py`s `_familie_fuer_strategie`). Der comdirect-Config-Eintrag allein bewirkte NICHTS, bis die comdirect-Titelformen ergänzt wurden — Struktur-Folien heißen „Anlagestrategie **Portfolioverwaltung** 30/70/100", Performance-Folien „**Comdirect** 30 | Wertentwicklung". Beide Formen sind jetzt im Mapping.
+
+6. **Thema behält, WELCHE Ringe Punkte bekommen:** nur Assetklassen-/Branchen-Ringe (`PUNKT_RINGTYPEN`), der Regionen-Ring NICHT — auch mit `punkte=True` (die Ringtyp-Regel bleibt).
+
+**Mechanik:** `nachbearbeiten` ermittelt die Familie einmal (`_fam = _familie_aus_prs(prs)`), holt `_fmt = _ring_format(_fam, hole_size, label_gap_in)` (löst `hole`/`label_gap_in` bei `None` auf die globalen Defaults auf) und reicht die Werte an `ring_holesize`, `ring_leader_zeichnen` (neu: `start_tiefe`, `gerade`, `breite_emu`, `punkt_durchmesser`) und `ring_label_schriftfarbe` (neu: `fett` → setzt `b="1"`) durch. Segmentfarben (`ring_segmentfarben`) und Datenlogik unverändert.
+
+**Zum Justieren** (alles Zahlen in `_RING_KRAEFTIG`, eine Stelle für alle fünf Familien; für eine abweichende Familie einen eigenen Block geben): Start tiefer ins Band → `leader_start_tiefe` 0,6–0,7. Linien kräftiger → `leader_breite_emu` z. B. 17462 (1,375 pt). Punkte kleiner → `punkt_durchmesser` z. B. 0,04. Labels luftiger → `label_gap_in` z. B. 0,20.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -2128,6 +2199,14 @@ mehr nötig.
 ---
 
 ## 16. Changelog
+
+### 21.–28.07.2026 – Familien-Ausbau, Export-Namen, Folienlisten-Config & kräftigere Ring-Optik
+- **comdirect-Familie** (Klassische Portfolioverwaltung, 27 Folien, 3 Strategien) — reine Config-Ergänzung. Transferwissen #36
+- **Konfigurierbare Export-Dateinamen** je Familie/Strategie (`EXPORT_NAME_*`), Namen kommen 1:1 durch den clientseitigen Download. #37
+- **Download-Button** direkt unter den „Momentaufnahme"-Hinweis verschoben + kontextbezogener Familien-Hinweis (`_render_familien_hinweis`). #38
+- **`_folien_config`** — statische/dynamische Folien als geordnete Liste (Position = Listenindex); comdirect/CVV/ESG/ETF umgestellt, jeweils byte-identisch zur alten Hand-Config belegt. #39
+- **`FAMILIE_RING_FORMAT`** — familienspezifische Ring-Optik. CVV/ESG/ETF/Thema/comdirect „kräftiger": dicker Ring (Loch 68), gerade Leader mittig im Band, kleine dezente Punkte (0,05"), fette schwarze Prozente, luftigere Labels; Nicht-gelistete (Standard) byte-identisch. Insight: Leader-Start IM Band ist gewollt (kein Bug); `leader_aussen_faktor` verworfen. #40
+- **Geänderte Dateien:** `portfolioanalyse.py`, `modules/pptx_slides.py`, `modules/chart_dynamik.py`
 
 ### 21.07.2026 – ETF-Familie eingebaut (additiv, byte-identisch belegt)
 - **ETF-Familie** (2 Strategien ETF_ausgewogen/ETF_Wachstum, Infoboard `Vorlage_ETF.pptx`, 35 Folien) in `portfolioanalyse.py` registriert — reine Config-Ergänzung (0 Zeilen entfernt), spiegelt ESG ohne Vergleichs-Chart. Transferwissen #35
