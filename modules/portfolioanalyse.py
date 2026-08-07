@@ -401,7 +401,7 @@ def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
 SPALTE_PP_FAMILIE = "Powerpoint Familie"
 
 
-def _folien_config(folien, rollen_optionen=None, entfernen=None):
+def _folien_config(folien, rollen_optionen=None, entfernen=None, modus="fest"):
     """Baut ein ``template_config`` aus einer GEORDNETEN Folienliste.
 
     Idee: Man beschreibt die Broschüre Folie für Folie in Reihenfolge — die
@@ -421,10 +421,39 @@ def _folien_config(folien, rollen_optionen=None, entfernen=None):
     zusammenstellung, rollierend, einzeltitel_themen (dynamisch) bzw.
     uebersicht, vergleich (einmal).
 
+    ── DIE ZWEI MODI (WICHTIG) ──────────────────────────────────────────────
+
+    ``modus="fest"`` (Default, Infoboard-Vorlagen: CVV/ESG/ETF/comdirect)
+        Die Vorlage enthält die Folien ALLER Strategien bereits vorgebaut,
+        oft mit strategiespezifischen Inhalten (z.B. der starre
+        Anlagekriterien-Kasten der CVV-Vorlage). Es wird NICHTS dupliziert,
+        nur an festen Positionen befüllt → ``feste_bloecke``.
+        Die Folienliste nennt hier jede Strategie einzeln (0, 1, 2, …).
+
+    ``modus="dupliziert"`` (Themen-Vorlage)
+        Die Vorlage enthält den dynamischen Block genau EINMAL; der Export
+        vervielfältigt ihn für so viele Strategien, wie übergeben werden
+        → ``block_positionen`` + ``block_reihenfolge``.
+        Die Folienliste nennt deshalb nur Strategie 0 — das ist die Vorlage
+        des Blocks, nicht "nur die erste Strategie".
+
+    Den Modus zu verwechseln ist die gefährliche Variante: Eine Vorlage mit
+    nur einem Block auf "fest" zu stellen liefert für jede weitere Strategie
+    stillschweigend KEINE Folien (der Export protokolliert es lediglich in
+    LAST_BUILD_ERRORS) — der Berater bekäme eine unvollständige Broschüre,
+    ohne dass etwas abstürzt.
+
     Erzeugt EXAKT die Struktur, die pptx_export.generate_portfolioanalyse_pptx
-    schon versteht (erwartete_folien / feste_bloecke / einmal_folien /
-    rollen_optionen / entfernen) — der Export bleibt unangetastet.
+    schon versteht — der Export bleibt unangetastet.
+
+    Raises:
+        ValueError: bei unbekanntem Modus, oder wenn eine dupliziert-Config
+            mehr als eine Strategie nennt bzw. ihr Block nicht zusammenhängt.
     """
+    if modus not in ("fest", "dupliziert"):
+        raise ValueError(f"_folien_config: unbekannter modus {modus!r} "
+                         f"(erlaubt: 'fest', 'dupliziert')")
+
     feste = {}    # strategie-index (int) -> {rolle: 1-indexierte Position}
     einmal = {}   # rolle -> 1-indexierte Position
     for i, eintrag in enumerate(folien):
@@ -438,18 +467,44 @@ def _folien_config(folien, rollen_optionen=None, entfernen=None):
         else:
             feste.setdefault(int(strat), {})[rolle] = pos
 
-    if feste:
-        # Liste in Strategie-Reihenfolge 0,1,2,... (fehlende Indizes -> leerer Block)
-        feste_bloecke = [feste.get(k, {}) for k in range(max(feste) + 1)]
-    else:
-        feste_bloecke = []
-
     cfg = {
         "erwartete_folien": len(folien),
         "entfernen": list(entfernen or []),
-        "feste_bloecke": feste_bloecke,
         "rollen_optionen": dict(rollen_optionen or {}),
     }
+
+    if modus == "dupliziert":
+        # Nur Strategie 0 darf vorkommen — sie beschreibt den Block, den der
+        # Export dann je Strategie dupliziert.
+        fremde = sorted(k for k in feste if k != 0)
+        if fremde:
+            raise ValueError(
+                f"_folien_config(modus='dupliziert'): die Folienliste nennt "
+                f"die Strategie-Indizes {fremde}. Im Dupliziermodus beschreibt "
+                f"Strategie 0 den Block, der vervielfältigt wird — weitere "
+                f"Indizes gehören nicht in die Liste.")
+        block = feste.get(0, {})
+        if not block:
+            raise ValueError("_folien_config(modus='dupliziert'): kein "
+                             "dynamischer Block in der Folienliste gefunden.")
+        # Reihenfolge = Reihenfolge in der Liste; Positionen müssen lückenlos
+        # aufeinanderfolgen, weil der Export den Block als Ganzes kopiert.
+        reihenfolge = sorted(block, key=lambda r: block[r])
+        positionen = [block[r] for r in reihenfolge]
+        if positionen != list(range(positionen[0], positionen[0] + len(positionen))):
+            raise ValueError(
+                f"_folien_config(modus='dupliziert'): der dynamische Block "
+                f"muss zusammenhängend sein, gefunden wurden die Positionen "
+                f"{positionen}. Statische Folien dürfen nicht dazwischen liegen.")
+        cfg["block_reihenfolge"] = reihenfolge
+        cfg["block_positionen"] = dict(block)
+    else:
+        if feste:
+            # Liste in Strategie-Reihenfolge 0,1,2,… (fehlende Indizes -> leerer Block)
+            cfg["feste_bloecke"] = [feste.get(k, {}) for k in range(max(feste) + 1)]
+        else:
+            cfg["feste_bloecke"] = []
+
     # einmal_folien NUR anlegen, wenn es Einmal-Folien gibt.
     if einmal:
         cfg["einmal_folien"] = einmal
@@ -457,20 +512,47 @@ def _folien_config(folien, rollen_optionen=None, entfernen=None):
 
 # Struktur-Block der THEMEN-Broschüren (Pro / Pro Dividende / Offensiv teilen
 # sich diese eine Vorlage + Struktur). Verifiziert an der echten Vorlage:
-# 21 Folien, dynamischer Block F10-F13 mit den Rollen einzeltitel_themen /
-# zusammenstellung / wertentwicklung / rollierend.
-_THEMA_CONFIG = {
-    "block_reihenfolge": ["einzeltitel_themen", "zusammenstellung",
-                          "wertentwicklung", "rollierend"],
-    "block_positionen": {
-        "einzeltitel_themen": 10,
-        "zusammenstellung": 11,
-        "wertentwicklung": 12,
-        "rollierend": 13,
-    },
-    "erwartete_folien": 21,
-    "entfernen": [],
-}
+# 21 Folien, dynamischer Block F10-F13.
+#
+# ALS EINZIGE FAMILIE IM DUPLIZIERMODUS (siehe _folien_config): Die Vorlage
+# enthält den Block genau EINMAL, der Export vervielfältigt ihn je Strategie.
+# Deshalb steht unten nur Strategie 0 — sie beschreibt den Block, nicht "die
+# erste Strategie". Das ist nötig, weil "Thema" NICHT in
+# FAMILIE_ALLE_STRATEGIEN steht: Der Berater wählt hier eine Strategie und
+# kann ein Vergleichsportfolio zuschalten, die Folienzahl steht also erst zur
+# Laufzeit fest. Auf "fest" umgestellt bekäme das Vergleichsportfolio
+# stillschweigend keine Folien.
+#
+# Umgestellt am 07.08.2026 von der handgeschriebenen Dict-Form auf
+# _folien_config — erzeugt beweisbar dasselbe template_config (siehe
+# tests/test_folien_config.py), aber in derselben lesbaren Folienliste wie
+# alle anderen Familien.
+_THEMA_CONFIG = _folien_config(
+    modus="dupliziert",
+    folien=[
+        ("S", "UNABHÄNGIG. WERTEORIENTIERT. PERSÖNLICH."),
+        ("S", "Unsere Strategie PRO"),
+        ("S", "Unsere Strategie PRO (Fortsetzung)"),
+        ("S", "Aktien – die guten Jahre überwiegen"),
+        ("S", "Die Fallstricke des typischen Investors"),
+        ("S", "Durchhalten zahlt sich aus"),
+        ("S", "Gute Jahre überwiegen"),
+        ("S", "Krise als Chance"),
+        ("S", "Basis unserer Investmententscheidungen"),
+        ("einzeltitel_themen", 0, "Einzeltitel (Tabelle + Assetklassen-Ring)"),
+        ("zusammenstellung", 0, "Aktuelle Portfoliozusammenstellung (Regionen + Branchen)"),
+        ("wertentwicklung", 0, "Anlagestrategie … | Wertentwicklung"),
+        ("rollierend", 0, "Wertentwicklung der Strategie … (rollierend)"),
+        ("S", "Unser Honorar"),
+        ("S", "Unser Honorar (Tabelle)"),
+        ("S", "Unsere Bank in Zahlen"),
+        ("S", "Unsere Standorte"),
+        ("S", "Unsere Standorte (Fortsetzung)"),
+        ("S", "Risikohinweise"),
+        ("S", "Rechtliche Hinweise und Impressum"),
+        ("S", "www.fuggerbank.de"),
+    ],
+)
 
 # Struktur der CVV-Broschüre ("cVV Infoboard", NEU 09.07.2026).
 #
