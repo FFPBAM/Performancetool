@@ -44,9 +44,10 @@ from modules.shared import (
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping, load_name_mapping,
     build_name_lookups, get_logo_aspect, get_logo_path,
-    to_decimal_interval,
     # CSV-Loader (07.08.2026): kommen jetzt von hier statt als lokale
     # Kopien weiter unten — eine Implementierung, ein Cache.
+    # (to_decimal_interval wird seitdem nur noch innerhalb von shared.py
+    # gebraucht und ist deshalb hier nicht mehr importiert.)
     load_all_csvs, build_portfolio_timeseries,
 )
 # Performance-Berechnungs-Funktionen (Single Source of Truth — siehe modules/analytics.py)
