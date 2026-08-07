@@ -166,6 +166,40 @@ def calc_max_drawdown(idx_after: Sequence[float]) -> Optional[float]:
     return float(np.min(dd))
 
 
+def has_benchmark(ret_bm) -> bool:
+    """Prüft, ob eine ECHTE Benchmark-Zeitreihe vorliegt.
+
+    WARUM NICHT `notna().any()` (BUGFIX 07.08.2026):
+    Infront liefert für Strategien ohne Vergleichsmaßstab keine leere Spalte,
+    sondern eine mit lauter NULLEN gefüllte. `notna().any()` ist dort True
+    (0.0 ist nicht NaN) — die Null-Reihe wurde deshalb als Benchmark
+    durchgerechnet. Betroffen sind "Muster SCHWEIZ Aktien" und "Muster
+    SCHWEIZ Substanz"; im Mapping_Namen.xlsx (Spalte D) steht bei beiden
+    ausdrücklich "Haben keine Benchmark".
+
+    Folgen vor dem Fix (an echten Daten reproduziert):
+        performance_pa_bench      0,00 %
+        volatilitaet_bench        0,00 %
+        sharpe_bench            -67,48      ← in einer Kundenbroschüre
+        max_drawdown_bench        0,00 %
+        Linien-Chart: flache Benchmark bei 100 %
+
+    Eine Benchmark gilt als vorhanden, sobald mindestens ein Wert ungleich
+    null ist. Einzelne Null-Tage (Wochenenden — rund 29 % aller Zeilen) sind
+    dagegen völlig normal und bleiben unberührt.
+
+    Args:
+        ret_bm: Benchmark-Tagesrenditen (Series, Array oder Liste)
+
+    Returns:
+        True, wenn mindestens ein Wert vorhanden UND ungleich null ist.
+    """
+    werte = pd.Series(ret_bm).dropna()
+    if werte.empty:
+        return False
+    return bool((werte != 0).any())
+
+
 def calc_sharpe_excess(daily_returns_after_fee: Sequence[float],
                        rf_annual_series: Sequence[float]) -> Optional[float]:
     """Sharpe Ratio nach Sharpe (1994) — tägliche Excess Returns.
@@ -243,7 +277,9 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
         return {"kennzahlen": {}, "performance_pa": {}, "wertentwicklung": {}}
 
     rp = df["ret_port"].to_numpy(float)
-    has_bm = "ret_bm" in df.columns and df["ret_bm"].notna().any()
+    # has_benchmark statt notna().any(): eine Spalte aus lauter Nullen ist
+    # KEINE Benchmark — siehe Docstring dort (Bugfix 07.08.2026).
+    has_bm = "ret_bm" in df.columns and has_benchmark(df["ret_bm"])
     rb = df["ret_bm"].fillna(0.0).to_numpy(float) if has_bm else None
     has_rf = "rf" in df.columns and df["rf"].notna().any()
     rf = df["rf"] if has_rf else pd.Series([0.0] * len(rp))

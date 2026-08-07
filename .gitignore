@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────
+# NIEMALS committen — Zugangsdaten
+# ─────────────────────────────────────────────────────────────────────────
+# Enthaelt die Login-Passwoerter der App (st.secrets["passwords"], siehe
+# modules/shared.py check_login). Das Repo ist oeffentlich — diese Datei
+# darf es unter keinen Umstaenden erreichen.
+.streamlit/secrets.toml
+secrets.toml
+*.env
+
+# ─────────────────────────────────────────────────────────────────────────
+# Python
+# ─────────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ─────────────────────────────────────────────────────────────────────────
+# Office-Sperrdateien (entstehen beim Oeffnen der Mappings/Vorlagen)
+# ─────────────────────────────────────────────────────────────────────────
+~$*.xlsx
+~$*.pptx
+~$*.docx
+
+# ─────────────────────────────────────────────────────────────────────────
+# Betriebssystem
+# ─────────────────────────────────────────────────────────────────────────
+Thumbs.db
+desktop.ini
+.DS_Store
