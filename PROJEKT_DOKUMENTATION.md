@@ -1421,6 +1421,37 @@ def has_benchmark(ret_bm) -> bool:
 
 ---
 
+### 42. Vorlagen-Rahmen wandern NICHT mit den Daten (BUG, NEU 07.08.2026) ⭐
+
+**Situation:** Eine PPTX-Vorlagentabelle ist optisch vorstrukturiert — dicke Trennstriche unter den Kategorie-Überschriften, dünne zwischen den Positionen. Der Code füllt die Zeilen dann mit echten Daten.
+
+**Falle:** `set_cell_text` schreibt Text und Fettung, **fasst Rahmenlinien aber nie an**. Die Striche bleiben an ihren Vorlagen-Positionen kleben, während die Kategorien je nach Portfolio ganz woanders beginnen. Das Ergebnis sieht auf den ersten Blick sauber aus — es ist ja *eine* Linie da —, sitzt aber falsch.
+
+**Konkret:** In der CVV-Broschüre „Defensiv" lief der dicke Strich mitten durch die Rentenliste zwischen *Fraport* und *Fresenius*, während der Übergang *Würth Finance* → **AKTIEN** gar keinen bekam. Über alle fünf Familien: **80 falsch platzierte Trennstriche**. Aufgefallen ist es einem Menschen beim Draufschauen, keinem Test.
+
+**Regel (fachlich festgelegt, Philip 07.08.2026):** Dicker Strich **nur unter der Kategorie-Überschrift**; zwischen Positionen und vor der nächsten Überschrift die dünne Linie.
+
+```
+Würth Finance IHS 3 %     ← dünn darunter
+AKTIEN                    ← DICK darunter
+Future of Defence ETF     ← dünn darunter
+```
+
+**Lösung:** `pptx_slides.tabelle_kategorie_trennlinien(table)` — läuft NACH dem Befüllen und nach `remove_empty_table_rows` (sonst stimmen die Zeilenindizes nicht mehr).
+
+Zwei Umsetzungsdetails, die den Unterschied machen:
+
+1. **Linienarten aus der Tabelle ERNTEN statt nachbauen.** Pro Spalte werden die dickste und die dünnste vorhandene Unterkante gesucht und per `_zelle_rahmen_uebernehmen` kopiert. So bleiben Stärke, Farbe und Strichart der Vorlage exakt erhalten — ein nachgebauter Rahmen träfe das Corporate Design nie.
+2. **An jeder Zeilengrenze BEIDSEITIG setzen** (`lnB` oben, `lnT` unten). Renderer führen angrenzende Zellrahmen zusammen; setzt man nur eine Seite, gewinnt mal die eine, mal die andere. (Dasselbe Prinzip steht schon in `tabelle_abstandszeile_einfuegen`.)
+
+**Kategorie-Erkennung** über die Fettung der ersten Spalte — `fill_table_with_positions` schreibt Gruppennamen mit `is_bold=True`, Positionen mit `is_bold=False`. Das Merkmal sitzt damit am Ergebnis, nicht an einer parallel gepflegten Liste.
+
+**Übertragbar:** Bei JEDER vorstrukturierten Vorlagentabelle gilt — was der Code nicht aktiv setzt, bleibt auf dem Stand der Vorlage. Das betrifft Rahmen, Hintergrundfarben, Zeilenhöhen und Zellverbünde gleichermaßen. Wenn Daten die Struktur verschieben können, muss die Optik mitgezogen werden.
+
+**Prüfstein:** `tests/test_trennstriche.py <ordner>` — prüft erzeugte Broschüren gegen die Regel. Verifiziert: rot auf dem alten Stand, grün nach dem Fix.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026

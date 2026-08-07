@@ -1214,6 +1214,16 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
                                   shape_height=table_shape.height, spalten_map=spalten_map)
         # Leere Zeilen entfernen (nur relevant falls Kapazität > benötigt)
         remove_empty_table_rows(table_shape.table, spalten_map=spalten_map)
+        # Trennstriche an die TATSÄCHLICHEN Kategoriegrenzen setzen (NEU
+        # 07.08.2026). Muss NACH dem Entfernen leerer Zeilen laufen, sonst
+        # stimmen die Zeilenindizes nicht mehr. Reine Kosmetik — ein Fehler
+        # hier darf den Export nicht abbrechen.
+        try:
+            tabelle_kategorie_trennlinien(table_shape.table)
+        except Exception as exc:
+            EINZELTITEL_WARNUNGEN.append(
+                f"Trennstriche der Positionstabelle konnten nicht gesetzt "
+                f"werden: {type(exc).__name__}: {exc}")
         # Shape-Höhe an tatsächliche Zeilenanzahl anpassen (staucht/streckt je
         # nach Bedarf; ensure_table_capacity in fill_table_with_positions hat
         # vorher bereits ggf. zusätzliche Zeilen geklont)
@@ -1438,6 +1448,125 @@ def _zelle_rahmen_uebernehmen(ziel_cell, quell_cell, ziel_tag: str, quell_tag: s
         else:
             z_tcPr.insert(0, neu)
     return True
+
+
+def _linien_breite_pt(cell, tag: str):
+    """Stärke einer Rahmenlinie in Punkt, oder None wenn keine/abgeschaltet."""
+    tcPr = cell._tc.find(qn("a:tcPr"))
+    if tcPr is None:
+        return None
+    el = tcPr.find(qn("a:" + tag))
+    if el is None or el.find(qn("a:noFill")) is not None:
+        return None
+    w = el.get("w")
+    return int(w) / 12700.0 if w else None
+
+
+def _ist_gruppenzeile(cell) -> bool:
+    """Kategorie-Kopfzeile? = erste Spalte fett UND nicht leer.
+
+    fill_table_with_positions schreibt Gruppennamen (RENTEN, AKTIEN,
+    EDELMETALLE, LIQUIDITÄT) mit is_bold=True, Positionen mit is_bold=False —
+    die Fettung ist damit das verlässliche Merkmal direkt am Ergebnis.
+    """
+    if not " ".join(cell.text_frame.text.split()):
+        return False
+    for p in cell.text_frame.paragraphs:
+        for run in p.runs:
+            if run.font.bold:
+                return True
+    return False
+
+
+def tabelle_kategorie_trennlinien(table, kopf_zeilen: int = 1,
+                                  letzte_zeilen: int = 1) -> int:
+    """Setzt den DICKEN Trennstrich genau unter jede Kategorie-Überschrift.
+
+    PROBLEM (gefunden 07.08.2026 an der CVV-Broschüre "Defensiv"):
+    fill_table_with_positions schreibt zwar Text und Fettung in die Zeilen,
+    fasst die Rahmenlinien aber nie an. Die dicken Trennstriche blieben
+    deshalb dort stehen, wo die VORLAGE ihre Gruppen hatte — unabhängig
+    davon, wo die Kategorien nach dem Befüllen tatsächlich beginnen. Bei
+    "Defensiv" lief der dicke Strich mitten durch die Rentenliste (zwischen
+    Fraport und Fresenius), während der Übergang Würth → AKTIEN gar keinen
+    bekam. Über alle Familien waren es 80 falsch platzierte Striche.
+
+    REGEL (festgelegt mit Philip, 07.08.2026): dicker Strich NUR unter der
+    Kategorie-Überschrift; zwischen den Positionen und vor der nächsten
+    Überschrift steht die dünne Linie.
+
+        Würth Finance IHS 3 %     ← dünn darunter
+        AKTIEN                    ← DICK darunter
+        Future of Defence ETF     ← dünn darunter
+
+    MECHANIK: Die beiden Linienarten werden aus der Tabelle selbst geerntet
+    (dickste bzw. dünnste vorhandene Unterkante) und per
+    _zelle_rahmen_uebernehmen kopiert — nicht nachgebaut. So bleiben Stärke,
+    Farbe und Strichart der Vorlage exakt erhalten, spaltenweise.
+    Wie in tabelle_abstandszeile_einfuegen dokumentiert, wird an jeder
+    Zeilengrenze BEIDSEITIG gesetzt (lnB oben, lnT unten), weil Renderer
+    angrenzende Zellrahmen zusammenführen.
+
+    Args:
+        table: die Tabelle (shape.table)
+        kopf_zeilen: Anzahl Kopfzeilen, die unberührt bleiben
+        letzte_zeilen: Anzahl Schlusszeilen (Summe/Abstand), die unberührt
+            bleiben — die regelt tabelle_abschlusslinie_sichern
+
+    Returns:
+        Anzahl der gesetzten Zeilengrenzen (0 = nichts getan).
+    """
+    zeilen = list(table.rows)
+    erste = kopf_zeilen
+    letzte = len(zeilen) - 1 - letzte_zeilen      # letzte Datenzeile
+    if letzte - erste < 1:
+        return 0
+
+    n_spalten = len(list(zeilen[erste].cells))
+
+    # ── Linienarten spaltenweise aus der Tabelle ernten ──────────────────
+    # Pro Spalte die Zelle mit der dicksten und der dünnsten Unterkante.
+    dick_quelle, duenn_quelle = {}, {}
+    for spalte in range(n_spalten):
+        breiteste = schmalste = None
+        b_max = b_min = None
+        for r in range(erste, letzte + 1):
+            zellen = list(zeilen[r].cells)
+            if spalte >= len(zellen):
+                continue
+            cell = zellen[spalte]
+            w = _linien_breite_pt(cell, "lnB")
+            if w is None:
+                continue
+            if b_max is None or w > b_max:
+                b_max, breiteste = w, cell
+            if b_min is None or w < b_min:
+                b_min, schmalste = w, cell
+        # Nur brauchbar, wenn es WIRKLICH zwei verschiedene Stärken gibt
+        if breiteste is not None and schmalste is not None and b_max > b_min:
+            dick_quelle[spalte] = breiteste
+            duenn_quelle[spalte] = schmalste
+
+    if not dick_quelle:
+        return 0        # Tabelle kennt keine zwei Linienarten → nichts tun
+
+    # ── Grenzen setzen ──────────────────────────────────────────────────
+    gesetzt = 0
+    for r in range(erste, letzte):
+        oben = list(zeilen[r].cells)
+        unten = list(zeilen[r + 1].cells)
+        # Dick, wenn DIESE Zeile eine Kategorie-Überschrift ist
+        quellen = dick_quelle if _ist_gruppenzeile(oben[0]) else duenn_quelle
+        for spalte in range(n_spalten):
+            quelle = quellen.get(spalte)
+            if quelle is None:
+                continue
+            if spalte < len(oben):
+                _zelle_rahmen_uebernehmen(oben[spalte], quelle, "lnB", "lnB")
+            if spalte < len(unten):
+                _zelle_rahmen_uebernehmen(unten[spalte], quelle, "lnT", "lnB")
+        gesetzt += 1
+    return gesetzt
 
 
 def tabelle_abschlusslinie_sichern(table, kopf_zeilen: int = 1) -> bool:
@@ -1796,6 +1925,13 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
         #     die klare Trennung übernimmt die dicke Linie über "Gesamt".
         #     VOR der Abstandszeile (Indizes!).
         tabelle_abschlusslinie_sichern(t)
+
+        # 1c. Dicke Trennstriche an die TATSÄCHLICHEN Kategoriegrenzen setzen
+        #     (NEU 07.08.2026). Ohne diesen Schritt bleiben sie dort stehen,
+        #     wo die Vorlage ihre Gruppen hatte. Nach 1b, damit die
+        #     vereinheitlichte Unterkante der letzten Datenzeile erhalten
+        #     bleibt (letzte_zeilen=1 lässt sie unberührt).
+        tabelle_kategorie_trennlinien(t)
 
         # 2. Linienlose Abstandszeile vor die Gesamt-Zeile.
         tabelle_abstandszeile_einfuegen(t)
