@@ -5,6 +5,7 @@ import os
 import re
 import glob
 import io
+import hmac
 import datetime as dt
 
 import numpy as np
@@ -79,7 +80,15 @@ def check_login() -> bool:
     def verify_password() -> bool:
         username = st.session_state.get("username_input", "").strip()
         password = st.session_state.get("password_input", "")
-        if username in USERS and USERS[username] == password:
+        if username not in USERS:
+            return False
+        # hmac.compare_digest statt "==" (07.08.2026): vergleicht in
+        # konstanter Zeit und verrät damit nicht über die Antwortdauer,
+        # wie viele Zeichen des Passworts bereits stimmen. Der normale
+        # ==-Vergleich bricht beim ersten falschen Zeichen ab.
+        erwartet = str(USERS[username]).encode("utf-8")
+        eingabe = str(password).encode("utf-8")
+        if hmac.compare_digest(erwartet, eingabe):
             st.session_state.logged_in = True
             st.session_state.username = username
             return True
@@ -235,10 +244,20 @@ def extract_benchmark_name(vv):
 
 @st.cache_data(show_spinner=True)
 def load_all_csvs(data_folder, date_tag, exclude_substrings):
-    """Lädt alle Performance-CSVs für einen date_tag aus dem data_folder."""
-    pattern = os.path.join(data_folder, f"*_{date_tag}_*.CSV")
-    files = glob.glob(pattern)
-    return [p for p in files if not any(sub in os.path.basename(p) for sub in exclude_substrings)]
+    """Lädt alle Performance-CSVs für einen date_tag aus dem data_folder.
+
+    Sucht .CSV UND .csv (07.08.2026): Streamlit Cloud läuft auf Linux und
+    unterscheidet Groß-/Kleinschreibung — eine klein geschriebene Datei wäre
+    dort stillschweigend verschwunden, während detect_newest_date_tag ihren
+    Tag trotzdem gefunden hätte. Ergebnis wäre die irreführende Meldung
+    "Keine Dateien für Tag X" gewesen, obwohl die Datei vorhanden ist.
+    Unter Windows liefern beide Muster dieselben Treffer → set() dedupliziert.
+    """
+    files = set()
+    for endung in ("CSV", "csv"):
+        files.update(glob.glob(os.path.join(data_folder, f"*_{date_tag}_*.{endung}")))
+    return sorted(p for p in files
+                  if not any(sub in os.path.basename(p) for sub in exclude_substrings))
 
 
 @st.cache_data(show_spinner=True)

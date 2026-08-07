@@ -15,8 +15,6 @@ Hinweis: Tab 'Portfolio zusammenstellen' wurde deaktiviert (Modul
 modules/portfolio_builder.py bleibt im Repo, wird aber nicht importiert).
 """
 import os
-import re
-import glob
 import io
 import datetime as dt
 
@@ -47,6 +45,9 @@ from modules.shared import (
     detect_newest_date_tag, load_mapping, load_name_mapping,
     build_name_lookups, get_logo_aspect, get_logo_path,
     to_decimal_interval,
+    # CSV-Loader (07.08.2026): kommen jetzt von hier statt als lokale
+    # Kopien weiter unten — eine Implementierung, ein Cache.
+    load_all_csvs, build_portfolio_timeseries,
 )
 # Performance-Berechnungs-Funktionen (Single Source of Truth — siehe modules/analytics.py)
 from modules.analytics import (
@@ -60,6 +61,7 @@ from modules.analytics import (
     calc_sharpe_excess as _ana_calc_sharpe_excess,
     calc_period_return as _ana_calc_period_return,
     calc_period_return_after_fee as _ana_calc_period_return_after_fee,
+    has_benchmark,
 )
 from modules.portfolioanalyse import render_portfolioanalyse
 
@@ -229,7 +231,9 @@ def compute_bar_data(df, fee_dec, mode, label, custom_start=None, custom_end=Non
     def _add(pl, sub):
         if sub.empty: return
         rp = sub["ret_port"].fillna(0.0).to_numpy(float); rb = sub["ret_bm"].fillna(0.0).to_numpy(float)
-        has_bm = sub["ret_bm"].notna().any()
+        # has_benchmark statt notna().any(): eine Spalte aus lauter Nullen
+        # ist keine Benchmark (Bugfix 07.08.2026, siehe analytics.py).
+        has_bm = has_benchmark(sub["ret_bm"])
         rows.append({"label": pl, f"{label} (nach Kosten)": calc_period_return_after_fee(rp, fee_dec)*100,
             "ret_bm_raw": calc_period_return(rb)*100 if has_bm else None})
     if mode == "Kalenderjahre":
@@ -577,52 +581,20 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
     doc.build(story); buf.seek(0); return buf.getvalue()
 
 # Data loading
-@st.cache_data(show_spinner=True)
-def load_all_csvs(data_folder, date_tag, exclude_substrings):
-    pattern=os.path.join(data_folder,f"*_{date_tag}_*.CSV"); files=glob.glob(pattern)
-    return [p for p in files if not any(sub in os.path.basename(p) for sub in exclude_substrings)]
-
-def read_one_csv(path):
-    return pd.read_csv(path,comment="#",encoding="ISO-8859-1",delimiter=";",decimal=",",thousands=".",dtype=str)
-
-def parse_dates_col(vv): return pd.to_datetime(vv["Datum"],format="%d.%m.%Y",errors="raise")
-
-def extract_benchmark_name(vv):
-    for c in ["Benchmark Name","Benchmark","Benchmarkname","Benchmark Name ","Benchmark-Bezeichnung"]:
-        if c in vv.columns:
-            v=vv.loc[0,c]
-            if pd.notna(v) and str(v).strip(): return str(v).strip()
-    return "Benchmark"
-
-@st.cache_data(show_spinner=True)
-def build_portfolio_timeseries(files, mapping):
-    out={}
-    for path in files:
-        vv=read_one_csv(path); pn=vv.loc[0,"Portfolio Name"]; bn=extract_benchmark_name(vv); dates=parse_dates_col(vv)
-        vv["Performance [%] (Intervall)"]=vv["Performance [%] (Intervall)"].astype(str).str.replace(",",".").astype(float)
-        rp=to_decimal_interval(vv.loc[1:,"Performance [%] (Intervall)"]); rb=None
-        if "Benchmark Performance [%] (Intervall)" in vv.columns:
-            vv["Benchmark Performance [%] (Intervall)"]=vv["Benchmark Performance [%] (Intervall)"].astype(str).str.replace(",",".").astype(float)
-            rb=to_decimal_interval(vv.loc[1:,"Benchmark Performance [%] (Intervall)"])
-        # NEU: Risikofreier Zins (annualisiert, dezimal) – Spalte ersetzte frühere "Währung"
-        rf_arr = None
-        if "Risiko freier Zins" in vv.columns:
-            try:
-                vv["Risiko freier Zins"] = vv["Risiko freier Zins"].astype(str).str.replace(",", ".").astype(float)
-                rf_raw = vv.loc[1:, "Risiko freier Zins"].to_numpy(dtype=float)
-                # Falls Werte > 1 (z.B. 3.928 statt 0.03928) → durch 100
-                if np.nanmedian(np.abs(rf_raw[~np.isnan(rf_raw)])) > 1.0:
-                    rf_raw = rf_raw / 100.0
-                rf_arr = rf_raw
-            except Exception:
-                rf_arr = None
-        try: fd=float(mapping.loc[mapping["Inhaber"]==pn,"Honorarsatz Standard"].values[0])
-        except: fd=0.0
-        idx=dates.iloc[1:].reset_index(drop=True); df=pd.DataFrame(index=idx); df.index.name="Datum"
-        df["ret_port"]=rp; df["ret_bm"]=rb if (rb is not None and len(rb)==len(df)) else np.nan
-        df["rf"] = rf_arr if (rf_arr is not None and len(rf_arr) == len(df)) else np.nan
-        df["fee_default"]=fd; df=df.sort_index(); df.attrs["benchmark_name"]=bn; out[pn]=df
-    return out
+# ENTFERNT 07.08.2026: Hier standen bis dahin EIGENE Kopien von
+# load_all_csvs / read_one_csv / parse_dates_col / extract_benchmark_name /
+# build_portfolio_timeseries — Zeile für Zeile identisch zu modules/shared.py.
+#
+# Warum das ein Problem war:
+#   • Der Performance-Tab nutzte die lokalen Kopien, Portfolioanalyse und
+#     PPTX-Export die aus shared.py. Zwei @st.cache_data-Funktionen mit
+#     gleichem Inhalt = zwei getrennte Caches → alle CSVs wurden doppelt
+#     geparst und doppelt im Speicher gehalten.
+#   • Wären die Kopien je auseinandergelaufen, hätten Tool-Anzeige und
+#     Broschüre verschiedene Zahlen gezeigt — genau das, was die
+#     Konsistenz-Doktrin (Doku 10.8) verhindern soll.
+#
+# Die Funktionen kommen jetzt aus modules.shared (Import ganz oben).
 
 
 # ==========================================================================
@@ -953,12 +925,16 @@ if ansicht == _VIEW_PERF:
     if sv:
         _add_line(xd, ib1, f"{l1} – vor Kosten")
         if ib2 is not None: _add_line(xd, ib2, f"{l2} – vor Kosten")
-    if sb and df1["ret_bm"].notna().any():
+    if sb and has_benchmark(df1["ret_bm"]):
         rbm1=df1["ret_bm"].fillna(0).to_numpy(float); ibm1=make_index_from_returns(rbm1,sw)
         _add_line(xd, ibm1, f"BM {l1}: {bn1}")
-        if df2 is not None and df2["ret_bm"].notna().any():
+        if df2 is not None and has_benchmark(df2["ret_bm"]):
             rbm2=df2["ret_bm"].fillna(0).to_numpy(float); ibm2=make_index_from_returns(rbm2,sw)
             _add_line(xd, ibm2, f"BM {l2}: {bn2}")
+    elif sb:
+        # Ohne Benchmark wurde bisher stillschweigend eine flache Linie bei
+        # 100 gezeichnet — jetzt sagen wir, warum nichts zu sehen ist.
+        st.caption("ℹ️ Für diese Strategie ist keine Benchmark hinterlegt.")
     # rf-Linie (nur eine, da für gleichen Zeitraum identisch)
     rf_idx = None
     if sb_rf and not rf_series_1.empty and rf_series_1.notna().any():
@@ -1061,9 +1037,9 @@ if ansicht == _VIEW_PERF:
     if ia2 is not None: plt_.append((f"{l2} – {nk_label} ({eff_fee_2:.2f}%)",ia2))
     if sv: plt_.append((f"{l1} – vK",ib1));
     if sv and ib2 is not None: plt_.append((f"{l2} – vK",ib2))
-    if sb and df1["ret_bm"].notna().any():
+    if sb and has_benchmark(df1["ret_bm"]):
         plt_.append((f"BM {l1}: {bn1}",make_index_from_returns(df1["ret_bm"].fillna(0).to_numpy(float),sw)))
-        if df2 is not None and df2["ret_bm"].notna().any():
+        if df2 is not None and has_benchmark(df2["ret_bm"]):
             plt_.append((f"BM {l2}: {bn2}",make_index_from_returns(df2["ret_bm"].fillna(0).to_numpy(float),sw)))
     # rf-Linie ins PDF wenn aktiv UND Daten vorhanden
     if sb_rf and rf_idx is not None:
