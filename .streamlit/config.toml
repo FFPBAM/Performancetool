@@ -1,0 +1,12 @@
+# .streamlit/config.toml
+#
+# ACHTUNG: Der Ordner MUSS mit einem Punkt beginnen. Streamlit liest
+# ausschliesslich  .streamlit/config.toml  — ein Ordner "streamlit" ohne
+# Punkt wird stillschweigend ignoriert und die Einstellungen hier wirken
+# dann nicht. Genau das war von Anfang an der Fall (repariert 07.08.2026);
+# der Punkt geht beim Anlegen ueber die GitHub-Weboberflaeche leicht
+# verloren, siehe Transferwissen #23.
+
+[client]
+# Schlanke Toolbar (kein "Deploy"-Button, kein Quellcode-Menue fuer Berater).
+toolbarMode = "minimal"
