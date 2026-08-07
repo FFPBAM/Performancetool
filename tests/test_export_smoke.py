@@ -91,7 +91,7 @@ def _portfolio(name, d):
 
 def _perf_inputs(portfolios, d, familie=""):
     """Wie render_portfolioanalyse die performance_inputs baut — inklusive
-    Beschneiden auf den Historien-Beginn der Familie (FAMILIE_HISTORIE_AB)."""
+    Beschneiden auf den Historien-Beginn der Datenreihe (HISTORIE_AB)."""
     raus = []
     for name, _df, _ad, dur in portfolios:
         csv_n = d["d2c"].get(name)
@@ -105,7 +105,7 @@ def _perf_inputs(portfolios, d, familie=""):
             bm = str(bm).strip()
         ts = d["ts"].get(csv_n) if csv_n else None
         raus.append({
-            "timeseries_df": historie_beschneiden(ts, familie),
+            "timeseries_df": historie_beschneiden(ts, csv_n),
             "fee_dec": float(treffer.values[0]) if len(treffer) else 0.0,
             "duration": dur.get("duration") if isinstance(dur, dict) else None,
             "benchmark_text": bm,

@@ -1,19 +1,25 @@
-"""Prueft den Historien-Beginn je Familie (FAMILIE_HISTORIE_AB).
+"""Prueft den Historien-Beginn je Datenreihe (HISTORIE_AB).
 
 REGEL (festgelegt mit Philip am 07.08.2026):
-    Die fuenf klassischen CVV-Strategien liefern als erste Datenpunkte den
+    Die klassischen cVV-Datenreihen liefern als erste Datenpunkte den
     30.12. und 31.12.2008 — zwei Tage. Daraus "Wertentwicklung seit 2008"
     zu schreiben suggeriert einen Track Record ueber 2008, den es nicht
     gibt. Gerechnet und ausgewiesen wird deshalb ab dem 01.01.2009; der
     31.12.2008 bleibt als Indexbasis (100 %) stehen.
 
+    Der Schluessel ist die DATENREIHE, nicht die Familie: "Offensiv" liegt
+    in der Familie Thema, nutzt aber "Muster offensiv cVV" (frueher eine
+    cVV-Strategie) und ist genauso betroffen — Pro und Pro Dividende
+    derselben Familie dagegen nicht.
+
 Geprueft wird:
-  1. cVV-Zeitreihen beginnen nach dem Beschneiden am 01.01.2009
-  2. spaeter aufgelegte Strategien (Dynamic, 2018) bleiben unberuehrt
-  3. Familien OHNE Eintrag bleiben unberuehrt (ESG/ETF/comdirect/Thema)
+  1. jeder HISTORIE_AB-Eintrag existiert wirklich in den Daten
+     (faengt Tippfehler und spaetere Umbenennungen durch Infront ab)
+  2. konfigurierte Reihen beginnen danach am hinterlegten Datum
+  3. alle uebrigen Reihen bleiben unveraendert
   4. die Beschriftung leitet sich korrekt ab: auflage_jahr == 2009
 
-Braucht nur pandas/numpy — laeuft ohne Streamlit-Umgebung:
+Braucht nur pandas — laeuft ohne Streamlit-Umgebung:
 
     python tests/test_historie_ab.py
 """
@@ -28,33 +34,9 @@ import pandas as pd
 WURZEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, WURZEL)
 
-from modules.vorlagen_config import FAMILIE_HISTORIE_AB       # noqa: E402
+from modules.vorlagen_config import HISTORIE_AB               # noqa: E402
 
 DATEN = os.path.join(WURZEL, "Daten")
-
-# Portfolio-Name (CSV) -> Familie
-FAMILIE_JE_PORTFOLIO = {
-    "Muster konservativ cVV":   "CVV",
-    "Muster defensiv cVV":      "CVV",
-    "Muster Defensiv Plus cVV": "CVV",
-    "Muster ausgewogen cVV":    "CVV",
-    "Muster Dynamic cVV":       "CVV",
-    "ESG Muster defensiv":      "ESG",
-    "Comdirect 30":             "comdirect",
-    "Muster FFPB Pro":          "Thema",
-}
-
-# Erwartet: erster Tag NACH dem Beschneiden
-ERWARTET = {
-    "Muster konservativ cVV":   "2009-01-01",
-    "Muster defensiv cVV":      "2009-01-01",
-    "Muster Defensiv Plus cVV": "2009-01-01",
-    "Muster ausgewogen cVV":    "2009-01-01",
-    "Muster Dynamic cVV":       "2018-10-06",   # 2018 aufgelegt -> unberuehrt
-    "ESG Muster defensiv":      "2020-10-01",   # Familie ohne Eintrag
-    "Comdirect 30":             "2024-03-12",
-    "Muster FFPB Pro":          "2023-09-01",
-}
 
 
 def _neuester_tag():
@@ -91,57 +73,69 @@ def main():
         print(f"FEHLER: keine CSVs in {DATEN}")
         return 1
 
-    print(f"Konfiguration: {FAMILIE_HISTORIE_AB}\n")
-    print(f"{'Portfolio':28s} {'Familie':10s} {'vorher':12s} {'nachher':12s} "
-          f"{'erwartet':12s}  Ergebnis")
-    print("-" * 92)
-
-    fehler = 0
-    gesehen = set()
+    reihen = {}
     for pfad in sorted(glob.glob(os.path.join(DATEN, f"*_{tag}_*.CSV"))):
         name, df = _zeitreihe(pfad)
-        if name not in ERWARTET:
-            continue
-        gesehen.add(name)
-        familie = FAMILIE_JE_PORTFOLIO.get(name, "")
-        vorher = str(df.index.min().date())
-        gekuerzt = historie_beschneiden(df, familie)
-        nachher = str(gekuerzt.index.min().date())
-        soll = ERWARTET[name]
-        ok = nachher == soll
+        reihen[name] = df
+
+    fehler = 0
+
+    # ── 1. Konfiguration zeigt auf existierende Reihen ───────────────────
+    print("1. Konfigurierte Datenreihen existieren")
+    unbekannt = [k for k in HISTORIE_AB if k not in reihen]
+    if unbekannt:
+        fehler += len(unbekannt)
+        print(f"   FEHLER — nicht in den Daten: {', '.join(unbekannt)}")
+        print("   (Tippfehler, oder Infront hat die Reihe umbenannt)")
+    else:
+        print(f"   OK — alle {len(HISTORIE_AB)} Eintraege gefunden")
+
+    # ── 2. + 3. Wirkung je Reihe ─────────────────────────────────────────
+    print(f"\n2. Wirkung auf alle {len(reihen)} Datenreihen")
+    print(f"   {'Datenreihe':28s} {'vorher':12s} {'nachher':12s} Ergebnis")
+    print("   " + "-" * 70)
+    for name in sorted(reihen):
+        df = reihen[name]
+        vorher = df.index.min()
+        nachher = historie_beschneiden(df, name).index.min()
+        soll_ab = HISTORIE_AB.get(name)
+        if soll_ab:
+            # Konfiguriert: muss genau am Stichtag beginnen (oder spaeter,
+            # falls die Reihe ohnehin erst danach anfaengt)
+            erwartet = max(pd.Timestamp(soll_ab), vorher)
+        else:
+            erwartet = vorher            # unberuehrt
+        ok = nachher == erwartet
         if not ok:
             fehler += 1
-        print(f"{name:28s} {familie:10s} {vorher:12s} {nachher:12s} {soll:12s}  "
-              f"{'OK' if ok else 'FEHLER'}")
+        marke = "  <- beschnitten" if nachher != vorher else ""
+        print(f"   {name[:28]:28s} {str(vorher.date()):12s} "
+              f"{str(nachher.date()):12s} {'OK' if ok else 'FEHLER'}{marke}")
 
-    fehlend = set(ERWARTET) - gesehen
-    if fehlend:
-        print(f"\nHINWEIS: nicht in den Daten gefunden: {', '.join(sorted(fehlend))}")
-
-    # ── Beschriftung: leitet sich das Auflagejahr korrekt ab? ────────────
-    print("\nBeschriftung der Wertentwicklungs-Folie")
+    # ── 4. Beschriftung der Wertentwicklungs-Folie ───────────────────────
+    print("\n3. Beschriftung leitet sich korrekt ab")
     try:
         from modules.pptx_export import compute_wertentwicklung_data
-        pfade = glob.glob(os.path.join(DATEN, f"Muster konservativ cVV_*_{tag}_*.CSV"))
-        if pfade:
-            _, df = _zeitreihe(pfade[0])
-            for label, reihe in (("ohne Beschneiden", df),
-                                 ("mit Beschneiden ", historie_beschneiden(df, "CVV"))):
-                jahr = compute_wertentwicklung_data(reihe, 0.0119)["auflage_jahr"]
-                erwartet_jahr = 2009 if "mit" in label else 2008
-                ok = jahr == erwartet_jahr
-                if not ok:
-                    fehler += 1
-                print(f"  {label}: 'Wertentwicklung seit {jahr} kumuliert'  "
-                      f"{'OK' if ok else 'FEHLER'}")
+        for name in ("Muster konservativ cVV", "Muster offensiv cVV"):
+            if name not in reihen:
+                continue
+            df = reihen[name]
+            roh = compute_wertentwicklung_data(df, 0.0119)["auflage_jahr"]
+            neu = compute_wertentwicklung_data(
+                historie_beschneiden(df, name), 0.0119)["auflage_jahr"]
+            ok = roh == 2008 and neu == 2009
+            if not ok:
+                fehler += 1
+            print(f"   {name:28s} 'seit {roh}' -> 'seit {neu}'  "
+                  f"{'OK' if ok else 'FEHLER'}")
     except ImportError as ex:
-        print(f"  UEBERSPRUNGEN — {ex}")
+        print(f"   UEBERSPRUNGEN — {ex}")
 
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
         return 1
-    print("BESTANDEN — CVV rechnet ab 01.01.2009, alle anderen unveraendert")
+    print("BESTANDEN — konfigurierte Reihen ab 01.01.2009, alle anderen unveraendert")
     return 0
 
 

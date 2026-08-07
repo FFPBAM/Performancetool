@@ -395,7 +395,7 @@ from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Import
     SPALTE_PP_FAMILIE,
     VORLAGEN_FAMILIEN,
     FAMILIE_ALLE_STRATEGIEN,
-    FAMILIE_HISTORIE_AB,
+    HISTORIE_AB,
     EXPORT_DATUM_FORMAT,
     EXPORT_NAME_DEFAULT,
     EXPORT_NAME_FAMILIE,
@@ -406,16 +406,21 @@ from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Import
 
 
 
-def historie_beschneiden(ts_df, familie):
-    """Beschneidet eine Performance-Zeitreihe auf den Historien-Beginn ihrer
-    Familie (NEU 07.08.2026, Konfiguration in FAMILIE_HISTORIE_AB).
+def historie_beschneiden(ts_df, csv_name):
+    """Beschneidet eine Performance-Zeitreihe auf ihren Historien-Beginn
+    (NEU 07.08.2026, Konfiguration in HISTORIE_AB).
 
-    Hintergrund: Die fünf klassischen CVV-Strategien liefern als erste
+    Hintergrund: Die klassischen cVV-Datenreihen liefern als erste
     Datenpunkte den 30.12. und 31.12.2008 — zwei Tage. Ungefiltert schrieb
     die Broschüre daraus "Wertentwicklung seit 2008 kumuliert" und
     suggerierte einen Track Record über 2008, den es nicht gibt. Fachlich
     beginnt er am 01.01.2009; der 31.12.2008 ist nur der Schlussstand, auf
     den indexiert wird.
+
+    Der Schlüssel ist der CSV-PORTFOLIONAME, nicht die Familie: "Offensiv"
+    liegt in der Familie Thema, nutzt aber die Reihe "Muster offensiv cVV"
+    (früher eine cVV-Strategie) und ist deshalb genauso betroffen — während
+    Pro und Pro Dividende derselben Familie es nicht sind.
 
     Bewusst EINE Stelle vor allen Berechnungen: Beschriftung, kumulierte
     Wertentwicklung, Rendite p.a. und Linien-Chart leiten sich alle aus der
@@ -423,15 +428,14 @@ def historie_beschneiden(ts_df, familie):
 
     Args:
         ts_df: Zeitreihe mit Datums-Index (oder None)
-        familie: Familien-Schlüssel wie in FAMILIE_HISTORIE_AB ("" = keine)
+        csv_name: CSV-Portfolioname, z.B. "Muster offensiv cVV"
 
     Returns:
-        Die beschnittene Zeitreihe — oder das Original, wenn die Familie
+        Die beschnittene Zeitreihe — oder das Original, wenn die Reihe
         keinen Eintrag hat, kein Index vorliegt oder nach dem Beschneiden
-        nichts übrig bliebe (z.B. Dynamic, aufgelegt 2018: unberührt, weil
-        ohnehin komplett nach dem Stichtag).
+        nichts übrig bliebe.
     """
-    ab = FAMILIE_HISTORIE_AB.get(familie or "")
+    ab = HISTORIE_AB.get(csv_name or "")
     if not ab or ts_df is None or len(ts_df) == 0:
         return ts_df
     gekuerzt = ts_df.loc[ts_df.index >= pd.Timestamp(ab)]
@@ -783,13 +787,6 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 except Exception as ex:
                     st.warning(f"Performance-Daten konnten nicht geladen werden: {ex}")
 
-            # Historien-Beginn der Familie (NEU 07.08.2026, siehe
-            # FAMILIE_HISTORIE_AB). Die Zeitreihe wird EINMAL hier
-            # beschnitten — damit rechnen ALLE Folien (Kennzahlen,
-            # Linien-Chart, rollierende Tabelle, Vergleich) auf derselben
-            # Basis, und die Beschriftung "seit <Jahr>" ergibt sich von selbst.
-            _familie_hist = _familie_fuer_strategie(name_mapping, pf_sel_1)
-
             performance_inputs = []
             missing_csv_names = []
             for pf_name, df_pf, _ad, _dur in portfolios:
@@ -800,7 +797,12 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 if ts_df is None or len(ts_df) == 0:
                     missing_csv_names.append((pf_name, csv_n))
                 else:
-                    ts_df = historie_beschneiden(ts_df, _familie_hist)
+                    # Historien-Beginn der Datenreihe (NEU 07.08.2026, siehe
+                    # HISTORIE_AB). EINMAL hier beschnitten — damit rechnen
+                    # ALLE Folien (Kennzahlen, Linien-Chart, rollierende
+                    # Tabelle, Vergleich) auf derselben Basis, und die
+                    # Beschriftung "seit <Jahr>" ergibt sich von selbst.
+                    ts_df = historie_beschneiden(ts_df, csv_n)
                 # Honorarsatz aus mapping (Default, dezimal) × MwSt-Faktor
                 fee_dec = 0.0
                 if mapping_pf is not None and csv_n is not None:

@@ -1452,6 +1452,36 @@ Zwei Umsetzungsdetails, die den Unterschied machen:
 
 ---
 
+### 43. Die ersten Datenpunkte sind oft nur Indexbasis, kein Track Record (NEU 07.08.2026)
+
+**Situation:** Eine Broschüre schreibt „Wertentwicklung seit *Auflagejahr*" und leitet das Jahr aus dem ersten Datenpunkt der Zeitreihe ab.
+
+**Falle:** Datenlieferanten setzen als erste Zeilen gern den **Schlussstand des Vorjahres**, damit die Indexierung einen Startwert hat. Diese Zeilen sind keine Wertentwicklung — sie sind der Nullpunkt. Wer das Jahr daraus ableitet, weist ein Jahr aus, in dem faktisch nichts passiert ist.
+
+**Konkret:** Die klassischen cVV-Reihen beginnen am **30.12.2008** — zwei Zeilen. Die Broschüre schrieb „Wertentwicklung seit 2008 kumuliert" und suggerierte damit einen Track Record über das Krisenjahr 2008, den es nicht gibt. Fachlich beginnt er am 01.01.2009.
+
+**Lösung:** `HISTORIE_AB` in `modules/vorlagen_config.py` + `portfolioanalyse.historie_beschneiden()`. Die Zeitreihe wird **einmal** beschnitten, bevor irgendetwas gerechnet wird:
+
+```python
+HISTORIE_AB = {
+    "Muster konservativ cVV":   "2009-01-01",
+    ...
+    "Muster offensiv cVV":      "2009-01-01",   # Familie Thema
+}
+```
+
+**Der wichtigste Entwurfsentscheid — Schlüssel ist die DATENREIHE, nicht die Familie.** Die Eigenschaft steckt in den Daten, nicht in der Broschüre: „Offensiv" gehört zur Familie *Thema*, nutzt aber die Reihe `Muster offensiv cVV` (früher eine cVV-Strategie) und hat denselben Stummel — während *Pro* und *Pro Dividende* derselben Familie nicht betroffen sind. Über einen Familien-Schlüssel wäre das nicht sauber abbildbar gewesen.
+
+**Warum EINE Stelle vor allen Berechnungen:** Beschriftung, kumulierte Wertentwicklung, Rendite p.a. und Linien-Chart leiten sich alle aus derselben Zeitreihe ab. Wer stattdessen nur das Label korrigiert, erzeugt genau die Inkonsistenz, gegen die die Konsistenz-Doktrin (§10.8) geschrieben wurde.
+
+**Bewusst keine Automatik** („erstes Jahr mit weniger als N Tagen abschneiden"): Eine Schwelle träfe irgendwann eine Reihe, bei der das Abschneiden falsch wäre. Geprüft: nur die cVV-Reihen sind betroffen — ESG startet mit 93 Tagen im ersten Jahr, ETF mit 32, comdirect mit 296.
+
+**Übertragbar:** Bei jeder neuen Datenreihe einmal nachsehen, wie viele Tage das erste Jahr trägt. Ein- oder zweistellige Werte sind ein Warnsignal.
+
+**Prüfstein:** `tests/test_historie_ab.py` — prüft zusätzlich, dass jeder Konfigurationseintrag wirklich in den Daten existiert. Das fängt Tippfehler und spätere Umbenennungen durch Infront ab, die sonst still wirkungslos blieben.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -2360,7 +2390,51 @@ mehr nötig.
 
 ## 16. Changelog
 
-### 07.08.2026 – Code-Review: Benchmark-Bugfix, Deploy-Konfiguration, Aufräumen
+### 07.08.2026 (nachmittags) – Broschüren-Korrekturen aus der Sichtprüfung
+
+Beides von Philip beim Durchsehen echter Broschüren gefunden — Fehlerklassen,
+die kein Test von allein entdeckt, weil das Ergebnis plausibel aussieht.
+
+**Trennstriche saßen an den Vorlagen-Positionen** (Transferwissen #42).
+`fill_table_with_positions` schrieb Text und Fettung, fasste Rahmenlinien
+aber nie an. Bei CVV „Defensiv" lief der dicke Strich mitten durch die
+Rentenliste (Fraport ↔ Fresenius), während der Übergang Würth → AKTIEN
+keinen bekam. Über alle Familien: 80 falsch platzierte Striche.
+Neu: `tabelle_kategorie_trennlinien()` — dicker Strich genau unter der
+Kategorie-Überschrift, Linienarten spaltenweise aus der Vorlage geerntet
+statt nachgebaut. Prüfstein `tests/test_trennstriche.py`.
+
+**Historie begann im falschen Jahr** (Transferwissen #43).
+Die cVV-Reihen starten am 30.12.2008 (zwei Zeilen = Indexbasis). Die
+Broschüre schrieb „Wertentwicklung seit 2008 kumuliert". Neu: `HISTORIE_AB`
+je Datenreihe + `historie_beschneiden()`, angewandt an EINER Stelle vor
+allen Berechnungen — Beschriftung, Kennzahlen und Chart ziehen automatisch
+mit. Betroffen sind die fünf CVV-Strategien **und „Offensiv"** (Familie
+Thema, nutzt `Muster offensiv cVV`).
+
+| Strategie | vorher | nachher |
+|---|---|---|
+| Konservativ | seit 2008 · 46,38 % | seit 2009 · 46,40 % |
+| Defensiv | seit 2008 · 80,68 % | seit 2009 · 80,39 % |
+| Defensiv Plus | seit 2008 · 114,57 % | seit 2009 · 114,29 % |
+| Ausgewogen | seit 2008 · 146,52 % | seit 2009 · 145,85 % |
+| Offensiv (Thema) | seit 2008 · 185,77 % | seit 2009 · 184,92 % |
+| Dynamic | seit 2018 · 76,82 % | unverändert (2018 aufgelegt) |
+
+Linien-Chart: startet jetzt bei 100 % am 31.12.2008, erste Bewegung am
+01.01.2009.
+
+⚠️ **Die kumulierten Werte ändern sich leicht** (der 31.12.2008 fällt als
+Renditetag heraus). Falls diese Zahlen außerhalb des Tools zitiert werden,
+dort angleichen.
+
+**Testumgebung:** `pip` funktioniert entgegen der bisherigen Annahme
+(Abschnitt 13). In einem venv laufen streamlit 1.61, python-pptx 1.0.2,
+pandas 3.0.5 und numpy 2.5.1 — also genau die Kombination, vor der
+Transferwissen #20/#21 warnt. Der komplette Export läuft damit sauber durch;
+`tests/test_export_smoke.py` erzeugt für jede Familie eine echte Broschüre.
+
+### 07.08.2026 (vormittags) – Code-Review: Benchmark-Bugfix, Deploy-Konfiguration, Aufräumen
 
 **Fachlicher Fehler behoben (ging in die Kundenbroschüre):**
 - Eine Benchmark-Spalte aus lauter Nullen galt als echte Benchmark, weil
