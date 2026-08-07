@@ -498,6 +498,36 @@ VORLAGEN_FAMILIEN = {
     "comdirect": ("Vorlage_comdirect.pptx", _COMDIRECT_CONFIG),
 }
 
+# ══════════════════════════════════════════════════════════════════════════
+#  HISTORIEN-BEGINN JE FAMILIE
+# ══════════════════════════════════════════════════════════════════════════
+# Ab wann die Performance-Historie einer Familie GERECHNET und AUSGEWIESEN
+# wird. Alles davor zählt nur als Indexbasis (Startwert 100 %), nicht als
+# Wertentwicklung.
+#
+# WARUM (07.08.2026, CVV): Die fünf klassischen VV-Strategien liefern als
+# erste Datenpunkte den 30.12. und 31.12.2008 — zwei Tage. Die Broschüre
+# schrieb daraus "Wertentwicklung seit 2008 kumuliert", was einen
+# Track Record über 2008 suggeriert, den es nicht gibt. Fachlich beginnt er
+# am 01.01.2009; der 31.12.2008 ist der Schlussstand, auf den indexiert wird.
+#
+# Wirkung: Die Zeitreihe wird vor JEDER Berechnung auf >= diesem Datum
+# beschnitten. Damit stimmen Beschriftung ("seit 2009"), kumulierte
+# Wertentwicklung, Rendite p.a. UND der Linien-Chart automatisch überein —
+# der Chart startet bei 100 % am 31.12.2008 und bewegt sich ab 01.01.2009.
+#
+# Andere Familien brauchen das NICHT: ESG startet mit 93 Tagen, ETF mit 32,
+# comdirect mit 296 — dort ist "seit <Jahr>" korrekt. Bewusst als explizite
+# Konfiguration statt als Automatik ("erstes Jahr mit wenigen Tagen
+# abschneiden"): Eine Schwelle würde irgendwann eine Strategie treffen, bei
+# der das Abschneiden falsch wäre.
+#
+# Format: Familie -> "JJJJ-MM-TT". Familien ohne Eintrag rechnen wie bisher
+# ab ihrem ersten Datenpunkt.
+FAMILIE_HISTORIE_AB = {
+    "CVV": "2009-01-01",
+}
+
 # Familien, deren Broschüre IMMER alle Strategien enthält (Variante A).
 # Wählt der Berater eine davon, lädt die App automatisch alle — in dieser
 # Reihenfolge. Neue Familie? Nur hier und in VORLAGEN_FAMILIEN eintragen.

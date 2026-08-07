@@ -42,7 +42,7 @@ try:
     from modules.portfolioanalyse import (
         load_pf_csvs, build_pf_data, duration_info_aus_bestand,
         VORLAGEN_FAMILIEN, FAMILIE_ALLE_STRATEGIEN, _familien_portfolios,
-        _vorlage_fuer_familie, _familie_fuer_strategie,
+        _vorlage_fuer_familie, _familie_fuer_strategie, historie_beschneiden,
     )
     from modules import pptx_export
     from modules.pptx_export import generate_portfolioanalyse_pptx
@@ -89,7 +89,9 @@ def _portfolio(name, d):
     return (name, df, ad, duration_info_aus_bestand(df))
 
 
-def _perf_inputs(portfolios, d):
+def _perf_inputs(portfolios, d, familie=""):
+    """Wie render_portfolioanalyse die performance_inputs baut — inklusive
+    Beschneiden auf den Historien-Beginn der Familie (FAMILIE_HISTORIE_AB)."""
     raus = []
     for name, _df, _ad, dur in portfolios:
         csv_n = d["d2c"].get(name)
@@ -101,8 +103,9 @@ def _perf_inputs(portfolios, d):
             bm = None
         else:
             bm = str(bm).strip()
+        ts = d["ts"].get(csv_n) if csv_n else None
         raus.append({
-            "timeseries_df": d["ts"].get(csv_n) if csv_n else None,
+            "timeseries_df": historie_beschneiden(ts, familie),
             "fee_dec": float(treffer.values[0]) if len(treffer) else 0.0,
             "duration": dur.get("duration") if isinstance(dur, dict) else None,
             "benchmark_text": bm,
@@ -113,7 +116,7 @@ def _perf_inputs(portfolios, d):
 def _bauen(portfolios, familie, d, ausgabe, dateiname):
     tpl, cfg = _vorlage_fuer_familie(familie)
     daten = generate_portfolioanalyse_pptx(
-        portfolios, 0.0, performance_inputs=_perf_inputs(portfolios, d),
+        portfolios, 0.0, performance_inputs=_perf_inputs(portfolios, d, familie),
         template_path=tpl, template_config=cfg)
     ziel = os.path.join(ausgabe, dateiname)
     with open(ziel, "wb") as f:

@@ -395,6 +395,7 @@ from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Import
     SPALTE_PP_FAMILIE,
     VORLAGEN_FAMILIEN,
     FAMILIE_ALLE_STRATEGIEN,
+    FAMILIE_HISTORIE_AB,
     EXPORT_DATUM_FORMAT,
     EXPORT_NAME_DEFAULT,
     EXPORT_NAME_FAMILIE,
@@ -403,6 +404,38 @@ from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Import
 )
 
 
+
+
+def historie_beschneiden(ts_df, familie):
+    """Beschneidet eine Performance-Zeitreihe auf den Historien-Beginn ihrer
+    Familie (NEU 07.08.2026, Konfiguration in FAMILIE_HISTORIE_AB).
+
+    Hintergrund: Die fünf klassischen CVV-Strategien liefern als erste
+    Datenpunkte den 30.12. und 31.12.2008 — zwei Tage. Ungefiltert schrieb
+    die Broschüre daraus "Wertentwicklung seit 2008 kumuliert" und
+    suggerierte einen Track Record über 2008, den es nicht gibt. Fachlich
+    beginnt er am 01.01.2009; der 31.12.2008 ist nur der Schlussstand, auf
+    den indexiert wird.
+
+    Bewusst EINE Stelle vor allen Berechnungen: Beschriftung, kumulierte
+    Wertentwicklung, Rendite p.a. und Linien-Chart leiten sich alle aus der
+    Zeitreihe ab und bleiben dadurch automatisch konsistent.
+
+    Args:
+        ts_df: Zeitreihe mit Datums-Index (oder None)
+        familie: Familien-Schlüssel wie in FAMILIE_HISTORIE_AB ("" = keine)
+
+    Returns:
+        Die beschnittene Zeitreihe — oder das Original, wenn die Familie
+        keinen Eintrag hat, kein Index vorliegt oder nach dem Beschneiden
+        nichts übrig bliebe (z.B. Dynamic, aufgelegt 2018: unberührt, weil
+        ohnehin komplett nach dem Stichtag).
+    """
+    ab = FAMILIE_HISTORIE_AB.get(familie or "")
+    if not ab or ts_df is None or len(ts_df) == 0:
+        return ts_df
+    gekuerzt = ts_df.loc[ts_df.index >= pd.Timestamp(ab)]
+    return gekuerzt if len(gekuerzt) else ts_df
 
 
 def _familien_portfolios(strategien, display_names_pf, display_to_csv_pf,
@@ -750,6 +783,13 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 except Exception as ex:
                     st.warning(f"Performance-Daten konnten nicht geladen werden: {ex}")
 
+            # Historien-Beginn der Familie (NEU 07.08.2026, siehe
+            # FAMILIE_HISTORIE_AB). Die Zeitreihe wird EINMAL hier
+            # beschnitten — damit rechnen ALLE Folien (Kennzahlen,
+            # Linien-Chart, rollierende Tabelle, Vergleich) auf derselben
+            # Basis, und die Beschriftung "seit <Jahr>" ergibt sich von selbst.
+            _familie_hist = _familie_fuer_strategie(name_mapping, pf_sel_1)
+
             performance_inputs = []
             missing_csv_names = []
             for pf_name, df_pf, _ad, _dur in portfolios:
@@ -759,6 +799,8 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 ts_df = perf_timeseries.get(csv_n) if csv_n else None
                 if ts_df is None or len(ts_df) == 0:
                     missing_csv_names.append((pf_name, csv_n))
+                else:
+                    ts_df = historie_beschneiden(ts_df, _familie_hist)
                 # Honorarsatz aus mapping (Default, dezimal) × MwSt-Faktor
                 fee_dec = 0.0
                 if mapping_pf is not None and csv_n is not None:
