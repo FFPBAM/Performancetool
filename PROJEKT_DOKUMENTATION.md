@@ -1,5 +1,12 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: 28.07.2026 (Phase 3: Familien-Ausbau [comdirect], Folienlisten-Config, konfigurierbare Export-Namen, Download-Umzug & familienspezifische kräftigere Ring-Optik)
+## Stand: 07.08.2026 (Phase 4: Code-Review — Benchmark-Bugfix, Deploy-Konfiguration repariert, ~1.900 Zeilen toter Code entfernt)
+
+> **Neu am 07.08.2026:** Transferwissen **#41** (Null-Spalten sind keine Daten —
+> der Benchmark-Bug), `.streamlit`-Ordner repariert, `lxml` in den requirements
+> ergänzt, doppelte CSV-Loader aufgelöst, erster Regressionstest unter `tests/`.
+> Die Abschnitte 2, 3, 13 und 15 wurden entsprechend korrigiert — insbesondere
+> stand dort bisher, `erstelle_broschueren.py` und `modules/dataload.py` lägen im
+> Repo; das war nie der Fall.
 
 > Vorgänger-Stand: Juni 2026 (Phase 2: Performance-PPTX-Export). Alle
 > Transferwissen-Einträge #1–#17 aus Phase 2 bleiben gültig und stehen
@@ -1378,6 +1385,42 @@ Die Ring-Optik (Grafik) ist jetzt **je Familie überschreibbar**, über einen CO
 
 ---
 
+### 41. „Kein Wert" kommt in Finanzdaten oft als NULL, nicht als NaN (BUG, NEU 07.08.2026) ⭐
+
+**Situation:** Du prüfst, ob eine optionale Spalte einer Datenlieferung überhaupt Inhalt hat — z.B. eine Benchmark-Zeitreihe.
+
+**Falle:** Der naheliegende Test `df["spalte"].notna().any()` prüft auf *fehlende* Werte. Datenlieferanten liefern „nicht vorhanden" aber häufig als **0**, nicht als leeres Feld. `0.0` ist nicht `NaN` → der Test sagt True → die Nullreihe wird als echte Daten durchgerechnet.
+
+**Konkret in diesem Projekt:** Infront liefert für Strategien ohne Vergleichsmaßstab eine Benchmark-Spalte aus lauter Nullen. Betroffen sind „Muster SCHWEIZ Aktien" (1409 von 1409 Zeilen null) und „Muster SCHWEIZ Substanz" (1399/1399); im `Mapping_Namen.xlsx` steht bei beiden ausdrücklich „Haben keine Benchmark". Ergebnis in der **Kundenbroschüre**:
+
+```
+performance_pa_bench      0,00 %
+volatilitaet_bench        0,00 %
+sharpe_bench            -67,48      ← der Wert, der es verraten hat
+max_drawdown_bench        0,00 %
+Linien-Chart: flache Benchmark bei 100 %
+```
+
+Die Sharpe Ratio entlarvt es: Bei konstanter Nullrendite ist die Überrendite exakt `−rf` mit Standardabweichung nahe null → der Quotient explodiert. Die anderen drei Kennzahlen sehen dagegen plausibel aus und wären wohl nie aufgefallen.
+
+**Lösung:** `analytics.has_benchmark()` — vorhanden UND mindestens ein Wert ungleich null:
+
+```python
+def has_benchmark(ret_bm) -> bool:
+    werte = pd.Series(ret_bm).dropna()
+    if werte.empty:
+        return False
+    return bool((werte != 0).any())
+```
+
+**Wichtig bei der Abgrenzung:** *Einzelne* Nulltage sind normal und müssen gültig bleiben — rund 29 % aller Zeilen sind Wochenenden, an denen der Index steht. Nur die **komplett** leere Reihe darf durchfallen. Deshalb `.any()` auf „ungleich null", nicht etwa eine Quotenschwelle.
+
+**Übertragbar:** Dieselbe Frage stellt sich bei jeder optionalen Spalte aus Fremdsystemen — Duration, Kupon, Rendite, Währung. Wenn „kein Wert" als 0 geliefert wird, ist `notna()` der falsche Test. Prüfe bei neuen Spalten einmal, wie der Lieferant „leer" kodiert.
+
+**Prüfstein:** `tests/test_benchmark_erkennung.py` — läuft gegen die echten CSVs, ohne pytest und ohne Streamlit (`python tests/test_benchmark_erkennung.py`). Erwartung: 2 Strategien ohne Benchmark, 17 unverändert.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -1393,11 +1436,15 @@ per `st.segmented_control` oben auf der Seite navigiert, davor `st.tabs`).
 | (PPTX Charts) | `modules/pptx_charts.py` | — | Chart-XML mit Bug-Workarounds (`replace_chart_data_safe` = 4-Bug-Fix, `replace_chart_data` XML-in-place für Ringe, `set_date_axis_base_unit`) |
 | (PPTX Folien) | `modules/pptx_slides.py` | — | Domain-Logik pro Folie (`fill_*_slide`-Funktionen, Themen-Blöcke, `EINZELTITEL_WARNUNGEN`) |
 | (PPTX Orchestrierung) | `modules/pptx_export.py` | — | Broschüren-Aufbau: N Strategien, `template_config`/`block_reihenfolge`, `compute_performance_data`, `compute_rollierend_data`, Block-Dispatcher, `LAST_BUILD_ERRORS` |
-| (lokaler Batch) | `erstelle_broschueren.py` + `modules/dataload.py` | — | Streamlit-freie Massen-Broschüren-Erzeugung (bewiesen lauffähig ohne Streamlit; **pausiert**, siehe Abschnitt 13) |
+| (Tests) | `tests/test_benchmark_erkennung.py` | ~130 | Regressionstest gegen die echten CSVs; läuft ohne pytest und ohne Streamlit |
 
-**Deployment:** Streamlit Community Cloud via GitHub (Repo `FFPBAM/Performancetool`, Branch `main`). Cloud-Python: **3.14**. `requirements.txt` aktuell mit `>=` (Pinnen offen, siehe Backlog + Transferwissen #20). **Repo MUSS privat sein (Honorarsätze im Mapping!).**
+**Deployment:** Streamlit Community Cloud via GitHub (Repo `FFPBAM/Performancetool`, Branch `main`). Cloud-Python: **3.14**. streamlit ist gepinnt, pandas/numpy stehen weiter auf `>=` (Transferwissen #20).
 
-**Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~695 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung). `generate_pf_pdf` in `portfolioanalyse.py` ist seit Juli 2026 toter Code (PDF-Button im Portfolioanalyse-Bereich entfernt; kann bei Gelegenheit raus).
+⚠️ **Repo-Sichtbarkeit:** Frühere Fassungen dieser Doku forderten „Repo MUSS privat sein (Honorarsätze im Mapping!)". Das Repo ist tatsächlich **öffentlich** (am 07.08.2026 über die GitHub-API verifiziert: `"visibility": "public"`, angelegt am 19.02.2026) — und bleibt es nach Entscheidung von Philip, damit der Cloud-Deploy unverändert läuft. Damit sind Honorarsätze, Benchmark-Zusammensetzungen und die Musterdepot-CSVs öffentlich einsehbar. **Kundendaten sind nicht betroffen** (nur „Muster"-Portfolios; der `EXCLUDE_SUBSTRINGS`-Filter hält Stiftungsdepots draußen), und `secrets.toml` wurde nie committet. Wer hier Daten ergänzt, sollte das im Bewusstsein tun, dass sie öffentlich werden — und dass die Git-Historie sie auch nach dem Löschen behält.
+
+*Hinweis am Rande:* Streamlit Community Cloud kann grundsätzlich auch aus privaten Repos deployen (erweiterter OAuth-Scope beim Verbinden des GitHub-Kontos); auf dem freien Tarif ist die Zahl privater Apps allerdings begrenzt.
+
+**Nicht aktiv im Repo:** `modules/portfolio_builder.py` (~606 Zeilen) – seit Juni 2026 nicht mehr importiert (Compliance-Entscheidung), bleibt aber bewusst liegen für eine mögliche Reaktivierung. `Zieldaten/` gehört dazu.
 
 **Vorlagen:**
 - `Vorlage/Vorlage_FFPB.pptx` – Standard-Broschüre, **26 Slides** (seit 02.07.2026 inkl. Wertentwicklungs-Folie), benannte Shapes, JPEG-optimiert (~4 MB)
@@ -1411,44 +1458,69 @@ per `st.segmented_control` oben auf der Seite navigiert, davor `st.tabs`).
 Repository Root/
 ├── streamlit_app.py                 ← Navigation (segmented_control), Keep-Alive,
 │                                      zentrale Datenbereitstellung, Performance-Ansicht inline
-├── erstelle_broschueren.py          ← lokaler Batch (streamlit-frei; PAUSIERT)
 ├── modules/
 │   ├── __init__.py
 │   ├── shared.py                    ← Konstanten, Login, Formatierung, CSV-Loader
-│   ├── analytics.py                 ← Berechnungs-Single-Source-of-Truth
+│   ├── analytics.py                 ← Berechnungs-Single-Source-of-Truth (inkl. has_benchmark)
 │   ├── portfolioanalyse.py          ← Portfolioanalyse-Ansicht + PPTX-Export-Integration
 │   ├── pptx_helpers.py              ← generische Shape/Table/Slide-Manipulation
 │   ├── pptx_charts.py               ← Chart-XML inkl. replace_chart_data_safe (4 Bugs)
-│   ├── chart_dynamik.py             ← NEU: Chart-Nachbearbeitung (Achsen, holeSize,
+│   ├── chart_dynamik.py             ← Chart-Nachbearbeitung (Achsen, holeSize,
 │   │                                   Ring-Labels außen) — nachbearbeiten(prs), TW #26
 │   ├── pptx_slides.py               ← Folien-Befüllung (Domain-Logik) + generische
 │   │                                   Tabellen-Helfer (TW #27)
 │   ├── pptx_export.py               ← Broschüren-Orchestrierung
-│   ├── dataload.py                  ← streamlit-freie Loader-Kopien für den Batch
-│   └── portfolio_builder.py         ← deaktiviert seit Juni 2026
-├── Vorlage/
-│   ├── Vorlage_FFPB.pptx            ← Standard, 26 Slides, ~4 MB
-│   └── Vorlage_Thema.pptx           ← Themen (Pro/Pro Dividende/Offensiv), 21 Slides, 3,95 MB
-├── fonts/  (segoeui.ttf, segoeuib.ttf)
-├── .streamlit/config.toml           ← toolbarMode = "minimal"
+│   ├── download_helfer.py           ← clientseitiger Blob-Download (TW #25)
+│   ├── formats.py                   ← Format-Helfer + Textkonstanten der Broschüre
+│   └── portfolio_builder.py         ← deaktiviert seit Juni 2026 (bewusst aufgehoben)
+├── tests/
+│   └── test_benchmark_erkennung.py  ← NEU 07.08.2026, läuft ohne pytest/Streamlit
+├── Vorlage/                         ← 6 Familien-Vorlagen (FFPB, Thema, ESG, ETF,
+│                                      comdirect, cVV_Infoboard)
+├── fonts/                           ← Segoe-UI-Dateien für den PDF-Export
+├── .streamlit/config.toml           ← toolbarMode = "minimal"  (Punkt im Ordnernamen ist
+│                                      zwingend, siehe unten!)
+├── .gitignore                       ← NEU 07.08.2026 — schließt secrets.toml aus
 ├── Mapping_Honorarsatz.xlsx         ← Inhaber + Honorarsatz Standard (Dezimal)
 ├── Mapping_Namen.xlsx               ← A=Anzeigename, B=CSV-Key, C=Duration(alt), D=Benchmark,
 │                                      + Spalte "Powerpoint Familie" (NEU Juli 2026)
+├── FFPB_Architektur_Ueberblick.pdf  ← Architektur-Grafik (Stand 28.07.2026)
 ├── Fuerst_Fugger_Bank_Logo_2-ZL-RGB.jpg
 ├── Daten/                           ← Performance-CSVs
 ├── Daten_PF/                        ← Portfolioanalyse-CSVs (Spalten inkl. Duration, Rendite;
 │                                      Spalte "Währung" angekündigt, siehe Backlog)
 ├── Zieldaten/                       ← Anlageuniversum für Builder (deaktiviert)
-└── requirements.txt                 ← aktuell >=-Mindestversionen (Pinnen offen)
+└── requirements.txt                 ← streamlit gepinnt, Rest Mindestversionen
 ```
+
+⚠️ **`.streamlit` MUSS den Punkt haben.** Bis 07.08.2026 hieß der Ordner im Repo
+`streamlit/` (ohne Punkt) — Streamlit liest ausschließlich `.streamlit/config.toml`
+und hat die Datei deshalb stillschweigend ignoriert; `toolbarMode = "minimal"` war
+nie aktiv. Ursache war vermutlich das Anlegen über die GitHub-Weboberfläche
+(vgl. Transferwissen #23). Nach Änderungen an diesem Ordner immer prüfen, ob der
+Punkt noch da ist.
+
+⚠️ **NICHT im Repo, obwohl frühere Fassungen dieser Doku es behaupteten:**
+`erstelle_broschueren.py` und `modules/dataload.py` (lokaler Batch, Abschnitt 13)
+wurden **nie committet**. Sie existierten nur lokal bzw. in Chatverläufen. Wer den
+Batch braucht, muss ihn neu bauen — die Beschreibung in Abschnitt 13 bleibt als
+Bauplan stehen.
+
+**ENTFERNT am 07.08.2026 (toter Code, rund 1.900 Zeilen):** `performance.py`
+(Altkopie von `streamlit_app.py`, trug im Header noch `# streamlit_app.py`),
+`macrobond_upload.py` (nirgends referenziert), `ll` (Tippfehler-Artefakt), die
+leeren Platzhalter-`.md` in `Daten/`, `Daten_PF/`, `Vorlage/`, `fonts/`,
+`Zieldaten/`, sowie `generate_pf_pdf` + `_mpl_ring_chart` aus
+`portfolioanalyse.py` (damit dort auch reportlab und matplotlib).
 
 **GELÖSCHT (03.07.2026):** Der Ordner `Duration/` — Duration/Rendite werden seit dem 03.07. **anleihe-gewichtet aus den Titeldaten** berechnet (`duration_info_aus_bestand` → `get_bond_summary`; verifiziert gegen Tool-Werte "Muster defensiv cVV": Duration 3,96 / Rendite 3,28 %). ⚠️ Der lokale Batch liest noch den alten Ordner — siehe Backlog Punkt 2.
 
 **Es gibt ZWEI Mappings — nicht verwechseln:** `build_portfolio_timeseries` erwartet das HONORARSATZ-Mapping (`Mapping_Honorarsatz.xlsx`, Spalten "Inhaber" + "Honorarsatz Standard"); Familien/Benchmark/Duration nutzen das NAMEN-Mapping (`Mapping_Namen.xlsx`, Spalten A–D + "Powerpoint Familie").
 
-### requirements.txt
+### requirements.txt (Stand 07.08.2026)
 ```
-streamlit>=1.30
+streamlit==1.61.0                    ← gepinnt (Transferwissen #20)
+starlette<1.4.0
 pandas>=2.0
 numpy>=1.24
 plotly>=5.18
@@ -1459,9 +1531,19 @@ Pillow>=10.0
 python-pptx>=1.0
 lxml>=4.9                            ← KRITISCH für Chart-XML-Manipulation
 ```
-⚠️ Siehe Transferwissen #20: Cloud zieht bei Reboot die NEUESTEN Versionen
-(Stand 07.07.: Streamlit 1.59.0, pandas 3.0, numpy 2.5 unter Python 3.14).
-Pinnen steht im Backlog — NUR auf 3.14-kompatible Versionen.
+⚠️ **`lxml` fehlte bis 07.08.2026 in dieser Datei**, obwohl `pptx_charts.py`,
+`pptx_export.py` und `chart_dynamik.py` es DIREKT importieren
+(`from lxml import etree`). Es kam nur zufällig als transitive Abhängigkeit von
+python-pptx mit — ein Wechsel der python-pptx-Version hätte die Chart-XML-
+Manipulation jederzeit lahmlegen können. Ebenfalls am 07.08. korrigiert:
+`python-pptx>=0.6.21` (Untergrenze von 2021) → `>=1.0`.
+
+⚠️ Siehe Transferwissen #20: Cloud zieht bei Reboot die NEUESTEN Versionen der
+NICHT gepinnten Pakete. Streamlit ist inzwischen fest auf 1.61.0; pandas/numpy
+stehen weiter auf `>=` und könnten unter Python 3.14 erneut überraschen.
+
+**Merksatz:** Was der Code direkt importiert, gehört in die requirements —
+transitive Abhängigkeiten sind kein Vertrag.
 
 ---
 
@@ -1470,7 +1552,7 @@ Pinnen steht im Backlog — NUR auf 3.14-kompatible Versionen.
 ```
 shared.py ──→ streamlit_app.py (Performance inline + importiert Portfolioanalyse)
           ──→ portfolioanalyse.py ──→ pptx_export.py
-analytics.py ──→ streamlit_app.py (Wrapper) + pptx_export.py (identische Mathematik!)
+analytics.py ──→ streamlit_app.py (Wrapper) + pptx_export.py
 
 PPTX-Schichten:
     pptx_helpers (Shape/Text/Table/Slide-Manipulation)
@@ -1479,12 +1561,16 @@ PPTX-Schichten:
     pptx_slides  (Domain-Logik pro Folie)
         ↑
     pptx_export  (Orchestrierung der Broschüre)
-
-Batch: erstelle_broschueren.py ──→ modules/dataload.py (streamlit-freie Loader-KOPIEN)
-                               ──→ pptx_export.py (gleiche Broschüren-Logik wie die App)
 ```
 
-`modules/dataload.py` enthält BEWUSST Kopien der shared.py-Loader (kein Import aus `modules.shared`, weil shared.py `import streamlit` am Modulkopf hat). Parser/Mathematik sind 1:1 identisch zur App. `portfolio_builder.py` liegt im Repo, wird aber nicht importiert.
+**Seit 07.08.2026 gibt es die CSV-Loader nur noch EINMAL**, in `shared.py`.
+Vorher hatte `streamlit_app.py` eigene, zeilengleiche Kopien — mit zwei
+getrennten `@st.cache_data`-Caches und dem Risiko, dass Tool und Broschüre bei
+Drift verschiedene Zahlen zeigen. Dieselbe Falle lauert bei jeder neuen
+„streamlit-freien Kopie": Wer Loader ohne Streamlit braucht, sollte sie in ein
+gemeinsames UI-freies Modul ziehen, statt sie zu duplizieren.
+
+`portfolio_builder.py` liegt im Repo, wird aber nicht importiert.
 
 ---
 
@@ -2104,7 +2190,7 @@ in diesem Projekt ZWEIMAL erfolgreich angewendet:
 
 ---
 
-## 13. Lokaler Batch `erstelle_broschueren.py` (Stand: PAUSIERT)
+## 13. Lokaler Batch `erstelle_broschueren.py` (Stand: NICHT IM REPO — Bauplan)
 
 **Zweck:** Massen-Erzeugung der Broschüren OHNE Streamlit/Cloud — z.B. alle
 Strategien einer Familie in einem Lauf, lokal, reproduzierbar.
@@ -2124,9 +2210,28 @@ Strategien einer Familie in einem Lauf, lokal, reproduzierbar.
 Streamlit-Import → identische Ergebnisse (CVV 28 Folien, Kennzahlen
 befüllt, 0 Build-Errors).
 
-**Status:** PAUSIERT — die Firmen-IT lässt lokale Paket-Installationen nur
-schwer zu; Fokus liegt deshalb auf der Streamlit-App. Der Batch-Stand ist
-aber aktuell (Duration aus Titeln steht dort noch aus → Backlog Punkt 2!).
+**Status (korrigiert 07.08.2026): NICHT IM REPO.** Weder
+`erstelle_broschueren.py` noch `modules/dataload.py` wurden je committet — ein
+`git log` über beide Pfade ist leer. Frühere Fassungen dieser Doku führten sie
+in den Abschnitten 1, 2, 3 und 17 als vorhanden auf; das stimmte nie. Die
+Dateien existierten nur lokal bzw. in Chatverläufen und sind damit praktisch
+verloren.
+
+Die Beschreibung oben bleibt bewusst als **Bauplan** stehen, falls der Batch
+neu gebaut werden soll. Zwei Dinge wären dann anders zu machen:
+- `dataload.py` als Kopien anzulegen war der Umgehung von `import streamlit`
+  in `shared.py` geschuldet. Besser: die Loader in ein streamlit-freies Modul
+  ziehen, das BEIDE nutzen — sonst entsteht dieselbe Doppel-Wahrheit, die am
+  07.08.2026 in `streamlit_app.py` beseitigt wurde.
+- Duration aus den Titeln rechnen (`duration_info_aus_bestand`), nicht aus dem
+  gelöschten Duration-Ordner (Backlog Punkt 2).
+
+Der ursprüngliche Grund für die Pause gilt weiter: Die Firmen-IT lässt lokale
+Paket-Installationen kaum zu (Stand 07.08.2026 fehlen lokal `streamlit`,
+`plotly`, `python-pptx` und `reportlab`; vorhanden sind pandas, numpy,
+matplotlib, lxml, openpyxl, Pillow). **Folge für die Arbeitsweise:** Nur
+streamlit-freie Module lassen sich lokal testen — Änderungen am PPTX-Export
+müssen im Deploy geprüft werden.
 
 ---
 
@@ -2156,20 +2261,44 @@ mehr nötig.
 
 ---
 
-## 15. Backlog (Stand 07.07.2026, nach Priorität)
+## 15. Backlog (Stand 07.08.2026, nach Priorität)
+
+**Am 07.08.2026 erledigt:** Punkt 5 (`generate_pf_pdf` entfernt), Punkt 6
+(`enableStaticServing` + `medien_download_url` entfernt), Teile von Punkt 1
+(`lxml` ergänzt, `python-pptx` angehoben; streamlit war bereits gepinnt).
+
+**Neu aufgenommen (aus dem Code-Review vom 07.08.2026):**
+
+- **A. Benchmark-Serie auch aus den PPTX-Charts nehmen.** `has_benchmark`
+  korrigiert die KENNZAHLEN (Folie zeigt „–"), aber `analytics` füllt die
+  Chartreihen weiterhin mit `0.0` bzw. `1.0` — die SCHWEIZ-Broschüren zeigen
+  also weiter eine flache Benchmark-Linie und Null-Balken. Das sauber zu
+  lösen heißt, die Serie im Vorlagen-Chart zu entfernen (`pptx_slides`), und
+  das ist ohne lokalen PPTX-Test nicht verifizierbar. **Vor dem nächsten
+  Versand einer SCHWEIZ-Broschüre klären.**
+- **B. Die zwei verbliebenen Mathe-Helfer in `pptx_export.py`**
+  (`_annual_fee_to_daily_drag`, `_make_index_after_fee`) sind Duplikate von
+  `analytics`. Umziehen, sobald `compute_wertentwicklung_data` angefasst wird
+  (steht als Hinweis auch im dortigen Docstring).
+- **C. Der Wrapper-Block in `pptx_export.py`** (rund 300 Zeilen reine
+  Durchreichfunktionen `_find_shape_by_name` → `find_shape_by_name` usw.)
+  hat seit der Modultrennung keinen Zweck mehr. Rein mechanisch zu entfernen,
+  aber viele Aufrufstellen — nur mit lauffähiger Testumgebung angehen.
+- **D. Testabdeckung ausbauen.** `tests/` enthält bisher einen Test. Die
+  streamlit-freien Module (`analytics`, `formats`) sind auch ohne Firmen-IT
+  testbar — dort lohnt sich mehr.
 
 1. **requirements.txt Python-3.14-kompatibel pinnen** (Transferwissen #20).
-   Guter Zeitpunkt: JETZT — Streamlit 1.59.0 ist mit dem aktuellen Code
-   nachweislich verifiziert. Erst prüfen, welche streamlit/pandas/numpy-
-   Versionen unter 3.14 bauen, dann pinnen.
-2. **Duration-Inkonsistenz Batch vs. App (WICHTIG):** Die App berechnet
-   Duration/Rendite seit 03.07. aus den Titeln; der Duration-Ordner ist
-   gelöscht. Der BATCH (`erstelle_broschueren.py` ~Z.288 +
-   `dataload.lade_duration`) liest aber noch den alten Ordner → Duration
-   "–" oder veraltete Werte. TODO: Titel-Berechnung
-   (`duration_info_aus_bestand`/`get_bond_summary`) in ein UI-freies Modul
-   ziehen und im Batch aus `df_pf` rechnen; `DATEN_DURATION` entfällt dann
-   komplett. (Voraussetzung erfüllt: Bestands-CSVs tragen Duration+Rendite.)
+   Teilweise erledigt: streamlit==1.61.0, starlette<1.4.0, lxml ergänzt.
+   OFFEN bleiben pandas/numpy — dort steht weiter `>=`, und genau diese
+   beiden hatten am 06.07. den Ausfall verursacht.
+2. ~~**Duration-Inkonsistenz Batch vs. App**~~ — **gegenstandslos (07.08.2026):**
+   Der Batch existiert nicht im Repo (siehe Abschnitt 13), es gibt also keine
+   zweite Implementierung, die abweichen könnte. Die App rechnet Duration und
+   Rendite seit 03.07. anleihe-gewichtet aus den Titeln
+   (`duration_info_aus_bestand` → `get_bond_summary`). **Falls der Batch neu
+   gebaut wird:** diese Berechnung vorher in ein streamlit-freies Modul ziehen,
+   damit beide dieselbe nutzen — nicht wieder kopieren.
 3. **Spalte "Währung" in Daten_PF** — Philip liefert per Push nach;
    `fill_einzeltitel_themen_slide` füllt dann automatisch.
 4. **Vorlagen-Familien ESG/CVV/ETF anlegen + kalibrieren:** je Familie
@@ -2199,6 +2328,49 @@ mehr nötig.
 ---
 
 ## 16. Changelog
+
+### 07.08.2026 – Code-Review: Benchmark-Bugfix, Deploy-Konfiguration, Aufräumen
+
+**Fachlicher Fehler behoben (ging in die Kundenbroschüre):**
+- Eine Benchmark-Spalte aus lauter Nullen galt als echte Benchmark, weil
+  `notna().any()` bei `0.0` True liefert. „Muster SCHWEIZ Aktien" und
+  „Muster SCHWEIZ Substanz" (beide laut Mapping ohne Benchmark) bekamen
+  dadurch BM-Performance 0,00 %, Vola 0,00 %, Max Drawdown 0,00 % und eine
+  **Sharpe Ratio von −67,48** ausgewiesen. Neu: `analytics.has_benchmark()`,
+  angewandt in `compute_performance_data`, im Balken- und Performance-Chart
+  sowie im PDF-Export. Transferwissen #41.
+- Erster Regressionstest: `tests/test_benchmark_erkennung.py`, 19/19 grün.
+  Die 17 Strategien mit Benchmark liefern nachweislich unveränderte Werte.
+
+**Deploy-Konfiguration repariert:**
+- Ordner `streamlit/` → `.streamlit/`. Ohne Punkt hat Streamlit die Datei nie
+  gelesen; `toolbarMode = "minimal"` war seit jeher wirkungslos.
+- `lxml>=4.9` in die requirements aufgenommen — wird direkt importiert, kam
+  bis dahin nur zufällig über python-pptx mit. `python-pptx>=0.6.21` → `>=1.0`.
+- `enableStaticServing` entfernt (seit dem Blob-Download unnötig, Backlog 6).
+
+**Doppelte Wahrheiten aufgelöst:**
+- `streamlit_app.py` enthielt eigene, zeilengleiche Kopien von `load_all_csvs`,
+  `read_one_csv`, `parse_dates_col`, `extract_benchmark_name` und
+  `build_portfolio_timeseries`. Zwei `@st.cache_data`-Caches für dieselbe
+  Arbeit → CSVs doppelt geparst und doppelt im Speicher; bei Drift hätten
+  Tool und Broschüre verschiedene Zahlen gezeigt. Jetzt nur noch `shared.py`.
+- Acht nie aufgerufene Kopien der analytics-Mathematik aus `pptx_export.py`.
+
+**Robustheit:**
+- `shared.load_all_csvs` findet jetzt `.CSV` UND `.csv`. Auf der Cloud (Linux,
+  case-sensitiv) wäre eine klein geschriebene Datei stillschweigend
+  verschwunden, während `detect_newest_date_tag` ihren Tag gefunden hätte.
+- `check_login` nutzt `hmac.compare_digest` statt `==`.
+- `.gitignore` angelegt — schließt `.streamlit/secrets.toml` aus.
+
+**Toter Code entfernt (~1.900 Zeilen):** `performance.py`,
+`macrobond_upload.py`, `ll`, fünf leere Platzhalter-`.md`, `generate_pf_pdf`,
+`_mpl_ring_chart` (damit reportlab und matplotlib aus `portfolioanalyse.py`),
+`medien_download_url`, `if True:`.
+
+**Doku korrigiert:** `erstelle_broschueren.py` und `modules/dataload.py` waren
+nie im Repo, wurden aber in vier Abschnitten als vorhanden geführt.
 
 ### 21.–28.07.2026 – Familien-Ausbau, Export-Namen, Folienlisten-Config & kräftigere Ring-Optik
 - **comdirect-Familie** (Klassische Portfolioverwaltung, 27 Folien, 3 Strategien) — reine Config-Ergänzung. Transferwissen #36
@@ -2339,8 +2511,9 @@ mehr nötig.
 **Hochladen:** Diese MD + die aktiven Code-Dateien (`streamlit_app.py`,
 `modules/shared.py`, `modules/analytics.py`, `modules/portfolioanalyse.py`,
 `modules/pptx_helpers.py`, `modules/pptx_charts.py`, `modules/pptx_slides.py`,
-`modules/pptx_export.py`; für Batch-Themen zusätzlich
-`erstelle_broschueren.py` + `modules/dataload.py`).
+`modules/pptx_export.py`, `modules/chart_dynamik.py`).
+Seit 07.08.2026 arbeiten wir stattdessen **direkt im geklonten Repo** — dann
+entfällt das Hochladen ganz und die Dateistände können nicht auseinanderlaufen.
 **Sagen:** "Lies die PROJEKT_DOKUMENTATION.md zuerst komplett. Dann [Aufgabe]."
 **Bei Problemen:** Screenshot + erwartetes Verhalten + welche Dateien aktuell
 deployed sind.
