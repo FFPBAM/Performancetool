@@ -231,10 +231,6 @@ def _clone_chart_part(prs, source_chart_part):
     return clone_chart_part(prs, source_chart_part)
 
 
-# Re wird in _clone_chart_part benutzt
-import re
-
-
 # ---------------------------------------------------------------------------
 # Chart-Befüllung — Wrapper für pptx_charts (Backwards-Compat)
 # ---------------------------------------------------------------------------
@@ -502,92 +498,37 @@ def _save_and_reload(prs) -> Presentation:
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Performance-Berechnungs-Funktionen
-# Historische Duplikate aus streamlit_app.py — die zentrale Mathematik lebt
-# inzwischen in modules/analytics.py (siehe compute_performance_data unten).
-# Die lokalen _calc_*-Helfer bleiben für compute_wertentwicklung_data und
-# als Fallback erhalten.
+# Performance-Berechnungs-Helfer
+#
+# AUFGERÄUMT 07.08.2026: Hier standen elf Kopien der analytics-Mathematik,
+# entstanden als Duplikate aus streamlit_app.py. Acht davon wurden nie
+# aufgerufen (_calc_cagr, _calc_vola, _drawdown_from_index,
+# _calc_max_drawdown, _calc_sharpe_excess, _calc_period_return,
+# _calc_period_return_after_fee, _calc_daily_returns_after_fee,
+# _make_index_from_returns) — sie luden nur dazu ein, versehentlich
+# weiterverwendet zu werden statt modules/analytics.py.
+#
+# Geblieben sind die zwei tatsächlich genutzten Helfer. Sie sind identisch
+# zu ihren analytics-Gegenstücken; perspektivisch sollten auch sie von dort
+# kommen, das berührt aber compute_wertentwicklung_data und wird deshalb
+# getrennt gemacht.
 # ─────────────────────────────────────────────────────────────────────────
 import numpy as _np
 
+
 def _annual_fee_to_daily_drag(fee_pa_decimal):
+    """Jährlicher Honorarsatz → äquivalente tägliche Belastung."""
     return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
 
 
-def _make_index_from_returns(d_returns_decimal, startwert=100.0):
-    idx = _np.empty(len(d_returns_decimal) + 1, dtype=float)
-    idx[0] = startwert
-    for i, d in enumerate(d_returns_decimal, start=1):
-        idx[i] = idx[i-1] * (1.0 + d)
-    return idx
-
-
 def _make_index_after_fee(d_returns_decimal, fee_pa_decimal, startwert=100.0):
+    """Index aus Tagesrenditen nach taggenauem Honorarabzug."""
     e = _annual_fee_to_daily_drag(fee_pa_decimal)
     idx = _np.empty(len(d_returns_decimal) + 1, dtype=float)
     idx[0] = startwert
     for i, d in enumerate(d_returns_decimal, start=1):
         idx[i] = idx[i-1] * (1.0 + (d - e))
     return idx
-
-
-def _calc_daily_returns_after_fee(d_returns_decimal, fee_pa_decimal):
-    return d_returns_decimal - _annual_fee_to_daily_drag(fee_pa_decimal)
-
-
-def _calc_cagr(idx_after, n_days):
-    if n_days <= 0 or idx_after[0] == 0:
-        return None
-    return (idx_after[-1] / idx_after[0]) ** (365.0 / n_days) - 1.0
-
-
-def _calc_vola(daily_returns_after_fee):
-    if len(daily_returns_after_fee) < 2:
-        return None
-    return float(_np.std(daily_returns_after_fee, ddof=1) * _np.sqrt(365))
-
-
-def _drawdown_from_index(idx):
-    peak = _np.maximum.accumulate(idx)
-    return (idx / peak) - 1.0
-
-
-def _calc_max_drawdown(idx_after):
-    dd = _drawdown_from_index(idx_after)
-    return float(_np.min(dd))
-
-
-def _calc_sharpe_excess(daily_returns_after_fee, rf_annual_series):
-    """Sharpe Ratio nach Sharpe (1994), tägliche Excess Returns."""
-    rp = pd.Series(daily_returns_after_fee).to_numpy(dtype=float)
-    if rp.size < 2:
-        return None
-    rf_ser = pd.Series(rf_annual_series).reset_index(drop=True)
-    if len(rf_ser) != len(rp):
-        if len(rf_ser) > len(rp):
-            rf_ser = rf_ser.iloc[:len(rp)]
-        else:
-            rf_ser = rf_ser.reindex(range(len(rp)))
-    rf_ann = rf_ser.fillna(0.0).to_numpy(dtype=float)
-    daily_rf = (1.0 + rf_ann) ** (1.0/365.0) - 1.0
-    mask = ~_np.isnan(rp)
-    if mask.sum() < 2:
-        return None
-    excess = rp[mask] - daily_rf[mask]
-    mu = float(_np.mean(excess))
-    sd = float(_np.std(excess, ddof=1))
-    if sd == 0:
-        return None
-    return (mu / sd) * _np.sqrt(365.0)
-
-
-def _calc_period_return(returns):
-    return float(_np.prod(1.0 + returns) - 1.0)
-
-
-def _calc_period_return_after_fee(returns, fee_pa_decimal):
-    e = _annual_fee_to_daily_drag(fee_pa_decimal)
-    return float(_np.prod(1.0 + (returns - e)) - 1.0)
 
 
 def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,

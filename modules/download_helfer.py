@@ -115,11 +115,3 @@ def download_bereich(daten: bytes, dateiname: str) -> None:
             key="pf_pptx_dl",
             use_container_width=True,
         )
-
-
-# ── LEGACY (nur Import-Kompatibilität; nicht mehr genutzt) ──────────────────
-# Frühere Varianten (interne Media-URL / Static Serving). portfolioanalyse.py
-# importiert medien_download_url noch mit → als No-Op belassen.
-def medien_download_url(daten: bytes, dateiname: str,
-                        mimetype: str = PPTX_MIMETYPE):
-    return None
