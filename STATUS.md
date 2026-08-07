@@ -58,12 +58,18 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 
 Netto etwa −1.500 Zeilen bei mehr Funktion.
 
-### Nach dem Merge testen
+### Sichtprüfung in echtem PowerPoint — ERLEDIGT
+
+Philip hat am 07.08.2026 **CVV „Defensiv"** und **Thema „Offensiv"** in
+echtem PowerPoint geöffnet: Trennstriche und „seit 2009" sitzen korrekt.
+Damit sind die beiden Broschüren-Korrekturen dieser Sitzung am Endprodukt
+bestätigt, nicht nur im XML.
+
+### Nach dem Merge noch testen (in der App)
 
 1. **Muster SCHWEIZ Aktien** wählen → Kennzahlen zeigen „–" statt 0,00 %
 2. **Eine andere Strategie** → muss exakt dieselben Zahlen liefern wie vorher
 3. **Toolbar oben rechts** → erstmals schlank (Config wird jetzt gelesen)
-4. **CVV „Defensiv"** in echtem PowerPoint → Trennstriche und „seit 2009"
 
 ---
 
