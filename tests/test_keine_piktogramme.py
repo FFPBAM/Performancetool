@@ -51,6 +51,61 @@ def _piktogramme(zeile):
     return gefunden
 
 
+def _pruefe_gerenderte_app():
+    """Zusatzprüfung: die App hochfahren und die GERENDERTEN Texte ansehen.
+
+    Die Quelltextprüfung oben findet nur, was im Code steht. Piktogramme
+    könnten auch aus Daten kommen (Mapping-Spalten, CSV-Werte) oder aus
+    Vorgaben Dritter. Deshalb hier zusätzlich der Blick auf das, was der
+    Nutzer wirklich sieht — in BEIDEN Ansichten.
+
+    Braucht streamlit; ohne wird übersprungen.
+    """
+    print("\nZusatzprüfung: gerenderte Oberfläche (AppTest)")
+    try:
+        from streamlit.testing.v1 import AppTest
+    except ImportError as ex:
+        print(f"   UEBERSPRUNGEN — {ex}")
+        return 0
+
+    at = AppTest.from_file(os.path.join(WURZEL, "streamlit_app.py"),
+                           default_timeout=300)
+    at.secrets["passwords"] = {"testnutzer": "nur-fuer-den-test"}
+    at.session_state["logged_in"] = True
+    at.session_state["username"] = "testnutzer"
+
+    fehler = 0
+    for ansicht in ("Performance", "Portfolioanalyse"):
+        if ansicht != "Performance":
+            at.session_state["nav_view"] = ansicht
+        try:
+            at.run()
+        except Exception as ex:
+            print(f"   UEBERSPRUNGEN ({ansicht}) — {ex}")
+            return 0
+        if at.exception:
+            for ex in at.exception:
+                print(f"   FEHLER — {ansicht} warf: {str(ex.value)[:200]}")
+            return 1
+
+        texte = []
+        for sammlung in (at.markdown, at.subheader, at.header, at.title,
+                         at.caption, at.info, at.warning, at.success,
+                         at.error):
+            texte += [e.value for e in sammlung if e.value]
+        gefunden = sorted({z for t in texte for z in _piktogramme(t)})
+        if gefunden:
+            fehler += len(gefunden)
+            print(f"   FEHLER — {ansicht}: {''.join(gefunden)}")
+            for t in texte:
+                if _piktogramme(t):
+                    print(f"          {t.strip()[:88]}")
+        else:
+            print(f"   OK — {ansicht}: {len(texte)} Textbausteine, "
+                  f"kein Piktogramm")
+    return fehler
+
+
 def main():
     fehler = 0
     geprueft = 0
@@ -79,9 +134,11 @@ def main():
             print(f"   FEHLER Zeile {nr}: {''.join(gef)}  ({namen})")
             print(f"          {text}")
 
+    fehler += _pruefe_gerenderte_app()
+
     print()
     if fehler:
-        print(f"FEHLGESCHLAGEN — {fehler} Zeile(n) mit Piktogrammen in "
+        print(f"FEHLGESCHLAGEN — {fehler} Fund(e) mit Piktogrammen in "
               f"sichtbarem Text")
         print("Hinweis: In Kommentaren und Docstrings sind sie erlaubt.")
         return 1
