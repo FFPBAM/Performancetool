@@ -112,6 +112,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 
 | Test | Braucht | Prüft |
 |---|---|---|
+| `test_anlagekriterien.py` | pandas **+ streamlit** | 14 Strategien, Schlüssel im Namens-Mapping, einheitliche Schreibweise, Thema ausgenommen |
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
 | `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
 | `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert |
@@ -121,6 +122,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
 ```
+python tests/test_anlagekriterien.py
 python tests/test_app_titel.py
 python tests/test_legende_musterdepot.py
 python tests/test_benchmark_erkennung.py

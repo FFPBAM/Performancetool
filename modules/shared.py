@@ -48,6 +48,15 @@ FFPB_PALETTE = [
 
 MAPPING_PATH      = "Mapping_Honorarsatz.xlsx"
 NAME_MAPPING_PATH = "Mapping_Namen.xlsx"
+ANLAGEKRITERIEN_PATH = "Mapping_Anlagekriterien.xlsx"
+
+# Die vier Anlagekriterien — Reihenfolge wie in der Vorlagen-Tabelle
+# (Zeile 1-4 des Kastens). Die Spaltennamen der Excel sind GLEICHZEITIG die
+# Beschriftungen, die gedruckt und angezeigt werden: eine Quelle, keine
+# zweite Liste, die auseinanderlaufen kann.
+KRITERIEN_SPALTEN = ("Anlageregion", "Aktienanteil",
+                     "Anleihenanteil / Liquidität", "Fremdwährungen")
+KRITERIEN_KEY_SPALTE = "Strategie auswählen"   # wie in Mapping_Namen.xlsx
 DATA_FOLDER       = "Daten"
 DATA_FOLDER_PF    = "Daten_PF"
 DURATION_FOLDER   = "Duration"
@@ -179,6 +188,50 @@ def load_mapping(mapping_path: str = MAPPING_PATH) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_name_mapping(path: str = NAME_MAPPING_PATH) -> pd.DataFrame:
     return pd.read_excel(path)
+
+
+@st.cache_data(show_spinner=False)
+def load_anlagekriterien(path: str = ANLAGEKRITERIEN_PATH) -> pd.DataFrame:
+    """Anlagekriterien je Strategie (Mapping_Anlagekriterien.xlsx).
+
+    EINE Quelle für zwei Ausgaben: den Banner im Tool UND den Kasten auf der
+    Struktur-Folie der Broschüre. Wer hier etwas ändert, ändert beides — genau
+    das ist der Zweck (vorher stand der Text nur in den Vorlagen und war je
+    Familie unterschiedlich geschrieben).
+
+    Fehlt die Datei, wird ein LEERER DataFrame zurückgegeben statt zu werfen:
+    Banner und Kasten entfallen dann still, die App läuft weiter.
+    """
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=[KRITERIEN_KEY_SPALTE, *KRITERIEN_SPALTEN])
+    return pd.read_excel(path)
+
+
+def anlagekriterien_fuer(strategie: str, kriterien: pd.DataFrame):
+    """Kriterien EINER Strategie als geordnete Liste [(Bezeichnung, Wert), …].
+
+    Schlüssel ist der Wert aus der Mapping-Spalte 'Strategie auswählen'.
+    Gibt [] zurück, wenn die Strategie keinen Kasten hat — das ist der
+    Normalfall für die Familie 'Thema' und kein Fehler.
+    """
+    if kriterien is None or kriterien.empty or not strategie:
+        return []
+    if KRITERIEN_KEY_SPALTE not in kriterien.columns:
+        return []
+    treffer = kriterien.loc[
+        kriterien[KRITERIEN_KEY_SPALTE].astype(str).str.strip() == str(strategie).strip()]
+    if treffer.empty:
+        return []
+    zeile = treffer.iloc[0]
+    paare = []
+    for spalte in KRITERIEN_SPALTEN:
+        if spalte not in kriterien.columns:
+            continue
+        wert = zeile[spalte]
+        if pd.isna(wert) or not str(wert).strip():
+            continue
+        paare.append((spalte, str(wert).strip()))
+    return paare
 
 def build_name_lookups(name_mapping: pd.DataFrame, available_csv_names: set):
     """Baut Lookup-Dicts aus dem Name-Mapping.
