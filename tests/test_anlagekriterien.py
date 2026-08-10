@@ -231,10 +231,16 @@ def _pruefe_bauweise(df):
             fehler += 1
 
     # Die nativen Bausteine, die das Theme mitbringen
-    for muster in ("st.container(border=True)", "st.columns", "st.caption"):
+    for muster in ("st.container(", "st.columns", "st.caption"):
         if muster not in quelle:
             print(f"   FEHLER — '{muster}' fehlt; Block ist nicht nativ gebaut")
             fehler += 1
+
+    # Ohne Rahmen (Wunsch Philip 10.08.2026): die graue Umrandung wirkte
+    # im Seitenfluss unruhig.
+    if "border=True" in quelle:
+        print("   FEHLER — Rahmen ist zurueck (border=True)")
+        fehler += 1
 
     # Bewusst NICHT st.metric — sonst sieht die Regel aus wie eine Kennzahl
     if "st.metric" in quelle:

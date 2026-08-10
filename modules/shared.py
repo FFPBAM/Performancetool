@@ -260,7 +260,13 @@ def zeige_anlagekriterien(strategie: str, kriterien: pd.DataFrame,
     if mit_strategiename:
         titel = f"Anlagekriterien — {strategie}"
 
-    with st.container(border=True):
+    # OHNE Rahmen (Wunsch Philip, 10.08.2026): Die graue Umrandung von
+    # `border=True` legte eine zusätzliche Linie um den Block, die im
+    # Seitenfluss unruhig wirkte. Die Gliederung tragen die Überschriften
+    # darüber und darunter — der Kasten braucht keine eigene Kante.
+    # Der Container bleibt (ohne Rahmen), damit Titel und Spalten als eine
+    # Einheit zusammenbleiben.
+    with st.container(border=False):
         st.markdown(f"**{markdown_escapen(titel)}**")
         spalten = st.columns(len(paare))
         for spalte, (bez, wert) in zip(spalten, paare):
