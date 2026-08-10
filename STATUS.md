@@ -4,7 +4,7 @@
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
-`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#43) — hier nur der Zustand.
+`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#44) — hier nur der Zustand.
 
 ---
 
@@ -181,6 +181,13 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
    mechanisch entfernbar, viele Aufrufstellen.
 5. **`use_container_width` → `width`** (Backlog 7) — Streamlit warnt und
    entfernt den Parameter künftig.
+
+**Nicht offen, sondern entschieden:** Die Ring-Label-Positionierung bei
+kleinen/dicht benachbarten Segmenten wurde am 10.08.2026 vollständig
+vermessen und diagnostiziert — Philip: „wir sind am Zenit angekommen",
+**keine Änderung**. Die Messung, die Ursachenkette und vier konkrete
+Ansatzpunkte für später stehen in `PROJEKT_DOKUMENTATION.md` §44. Wer das
+Thema wieder aufmacht, fängt dort an und nicht bei null.
 
 ---
 

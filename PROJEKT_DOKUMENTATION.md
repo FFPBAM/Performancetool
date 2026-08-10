@@ -1482,6 +1482,75 @@ HISTORIE_AB = {
 
 ---
 
+### 44. Ring-Labels: vermessen, verstanden — und bewusst nicht geändert (NEU 10.08.2026) ⭐
+
+**Anlass:** Kleine und dicht benachbarte Segmente wirken gedrängt; die Zuordnung Segment ↔ Prozentwert ist nicht sofort klar. Gewünscht war eine allgemein bessere Label-Positionierung, nicht ein Einzelfall-Fix.
+
+**Entscheidung von Philip nach der Diagnose: Der Stand bleibt.** „Wir sind am Zenit angekommen." Am Code wurde **nichts** geändert. Dieser Eintrag hält fest, was gemessen wurde — damit die Diagnose nicht noch einmal erarbeitet werden muss.
+
+#### Der Ist-Zustand, gemessen an 143 Labels in 32 Ringen (alle sieben Broschüren)
+
+| Kennzahl | Wert |
+|---|---|
+| Abweichung Segment ↔ Label, Mittel | 20,0° |
+| Median / Maximum | 12,8° / **92,0°** (ESG F22, EDELMETALLE) |
+| Labels > 12° / > 30° / > 45° daneben | 77 / 25 / **21** |
+| Eng stehende Label-Paare | 18 |
+| Überkreuzende Leader · zu kurze Leader | **0 · 0** ✓ |
+
+Die Fixes aus #29–#31 halten also. Das Restproblem ist ein anderes: **54 % der Labels stehen mehr als 12° neben ihrem Segment.**
+
+#### Die Ursachenkette (am Beispiel ESG F16, LIQUIDITÄT 6,52 %, Segment bei 348,3° = 11:37 Uhr)
+
+| Schritt | x-Position des Labels |
+|---|---|
+| radiale Zielposition (Pass 5) | `cx − 0,21"` → **links** der Mitte ✓ |
+| tangentialer Versatz `tangential_klein = 0,24"` | `cx + 0,03"` → **rechts** der Mitte |
+| Pass 6d: `seite = 1.0 if dx0 >= 0 else -1.0` | dreht das Label die **rechte** Seite hinunter |
+| Ergebnis | Label bei 53,3° = 1:46 Uhr — **65° daneben** |
+
+**Ein Schubs von 0,24" kippt eine 65°-Entscheidung.** Die Führungslinie läuft dann quer über den Ringkopf und liegt dabei fast tangential auf der Ringkante — genau das wirkt unruhig.
+
+**Warum überhaupt gedreht wird:** Oben ist zu. `kopf_sperre_aus_usershapes` addiert **0,30" Luft** auf die Balken-Unterkante. Das Label bräuchte seine Mitte bei y = 0,41", die Sperre erlaubt erst 0,65". Wegen **0,14" Platzmangel** wird ein Label 65° um den Ring gedreht.
+
+Betroffen ist systematisch **LIQUIDITÄT in jeder Familie** — als letztes Segment der `GROUP_ORDER` endet es immer kurz vor 12 Uhr, also genau unter dem Überschriftenbalken.
+
+#### Zwei Experimente (beide zurückgerollt)
+
+| Kennzahl | heute | Spreizung 60°→24° | **Kopfluft 0,30"→0,12"** |
+|---|---|---|---|
+| Abweichung Mittel | 20,0° | 19,0° | **14,9°** |
+| Abweichung Maximum | 92,0° | 65,2° | **52,7°** |
+| Labels > 45° | 21 | 20 | **5** |
+| Enge Paare | 18 | **22** ✗ | **9** |
+| Leader-Länge Mittel | 0,68" | 0,66" | 0,60" |
+
+**Erst-These war falsch:** Die 60°-Winkelspreizung (`min_gap_deg_klein`) ist *nicht* der Treiber — sie ließ die großen Fälle unverändert und verschlechterte die engen Paare. Sie half nur beim Extremfall ESG F22 (92° → 23°).
+
+**Der wirksame Hebel ist die Kopfluft:** eine Zahl halbiert die engen Paare und drückt die schlimmste Kategorie um 76 %.
+
+#### Ansatzpunkte, falls das Thema wieder aufgemacht wird
+
+1. **Kopfluft datenbasiert** statt fix 0,30" — größter gemessener Hebel, kleinster Eingriff. Offene Frage: wie nah dürfen Zahlen optisch an den Balken?
+2. **Seitentreue** — `seite` in Pass 6d aus dem *Segmentwinkel* ableiten statt aus der aktuellen x-Position. Kippt die Ursachenkette oben (~10 Zeilen).
+3. **Entzerrung in 2D** — Pass 6 schiebt nur senkrecht, deshalb stehen alle engen Paare bei exakt `dy = 0,21"` (Text ist 0,20" hoch). Seitlich sind 1,4–1,6" frei. **Höchstes Risiko**, das ist der am stärksten austarierte Pass.
+4. **Anti-Kreuzung nur zwischen winkelbenachbarten Paaren** — der Tausch in Pass 6e darf heute beliebige Paare vertauschen; genau daraus entsteht der 92°-Ausreißer.
+
+#### Wovon ausdrücklich abgeraten wird
+
+**Keine neue Layout-Engine** (Kräftemodell, Solver, Annealing). Drei Gründe:
+- Genau das ist schon einmal gescheitert (Cluster-Engine, #29) — sie ersetzte das Layout, statt Ausreißer zu reparieren.
+- Die 8 Pässe sind kein Chaos, sondern verdichtetes Erfahrungswissen über PowerPoint-Eigenheiten (wann PP einen Leader zeichnet, Bogengrenzen-Regel, absolute Positionierung). Ein Neubau riskiert alle gleichzeitig.
+- Die Abnahme ist menschlich: LibreOffice ist als Beweis unbrauchbar (#29), jede Iteration braucht einen Blick in echtes PowerPoint. Ein Verfahren mit vielen Stellschrauben ist so nicht durchzutunen.
+
+**Ein Rest ist nicht algorithmisch lösbar:** „zwei kleine Segmente dicht nebeneinander direkt unter dem Überschriftenbalken". Oben ist zu, beide wollen dieselbe Seite. Es gibt keine geometrisch gute Antwort, nur eine bewusst gewählte, konsistente Regel — das ist eine Design-, keine Rechenfrage.
+
+**Übertragbar:** Bei Layout-Problemen dieser Art zuerst den *verfügbaren Platz* messen, nicht den Algorithmus verdächtigen. Hier steckte die Ursache in einer Randbedingung (0,30" Sicherheitsabstand), nicht in der Positionierungslogik — und die Kette aus drei je für sich vernünftigen Pässen machte sie unsichtbar.
+
+**Messmethode:** Geometrie direkt aus dem Chart-XML der fertigen Broschüren (plotArea-Layout → Mittelpunkt/Radius, `val`+`firstSliceAng` → Segmentwinkel, `dLbl`/`manualLayout` mit `xMode=edge` → Label-Mitte). Damit sind Abweichung, Leader-Länge und Paar-Abstände ohne Rendern reproduzierbar.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -2389,6 +2458,17 @@ mehr nötig.
 ---
 
 ## 16. Changelog
+
+### 10.08.2026 (abends) – Ring-Label-Positionierung vermessen, bewusst NICHT geändert
+
+Philips Anliegen: kleine und dicht benachbarte Segmente wirken gedrängt, die
+Zuordnung Segment ↔ Prozentwert ist nicht sofort klar. Es wurde **gemessen,
+diagnostiziert, zwei Experimente gefahren — und dann entschieden, den Stand
+zu belassen** („wir sind am Zenit angekommen"). Details in Transferwissen #44.
+
+**Am Code wurde nichts geändert.** `chart_dynamik.py` ist bitweise identisch;
+beide Experimente wurden zurückgerollt. Dieser Eintrag existiert, damit die
+Diagnose nicht verlorengeht.
 
 ### 10.08.2026 (nachmittags) – Das Tool trägt überall denselben Namen
 
