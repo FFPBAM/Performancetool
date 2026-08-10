@@ -119,6 +119,15 @@ SHAPE_CHART_RIGHT = "C_Kennzahlen2"        # Rechtes Ring-Diagramm (Slide 9)
 SHAPE_TITLE = "Titel"
 SHAPE_TITLE_ALT = "Titel 2"
 
+# ─── Anlagekriterien-Kasten der Struktur-Folie (NEU 10.08.2026) ─────────────
+# Tabelle 5x3 links oben: Spalte 0 Bezeichnung, Spalte 1 LEERE Abstandsspalte,
+# Spalte 2 Wert. Zeile 0 ist die Kopfzeile ("Anlagekriterien" | | Strategie).
+KRIT_KOPFZELLE = "Anlagekriterien"
+KRIT_COL_BEZ = 0
+KRIT_COL_WERT = 2
+KRIT_ROW_KOPF = 0
+"""Die Abstandsspalte 1 wird NIE angefasst — sie trägt die Optik des Kastens."""
+
 # Shape-Namen der Wertentwicklungs-Folie (alte cVV-Folie, NEU Juli 2026).
 # "Tabelle"/"Diagramm links"/"Diagramm rechts" heißen auf der Performance-
 # Folie genauso — die Lookups sind aber immer per-Slide, daher kein Konflikt.
@@ -277,6 +286,77 @@ Liquidität wird ggf. NACH dieser Konsolidierung angehängt."""
 # ═══════════════════════════════════════════════════════════════════════════
 # DOMAIN-HELPERS
 # ═══════════════════════════════════════════════════════════════════════════
+
+def finde_anlagekriterien_tabelle(slide):
+    """Findet den Anlagekriterien-Kasten INHALTSBASIERT.
+
+    Bewusst nicht über den Shape-Namen: Der Kasten heißt in der Vorlage
+    schlicht "Tabelle" — und so heißt auf der Wertentwicklungs-Folie die
+    KENNZAHLEN-Tabelle. Wer über den Namen sucht, erwischt irgendwann die
+    falsche und überschreibt Kundenzahlen mit Anlageregionen.
+
+    Erkennungsmerkmal ist deshalb die Kopfzelle (0,0) = "Anlagekriterien".
+    Siehe Transferwissen #45.
+
+    Returns: die Tabelle oder None.
+    """
+    for shape in slide.shapes:
+        if not getattr(shape, "has_table", False):
+            continue
+        tabelle = shape.table
+        if len(tabelle.rows) < 2 or len(tabelle.columns) <= KRIT_COL_WERT:
+            continue
+        kopf = tabelle.cell(KRIT_ROW_KOPF, 0).text.strip().lower()
+        if KRIT_KOPFZELLE.lower() in kopf:
+            return tabelle
+    return None
+
+
+def fill_anlagekriterien_slide(prs, slide_idx: int, kriterien,
+                               anzeigename: Optional[str] = None) -> bool:
+    """Schreibt die Anlagekriterien in den Kasten der Struktur-Folie.
+
+    NEU 10.08.2026: Bis hierher stand der Kasten NUR statisch in der Vorlage —
+    je Familie unterschiedlich geschrieben, mit Tippfehlern („FPFB Strategie
+    30", „AUsgewogen") und uneinheitlicher Prozent-Schreibweise. Jetzt kommt
+    er aus ``Mapping_Anlagekriterien.xlsx``, derselben Datei, die den Banner
+    im Tool speist. Eine Änderung dort wirkt auf beides.
+
+    Das ist die bewusste Ausnahme von der Regel „statischer Vorlagentext wird
+    in der VORLAGE geändert" (CLAUDE.md): Der Text muss an ZWEI Stellen
+    erscheinen, also braucht er EINE Quelle. Anders als beim Musterdepot-Fall
+    widerspricht der Code der Vorlage hier nicht heimlich — er ersetzt sie
+    als Quelle, nachvollziehbar über eine gepflegte Datei.
+
+    Args:
+        kriterien: [(Bezeichnung, Wert), …] in Zeilenreihenfolge (aus
+            ``anlagekriterien.fuer``). Leer → die Folie bleibt unberührt.
+        anzeigename: Strategiename für die Kopfzeile. None → Vorlage bleibt.
+
+    Returns: True, wenn geschrieben wurde.
+    """
+    if not kriterien:
+        return False
+    if slide_idx < 0 or slide_idx >= len(prs.slides):
+        return False
+    tabelle = finde_anlagekriterien_tabelle(prs.slides[slide_idx])
+    if tabelle is None:
+        return False
+
+    # Kopfzeile: Strategiename rechts neben "Anlagekriterien"
+    if anzeigename:
+        set_cell_text_preserve_format(
+            tabelle.cell(KRIT_ROW_KOPF, KRIT_COL_WERT), anzeigename)
+
+    # Datenzeilen ab 1. Mehr Kriterien als Zeilen → der Rest wird ignoriert,
+    # statt die Tabelle zu sprengen (die Vorlage gibt die Zeilenzahl vor).
+    for zeile, (bez, wert) in enumerate(kriterien, start=KRIT_ROW_KOPF + 1):
+        if zeile >= len(tabelle.rows):
+            break
+        set_cell_text_preserve_format(tabelle.cell(zeile, KRIT_COL_BEZ), bez)
+        set_cell_text_preserve_format(tabelle.cell(zeile, KRIT_COL_WERT), wert)
+    return True
+
 
 def clean_strategy_name(name: str) -> str:
     """Bereinigt einen Strategienamen für die Anzeige in der Broschüre.

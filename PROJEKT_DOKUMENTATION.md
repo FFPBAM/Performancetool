@@ -2509,6 +2509,71 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 10.08.2026 (spät) – Anlagekriterien: eine Quelle für Tool und Broschüre
+
+Der Anlagekriterien-Kasten der Struktur-Folien wandert ins Streamlit-Tool.
+In drei Schritten umgesetzt.
+
+**Schritt 1 — `Mapping_Anlagekriterien.xlsx`.** Eine Zeile je Strategie,
+Schlüssel ist die Spalte „Strategie auswählen" wie in `Mapping_Namen.xlsx`.
+Die Spaltenüberschriften **sind** die gedruckten Beschriftungen — keine
+zweite Liste, die auseinanderlaufen kann. 14 Strategien (CVV 5, ESG 4,
+ETF 2, comdirect 3); die Thema-Familie hat keinen Kasten und bleibt außen vor.
+
+**19 Bereinigungen**, mit Philip abgestimmt — diese Texte standen so in
+Kundenbroschüren: Tippfehler `FPFB Strategie 30` → `FFPB`, `AUsgewogen` →
+`Ausgewogen`; Groß-/Kleinschreibung der Anzeigenamen (`defensiv`,
+`ausgewogen`, `dynamic`); `min.` → `mind.`; Aktienanteil `-` → `keine`
+(Wortlaut der Webseite); bei CVV Dynamic hieß die Zeile nur `Liquidität`
+statt `Anleihenanteil / Liquidität`; zehnmal Prozent einheitlich mit
+Leerzeichen (DIN 5008).
+
+**Schritt 2 — Banner im Tool**, in beiden Ansichten: Performance zwischen
+Kennzahlen und Wertentwicklung, Portfolioanalyse direkt unter den
+Bestandszahlen. Dort ist der fachliche Gewinn: Investitionsgrad und
+erlaubter Aktienanteil stehen erstmals nebeneinander.
+
+⚠️ **Einmal überarbeitet — die Lehre:** Die erste Fassung war ein
+HTML-Block mit eigener heller Fläche und Fuggerblau als Textfarbe. Im
+**Dark Mode** stand ein greller weißer Kasten in der dunklen App. Der
+naheliegende Fix `var(--background-color)` wurde geprüft und verworfen:
+**Streamlit 1.61 stellt keine Theme-CSS-Variablen bereit** (weder in
+`static/css` noch im JS-Bundle nachweisbar) — die Variable wäre still ins
+Leere gelaufen. Jetzt ohne eine Zeile eigenes CSS:
+`st.container(border=True)` + `st.columns` + `st.caption` + fettes
+`st.markdown`. **Regel: eigene HTML-Bausteine in Streamlit nur, wenn sie
+ohne Farbannahmen auskommen.**
+
+**Schritt 3 — Rückweg in die PowerPoint.** `fill_anlagekriterien_slide`
+schreibt die Konfiguration beim Export in den Kasten. Die Tabelle wird
+**inhaltsbasiert** gefunden (Kopfzelle „Anlagekriterien"), nicht über den
+Shape-Namen — der ist „Tabelle", und so heißt auf der Wertentwicklungs-Folie
+die Kennzahlen-Tabelle. Die leere Abstandsspalte 1 bleibt unberührt.
+
+**Beweis, dass nichts kaputtgeht** (Vorher/Nachher über alle sieben
+Broschüren): **genau 19 Zellen geändert — 0 Änderungen außerhalb der
+Kästen**, ZIP-Struktur identisch, Thema unberührt. Formatvergleich über 210
+Zellen: Schriftgröße, Fettung, Schriftart und Farbe unverändert.
+
+Ein Zwischenbefund dabei: In der Vorlage bestand die Zelle
+„Anleihenanteil / Liquidität" aus **zwei Runs** (`'Anleihenanteil'` +
+`' / Liquidität '`). `set_cell_text_preserve_format` führt sie zu einem
+zusammen. Geprüft statt angenommen: beide Runs trugen identisches Format
+(9 pt, nicht fett, keine Farbe) — der Split war ein Bearbeitungsartefakt,
+das Zusammenführen ist folgenlos.
+
+**Architektur:** Die Kriterien-Logik steht in `modules/anlagekriterien.py`
+und ist **streamlit-frei**, weil `pptx_export.py` sie ebenfalls braucht und
+bewusst ohne Streamlit läuft (Batch-Fähigkeit, Abschnitt 13). `shared.py`
+legt für die App nur `@st.cache_data` darum. Zwei Loader wären genau die
+Duplizierung, an der die Codebasis früher krankte.
+
+**Prüfstein** `tests/test_anlagekriterien.py`, zehn Schritte — vom Aufbau der
+Excel über die Bauweise des Banners und einen **AppTest in beiden Ansichten**
+bis zum Kasten in der erzeugten Broschüre (Schritt 10, nur mit
+Ordner-Argument). Gegenproben gefahren: gegen den unbereinigten
+Vorlagenstand 14 Abweichungen, gegen die alten Broschüren rot.
+
 ### 10.08.2026 (abends) – Ring-Label-Positionierung vermessen, bewusst NICHT geändert
 
 Philips Anliegen: kleine und dicht benachbarte Segmente wirken gedrängt, die

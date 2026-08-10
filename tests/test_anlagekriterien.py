@@ -330,6 +330,86 @@ def _pruefe_in_der_app(df):
     return 0
 
 
+def _pruefe_broschueren(df, ordner):
+    """Schritt 10 (nur mit Ordner-Argument): Zeigt die ERZEUGTE Broschuere
+    genau das, was in der Konfiguration steht?
+
+        python tests/test_anlagekriterien.py C:\\pfad\\zur\\ausgabe
+    """
+    print(f"\n10. Kasten in den erzeugten Broschueren ({ordner})")
+    try:
+        import glob
+        from pptx import Presentation
+        from modules.pptx_slides import finde_anlagekriterien_tabelle
+    except ImportError as ex:
+        print(f"   UEBERSPRUNGEN — {ex}")
+        return 0
+
+    dateien = sorted(glob.glob(os.path.join(ordner, "*.pptx")))
+    if not dateien:
+        print(f"   FEHLER — keine PPTX in {ordner}")
+        return 1
+
+    # Nachschlagen ueber die Kopfzeile: unabhaengig von Folienpositionen.
+    nach_anzeige = {}
+    for _, z in df.iterrows():
+        nach_anzeige.setdefault(str(z["Anzeigename"]).strip(), []).append(z)
+
+    fehler, geprueft = 0, 0
+    for pfad in dateien:
+        name = os.path.basename(pfad)
+        prs = Presentation(pfad)
+        for si, slide in enumerate(prs.slides, 1):
+            t = finde_anlagekriterien_tabelle(slide)
+            if t is None:
+                continue
+            geprueft += 1
+            kopf = t.cell(0, 2).text.strip()
+            kandidaten = nach_anzeige.get(kopf)
+            if not kandidaten:
+                print(f"   FEHLER — {name} F{si}: Kopfzeile {kopf!r} steht "
+                      f"in keiner Zeile der Konfiguration")
+                fehler += 1
+                continue
+            # Bei gleichem Anzeigenamen (ETF/CVV 'Ausgewogen') genuegt EINE
+            # passende Zeile — die Werte entscheiden.
+            passt = False
+            for z in kandidaten:
+                if all(t.cell(r, 0).text.strip() == k
+                       and t.cell(r, 2).text.strip() == str(z[k]).strip()
+                       for r, k in enumerate(KRITERIEN, start=1)):
+                    passt = True
+                    break
+            if not passt:
+                z = kandidaten[0]
+                print(f"   FEHLER — {name} F{si} ({kopf}):")
+                for r, k in enumerate(KRITERIEN, start=1):
+                    ist_b, ist_w = t.cell(r, 0).text.strip(), t.cell(r, 2).text.strip()
+                    if ist_b != k or ist_w != str(z[k]).strip():
+                        print(f"      Zeile {r}: {ist_b!r}={ist_w!r}  "
+                              f"erwartet {k!r}={str(z[k]).strip()!r}")
+                fehler += 1
+                continue
+            # Formatierung darf nicht verloren gehen: jede beschriebene Zelle
+            # braucht einen Run MIT expliziter Schriftgroesse.
+            for r in range(len(t.rows)):
+                for c in (0, 2):
+                    paras = t.cell(r, c).text_frame.paragraphs
+                    runs = paras[0].runs if paras else []
+                    if not runs or runs[0].font.size is None:
+                        print(f"   FEHLER — {name} F{si} Zeile {r} Spalte {c}: "
+                              f"Formatierung verloren (keine Schriftgroesse)")
+                        fehler += 1
+
+    if geprueft == 0:
+        print("   FEHLER — kein einziger Kasten gefunden")
+        return 1
+    if not fehler:
+        print(f"   OK — {geprueft} Kaesten stimmen mit der Konfiguration "
+              f"ueberein, Formatierung erhalten")
+    return fehler
+
+
 def main():
     if not os.path.exists(EXCEL):
         print(f"FEHLER: {EXCEL} fehlt")
@@ -346,6 +426,11 @@ def main():
               + _pruefe_zugriff(df)
               + _pruefe_bauweise(df)
               + _pruefe_in_der_app(df))
+
+    # Schritt 10 nur, wenn ein Export-Ordner uebergeben wurde (wie
+    # test_trennstriche.py). Ohne Ordner bleibt der Test schnell.
+    if len(sys.argv) > 1:
+        fehler += _pruefe_broschueren(df, sys.argv[1])
 
     print()
     if fehler:

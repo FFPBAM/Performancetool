@@ -43,6 +43,13 @@ vergleichen, Zeitstempel ignorieren.
   an, was gedruckt wird. Zurückgenommen. Code fasst statischen Text nur an,
   wenn er *dynamisch* werden muss (Datenstand, Benchmark-Zusammensetzung,
   Kennzahlen-Labels). Reine Wording-Wünsche gehören in die `.pptx`.
+  **Die eine Ausnahme:** Text, der an ZWEI Stellen erscheinen muss (Tool
+  *und* Broschüre), braucht EINE Quelle — sonst läuft er auseinander. Dann
+  gewinnt eine gepflegte Konfigurationsdatei, und die Vorlage wird zum
+  Ausgabeziel. So bei den Anlagekriterien (`Mapping_Anlagekriterien.xlsx`,
+  10.08.2026). Der Unterschied zum Musterdepot-Fall: Dort widersprach der
+  Code der Vorlage *heimlich*; hier ersetzt eine sichtbare Datei sie als
+  Quelle. Wer eine weitere solche Ausnahme anlegt, dokumentiert sie hier.
 
 ---
 
@@ -57,6 +64,7 @@ vergleichen, Zeitstempel ignorieren.
 | `modules/pptx_helpers.py` | generische PPTX-Mechanik |
 | `modules/pptx_charts.py` | Chart-XML + Bug-Workarounds |
 | `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) |
+| `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.
 `vorlagen_config.py` hat bewusst **keine Importe** — das bitte so lassen.

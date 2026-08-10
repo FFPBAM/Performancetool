@@ -109,6 +109,7 @@ try:
         fill_rollierend_slide,
         fill_einzeltitel_themen_slide,
         fill_uebersicht_slide,
+        fill_anlagekriterien_slide,
     )
 except ImportError:
     from pptx_slides import (
@@ -132,7 +133,15 @@ except ImportError:
         fill_rollierend_slide,
         fill_einzeltitel_themen_slide,
         fill_uebersicht_slide,
+        fill_anlagekriterien_slide,
     )
+
+# Anlagekriterien-Konfiguration. BEWUSST das UI-freie Modul, nicht shared.py:
+# dieser Export laeuft ohne Streamlit (Batch-Faehigkeit, Doku Abschnitt 13).
+try:
+    from modules import anlagekriterien as _anlagekriterien
+except ImportError:
+    import anlagekriterien as _anlagekriterien
 
 
 # ---------------------------------------------------------------------------
@@ -1138,6 +1147,10 @@ def generate_portfolioanalyse_pptx(
     # sich aus der Position der Rolle in `reihenfolge` (so kann jede Vorlage
     # eine andere Folien-Zusammenstellung/-Reihenfolge haben, z.B. die
     # Themen-Broschüren mit "rollierend" statt "performance").
+    # Anlagekriterien EINMAL laden (nicht je Strategie) — die Datei ist klein,
+    # aber der Export laeuft ueber bis zu fuenf Strategien.
+    kriterien_cfg = _anlagekriterien.lade()
+
     for k, (display_name, df, eval_date, _dur) in enumerate(portfolios):
         strategy_name = clean_strategy_name(display_name)
         perf_data = _build_perf_data(performance_inputs, k)
@@ -1163,6 +1176,15 @@ def generate_portfolioanalyse_pptx(
             if rolle == "anlagevorschlag":
                 _fill_anlagevorschlag_slides(prs, idx, df, strategy_name,
                                              eval_date=eval_date, **opt)
+                # Anlagekriterien-Kasten aus der Konfiguration (NEU 10.08.2026).
+                # Schluessel ist der UNGEKUERZTE Anzeigename aus dem Mapping
+                # ("cVV konservativ"), nicht strategy_name — der hat den
+                # Praefix bereits verloren. Strategien ohne Eintrag (Familie
+                # Thema) lassen die Vorlage unberuehrt.
+                fill_anlagekriterien_slide(
+                    prs, idx,
+                    _anlagekriterien.fuer(display_name, kriterien_cfg),
+                    _anlagekriterien.anzeigename(display_name, kriterien_cfg))
             elif rolle == "wertentwicklung":
                 _fill_wertentwicklung_slide(prs, idx, strategy_name,
                                             we_data=we_data, stand_date_str=stand)
