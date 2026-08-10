@@ -96,11 +96,18 @@ undefinierten Namen. Nach dem Entfernen von Importen oder Funktionen immer
 
 ## Git
 
+- **Gearbeitet wird in `C:\Entwicklung\Performancetool`** (seit 10.08.2026).
+  DRACOON (`H:\…`) ist nur Ablage und wird am Sessionende nachgezogen —
+  Ablauf in `STATUS.md`. Wahrheit ist GitHub, Branch `verbesserungen`.
 - Auf einem Branch arbeiten, `main` nie direkt anfassen.
 - Ein Commit je Thema, **deutsche** Nachricht mit Begründung und Messwerten.
 - Vor dem Push: alle Tests grün.
-- Netzlaufwerk-Eigenheit: DRACOON legt kurzlebige Dateien an — `git add -A`
-  kann daran scheitern. Dateien lieber explizit nennen.
+- Netzlaufwerk-Eigenheit: DRACOON legt kurzlebige Dateien an (`__init__.py`,
+  `py.typed` erscheinen und verschwinden von selbst) — `git add -A` kann
+  daran scheitern. **Dateien immer explizit nennen**, auch auf C:.
+- Commit-Nachrichten über `git commit -F <datei>`, nicht `-m` mit
+  PowerShell-Here-String: eingebettete Anführungszeichen zerlegen sonst die
+  Argumentgrenzen und git liest die Nachricht als Pathspecs (10.08.2026).
 - Zeilenenden: LF ist Repo-Konvention.
 
 ---

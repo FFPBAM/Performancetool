@@ -12,7 +12,7 @@ wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
 
 Diese drei Zeilen im Chat genügen:
 
-> Arbeite im Repo `H:\Entwicklung\Forschung_Claude\Performancetool`.
+> Arbeite im Repo `C:\Entwicklung\Performancetool`.
 > Lies zuerst `STATUS.md`, dann `PROJEKT_DOKUMENTATION.md`.
 > Hol den aktuellen Stand von GitHub und sag mir, wo wir stehen.
 
@@ -24,10 +24,41 @@ Diese drei Zeilen im Chat genügen:
    ist gar nicht installiert und wird für push/pull auch nicht gebraucht).
    Angemeldet als `FFPBAM`, Schreibrechte auf `FFPBAM/Performancetool`.
 2. **Stand holen:** `git fetch origin && git status -sb`
-3. **Testumgebung prüfen:** siehe unten — die venv liegt im Temp-Ordner und
-   ist nach einem Neustart womöglich weg.
+3. **Testumgebung:** `.venv` liegt im Projekt und übersteht den Neustart.
 
-**Falls Git meint „dubious ownership":** Das Netzlaufwerk braucht einmalig
+### Gearbeitet wird auf C:, nicht auf DRACOON (NEU 10.08.2026)
+
+**Arbeitskopie:** `C:\Entwicklung\Performancetool` (Klon von GitHub, Branch
+`verbesserungen`). **Wahrheit ist GitHub.** Das DRACOON-Laufwerk
+`H:\Entwicklung\Forschung_Claude\Performancetool` ist nur noch Ablage und
+wird **am Sessionende** nachgezogen.
+
+Warum — am 10.08.2026 gemessen:
+
+| | DRACOON (H:) | lokal (C:) |
+|---|---|---|
+| `pip install -r requirements.txt` | > 20 Min, abgebrochen | ~1 Min |
+| Fremddateien im Arbeitsverzeichnis | `__init__.py`, `py.typed` tauchen auf und verschwinden wieder | keine |
+
+Die Geisterdateien sind keine Einbildung: `git status` zeigte sie, Sekunden
+später waren sie weg. Genau davor warnt `CLAUDE.md` („DRACOON legt
+kurzlebige Dateien an") — deshalb beim Commit **Dateien explizit nennen**,
+nie `git add -A`.
+
+**Sessionende — H: nachziehen** (Reihenfolge wichtig, erst pushen):
+
+```
+cd C:\Entwicklung\Performancetool
+git push origin verbesserungen
+cd H:\Entwicklung\Forschung_Claude\Performancetool
+git fetch origin && git reset --hard origin/verbesserungen
+```
+
+`git reset --hard` auf H: ist unkritisch, **solange dort nicht gearbeitet
+wird** — die Kopie soll ja nur spiegeln. Wer doch etwas auf H: geändert hat:
+vorher `git status` dort ansehen.
+
+**Falls Git auf H: „dubious ownership" meldet:** einmalig
 
 ```
 git config --global --add safe.directory '%(prefix)///RCO-MASCHINE/DRACOON/Entwicklung/Forschung_Claude/Performancetool'
@@ -103,21 +134,30 @@ dann sauber, `test_folien_config` bricht mit `ModuleNotFoundError` ab. Ohne
 venv laufen tatsächlich nur `test_benchmark_erkennung` und Schritt 1 von
 `test_legende_musterdepot`.
 
-### Testumgebung (WICHTIG)
+### Testumgebung — steht (10.08.2026)
 
 Die Doku behauptete lange, die Firmen-IT lasse keine Paketinstallationen zu.
-**Das stimmt nicht** — `pip` funktioniert. Eine venv anlegen:
+**Das stimmt nicht** — `pip` funktioniert.
+
+`C:\Entwicklung\Performancetool\.venv` ist **angelegt und bleibt liegen**
+(nicht mehr im Temp-Ordner, übersteht also den Neustart). Installiert:
+
+```
+pandas 3.0.5 · numpy 2.5.2 · python-pptx 1.0.2 · streamlit 1.61.0 · pyflakes
+```
+
+Genau die pandas/numpy-Kombination aus Transferwissen #20/#21 — der Export
+läuft damit sauber durch (7 Broschüren am 10.08. erzeugt).
+
+Neu anlegen, falls doch nötig:
 
 ```
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -r requirements.txt pyflakes
 ```
 
-Damit läuft der komplette PPTX-Export lokal. In der letzten Sitzung lag die
-venv unter `%TEMP%\claude\...\scratchpad\venv_ffpb` — **die ist beim nächsten
-Mal vermutlich weg.** Beim Neuanlegen zieht pip pandas 3.0 und numpy 2.5
-(Python 3.12), also genau die Kombination aus Transferwissen #20/#21. Der
-Export läuft damit sauber durch.
+**Auf C: dauert das rund eine Minute, auf H: über zwanzig** (dort am 10.08.
+abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 `.venv/` steht in `.gitignore`.
 
