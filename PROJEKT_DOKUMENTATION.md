@@ -1551,6 +1551,56 @@ Betroffen ist systematisch **LIQUIDITÄT in jeder Familie** — als letztes Segm
 
 ---
 
+### 45. Statische Vorlagen-Inhalte finden: ein Shape ist selten ein Textfeld (NEU 10.08.2026) ⭐
+
+**Anlass:** Der Anlagekriterien-Kasten der Struktur-Folien sollte ins Streamlit-Tool übernommen werden. Der naheliegende erste Griff — alle Shapes der Folie durchgehen und `shape.text_frame.text` lesen — fand **nichts** außer Titel und Foliennummer. Der Kasten war „unsichtbar".
+
+**Ursache:** Sichtbarer Text steckt in PowerPoint an **vier** verschiedenen Orten, und nur einer davon ist ein Textfeld:
+
+| Ort | Zugriff | Beispiel in diesem Projekt |
+|---|---|---|
+| Textfeld / Platzhalter | `shape.text_frame.text` | Titel, Fußnote, Quelle |
+| **Tabelle** | `shape.table.cell(r,c).text` | **Anlagekriterien-Kasten**, T_Kennzahlen |
+| Gruppe | rekursiv über `shape.shapes` | — (hier keine, aber jederzeit möglich) |
+| `chartUserShapes` | über `chart.part.rels`, Namespace `chartDrawing` | Balken „AKTUELLE STRUKTUR", Quelle-Zeile |
+
+`has_text_frame` ist bei Tabellen **False**. Ein Scan, der nur darauf prüft, übersieht sie lautlos — kein Fehler, kein Hinweis, nur ein leeres Ergebnis.
+
+**Regel:** Beim Suchen nach statischem Vorlagentext immer alle vier Orte abklopfen — `has_table` und Gruppen-Rekursion gehören dazu. Der Balken über dem Ring ist der zweite Klassiker: er liegt nicht auf der Folie, sondern im Chart-Part (siehe `kopf_sperre_aus_usershapes`).
+
+**Der Anlagekriterien-Kasten konkret:**
+- Tabelle **5 Zeilen × 3 Spalten**, Shape-Name `Tabelle`, Position **(0,38 / 1,14)", Größe 4,34 × 1,42"**
+- Spalte 0 = Bezeichnung, Spalte 1 = leer (Abstandsspalte), Spalte 2 = Wert
+- Zeile 0 ist die Kopfzeile: `Anlagekriterien` | | `<Strategiename>`
+- Zeilen 1–4: Anlageregion · Aktienanteil · Anleihenanteil / Liquidität · Fremdwährungen
+
+**Fundstellen je Familie** (Struktur-Folien, Rolle `anlagevorschlag`):
+
+| Familie | Folien | Strategien |
+|---|---|---|
+| CVV | 7, 9, 11, 13, 15 | Konservativ, Defensiv, Defensiv Plus, Ausgewogen, Dynamic |
+| ESG | 16, 18, 20, 22 | ESG Defensiv, Defensiv Plus, Ausgewogen, Offensiv |
+| ETF | 16, 18 | ESG-ETF Ausgewogen, Wachstum |
+| comdirect | 6, 8, 10 | FFPB Strategie 30 / 70 / 100 |
+| **Thema** | — | **kein Kasten** (Rolle `einzeltitel_themen`) |
+
+Zusammen **14 Strategien**.
+
+**Robust suchen — inhaltsbasiert, nicht über den Namen:** Der Shape-Name `Tabelle` ist auf der Wertentwicklungs-Folie die Kennzahlen-Tabelle. Wer über den Namen sucht, erwischt die falsche. Zuverlässig ist: *die Tabelle, deren Zelle (0,0) „Anlagekriterien" enthält.*
+
+```python
+def kriterien_tabelle(slide):
+    for sh in slide.shapes:
+        if getattr(sh, "has_table", False) and len(sh.table.rows) >= 2:
+            if "anlagekriterien" in sh.table.cell(0, 0).text.strip().lower():
+                return sh
+    return None
+```
+
+**Übertragbar:** Wenn ein Vorlagen-Element „nicht auffindbar" ist, liegt es fast nie daran, dass es fehlt — sondern daran, dass der Scan den falschen Shape-Typ prüft. Erst einen vollständigen Dump aller Shapes einer Folie ziehen (Typ, Name, Position, Inhalt), dann gezielt suchen.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026

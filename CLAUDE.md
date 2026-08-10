@@ -1,7 +1,7 @@
-# Arbeitsanweisung für Claude — FFPB Performancetool
+﻿# Arbeitsanweisung für Claude — FFPB Performancetool
 
 **Zuerst lesen:** `STATUS.md` (wo stehen wir), dann `PROJEKT_DOKUMENTATION.md`
-(44 Transferwissen-Einträge, Architektur, Compliance).
+(45 Transferwissen-Einträge, Architektur, Compliance).
 
 Streamlit-App der Fürst Fugger Privatbank, die aus Corporate-Vorlagen
 PowerPoint-Broschüren erzeugt. **Die Ergebnisse gehen an Kunden.**

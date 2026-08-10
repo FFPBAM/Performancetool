@@ -1,10 +1,10 @@
-# STATUS — FFPB Performancetool
+﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 10.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
-`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#44) — hier nur der Zustand.
+`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#45) — hier nur der Zustand.
 
 ---
 
