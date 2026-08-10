@@ -42,6 +42,7 @@ from modules.shared import (
     LOGO_FILENAME, FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2, FFPB_SAND, FFPB_PALETTE,
     MAPPING_PATH, NAME_MAPPING_PATH, DATA_FOLDER, EXCLUDE_SUBSTRINGS,
     PDF_FONT, PDF_FONT_BOLD,
+    load_anlagekriterien, zeige_anlagekriterien,
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping, load_name_mapping,
     build_name_lookups, get_logo_aspect, get_logo_path,
@@ -899,6 +900,20 @@ if ansicht == _VIEW_PERF:
     st.subheader(f"📊 Kennzahlen ({nk_label})")
     display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix)
     if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix)
+
+    # ── Anlagekriterien (NEU 10.08.2026) ──────────────────────────────────
+    # Eigener Block ZWISCHEN Kennzahlen und Wertentwicklung: erst was die
+    # Strategie geleistet hat, dann in welchem Rahmen sie das darf.
+    # Quelle ist Mapping_Anlagekriterien.xlsx — dieselbe Datei, die den
+    # Kasten auf der Struktur-Folie der Broschuere fuellt.
+    # Der Strategiename steht nur dann in der Ueberschrift, wenn ein
+    # Vergleichsportfolio gewaehlt ist; sonst waere nicht erkennbar, welcher
+    # Banner zu welcher Strategie gehoert.
+    _krit = load_anlagekriterien()
+    _vergleich_aktiv = df2 is not None and l2
+    zeige_anlagekriterien(ds1, _krit, mit_strategiename=bool(_vergleich_aktiv))
+    if _vergleich_aktiv and ds2 != ds1:
+        zeige_anlagekriterien(ds2, _krit, mit_strategiename=True)
 
     eff_fee_1 = fp1 * mwst_faktor  # effektive Kosten in %
     eff_fee_2 = (fp2 * mwst_faktor) if fp2 is not None else 0.0

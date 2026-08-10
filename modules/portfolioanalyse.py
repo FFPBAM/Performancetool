@@ -20,6 +20,7 @@ from modules.shared import (
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping,
     load_all_csvs, build_portfolio_timeseries,
+    load_anlagekriterien, zeige_anlagekriterien,
 )
 from modules.download_helfer import download_bereich
 
@@ -959,6 +960,17 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
         help="Nicht investierter Anteil (100% − Investitionsgrad).")
     if use_volume:
         with kcols[3]: st.metric("Liquidität in €", fmt_eur_de(liq * anlagevolumen))
+
+    # ── Anlagekriterien (NEU 10.08.2026) ──────────────────────────────────
+    # Direkt UNTER den Bestandszahlen: erst was das Portfolio ist, dann
+    # welchem Rahmen es folgt. Damit laesst sich ohne Blattwechsel pruefen,
+    # ob Investitionsgrad und Aktienanteil zur Strategie passen.
+    # Quelle ist Mapping_Anlagekriterien.xlsx — dieselbe Datei, die den
+    # Kasten auf der Struktur-Folie der Broschuere fuellt.
+    # `label` ist der Strategiename aus der Mapping-Spalte
+    # 'Strategie auswählen' und damit der Schluessel der Konfiguration.
+    # Strategien ohne Kasten (Familie Thema) liefern nichts — kein Fehler.
+    zeige_anlagekriterien(label, load_anlagekriterien())
 
     # ── Ring-Diagramme (3 nebeneinander, volle Breite) ──
     st.markdown("---")

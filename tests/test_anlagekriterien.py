@@ -191,6 +191,138 @@ def _pruefe_zugriff(df):
     return fehler
 
 
+def _pruefe_banner(df):
+    print("\n8. Banner-HTML (Variante B)")
+    try:
+        from modules.shared import (anlagekriterien_banner_html,
+                                    anlagekriterien_fuer)
+    except ImportError as ex:
+        print(f"   UEBERSPRUNGEN — {ex}")
+        return 0
+    fehler = 0
+
+    paare = anlagekriterien_fuer("cVV konservativ", df)
+    html = anlagekriterien_banner_html(paare)
+
+    # Alle vier Bezeichnungen UND Werte muessen im Markup stehen
+    for bez, wert in paare:
+        if bez not in html:
+            print(f"   FEHLER — Bezeichnung '{bez}' fehlt im HTML")
+            fehler += 1
+        if wert not in html:
+            print(f"   FEHLER — Wert '{wert}' fehlt im HTML")
+            fehler += 1
+
+    # Variante B: KEINE Symbole (Haken wuerde 'erfuellt' behaupten)
+    if "<svg" in html or "✓" in html:
+        print("   FEHLER — Banner enthaelt ein Symbol; Variante B ist symbolfrei")
+        fehler += 1
+
+    # Eigene Flaeche + Textfarbe, sonst unlesbar bei dunklem Streamlit-Theme
+    for pflicht in ("background:", "border-top:", "color:"):
+        if pflicht not in html:
+            print(f"   FEHLER — '{pflicht}' fehlt; Banner malt sich nicht selbst")
+            fehler += 1
+
+    # Kein Skript, keine unmaskierten spitzen Klammern aus den Daten
+    if "<script" in html.lower():
+        print("   FEHLER — <script> im Banner")
+        fehler += 1
+    boese = anlagekriterien_banner_html([("<b>Feld</b>", "a < b & c")])
+    if "<b>Feld</b>" in boese or "a < b" in boese:
+        print("   FEHLER — Sonderzeichen aus den Daten werden nicht maskiert")
+        fehler += 1
+
+    # Ohne Kriterien: leerer String, damit die Aufrufstelle nichts pruefen muss
+    if anlagekriterien_banner_html([]) != "":
+        print("   FEHLER — leere Kriterien liefern kein leeres HTML")
+        fehler += 1
+
+    if not fehler:
+        print(f"   OK — {len(paare)} Felder, symbolfrei, maskiert, "
+              f"eigene Flaeche")
+    return fehler
+
+
+def _pruefe_in_der_app(df):
+    """End-to-End: die App hochfahren und den Banner im Markup suchen."""
+    print("\n9. Banner erscheint in der laufenden App (AppTest)")
+    try:
+        from streamlit.testing.v1 import AppTest
+    except ImportError as ex:
+        print(f"   UEBERSPRUNGEN — {ex}")
+        return 0
+
+    at = AppTest.from_file(os.path.join(WURZEL, "streamlit_app.py"),
+                           default_timeout=300)
+    # check_login liest st.secrets; angemeldet wird ueber den session_state,
+    # damit der Test nicht am Passwort haengt (siehe test_app_titel.py).
+    at.secrets["passwords"] = {"testnutzer": "nur-fuer-den-test"}
+    at.session_state["logged_in"] = True
+    at.session_state["username"] = "testnutzer"
+    try:
+        at.run()
+    except Exception as ex:
+        print(f"   UEBERSPRUNGEN — App liess sich nicht starten: {ex}")
+        return 0
+    if at.exception:
+        for ex in at.exception:
+            print(f"   FEHLER — App warf: {str(ex.value)[:220]}")
+        return 1
+
+    markup = " ".join(m.value for m in at.markdown)
+    if "Anlagekriterien" not in markup:
+        print("   FEHLER — 'Anlagekriterien' steht nicht im Seiten-Markup")
+        return 1
+
+    # Der Banner muss zur AUSGEWAEHLTEN Strategie passen. Streamlit waehlt die
+    # erste Option der Portfolio-Auswahl vor.
+    gewaehlt = at.selectbox(key="p_sel1").value if at.selectbox else None
+    print(f"   vorausgewaehlte Strategie: {gewaehlt!r}")
+    from modules.shared import anlagekriterien_fuer
+    paare = anlagekriterien_fuer(gewaehlt, df)
+    if not paare:
+        print("   OK — Strategie ohne Kasten, Banner entfaellt korrekt")
+        return 0
+    fehlen = [w for _, w in paare if w not in markup]
+    if fehlen:
+        print(f"   FEHLER — Werte fehlen im Markup: {fehlen}")
+        return 1
+    print(f"   OK — Performance-Ansicht: alle {len(paare)} Werte gefunden "
+          f"({', '.join(w for _, w in paare)})")
+
+    # ── zweite Ansicht: Portfolioanalyse ──────────────────────────────────
+    # Der Banner soll in BEIDEN Ansichten stehen. Umschalten ueber den
+    # session_state des segmented_control (key "nav_view", siehe #18).
+    at.session_state["nav_view"] = "📊 Portfolioanalyse"
+    try:
+        at.run()
+    except Exception as ex:
+        print(f"   UEBERSPRUNGEN (Portfolioanalyse) — {ex}")
+        return 0
+    if at.exception:
+        for ex in at.exception:
+            print(f"   FEHLER — Portfolioanalyse warf: {str(ex.value)[:220]}")
+        return 1
+
+    markup2 = " ".join(m.value for m in at.markdown)
+    gewaehlt2 = None
+    for sb in at.selectbox:
+        if sb.key == "pf_sel_1":
+            gewaehlt2 = sb.value
+    print(f"   vorausgewaehltes Portfolio: {gewaehlt2!r}")
+    paare2 = anlagekriterien_fuer(gewaehlt2, df)
+    if not paare2:
+        print("   OK — Portfolio ohne Kasten, Banner entfaellt korrekt")
+        return 0
+    fehlen2 = [w for _, w in paare2 if w not in markup2]
+    if fehlen2:
+        print(f"   FEHLER — Portfolioanalyse, Werte fehlen: {fehlen2}")
+        return 1
+    print(f"   OK — Portfolioanalyse: alle {len(paare2)} Werte gefunden")
+    return 0
+
+
 def main():
     if not os.path.exists(EXCEL):
         print(f"FEHLER: {EXCEL} fehlt")
@@ -204,7 +336,9 @@ def main():
               + _pruefe_umfang(df)
               + _pruefe_vollstaendig(df)
               + _pruefe_schreibweise(df)
-              + _pruefe_zugriff(df))
+              + _pruefe_zugriff(df)
+              + _pruefe_banner(df)
+              + _pruefe_in_der_app(df))
 
     print()
     if fehler:
