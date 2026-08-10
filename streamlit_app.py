@@ -38,6 +38,7 @@ from reportlab.lib.colors import HexColor, white
 from PIL import Image as PILImage
 
 from modules.shared import (
+    APP_TITLE,
     LOGO_FILENAME, FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2, FFPB_SAND, FFPB_PALETTE,
     MAPPING_PATH, NAME_MAPPING_PATH, DATA_FOLDER, EXCLUDE_SUBSTRINGS,
     PDF_FONT, PDF_FONT_BOLD,
@@ -601,7 +602,7 @@ def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, b
 # ==========================================================================
 # STREAMLIT APP
 # ==========================================================================
-st.set_page_config(page_title="FFPB – Performance & Portfolioanalyse", layout="wide")
+st.set_page_config(page_title=APP_TITLE, layout="wide")
 
 # Schriftart nur im Hauptbereich (Sidebar und System-Icons bleiben unberührt)
 st.markdown("""
@@ -649,7 +650,7 @@ for _k in list(st.session_state.keys()):
     except Exception:
         pass  # Trigger-Widget-Key → nicht setzbar, bewusst überspringen
 
-st.title("Fürst Fugger Privatbank – Vermögensverwaltung")
+st.title(APP_TITLE)
 
 # ── Gemeinsame Sidebar ──
 mapping = load_mapping()

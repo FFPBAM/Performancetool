@@ -2390,6 +2390,43 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 10.08.2026 (nachmittags) – Das Tool trägt überall denselben Namen
+
+Philip beim Anmelden aufgefallen: Der Login-Bildschirm hieß „Performance VV
+Rechner | Fürst Fugger Privatbank" — das Tool kann aber auch die
+Portfolioanalyse, die im Namen gar nicht vorkam.
+
+Beim Nachsehen: es gab **drei** Namen.
+
+| Wo | vorher |
+|---|---|
+| Login (`modules/shared.py`) | Performance VV Rechner \| Fürst Fugger Privatbank |
+| Browser-Tab (`streamlit_app.py`) | FFPB – Performance & Portfolioanalyse |
+| Kopfzeile nach dem Login | Fürst Fugger Privatbank – Vermögensverwaltung |
+
+Neu an allen drei Stellen: **„Performance & Portfolioanalyse | Fürst Fugger
+Privatbank"**, aus der neuen Konstante `shared.APP_TITLE`
+(`APP_NAME` + `BANK_NAME`). Der Name benennt genau die beiden Bereiche der
+Navigation (📈 Performance / 📊 Portfolioanalyse). „Rechner" ist bewusst
+raus — das Tool erzeugt die fertigen Kundenbroschüren, es rechnet nicht nur;
+„VV" als Haus-Jargon ebenfalls, das gehört nicht auf einen
+Anmeldebildschirm.
+
+Konstante statt Literal, weil genau die Duplizierung zu den drei Namen
+geführt hat — dieselbe Lehre wie bei den Loadern und der Mathematik.
+
+Prüfstein `tests/test_app_titel.py`: Wortlaut der Konstante, keine alten
+Namen mehr als Literal (14 Dateien), und Schritt 3 fährt die App per
+**AppTest** hoch und liest den Titel aus dem gerenderten Login-Bildschirm
+(Transferwissen #24) — nicht aus dem Quelltext. Auf dem alten Stand rot
+(4 Abweichungen).
+
+⚠️ **Falle beim AppTest:** `check_login` liest `st.secrets["passwords"]`.
+Ohne Secrets wirft die App eine Exception, *bevor* der Titel gerendert wird
+— der Test wäre dann aus dem falschen Grund rot. `secrets.toml` ist bewusst
+nie committet, deshalb setzt der Test ein Wegwerf-Passwort über
+`at.secrets[...]` im Speicher. Wer weitere AppTests schreibt: daran denken.
+
 ### 10.08.2026 – Legende der Wertentwicklungs-Folie: zurück auf „Musterdepot"
 
 Von Philip an der ETF-Broschüre bemerkt (F19, „ETF Wachstum"): Die Legende

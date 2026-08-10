@@ -56,7 +56,7 @@ vergleichen, Zeitstempel ignorieren.
 | `modules/chart_dynamik.py` | **wie** es aussieht (Optik, nie Werte) |
 | `modules/pptx_helpers.py` | generische PPTX-Mechanik |
 | `modules/pptx_charts.py` | Chart-XML + Bug-Workarounds |
-| `modules/shared.py` | Konstanten, Login, CSV-Loader |
+| `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.
 `vorlagen_config.py` hat bewusst **keine Importe** — das bitte so lassen.
@@ -70,6 +70,7 @@ ohne Streamlit braucht, zieht es in ein UI-freies Modul — er kopiert es nicht.
 ## Testen
 
 ```
+python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
 python tests/test_benchmark_erkennung.py     # nur pandas
 python tests/test_historie_ab.py             # pandas + streamlit

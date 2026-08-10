@@ -19,6 +19,18 @@ from PIL import Image as PILImage
 # ---------------------------------------------------------------------------
 LOGO_FILENAME = "Fuerst_Fugger_Bank_Logo_2-ZL-RGB.jpg"
 
+# Name des Tools — EINE Quelle für Login, Browser-Tab und Kopfzeile.
+# 10.08.2026: Vorher standen an diesen drei Stellen drei verschiedene Namen
+# ("Performance VV Rechner | Fürst Fugger Privatbank" im Login,
+# "FFPB – Performance & Portfolioanalyse" im Tab, "Fürst Fugger Privatbank –
+# Vermögensverwaltung" in der Kopfzeile). Der Login-Titel nannte zudem nur
+# die halbe Anwendung — die Portfolioanalyse ist ein gleichwertiger Bereich —
+# und "Rechner" untertreibt: das Tool erzeugt die fertigen Kundenbroschüren.
+# Der neue Name benennt genau die beiden Bereiche der Navigation.
+APP_NAME  = "Performance & Portfolioanalyse"
+BANK_NAME = "Fürst Fugger Privatbank"
+APP_TITLE = f"{APP_NAME} | {BANK_NAME}"
+
 # Corporate Colors (Fürst Fugger Privatbank) — gilt für ALLE Tabs.
 # Stand: Juni 2026. Performance-Tab wurde von alten Theme-Farben auf Corporate umgestellt.
 FFPB_DARK     = "#003460"   # Fuggerblau (vorher #1B3A5C)
@@ -95,7 +107,7 @@ def check_login() -> bool:
         return False
 
     if not st.session_state.logged_in:
-        st.title("Performance VV Rechner | Fürst Fugger Privatbank")
+        st.title(APP_TITLE)
         st.write("Bitte melden Sie sich an, um fortzufahren.")
         st.text_input("Benutzername", key="username_input")
         st.text_input("Passwort", type="password", key="password_input")
