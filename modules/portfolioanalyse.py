@@ -154,6 +154,17 @@ def build_allocation(df: pd.DataFrame, group_col: str, sonstige_threshold: float
     return agg
 
 
+GRUPPE_LIQUIDITAET = "Liquidität"
+"""Name der Liquiditäts-Gruppe in `build_grouped_title_table`.
+
+Bis 10.08.2026 war das Erkennungsmerkmal ein vorangestelltes Geldsack-Symbol
+im Gruppennamen; die Anzeige entschied per `startswith(...)`, ob eine Gruppe
+die Liquidität ist. Beim Entfernen der Piktogramme wäre diese Prüfung still
+ins Leere gelaufen — sie hätte immer False geliefert, ohne Fehler. Jetzt
+trägt eine Konstante die Bedeutung. `portfolio_builder.py` nutzt dieselbe
+Funktion und ist mit umgestellt."""
+
+
 def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show_ytd: bool = False):
     """
     Baut Tabellen-Daten gruppiert nach Gattung auf.
@@ -212,10 +223,10 @@ def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show
     # Liquidität
     liq = calc_liquidity(df)
     if liq > 0.0001:
-        liq_data = {"Wertpapier": "Liquidität", "Gewicht": fmt_pct_de(liq)}
+        liq_data = {"Wertpapier": GRUPPE_LIQUIDITAET, "Gewicht": fmt_pct_de(liq)}
         if use_volume:
             liq_data["Investiert (€)"] = fmt_eur_de(liq * anlagevolumen)
-        groups.append(("💰 Liquidität", liq, pd.DataFrame([liq_data])))
+        groups.append((GRUPPE_LIQUIDITAET, liq, pd.DataFrame([liq_data])))
 
     return groups
 
@@ -634,7 +645,7 @@ def _render_familien_hinweis(name_mapping, strategie):
         return
     liste = ", ".join(strategien)
     st.info(
-        f'ℹ️ **{familie}-Broschüre:** Enthält immer **alle '
+        f'**{familie}-Broschüre:** Enthält immer **alle '
         f'{len(strategien)} Strategien** der {familie}-Familie ({liste}) — '
         f'auch wenn oben nur „{strategie}“ ausgewählt ist.'
     )
@@ -648,7 +659,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     date_tag_pf = auto_tag_pf
     with st.sidebar:
         st.markdown("---")
-        st.subheader("📊 Portfolioanalyse")
+        st.subheader("Portfolioanalyse")
         show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd")
         pf_brutto_mwst = st.checkbox("Bruttohonorar (inkl. 19% MwSt.)", value=False, key="pf_mwst",
             help="Aktiviert MwSt für die Performance-Kennzahlen auf Slide 8 der PowerPoint.")
@@ -660,7 +671,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     pf_files = load_pf_csvs(DATA_FOLDER_PF, date_tag_pf)
     if not pf_files:
         st.warning(f"Keine Portfolioanalyse-Dateien für Tag {date_tag_pf} in {DATA_FOLDER_PF}/ gefunden.")
-        show_debug = st.checkbox("🔍 Debug anzeigen", value=False, key="pf_debug")
+        show_debug = st.checkbox("Debug anzeigen", value=False, key="pf_debug")
         if show_debug:
             import glob as g
             af = g.glob(os.path.join(DATA_FOLDER_PF, "*"))
@@ -705,10 +716,10 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     auswertung_str = fmt_date_de(ad1) if ad1 else date_tag_pf
 
     # Hinweis + Quelle oben
-    st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
-    st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
+    st.caption("**Hinweise:** Siehe Disclaimer unten!")
+    st.caption(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
 
-    st.info(f"📅 **Momentaufnahme per {auswertung_str}** – "
+    st.info(f"**Momentaufnahme per {auswertung_str}** – "
             f"Die dargestellten Daten zeigen den Portfoliobestand zu einem Stichtag.")
 
     # Cache-Key aus aktueller Auswahl (ändert sich → Cache ungültig → Download-Button verschwindet)
@@ -724,7 +735,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     # ── PowerPoint Export (einziger Export) ──
     if "pf_pptx_bytes" not in st.session_state:
         # Button zum Generieren
-        if st.button("📊 PowerPoint erstellen", key="pf_pptx_btn", use_container_width=True,
+        if st.button("PowerPoint erstellen", key="pf_pptx_btn", use_container_width=True,
                      help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Folien 7-10)."):
             portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
             if show_compare_pf and df_pf_2 is not None:
@@ -887,7 +898,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                             _sz = _osd.path.getsize(_p)
                             diag.append(f"Datei {_p} existiert, Größe {_sz} Bytes.")
                             if _sz < 5000:
-                                diag.append("⚠️ Sehr klein — das ist vermutlich ein "
+                                diag.append("Sehr klein — das ist vermutlich ein "
                                             "Git-LFS-Zeiger statt der echten PPTX. "
                                             "Die Vorlage muss als normale Binärdatei "
                                             "(nicht über Git LFS) im Repo liegen.")
@@ -902,7 +913,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     else:
         # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
         for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
-            st.warning(f"⚠️ {_diag_msg}")
+            st.warning(f"{_diag_msg}")
 
         # Dateiname aus der konfigurierbaren Sektion oben (EXPORT_NAME_*).
         # Familie/Strategie/Datum werden dort zum finalen Namen aufgelöst;
@@ -948,7 +959,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
 
 def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_volume, show_ytd, duration_info, suffix="pf1"):
-    st.subheader(f"📊 {label}")
+    st.subheader(f"{label}")
 
     # ── Kennzahlen ──
     liq = calc_liquidity(df); n_titel = len(df); total_weight = df["Gewicht"].sum()
@@ -998,10 +1009,7 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     st.markdown("**Einzeltitel-Übersicht**")
     grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
     for i, (gattung_name, gattung_weight, disp_df) in enumerate(grouped):
-        if gattung_name.startswith("💰"):
-            st.markdown(f"**{gattung_name}** ({fmt_pct_de(gattung_weight)})")
-        else:
-            st.markdown(f"**📋 {gattung_name}** – {fmt_pct_de(gattung_weight)}")
+        st.markdown(f"**{gattung_name}** – {fmt_pct_de(gattung_weight)}")
         st.dataframe(disp_df, use_container_width=True, hide_index=True, key=f"tbl_{suffix}_{i}")
 
     # ── Top/Flop Performancebeitrag (nur wenn YTD aktiv) ──
@@ -1010,13 +1018,13 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
         tc, fc = st.columns(2)
         top, flop = get_top_flop(df, "Performancebeitrag", n=5)
         with tc:
-            st.markdown("**🏆 Top 5 Performancebeitrag (YTD)**")
+            st.markdown("**Top 5 Performancebeitrag (YTD)**")
             if not top.empty:
                 td = top.copy(); td["Gewicht"] = td["Gewicht"].apply(fmt_pct_de)
                 td["Performancebeitrag"] = td["Performancebeitrag"].apply(fmt_pct_de)
                 st.dataframe(td, use_container_width=True, hide_index=True, key=f"top5ytd_{suffix}")
         with fc:
-            st.markdown("**📉 Flop 5 Performancebeitrag (YTD)**")
+            st.markdown("**Flop 5 Performancebeitrag (YTD)**")
             if not flop.empty:
                 fd = flop.copy(); fd["Gewicht"] = fd["Gewicht"].apply(fmt_pct_de)
                 fd["Performancebeitrag"] = fd["Performancebeitrag"].apply(fmt_pct_de)
@@ -1032,7 +1040,7 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     bond_summary = get_bond_summary(df)
     if bond_summary is not None:
         st.markdown("---")
-        st.markdown("**🏦 Anleihen-Detail**")
+        st.markdown("**Anleihen-Detail**")
 
         # Duration/Rendite bevorzugt aus den TITELN (get_bond_summary, seit
         # 03.07.2026, anleihe-gewichtet, verifiziert gegen Tool: 3,96 / 3,28%);

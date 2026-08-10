@@ -709,8 +709,8 @@ if perf_daten_fehler is None:
 # stellen). segmented_control hält seinen Zustand nativ im session_state.
 # required=True verhindert das Abwählen (Klick auf aktives Segment = no-op),
 # es gibt also nie den Zustand "keine Ansicht gewählt".
-_VIEW_PERF = "📈 Performance"
-_VIEW_PF = "📊 Portfolioanalyse"
+_VIEW_PERF = "Performance"
+_VIEW_PF = "Portfolioanalyse"
 if "nav_view" not in st.session_state:
     st.session_state["nav_view"] = _VIEW_PERF
 ansicht = st.segmented_control("Ansicht", [_VIEW_PERF, _VIEW_PF],
@@ -724,7 +724,7 @@ ansicht = st.segmented_control("Ansicht", [_VIEW_PERF, _VIEW_PF],
 if ansicht == _VIEW_PERF:
     with st.sidebar:
         st.markdown("---")
-        st.subheader("📈 Performance")
+        st.subheader("Performance")
         show_adv_perf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_perf")
         if show_adv_perf:
             # Der Wert wird OBEN in der zentralen Datenbereitstellung gelesen
@@ -784,8 +784,8 @@ if ansicht == _VIEW_PERF:
     else: mind=rm1; maxd=rx1
 
     # Hinweis + Quelle oben
-    st.caption("⚠️ **Hinweise:** Siehe Disclaimer unten!")
-    st.caption(f"📊 **Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
+    st.caption("**Hinweise:** Siehe Disclaimer unten!")
+    st.caption(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
 
     st.markdown("#### Zeitraum auswählen")
     # Reset-Logik: Counter ändert den Widget-Key, sodass das Widget frisch mit Default rendert
@@ -798,11 +798,11 @@ if ansicht == _VIEW_PERF:
 
     rc1,rc2=st.columns(2)
     with rc1:
-        if st.button(f"↩️ Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", use_container_width=True):
+        if st.button(f"Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", use_container_width=True):
             st.session_state.p_sd_reset += 1
             st.rerun()
     with rc2:
-        if st.button(f"↩️ Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", use_container_width=True):
+        if st.button(f"Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", use_container_width=True):
             st.session_state.p_ed_reset += 1
             st.rerun()
 
@@ -866,7 +866,7 @@ if ansicht == _VIEW_PERF:
         if abs(fp2 - _fee_std_2) > 1e-9:
             _pp_abweichungen.append(f"Kostensatz {ds2} manuell geändert ({fp2:.4f}% statt Standard {_fee_std_2:.4f}%)")
     if _pp_abweichungen:
-        st.info("ℹ️ **Anzeige weicht von der PowerPoint-Basis ab** (die Broschüre rechnet immer: "
+        st.info("**Anzeige weicht von der PowerPoint-Basis ab** (die Broschüre rechnet immer: "
                 "volle Historie, Standardsatz aus dem Mapping): " + " · ".join(_pp_abweichungen)
                 + ". MwSt-Häkchen ggf. in beiden Bereichen gleich stellen.")
 
@@ -897,7 +897,7 @@ if ansicht == _VIEW_PERF:
             "recovery_days":rd2 if sdd else None,"recovery_date":rdt2 if sdd else None,"max_dd_dur":dur2 if sdd else None})
 
     nk_label = f"nach Kosten{mwst_suffix}"
-    st.subheader(f"📊 Kennzahlen ({nk_label})")
+    st.subheader(f"Kennzahlen ({nk_label})")
     display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix)
     if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix)
 
@@ -917,8 +917,8 @@ if ansicht == _VIEW_PERF:
 
     eff_fee_1 = fp1 * mwst_faktor  # effektive Kosten in %
     eff_fee_2 = (fp2 * mwst_faktor) if fp2 is not None else 0.0
-    if use_volume: st.subheader(f"📈 Wertentwicklung in Euro ({fmt_eur_de(anlagevolumen)})"); yl="Wert in €"
-    else: st.subheader("📈 Performance-Index (Start = 100)"); yl="Index (Start 100)"
+    if use_volume: st.subheader(f"Wertentwicklung in Euro ({fmt_eur_de(anlagevolumen)})"); yl="Wert in €"
+    else: st.subheader("Performance-Index (Start = 100)"); yl="Index (Start 100)"
     fig=go.Figure()
 
     def _add_line(x, y, name):
@@ -951,7 +951,7 @@ if ansicht == _VIEW_PERF:
     elif sb:
         # Ohne Benchmark wurde bisher stillschweigend eine flache Linie bei
         # 100 gezeichnet — jetzt sagen wir, warum nichts zu sehen ist.
-        st.caption("ℹ️ Für diese Strategie ist keine Benchmark hinterlegt.")
+        st.caption("Für diese Strategie ist keine Benchmark hinterlegt.")
     # rf-Linie (nur eine, da für gleichen Zeitraum identisch)
     rf_idx = None
     if sb_rf and not rf_series_1.empty and rf_series_1.notna().any():
@@ -959,7 +959,7 @@ if ansicht == _VIEW_PERF:
         _add_line(xd, irf, "Risikofreier Zins")
         rf_idx = irf
     elif sb_rf:
-        st.caption("ℹ️ Keine Daten zum risikofreien Zins für den gewählten Zeitraum verfügbar.")
+        st.caption("Keine Daten zum risikofreien Zins für den gewählten Zeitraum verfügbar.")
 
     fig.update_layout(height=550,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title=yl,
         yaxis=dict(tickformat=",.0f" if use_volume else None, separatethousands=True),
@@ -996,11 +996,11 @@ if ansicht == _VIEW_PERF:
     if stbl:
         sl=f"Seit: {fmt_date_de(df1.index.min())}"
         dfr=build_rolling_table(sb1t,sa1t,l1,sb2t,sa2t,l2,sl)
-        st.subheader("📋 Wertentwicklung rollierend"); st.dataframe(dfr,use_container_width=True)
+        st.subheader("Wertentwicklung rollierend"); st.dataframe(dfr,use_container_width=True)
 
     bdl=[]
     if sbar:
-        st.markdown("---"); st.subheader("📊 Performance blockweise")
+        st.markdown("---"); st.subheader("Performance blockweise")
         bl,br=st.columns([1,3])
         with bl:
             bm=st.radio("Zeitraum",["Kalenderjahre","Quartale","Benutzerdefiniert"],key="p_bm_r")
@@ -1014,7 +1014,7 @@ if ansicht == _VIEW_PERF:
             if bd.empty: cont.info(f"Keine Daten für {lab}."); return
             btt=f"{tm[bm]} – {lab}"; bdl.append((bd,lab,bname,btt,btxt))
             cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True,config={"displayModeBar": False},key=f"bar_chart_{suffix}")
-            show_tbl = cont.checkbox(f"🔢 Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}_{suffix}")
+            show_tbl = cont.checkbox(f"Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}_{suffix}")
             if show_tbl:
                 cp=f"{lab} (nach Kosten)"; dp=bd[["label",cp,"ret_bm_raw"]].copy()
                 dp[cp]=dp[cp].map(lambda x:f"{x:+.2f}%"); dp["ret_bm_raw"]=dp["ret_bm_raw"].map(lambda x:f"{x:+.2f}%" if pd.notna(x) else "–")
@@ -1069,9 +1069,9 @@ if ansicht == _VIEW_PERF:
             if use_volume: pdd.append((f"{l2} DD €",drawdown_euro_from_index(ia2)))
             else: pdd.append((f"{l2} DD",drawdown_from_index(ia2_100)))
     lp=get_logo_path()
-    if st.button("📄 PDF Performance",key="perf_pdf"):
+    if st.button("PDF Performance",key="perf_pdf"):
         with st.spinner("PDF..."): pb=generate_perf_pdf(lp,l1,l2,bn1,bn2,bt1,bt2,eff_fee_1,eff_fee_2 if fp2 is not None else None,anlagevolumen,use_volume,sd,ed,xd,plt_,yl,sdd,pdd,stbl,dfr,sbar,bdl,md,mwst_suffix)
-        st.download_button("⬇️ PDF",pb,f"Performance_{l1}_{fmt_date_de(sd)}-{fmt_date_de(ed)}.pdf","application/pdf",key="perf_dl")
+        st.download_button("PDF",pb,f"Performance_{l1}_{fmt_date_de(sd)}-{fmt_date_de(ed)}.pdf","application/pdf",key="perf_dl")
 
 
 # ===========================================================================

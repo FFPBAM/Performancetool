@@ -35,6 +35,10 @@ vergleichen, Zeitstempel ignorieren.
   Mathematik gehört dorthin und **nirgendwo sonst hin kopiert**.
 - **Das Repo ist öffentlich.** Keine Zugangsdaten, keine Kundendaten
   einchecken. `.gitignore` schützt `secrets.toml` — nicht aufweichen.
+- **Keine Piktogramme in der Oberfläche** (10.08.2026). Überschriften,
+  Hinweise, Schaltflächen und Disclaimer tragen keine Emoji — die Ergebnisse
+  gehen ins Kundengespräch einer Privatbank. In Kommentaren und Doku sind sie
+  erlaubt. Prüfstein: `tests/test_keine_piktogramme.py`.
 - **`chart.replace_data()` ist verseucht** (#12, vier Bugs). Immer
   `replace_chart_data_safe()`, Ringe über `replace_chart_data`.
 - **Statischer Vorlagentext wird in der VORLAGE geändert, nicht im Code.**
@@ -78,6 +82,7 @@ ohne Streamlit braucht, zieht es in ein UI-freies Modul — er kopiert es nicht.
 ## Testen
 
 ```
+python tests/test_keine_piktogramme.py       # ohne jedes Paket
 python tests/test_anlagekriterien.py         # pandas + streamlit
 python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket

@@ -2509,6 +2509,47 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 10.08.2026 (spät) – Piktogramme aus der Oberfläche entfernt
+
+Philip: Emoji vor Überschriften und Disclaimern wirken unprofessionell. Für
+eine Privatbank mit gehobener Kundschaft — die Ergebnisse gehen ins
+Kundengespräch — ist das nachvollziehbar.
+
+**67 Zeilen** in fünf Dateien bereinigt: Navigations-Beschriftungen, alle
+`st.subheader`, Hinweis- und Quellenzeilen, Schaltflächen, Download-Texte.
+Kommentare und Docstrings bleiben unangetastet — die sieht kein Nutzer.
+
+⚠️ **Zwei Piktogramme waren keine Dekoration, sondern Logik:**
+
+1. `build_grouped_title_table` markierte die Liquiditäts-Gruppe mit einem
+   vorangestellten Geldsack-Symbol; die Anzeige entschied per
+   `startswith(...)`, ob eine Gruppe die Liquidität ist. Ein blindes
+   Entfernen hätte die Prüfung **still** auf immer-False gesetzt — ohne
+   Fehler, ohne Absturz, nur mit falscher Darstellung. Jetzt trägt die
+   Konstante `GRUPPE_LIQUIDITAET` die Bedeutung. Auch `portfolio_builder.py`
+   hing daran und ist mit umgestellt.
+2. Im Builder war `"🗑️"` ein **Spaltenschlüssel** eines DataFrames, an
+   sechs Stellen verwendet (`insert`, `column_config`, `row[...]`, `drop`).
+   Umbenannt auf `"Entfernen"` — alle Stellen zugleich.
+
+Dazu eine Ampel aus 🟢/🔴 in `st.metric`: ersetzt durch einen `delta`-Text
+(„weicht von 100 % ab"). Eine Aussage, die nur in einer Farbe steckt, ist
+ohnehin nicht barrierefrei.
+
+**Prüfstein** `tests/test_keine_piktogramme.py` — läuft **ohne jedes Paket**
+(reine Textprüfung). Erkennt Piktogramme (U+1F300–U+1FAFF) und Zeichen mit
+Emoji-Variantenselektor (U+FE0F), überspringt Kommentarzeilen. Auf dem alten
+Stand rot mit 67 Befunden.
+
+**Merke für künftige Sweeps:** Ein Skript, das Zeichen aus Quelltext
+entfernt, erwischt auch **Docstrings, die diese Zeichen erklären** — genau
+das passierte hier mit der Begründung zum Geldsack-Marker. Nach solchen
+Aktionen den Diff lesen, nicht nur die Tests laufen lassen.
+
+`modules/portfolio_builder.py` ist nicht importiert (mögliche
+Reaktivierung) und daher **nicht zur Laufzeit prüfbar**; dort wurde
+`py_compile` als Mindestabsicherung gefahren.
+
 ### 10.08.2026 (spät) – Anlagekriterien: eine Quelle für Tool und Broschüre
 
 Der Anlagekriterien-Kasten der Struktur-Folien wandert ins Streamlit-Tool.

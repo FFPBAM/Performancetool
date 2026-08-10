@@ -58,7 +58,7 @@ def _download_komponente_html(daten: bytes, dateiname: str) -> str:
       width:100%;box-sizing:border-box;padding:0.6rem 1rem;cursor:pointer;
       border:1px solid #003460;border-radius:0.5rem;background:#003460;
       color:#ffffff;font-size:1rem;font-weight:600;">
-    📥 Broschüre herunterladen
+    Broschüre herunterladen
   </button>
   <div id="dlmsg" style="margin-top:0.4rem;font-size:0.85rem;color:#5c6b3c;"></div>
 </div>
@@ -108,7 +108,7 @@ def download_bereich(daten: bytes, dateiname: str) -> None:
     # Fallback bleibt IMMER erreichbar.
     with st.expander("Alternativer Download (falls der Button oben nicht lädt)"):
         st.download_button(
-            "⬇️ Klassischer Download (über den Server)",
+            "Klassischer Download (über den Server)",
             data=daten,
             file_name=dateiname,
             mime=PPTX_MIMETYPE,

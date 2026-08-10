@@ -251,6 +251,20 @@ def _pruefe_bauweise(df):
     return fehler
 
 
+def _view_pf_beschriftung():
+    """Beschriftung der Portfolioanalyse-Ansicht aus streamlit_app lesen.
+
+    streamlit_app.py laesst sich nicht importieren (das Skript wuerde
+    losrennen), deshalb wird die Zuweisung aus dem Quelltext gelesen. So
+    steht der Wert trotzdem nur an EINER Stelle.
+    """
+    import re
+    pfad = os.path.join(WURZEL, "streamlit_app.py")
+    with open(pfad, encoding="utf-8") as fh:
+        m = re.search(r'^_VIEW_PF\s*=\s*"([^"]*)"', fh.read(), re.M)
+    return m.group(1) if m else "Portfolioanalyse"
+
+
 def _pruefe_in_der_app(df):
     """End-to-End: die App hochfahren und den Banner im Markup suchen."""
     print("\n9. Banner erscheint in der laufenden App (AppTest)")
@@ -301,7 +315,10 @@ def _pruefe_in_der_app(df):
     # ── zweite Ansicht: Portfolioanalyse ──────────────────────────────────
     # Der Banner soll in BEIDEN Ansichten stehen. Umschalten ueber den
     # session_state des segmented_control (key "nav_view", siehe #18).
-    at.session_state["nav_view"] = "📊 Portfolioanalyse"
+    # Der Wert wird aus streamlit_app importiert statt hier wiederholt —
+    # sonst bricht der Test still, wenn sich die Beschriftung aendert
+    # (genau das passierte beim Entfernen der Piktogramme am 10.08.2026).
+    at.session_state["nav_view"] = _view_pf_beschriftung()
     try:
         at.run()
     except Exception as ex:

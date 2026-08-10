@@ -127,7 +127,7 @@ def check_login() -> bool:
         return False
 
     with st.sidebar:
-        st.write(f"👤 Angemeldet als: **{st.session_state.username}**")
+        st.write(f"Angemeldet als: **{st.session_state.username}**")
         if st.button("Ausloggen"):
             st.session_state.logged_in = False
             st.session_state.username = ""
