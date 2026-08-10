@@ -1,6 +1,6 @@
 # STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 07.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
+**Letzte Sitzung:** 10.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -55,6 +55,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
 | **Tests** | Vier Suiten unter `tests/` — vorher gab es keine. |
+| **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 
 Netto etwa −1.500 Zeilen bei mehr Funktion.
 
@@ -75,23 +76,32 @@ bestätigt, nicht nur im XML.
 
 ## Tests
 
-Alle vier laufen ohne pytest, mit reinem `python`:
+Alle laufen ohne pytest, mit reinem `python`:
 
 | Test | Braucht | Prüft |
 |---|---|---|
+| `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
 | `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert |
-| `test_historie_ab.py` | pandas | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
-| `test_folien_config.py` | pandas (+pptx optional) | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
+| `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
+| `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
 ```
+python tests/test_legende_musterdepot.py
 python tests/test_benchmark_erkennung.py
 python tests/test_historie_ab.py
 python tests/test_folien_config.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
+
+**Korrektur 10.08.2026:** Die Tabelle führte `test_historie_ab` und
+`test_folien_config` als „nur pandas". Das stimmt nicht — beide ziehen über
+`modules.portfolioanalyse` streamlit herein. `test_historie_ab` überspringt
+dann sauber, `test_folien_config` bricht mit `ModuleNotFoundError` ab. Ohne
+venv laufen tatsächlich nur `test_benchmark_erkennung` und Schritt 1 von
+`test_legende_musterdepot`.
 
 ### Testumgebung (WICHTIG)
 

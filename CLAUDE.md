@@ -37,6 +37,12 @@ vergleichen, Zeitstempel ignorieren.
   einchecken. `.gitignore` schützt `secrets.toml` — nicht aufweichen.
 - **`chart.replace_data()` ist verseucht** (#12, vier Bugs). Immer
   `replace_chart_data_safe()`, Ringe über `replace_chart_data`.
+- **Statischer Vorlagentext wird in der VORLAGE geändert, nicht im Code.**
+  Bis 10.08.2026 schrieb der Export die Legende der Wertentwicklungs-Folie
+  von „Musterdepot" auf „Referenzportfolio" um — niemand sah der Vorlage noch
+  an, was gedruckt wird. Zurückgenommen. Code fasst statischen Text nur an,
+  wenn er *dynamisch* werden muss (Datenstand, Benchmark-Zusammensetzung,
+  Kennzahlen-Labels). Reine Wording-Wünsche gehören in die `.pptx`.
 
 ---
 
@@ -64,9 +70,10 @@ ohne Streamlit braucht, zieht es in ein UI-freies Modul — er kopiert es nicht.
 ## Testen
 
 ```
+python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
 python tests/test_benchmark_erkennung.py     # nur pandas
-python tests/test_historie_ab.py             # nur pandas
-python tests/test_folien_config.py           # nur pandas
+python tests/test_historie_ab.py             # pandas + streamlit
+python tests/test_folien_config.py           # pandas + streamlit
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 ```

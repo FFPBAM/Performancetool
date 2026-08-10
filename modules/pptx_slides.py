@@ -131,24 +131,25 @@ SHAPE_WE_QUELLE = "Quelle"
 WE_TITLE_FORMAT = "Anlagestrategie {name} | Wertentwicklung"
 """Titel-Muster der Wertentwicklungs-Folie (wie in der alten cVV-Broschüre)."""
 
-WE_SERIES_PORTFOLIO = "Referenzportfolio"
+WE_SERIES_PORTFOLIO = "Musterdepot"
 WE_SERIES_BENCHMARK = "Benchmark"
 """Series-Namen im Balken-Chart der Wertentwicklungs-Folie.
-02.07.2026 (Punkt 3, Wording-Vereinheitlichung): 'Musterdepot' →
-'Referenzportfolio', damit F8 und F9 denselben Begriff nutzen. F9 ist die
-etablierte/freigegebene Folie dieser Broschüre → deren Begriff gewinnt.
-Die statische Legenden-Textbox der F8 wird beim Befüllen entsprechend
-umgeschrieben (siehe WE_LEGEND_*)."""
 
-WE_LEGEND_OLD_TERM = "Musterdepot "
-WE_LEGEND_NEW_TERM = "Referenzportfolio "
-WE_LEGEND_GAP_OLD = "     "
-WE_LEGEND_GAP_NEW = "   "
-"""Legenden-Umschreibung F8: Der Begriff wird im Run 'Musterdepot ' ersetzt;
-weil 'Referenzportfolio' 6 Zeichen länger ist und die Box (2,24") mit
-'…Benchmark***' knapp wird, wird der 5-Leerzeichen-Lücken-Run auf 3 gekürzt
-(F9 beweist, dass 'Referenzportfolio      Benchmark' in 2,24" passt —
-F8 hat 3 Zeichen mehr durch '***')."""
+10.08.2026 (Philip): ZURÜCK auf 'Musterdepot' — das ist der Begriff, der in
+ALLEN Vorlagen original steht (verifiziert in der Slide-XML: ETF 17/19,
+cVV 8/10/12/14/16, ESG 17/19/21/23, comdirect 7/9/11, Thema 12, FFPB 11).
+Damit entfällt auch die Umschreibung der statischen Legenden-Textbox: die
+Vorlage bleibt unangetastet, der Serienname folgt ihr.
+
+Vorgeschichte: Am 02.07.2026 (Punkt 3) wurde 'Musterdepot' → 'Referenz-
+portfolio' vereinheitlicht, weil die performance-Folie diesen Begriff
+original führt (FFPB slide10, auch im Folientitel). Das Argument trägt aber
+nur für die FFPB-Standardvorlage — die Rolle 'performance' kommt in KEINER
+Familien-Konfiguration vor (siehe vorlagen_config.VORLAGEN_FAMILIEN), nur in
+pptx_export.DEFAULT_TEMPLATE_CONFIG. In den Familien-Broschüren gab es also
+gar keine Folie, zu der die Angleichung hätte passen können. Die
+performance-Folie behält 'Referenzportfolio' bewusst (dort in der Vorlage
+statisch, inkl. Titel)."""
 
 # ─── Fußnoten-/Disclaimer-Umschreibung der Wertentwicklungs-Folie ───────────
 # Juli 2026: Die YTD-Kennzahl folgt jetzt der Tool-Konvention (nach Kosten,
@@ -407,6 +408,11 @@ def replace_substring_in_runs(text_frame, old: str, new: str) -> bool:
     Wingdings-Farbquadrate der Legende) bleiben samt Formatierung unberührt.
     Voraussetzung: `old` liegt komplett in EINEM Run (in der Vorlage der Fall:
     'Musterdepot ' ist ein eigener Run).
+
+    HINWEIS (10.08.2026): Seit der Rücknahme der Legenden-Umschreibung hat
+    diese Funktion KEINEN Aufrufer mehr. Sie bleibt als generischer Helfer
+    stehen, weil sie die einzige Stelle im Modul ist, die formaterhaltend in
+    einzelnen Runs ersetzt — wer sie nicht braucht, kann sie entfernen.
 
     Returns:
         True wenn mindestens ein Run ersetzt wurde.
@@ -2198,6 +2204,14 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
         fill_kennzahlen_table(tab.table, kz)
 
     # ── PERFORMANCE P.A. Chart (Säulen) ──
+    # ACHTUNG, bewusste Abweichung zur Wertentwicklungs-Folie (10.08.2026):
+    # Hier heißt die Serie weiter "Referenzportfolio", weil DIESE Folie den
+    # Begriff in der Vorlage statisch führt (Vorlage_FFPB.pptx slide10 —
+    # Legenden-Box UND Folientitel "Referenzportfolio| Wertentwicklung").
+    # Die Wertentwicklungs-Folie nutzt WE_SERIES_PORTFOLIO ("Musterdepot"),
+    # weil ihre Vorlagen das so vorgeben. Kein Versehen: jede Folie folgt
+    # ihrer eigenen Vorlage. Wer das vereinheitlichen will, ändert die
+    # Vorlagen, nicht diese Konstanten.
     pa = performance_data.get("performance_pa", {})
     chart_links = find_shape_by_name(slide, "Diagramm links")
     if chart_links and chart_links.has_chart and pa.get("jahre"):
@@ -2287,8 +2301,9 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
       gesamte Historie, EINE Serie; Achsen-Untergrenze DATENBASIERT
       (02.07.2026, Punkt 2 — 10%-Schritt unter Datenminimum, deterministisch
       in PowerPoint UND LibreOffice, statt Template-Fixwert/Auto)
-    - Legende: 'Musterdepot' → 'Referenzportfolio' (02.07.2026, Punkt 3 —
-      Wording-Angleich an F9)
+    - Legende: bleibt unangetastet ("Musterdepot     Benchmark***" wie in der
+      Vorlage). Der Angleich an F9 vom 02.07.2026 ist am 10.08.2026
+      zurückgenommen — Begründung siehe WE_SERIES_PORTFOLIO.
     - Quelle: Datumsfeld → statischer Text mit Datenstand (02.07.2026,
       Punkt 6 — vorher zeigte die Box das ÖFFNUNGS-Datum der Datei)
     - Fußnote: *-, **- und ***-Zeilen sowie Disclaimer-Satz dynamisch
@@ -2407,15 +2422,15 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         for prefix, new_text in WE_DISCLAIMER_REPLACEMENTS:
             replace_paragraph_text_by_prefix(fn.text_frame, prefix, new_text)
 
-    # ── Legende (02.07.2026, Punkt 3): 'Musterdepot' → 'Referenzportfolio' ──
-    # Nur der Begriff-Run wird ersetzt (Wingdings-Farbquadrate bleiben);
-    # der Lücken-Run wird gekürzt, damit '…Benchmark***' in die Box passt.
-    legend = find_shape_by_name(slide, "Legende Diagramm links")
-    if legend and legend.has_text_frame:
-        if replace_substring_in_runs(legend.text_frame,
-                                     WE_LEGEND_OLD_TERM, WE_LEGEND_NEW_TERM):
-            replace_substring_in_runs(legend.text_frame,
-                                      WE_LEGEND_GAP_OLD, WE_LEGEND_GAP_NEW)
+    # ── Legende: bewusst NICHT angefasst (10.08.2026) ──────────────────────
+    # Die Textbox "Legende Diagramm links" steht in jeder Vorlage bereits auf
+    # "Musterdepot     Benchmark***" — genau so, wie sie gedruckt werden soll.
+    # Bis 10.08.2026 schrieb hier eine Ersetzung 'Musterdepot ' →
+    # 'Referenzportfolio ' und kürzte zum Ausgleich den 5-Leerzeichen-Run auf
+    # 3 (02.07.2026, Punkt 3). Das ist zurückgenommen; Begründung siehe
+    # WE_SERIES_PORTFOLIO. Wer den Begriff künftig ändern will, ändert die
+    # VORLAGE — nicht den Code: die Box trägt Wingdings-Farbquadrate und
+    # hochgestellte Runs, die eine Ersetzung nur unnötig gefährdet.
 
     # ── Quelle (02.07.2026, Punkt 6): Datumsfeld → statischer Datenstand ──
     if stand_date_str:

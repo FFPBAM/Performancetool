@@ -2390,6 +2390,59 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 10.08.2026 – Legende der Wertentwicklungs-Folie: zurück auf „Musterdepot"
+
+Von Philip an der ETF-Broschüre bemerkt (F19, „ETF Wachstum"): Die Legende
+zeigte `Referenzportfolio    Benchmark***`, die Vorlage sagt aber
+`Musterdepot    Benchmark***`.
+
+**Befund.** Der Begriff stand nie in der Vorlage — `fill_wertentwicklung_slide`
+schrieb ihn beim Befüllen um (Ersetzung `'Musterdepot '` →
+`'Referenzportfolio '` plus Kürzung des 5-Leerzeichen-Lücken-Runs auf 3,
+damit `…Benchmark***` weiter in die 2,24"-Box passt). Eingeführt am
+02.07.2026 als „Punkt 3, Wording-Vereinheitlichung".
+
+Verifiziert an der Slide-XML aller sechs Vorlagen (PPTX als ZIP gelesen) —
+**„Musterdepot" steht überall im Original**:
+
+| Vorlage | Folien | Begriff |
+|---|---|---|
+| `Vorlage_ETF.pptx` | 17, 19 | Musterdepot |
+| `Vorlage_cVV_Infoboard.pptx` | 8, 10, 12, 14, 16 | Musterdepot |
+| `Vorlage_ESG.pptx` | 17, 19, 21, 23 | Musterdepot |
+| `Vorlage_comdirect.pptx` | 7, 9, 11 | Musterdepot |
+| `Vorlage_Thema.pptx` | 12 | Musterdepot |
+| `Vorlage_FFPB.pptx` | 11 | Musterdepot |
+| `Vorlage_FFPB.pptx` | **10** | **Referenzportfolio** ← performance-Folie |
+
+**Warum die Begründung von damals nicht trug.** Der Angleich zielte auf die
+performance-Folie, die „Referenzportfolio" tatsächlich statisch führt
+(FFPB slide10, auch im Folientitel). Diese Rolle kommt aber in **keiner**
+Familien-Konfiguration vor (`VORLAGEN_FAMILIEN` kennt nur
+`wertentwicklung`) — sie existiert nur in
+`pptx_export.DEFAULT_TEMPLATE_CONFIG`, Position 10. In den fünf
+Familien-Broschüren gab es also gar keine Folie, zu der angeglichen werden
+konnte; die Umschreibung entfernte sich dort nur von der Vorlage.
+
+**Änderung.** Die Legenden-Umschreibung ist ersatzlos entfallen (die Vorlage
+wird nicht mehr angefasst), `WE_SERIES_PORTFOLIO` steht auf `"Musterdepot"`.
+Die performance-Folie behält „Referenzportfolio" — **bewusste Abweichung**,
+als Kommentar an beiden Stellen vermerkt: jede Folie folgt ihrer eigenen
+Vorlage. Betroffen sind alle 15 Wertentwicklungs-Folien über alle Familien.
+
+Prüfstein `tests/test_legende_musterdepot.py`: prüft die Vorlagen-Invariante
+(stdlib, ohne python-pptx — PPTX ist ein ZIP), den Serienamen und die Wirkung
+am echten Artefakt. Auf dem Stand vom 07.08.2026 rot.
+
+Nebenbefund: `replace_substring_in_runs` (pptx_slides.py) hat damit keinen
+Aufrufer mehr. Als generischer Helfer stehen gelassen und im Docstring
+markiert — Kandidat für die nächste Aufräumrunde.
+
+⚠️ Merkposten für die Vorlagenpflege: Wer den Begriff künftig ändern will,
+ändert die **Vorlage**, nicht den Code. Die Legenden-Box enthält
+Wingdings-2-Farbquadrate und hochgestellte Runs (`baseline="14000"`); eine
+Code-Ersetzung gefährdet die Formatierung ohne Not.
+
 ### 07.08.2026 (nachmittags) – Broschüren-Korrekturen aus der Sichtprüfung
 
 Beides von Philip beim Durchsehen echter Broschüren gefunden — Fehlerklassen,
