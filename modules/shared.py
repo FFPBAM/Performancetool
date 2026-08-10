@@ -39,13 +39,6 @@ FFPB_BLUE2    = "#4A7FAA"   # Mittelblau (vorher #2C5F8A)
 FFPB_SAND     = "#D4BD8A"   # Sand (neu)
 FFPB_LIGHT    = "#7FABC8"   # Hellblau (vorher #A8CBE8)
 
-# Flächen- und Grautöne für eigene HTML-Bausteine (NEU 10.08.2026,
-# Anlagekriterien-Banner). Bewusst blaustichige Neutraltöne — ein reines Grau
-# wirkt neben dem Fuggerblau schmutzig.
-FFPB_FLAECHE   = "#F4F7FA"  # sehr helle Blaufläche (Banner-Hintergrund)
-FFPB_HAARLINIE = "#D8E1EA"  # feine Trennlinie
-FFPB_GRAU      = "#6E8095"  # gedämpfte Beschriftung
-
 # Erweiterte Corporate-Palette (für PDF-Linien-Charts, Reihenfolge wie Portfolioanalyse RING_COLORS)
 FFPB_PALETTE = [
     "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",
@@ -214,69 +207,73 @@ def load_anlagekriterien(path: str = ANLAGEKRITERIEN_PATH) -> pd.DataFrame:
     return pd.read_excel(path)
 
 
-def anlagekriterien_banner_html(paare, titel: str = "Anlagekriterien") -> str:
-    """Baut den Anlagekriterien-Banner als HTML (Variante B, abgestimmt 10.08.2026).
+_MD_SONDERZEICHEN = ("\\", "*", "_", "`", "[", "]", "#")
 
-    Gestaltung: keine Symbole — ein Häkchen würde „erfüllt" behaupten, hier
-    steht aber eine REGEL, keine Prüfung. Die Bezeichnung tritt als kleine
-    Versalzeile zurück, der Wert ist die Hauptsache.
 
-    WARUM EIGENE FLÄCHE UND INLINE-STILE:
-    - Der Block malt Hintergrund UND Textfarben selbst. Das Tool pinnt kein
-      Streamlit-Theme (.streamlit/config.toml setzt nur die Toolbar), der
-      Nutzer kann also auf Dunkel stellen — Fuggerblau auf dunklem Grund wäre
-      unlesbar. Mit eigener Fläche stimmt der Kontrast in beiden Themes.
-    - Stile stehen INLINE statt in einem <style>-Block: Der Banner wird pro
-      Seite mehrfach gerendert (zwei Portfolios im Vergleich), doppelte
-      Klassennamen und nachgeladene Stile fielen sich sonst ins Wort.
+def markdown_escapen(text: str) -> str:
+    """Entschärft Markdown-Sonderzeichen in Werten aus der Konfiguration.
 
-    Gibt "" zurück, wenn keine Kriterien vorliegen — die Aufrufstelle muss
-    nichts prüfen.
+    Die Werte kommen aus einer Excel, die von Hand gepflegt wird. Ein
+    Sternchen oder Unterstrich darin würde `st.markdown` sonst als Formatierung
+    lesen und Text verschlucken.
     """
-    if not paare:
-        return ""
-    import html as _html
-
-    rand = f"1px solid {FFPB_HAARLINIE}"
-    felder = []
-    for i, (bez, wert) in enumerate(paare):
-        trenner = "none" if i == 0 else rand
-        pad = "0 18px 0 0" if i == 0 else "0 18px"
-        felder.append(
-            f'<div style="border-left:{trenner};padding:{pad};'
-            f'display:flex;flex-direction:column;gap:4px;min-width:0">'
-            f'<span style="font-size:11px;font-weight:600;letter-spacing:.09em;'
-            f'text-transform:uppercase;color:{FFPB_GRAU};line-height:1.3">'
-            f'{_html.escape(str(bez))}</span>'
-            f'<span style="font-size:16px;font-weight:600;color:{FFPB_DARK};'
-            f'line-height:1.3">{_html.escape(str(wert))}</span>'
-            f'</div>')
-
-    return (
-        f'<div style="background:{FFPB_FLAECHE};border-top:2px solid {FFPB_DARK};'
-        f'border-bottom:{rand};padding:16px 18px 18px;margin:4px 0 8px">'
-        f'<div style="font-size:11px;font-weight:700;letter-spacing:.13em;'
-        f'text-transform:uppercase;color:{FFPB_BLUE2};margin-bottom:14px">'
-        f'{_html.escape(titel)}</div>'
-        f'<div style="display:grid;'
-        f'grid-template-columns:repeat(auto-fit,minmax(170px,1fr));'
-        f'row-gap:14px">{"".join(felder)}</div>'
-        f'</div>')
+    text = str(text)
+    for z in _MD_SONDERZEICHEN:
+        text = text.replace(z, "\\" + z)
+    return text
 
 
 def zeige_anlagekriterien(strategie: str, kriterien: pd.DataFrame,
-                          mit_strategiename: bool = False):
-    """Rendert den Anlagekriterien-Banner. No-op ohne Kriterien.
+                          mit_strategiename: bool = False) -> bool:
+    """Zeigt die Anlagekriterien einer Strategie. No-op ohne Kriterien.
+
+    GEBAUT AUS NATIVEN STREAMLIT-BAUSTEINEN (überarbeitet 10.08.2026).
+
+    Die erste Fassung war ein HTML-Block mit eigener heller Fläche und
+    Fuggerblau als Textfarbe. Im **Dark Mode** stand damit ein greller weißer
+    Kasten mitten in der dunklen App — der Block arbeitete gegen das Theme
+    statt sich einzufügen.
+
+    Naheliegender Reparaturversuch wäre `var(--background-color)` gewesen.
+    Geprüft und verworfen: Streamlit 1.61 stellt **keine** Theme-CSS-Variablen
+    bereit (weder in `static/css` noch im JS-Bundle nachweisbar) — die
+    Variable wäre still ins Leere gelaufen und der Kasten hätte je nach
+    Browser gar keinen Hintergrund gehabt.
+
+    Deshalb jetzt ohne eine Zeile eigenes CSS:
+      `st.container(border=True)` liefert Fläche und Rahmen aus dem aktiven
+      Theme, `st.caption` die gedämpfte Beschriftung, fettes `st.markdown` den
+      Wert. Hell wie dunkel korrekt, ohne dass wir Farben pflegen.
+
+    Die Gestaltungsidee aus Variante B bleibt erhalten: **keine Symbole**
+    (ein Häkchen würde „erfüllt" behaupten, hier steht aber eine REGEL), die
+    Bezeichnung tritt zurück, der Wert ist die Hauptsache.
+
+    Bewusst NICHT `st.metric`: In der Portfolioanalyse steht direkt darüber
+    die Kennzahlen-Zeile aus `st.metric`. Gleiche Optik würde verwischen, was
+    das Portfolio IST und was die Strategie ERLAUBT.
 
     mit_strategiename=True setzt den Namen in die Überschrift — nötig, sobald
-    auf einer Seite MEHRERE Banner stehen (Portfolio + Vergleichsportfolio),
+    auf einer Seite MEHRERE Blöcke stehen (Portfolio + Vergleichsportfolio),
     sonst wäre nicht erkennbar, welcher zu welcher Strategie gehört.
+
+    Returns: True, wenn etwas gezeichnet wurde.
     """
     paare = anlagekriterien_fuer(strategie, kriterien)
     if not paare:
         return False
-    titel = f"Anlagekriterien · {strategie}" if mit_strategiename else "Anlagekriterien"
-    st.markdown(anlagekriterien_banner_html(paare, titel), unsafe_allow_html=True)
+
+    titel = "Anlagekriterien"
+    if mit_strategiename:
+        titel = f"Anlagekriterien — {strategie}"
+
+    with st.container(border=True):
+        st.markdown(f"**{markdown_escapen(titel)}**")
+        spalten = st.columns(len(paare))
+        for spalte, (bez, wert) in zip(spalten, paare):
+            with spalte:
+                st.caption(markdown_escapen(bez))
+                st.markdown(f"**{markdown_escapen(wert)}**")
     return True
 
 

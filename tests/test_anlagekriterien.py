@@ -191,56 +191,63 @@ def _pruefe_zugriff(df):
     return fehler
 
 
-def _pruefe_banner(df):
-    print("\n8. Banner-HTML (Variante B)")
+def _pruefe_bauweise(df):
+    """Der Block MUSS aus nativen Streamlit-Bausteinen bestehen.
+
+    Die erste Fassung war ein HTML-Block mit eigener heller Flaeche — im Dark
+    Mode ein greller weisser Kasten. Dieser Schritt haelt fest, dass wir da
+    nicht zurueckfallen: kein eigenes CSS, keine festen Farben.
+    """
+    print("\n8. Bauweise: native Streamlit-Bausteine, kein eigenes CSS")
+    import inspect
+    fehler = 0
     try:
-        from modules.shared import (anlagekriterien_banner_html,
-                                    anlagekriterien_fuer)
+        from modules.shared import zeige_anlagekriterien, markdown_escapen
     except ImportError as ex:
         print(f"   UEBERSPRUNGEN — {ex}")
         return 0
-    fehler = 0
 
-    paare = anlagekriterien_fuer("cVV konservativ", df)
-    html = anlagekriterien_banner_html(paare)
+    # NUR den ausfuehrbaren Code pruefen: Docstring und Kommentare BEGRUENDEN
+    # ja gerade, warum wir var(--…) und st.metric NICHT verwenden — ohne diese
+    # Bereinigung schlaegt der Test auf seine eigene Erklaerung an.
+    roh = inspect.getsource(zeige_anlagekriterien)
+    doku = zeige_anlagekriterien.__doc__ or ""
+    if doku:
+        roh = roh.replace(doku, "")
+    quelle = "\n".join(z for z in roh.splitlines()
+                       if not z.strip().startswith("#"))
 
-    # Alle vier Bezeichnungen UND Werte muessen im Markup stehen
-    for bez, wert in paare:
-        if bez not in html:
-            print(f"   FEHLER — Bezeichnung '{bez}' fehlt im HTML")
+    # Kein Roh-HTML, keine Farbwerte, kein unsafe_allow_html
+    verboten = {
+        "unsafe_allow_html": "eigenes HTML statt nativer Bausteine",
+        "background:": "fest verdrahteter Hintergrund",
+        "#003460": "fest verdrahtete Textfarbe (bricht im Dark Mode)",
+        "<div": "Roh-HTML",
+        "var(--": "Streamlit 1.61 stellt KEINE Theme-CSS-Variablen bereit",
+    }
+    for muster, warum in verboten.items():
+        if muster in quelle:
+            print(f"   FEHLER — '{muster}' im Code: {warum}")
             fehler += 1
-        if wert not in html:
-            print(f"   FEHLER — Wert '{wert}' fehlt im HTML")
+
+    # Die nativen Bausteine, die das Theme mitbringen
+    for muster in ("st.container(border=True)", "st.columns", "st.caption"):
+        if muster not in quelle:
+            print(f"   FEHLER — '{muster}' fehlt; Block ist nicht nativ gebaut")
             fehler += 1
 
-    # Variante B: KEINE Symbole (Haken wuerde 'erfuellt' behaupten)
-    if "<svg" in html or "✓" in html:
-        print("   FEHLER — Banner enthaelt ein Symbol; Variante B ist symbolfrei")
+    # Bewusst NICHT st.metric — sonst sieht die Regel aus wie eine Kennzahl
+    if "st.metric" in quelle:
+        print("   FEHLER — st.metric verwischt Bestandszahl und Regel")
         fehler += 1
 
-    # Eigene Flaeche + Textfarbe, sonst unlesbar bei dunklem Streamlit-Theme
-    for pflicht in ("background:", "border-top:", "color:"):
-        if pflicht not in html:
-            print(f"   FEHLER — '{pflicht}' fehlt; Banner malt sich nicht selbst")
-            fehler += 1
-
-    # Kein Skript, keine unmaskierten spitzen Klammern aus den Daten
-    if "<script" in html.lower():
-        print("   FEHLER — <script> im Banner")
-        fehler += 1
-    boese = anlagekriterien_banner_html([("<b>Feld</b>", "a < b & c")])
-    if "<b>Feld</b>" in boese or "a < b" in boese:
-        print("   FEHLER — Sonderzeichen aus den Daten werden nicht maskiert")
-        fehler += 1
-
-    # Ohne Kriterien: leerer String, damit die Aufrufstelle nichts pruefen muss
-    if anlagekriterien_banner_html([]) != "":
-        print("   FEHLER — leere Kriterien liefern kein leeres HTML")
+    # Markdown-Sonderzeichen aus der Excel duerfen nichts verschlucken
+    if markdown_escapen("max. *5* _%_") != "max. \\*5\\* \\_%\\_":
+        print("   FEHLER — Markdown-Sonderzeichen werden nicht entschaerft")
         fehler += 1
 
     if not fehler:
-        print(f"   OK — {len(paare)} Felder, symbolfrei, maskiert, "
-              f"eigene Flaeche")
+        print("   OK — container/columns/caption, kein CSS, keine Farbwerte")
     return fehler
 
 
@@ -337,7 +344,7 @@ def main():
               + _pruefe_vollstaendig(df)
               + _pruefe_schreibweise(df)
               + _pruefe_zugriff(df)
-              + _pruefe_banner(df)
+              + _pruefe_bauweise(df)
               + _pruefe_in_der_app(df))
 
     print()
