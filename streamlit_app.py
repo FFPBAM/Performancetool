@@ -380,19 +380,28 @@ if not check_login(): st.stop()
 # Skriptanfang markiert sie als API-gesetzt → sie überleben den Wechsel
 # (per AppTest unter Streamlit 1.59.0 verifiziert).
 # Trigger-Widgets (Buttons/Downloads) sind ausgenommen: ihr Zustand darf
-# nicht persistieren (sonst würde z.B. ein Klick "hängen bleiben") und ihre
-# Keys lassen sich per API ohnehin nicht setzen. Das try/except fängt
-# künftige, hier nicht gelistete Trigger-Keys defensiv ab.
-# 11.08.2026: "reset_sd"/"reset_ed" entfallen — die beiden
+# nicht persistieren (sonst würde ein Klick "hängen bleiben").
+#
+# ACHTUNG — JEDER NEUE BUTTON MIT key= GEHÖRT IN DIESE LISTE (11.08.2026):
+# Das try/except unten hilft dabei NICHT. Die Zuweisung selbst geht durch;
+# sie markiert den Key nur als "per API gesetzt". Erst das spätere
+# st.button(key=...) wirft dann StreamlitValueAssignmentNotAllowedError —
+# außerhalb dieses try. Der Kommentar behauptete bis 11.08.2026 das
+# Gegenteil ("fängt künftige Trigger-Keys defensiv ab"); beim Einbau des
+# Zurücksetzen-Knopfes kam prompt der Absturz. Das try/except bleibt für
+# andere nicht setzbare Keys, ersetzt die Liste aber nicht.
+#
+# 11.08.2026: "reset_sd"/"reset_ed" entfallen — die beiden alten
 # Zurücksetzen-Schaltflächen sind durch die Zeitraum-Schnellwahl ersetzt.
-_KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl"}
+# Neu: "p_zeit_reset" (Zurücksetzen im eigenen Zeitraum).
+_KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl", "p_zeit_reset"}
 for _k in list(st.session_state.keys()):
     if _k in _KEEPALIVE_SPERRE:
         continue
     try:
         st.session_state[_k] = st.session_state[_k]
     except Exception:
-        pass  # Trigger-Widget-Key → nicht setzbar, bewusst überspringen
+        pass  # nicht setzbarer Key → bewusst überspringen
 
 st.title(APP_TITLE)
 
@@ -627,13 +636,37 @@ if ansicht == _VIEW_PERF:
     ed_vor = maxd
 
     if eigener:
-        c1, c2 = st.columns(2)
+        # Zurücksetzen über COUNTER-KEYS (Transferwissen #4, Lösung A):
+        # st.session_state["p_sd"] = ... wirft bei einem aktiven Widget eine
+        # StreamlitAPIException. Ein neuer Key erzeugt stattdessen ein NEUES
+        # Widget, das seinen Default (value=sd_vor) übernimmt.
+        #
+        # Warum es den Knopf überhaupt braucht (Philip, 11.08.2026): Sobald
+        # jemand die Kalenderfelder einmal angefasst hat, kleben sie an ihren
+        # Werten — die Schnellwahl darüber ändert dann nichts mehr, und es
+        # gibt keinen Weg zurück außer die Seite neu zu laden. Zurückgesetzt
+        # wird auf den Zeitraum, den die Schnellwahl gerade vorgibt.
+        if "p_zeit_zaehler" not in st.session_state:
+            st.session_state["p_zeit_zaehler"] = 0
+        n = st.session_state["p_zeit_zaehler"]
+
+        c1, c2, c3 = st.columns([2, 2, 1], vertical_alignment="bottom")
         with c1:
             sd = st.date_input("Start", value=sd_vor, min_value=mind,
-                               max_value=maxd, format="DD.MM.YYYY", key="p_sd")
+                               max_value=maxd, format="DD.MM.YYYY",
+                               key=f"p_sd_{n}")
         with c2:
             ed = st.date_input("Ende", value=ed_vor, min_value=mind,
-                               max_value=maxd, format="DD.MM.YYYY", key="p_ed")
+                               max_value=maxd, format="DD.MM.YYYY",
+                               key=f"p_ed_{n}")
+        with c3:
+            if st.button("Zurücksetzen", key="p_zeit_reset",
+                         width="stretch",
+                         help=f"Setzt Start und Ende auf die Schnellwahl "
+                              f"zurück ({fmt_date_de(sd_vor)} – "
+                              f"{fmt_date_de(ed_vor)})."):
+                st.session_state["p_zeit_zaehler"] += 1
+                st.rerun()
     else:
         sd, ed = sd_vor, ed_vor
         st.caption(f"{fmt_date_de(sd)} – {fmt_date_de(ed)}")

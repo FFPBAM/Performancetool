@@ -72,7 +72,10 @@ def pruefe_zeitraum():
         print(f"   FEHLER — Vorbelegung ist "
               f"{_ss(at, 'p_zeitraum')!r}, erwartet 'Seit Auflage'")
         fehler += 1
-    if any(d.key in ("p_sd", "p_ed") for d in at.date_input):
+    # Praefix statt exaktem Schluessel: die Kalenderfelder tragen seit
+    # 11.08.2026 einen Zaehler im Key (p_sd_0, p_sd_1, ...), damit der
+    # Zuruecksetzen-Knopf sie neu erzeugen kann (Transferwissen #4).
+    if any(d.key and d.key.startswith(("p_sd", "p_ed")) for d in at.date_input):
         print("   FEHLER — Kalenderfelder stehen da, obwohl 'Eigener "
               "Zeitraum' aus ist")
         fehler += 1
@@ -112,14 +115,65 @@ def pruefe_zeitraum():
     at.session_state["p_zeitraum"] = "Seit Auflage"
     at.session_state["p_zeit_frei"] = True
     at.run()
-    keys = {d.key for d in at.date_input}
-    if not {"p_sd", "p_ed"} <= keys:
+    keys = {d.key for d in at.date_input if d.key}
+    if not (any(k.startswith("p_sd") for k in keys)
+            and any(k.startswith("p_ed") for k in keys)):
         print(f"   FEHLER — Kalenderfelder fehlen trotz 'Eigener Zeitraum' "
               f"(gefunden: {keys})")
         fehler += 1
     else:
         print("   Eigener Zeitraum: Kalenderfelder erscheinen")
+
+    fehler += _pruefe_zuruecksetzen(at)
     return fehler
+
+
+def _pruefe_zuruecksetzen(at):
+    """Der Zuruecksetzen-Knopf im eigenen Zeitraum (NEU 11.08.2026).
+
+    Geprueft wird die WIRKUNG, nicht nur die Existenz: Datum verstellen,
+    Knopf druecken, danach muss wieder der Wert der Schnellwahl dastehen.
+    Vorausgesetzt wird ein Lauf mit eingeschaltetem 'Eigener Zeitraum'.
+    """
+    import datetime as dt
+    print("   Zuruecksetzen-Knopf")
+
+    knopf = next((b for b in at.button if b.key == "p_zeit_reset"), None)
+    if knopf is None:
+        print(f"      FEHLER — kein Knopf 'p_zeit_reset' "
+              f"(vorhanden: {[b.key for b in at.button]})")
+        return 1
+
+    feld_start = next((d for d in at.date_input
+                       if d.key and d.key.startswith("p_sd")), None)
+    if feld_start is None:
+        print("      FEHLER — kein Startdatum-Feld")
+        return 1
+    vorgabe = feld_start.value
+
+    # Startdatum bewusst verstellen (ein Jahr spaeter, aber nicht ueber das Ende)
+    feld_ende = next((d for d in at.date_input
+                      if d.key and d.key.startswith("p_ed")), None)
+    verstellt = min(vorgabe + dt.timedelta(days=365),
+                    feld_ende.value - dt.timedelta(days=1))
+    feld_start.set_value(verstellt).run()
+    ist = next(d.value for d in at.date_input
+               if d.key and d.key.startswith("p_sd"))
+    if ist != verstellt:
+        print(f"      FEHLER — Verstellen wirkte nicht ({ist} statt {verstellt})")
+        return 1
+
+    # Knopf druecken -> zurueck auf die Vorgabe der Schnellwahl
+    next(b for b in at.button if b.key == "p_zeit_reset").click().run()
+    danach = next(d.value for d in at.date_input
+                  if d.key and d.key.startswith("p_sd"))
+    if danach != vorgabe:
+        print(f"      FEHLER — nach dem Zuruecksetzen {danach}, "
+              f"erwartet {vorgabe}")
+        return 1
+    print(f"      OK — {vorgabe} -> verstellt {verstellt} -> "
+          f"zurueckgesetzt {danach}")
+    return 0
 
 
 def pruefe_kein_pdf():

@@ -113,6 +113,17 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Versionen gedeckelt** | *(11.08.)* Backlog 1 erledigt: **jede** Zeile der requirements hat jetzt eine Obergrenze auf die nächste Hauptversion — ein Cloud-Rebuild kann keine neue Hauptversion mehr einschleppen. Bewusst keine `==`-Pins. |
 | **Honorar SCHWEIZ** | *(11.08.)* Beide SCHWEIZ-Strategien **fehlten** im Honorar-Mapping und liefen deshalb still mit 0 % Kosten. Jetzt 1,55 % netto. **Ändert die ausgewiesenen Zahlen** — siehe unten. |
 | **Hinweis ohne Benchmark** | *(11.08.)* Kleiner Hinweis über den Kennzahlen, wenn eine Strategie keinen Vergleichsmaßstab hat. Ersetzt den alten Hinweis unter dem Chart, der nur bei eingeschaltetem Benchmark-Schalter erschien. |
+| **Zurücksetzen im Zeitraum** | *(11.08.)* Knopf neben den Kalenderfeldern, nur bei „Eigener Zeitraum". Vorher klebten die Felder an ihren Werten, sobald man sie einmal angefasst hatte. Dabei ist ein Fehler in der Doku zu #19 aufgeflogen — siehe unten. |
+
+### Falle beim nächsten Button: `_KEEPALIVE_SPERRE`
+
+Wer einen `st.button(..., key="…")` einbaut, muss den Key in
+`_KEEPALIVE_SPERRE` (oben in `streamlit_app.py`) eintragen — sonst stürzt die
+Seite ab. Das Keep-Alive re-assigniert alle session_state-Keys; für
+Button-Keys ist das verboten. Tückisch: Die Zuweisung selbst wirft nichts,
+erst das spätere `st.button()` — der Traceback zeigt also auf den Button,
+nicht auf die Ursache. Das `try/except` im Keep-Alive hilft dagegen **nicht**,
+auch wenn die Doku das bis 11.08.2026 behauptet hat (jetzt korrigiert, #19).
 
 ### Honorar SCHWEIZ: die Zahlen ändern sich
 

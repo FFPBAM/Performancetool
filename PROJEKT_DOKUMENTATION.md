@@ -897,11 +897,8 @@ else:
 **Lösung — Keep-Alive am Skriptanfang:** Alle Keys einmal re-assignen. Damit gelten sie als "per API gesetzt" und überleben das Nicht-Rendern.
 
 ```python
-# Trigger-Widgets (Buttons, Download-Buttons) MÜSSEN ausgenommen werden:
-# ihr Zustand darf nicht persistieren und ihre Keys sind per API nicht
-# setzbar (StreamlitAPIException). try/except fängt künftige defensiv ab.
-_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed", "perf_pdf", "perf_dl",
-                     "pf_pptx_btn", "pf_pptx_dl"}
+# JEDER Button/Download-Button mit key= MUSS in diese Liste.
+_KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl", "p_zeit_reset"}
 for _k in list(st.session_state.keys()):
     if _k in _KEEPALIVE_SPERRE:
         continue
@@ -910,6 +907,26 @@ for _k in list(st.session_state.keys()):
     except Exception:
         pass
 ```
+
+⚠️ **KORREKTUR 11.08.2026 — das try/except rettet dich NICHT.** Hier stand
+bis dahin, es fange künftige, nicht gelistete Trigger-Keys „defensiv" ab.
+Das ist falsch, und es kostet sofort einen Absturz:
+
+1. `st.session_state["mein_knopf"] = ...` **geht durch** — die Zuweisung
+   wirft nichts, sie markiert den Key nur als „per API gesetzt".
+2. Erst das spätere `st.button(key="mein_knopf")` prüft das in
+   `check_session_state_rules` und wirft
+   **`StreamlitValueAssignmentNotAllowedError`** — an einer ganz anderen
+   Stelle, weit außerhalb dieses `try`.
+
+Symptom: Die Seite bricht mit „Uncaught app execution" ab, und der
+Traceback zeigt auf die Button-Zeile — nicht auf das Keep-Alive, das die
+Ursache ist. Beim Einbau des Zurücksetzen-Knopfes (11.08.2026) genau so
+passiert.
+
+**Regel:** Neuer Button mit `key=` → Key in `_KEEPALIVE_SPERRE` eintragen.
+Das `try/except` bleibt für andere nicht setzbare Keys, ersetzt die Liste
+aber nicht.
 
 **Alternative (offiziell, ab ~1.59):** Widgets haben einen `persist_state`-Parameter (`"page"` / `"session"`, braucht `key`). Für EINZELNE Widgets sauberer; das Keep-Alive-Loop-Pattern deckt dagegen ALLE Widgets zentral mit einer Stelle ab — in diesem Projekt bewusst so gewählt (minimaler Diff, keine Änderung an Dutzenden Widget-Aufrufen).
 
@@ -2119,24 +2136,30 @@ Performance-Ansicht stehen wieder auf Default.
 sie als "per API gesetzt" gelten und das Nicht-Rendern überleben:
 
 ```python
-# Trigger-Widgets (Buttons/Downloads) AUSNEHMEN: ihr Zustand darf nicht
-# persistieren und ihre Keys sind per API nicht setzbar (Exception).
-_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed", "perf_pdf", "perf_dl",
-                     "pf_pptx_btn", "pf_pptx_dl"}
+# JEDER Button/Download-Button mit key= MUSS hier eingetragen werden.
+_KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl", "p_zeit_reset"}
 for _k in list(st.session_state.keys()):
     if _k in _KEEPALIVE_SPERRE:
         continue
     try:
         st.session_state[_k] = st.session_state[_k]
     except Exception:
-        pass   # Trigger-Widget-Key → nicht setzbar, bewusst überspringen
+        pass   # nicht setzbarer Key → bewusst überspringen
 ```
 
-**Warum die Sperrliste + try/except:** Button-artige Widgets (`st.button`,
-`st.download_button`) lassen ihren Key per API nicht setzen und werfen eine
-`StreamlitAPIException`. Die explizite Sperrliste dokumentiert die bekannten
-Fälle; das `try/except` fängt künftige, noch nicht gelistete Trigger-Keys
-defensiv ab, ohne dass die App crasht.
+**Warum die Sperrliste zwingend ist — und das try/except NICHT reicht**
+(korrigiert 11.08.2026): Hier stand bisher, das `try/except` fange künftige,
+nicht gelistete Trigger-Keys defensiv ab. Das stimmt nicht. Die Zuweisung
+`st.session_state["mein_knopf"] = …` läuft ohne Fehler durch — sie markiert
+den Key lediglich als „per API gesetzt". Die Exception kommt erst später,
+beim `st.button(key="mein_knopf")`, aus `check_session_state_rules`:
+`StreamlitValueAssignmentNotAllowedError`. Die liegt außerhalb dieses `try`
+und reißt die ganze Seite ab („Uncaught app execution"), wobei der Traceback
+auf die Button-Zeile zeigt statt auf das Keep-Alive, das die Ursache ist.
+
+Beim Einbau des Zurücksetzen-Knopfes am 11.08.2026 genau so eingetreten.
+Die Liste ist also der Mechanismus, nicht die Dokumentation bekannter Fälle;
+das `try/except` bleibt nur als Netz für andere nicht setzbare Keys.
 
 **Offizielle Alternative (ab Streamlit ~1.59):** Einzelne Widgets haben einen
 `persist_state`-Parameter (`"page"` / `"session"`, braucht `key`). Sauberer
@@ -2620,6 +2643,28 @@ mehr nötig.
 ---
 
 ## 16. Changelog
+
+### 11.08.2026 – Zurücksetzen im eigenen Zeitraum; Korrektur an Transferwissen #19
+
+**Zurücksetzen-Knopf** neben den Kalenderfeldern, sichtbar nur bei
+eingeschaltetem „Eigener Zeitraum" (Philip). Vorher klebten die Felder an
+ihren Werten, sobald sie einmal angefasst waren — die Schnellwahl darüber
+änderte dann nichts mehr, und es gab keinen Weg zurück außer Neuladen.
+Zurückgesetzt wird auf den Zeitraum, den die Schnellwahl gerade vorgibt.
+
+Umgesetzt mit **Counter-Keys** (`p_sd_0`, `p_sd_1`, …) nach Transferwissen
+#4, Lösung A: `st.session_state["p_sd"] = …` wirft bei einem aktiven Widget.
+Der Test `test_bedienung.py` prüft deshalb jetzt auf Key-PRÄFIX statt auf
+exakte Namen — und prüft die Wirkung, nicht die Existenz: Datum verstellen,
+klicken, Vorgabe muss zurück sein.
+
+**Dabei ein Doku-Fehler aufgeflogen (#19).** Der Knopf ließ die App sofort
+abstürzen. Ursache: Das Keep-Alive re-assigniert alle session_state-Keys,
+und für Button-Keys ist das verboten — nur wirft die Zuweisung selbst nichts,
+sondern erst das spätere `st.button()`. Das dokumentierte `try/except` fängt
+das folglich nicht. #19 und Abschnitt 8.5 sind entsprechend korrigiert; die
+Regel lautet jetzt unmissverständlich: **jeder neue Button mit `key=` gehört
+in `_KEEPALIVE_SPERRE`.**
 
 ### 11.08.2026 – Honorarsatz SCHWEIZ ergänzt; Hinweis „keine Benchmark" im Tool
 
