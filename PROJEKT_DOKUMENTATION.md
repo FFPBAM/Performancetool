@@ -2509,6 +2509,51 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 11.08.2026 – Bedienbarkeit, Runde 1: die drei echten Fehler
+
+Aus der Durchsicht der Anwendung (14 Befunde, erhoben per `AppTest` am
+laufenden Programm). Runde 1 sind die Punkte, die Nutzer direkt treffen.
+
+**PDF-Ausgabe komplett entfernt.** Entscheidung von Philip: Kundendokumente
+entstehen ausschließlich als PowerPoint. Der PDF-Weg hatte ohnehin einen
+Konstruktionsfehler — Erzeugen und Herunterladen waren zwei Schaltflächen,
+die Bytes lagen nur in einer lokalen Variablen; nach der nächsten Interaktion
+war der Download weg. Entfernt: `generate_perf_pdf` (179 Zeilen), die drei
+matplotlib-Bildbauer (`_mpl_line_chart`, `_mpl_drawdown_chart`,
+`_mpl_bar_chart`, 65 Zeilen — sie rendern **nur** fürs PDF), der UI-Block,
+die reportlab-Importe und die PDF-Schriftregistrierung in `shared.py`.
+**−296 Zeilen**, und `reportlab` + `matplotlib` fallen aus
+`requirements.txt` — zwei schwere Bibliotheken weniger im Deploy.
+
+Vorgehen dabei: Für **jede** Hilfsvariable wurde einzeln geprüft, ob sie nur
+dem PDF dient. `dfr` (rollierende Tabelle) wird auch auf dem Bildschirm
+gezeigt und blieb; `md`, `bdl`, `plt_`, `pdd`, `lp` waren PDF-only und sind
+weg. Das Entfernungs-Skript arbeitete mit **Ankern im Text statt
+Zeilennummern** und brach beim ersten mehrdeutigen Anker ab — es lief zweimal
+ins Leere, bevor es schrieb (einmal wegen CRLF im Arbeitsverzeichnis). Genau
+so soll es sein.
+
+**Benchmark-Zusammensetzung stand doppelt.** Sie wurde am Performance-Chart
+*und* am Balken-Chart ausgegeben; beide auslösenden Schalter sind
+standardmäßig an, der Doppel-Eintrag war also der Normalfall. Jetzt genau
+einmal: am Chart, wenn „Benchmark" aktiv ist — sonst am Balken-Chart, dessen
+Balken die Benchmark ja trotzdem zeigen.
+
+**33 × `use_container_width` migriert.** Der Parameter ist abgekündigt,
+Streamlit warnt bei jedem Aufruf. Die Regel wurde aus den **echten
+Signaturen** von Streamlit 1.61 abgeleitet, nicht geraten:
+
+| Element | Default | `use_container_width=True` wird zu |
+|---|---|---|
+| `dataframe`, `plotly_chart`, `data_editor` | bereits `"stretch"` | **ersatzlos gestrichen** |
+| `button`, `download_button` | `"content"` | `width="stretch"` |
+
+**Prüfstein** `tests/test_streamlit_api.py` — läuft ohne jedes Paket und
+sperrt den abgekündigten Parameter. Auf dem alten Stand rot mit exakt 33
+Befunden. Der Grund für einen Test statt eines Changelog-Eintrags: Der
+Parameter steht in jeder älteren Anleitung im Netz und schleicht sich beim
+nächsten Copy-Paste zurück.
+
 ### 10.08.2026 (spät) – Piktogramme aus der Oberfläche entfernt
 
 Philip: Emoji vor Überschriften und Disclaimern wirken unprofessionell. Für

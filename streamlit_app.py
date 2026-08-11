@@ -14,38 +14,19 @@ ist strukturell weg (per AppTest unter Streamlit 1.59.0 verifiziert).
 Hinweis: Tab 'Portfolio zusammenstellen' wurde deaktiviert (Modul
 modules/portfolio_builder.py bleibt im Repo, wird aber nicht importiert).
 """
-import os
-import io
-import datetime as dt
-
 import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import matplotlib.ticker as mticker
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
-    Table, TableStyle, PageBreak, HRFlowable,
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.colors import HexColor, white
-from PIL import Image as PILImage
 
 from modules.shared import (
     APP_TITLE,
-    LOGO_FILENAME, FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2, FFPB_SAND, FFPB_PALETTE,
-    MAPPING_PATH, NAME_MAPPING_PATH, DATA_FOLDER, EXCLUDE_SUBSTRINGS,
-    PDF_FONT, PDF_FONT_BOLD,
+    FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2, FFPB_SAND, FFPB_PALETTE,
+    DATA_FOLDER, EXCLUDE_SUBSTRINGS,
     load_anlagekriterien, zeige_anlagekriterien,
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping, load_name_mapping,
-    build_name_lookups, get_logo_aspect, get_logo_path,
+    build_name_lookups,
     # CSV-Loader (07.08.2026): kommen jetzt von hier statt als lokale
     # Kopien weiter unten — eine Implementierung, ein Cache.
     # (to_decimal_interval wird seitdem nur noch innerhalb von shared.py
@@ -339,250 +320,6 @@ def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds,
     with cols[2]: st.metric("Längste Drawdown-Phase",f"{mddur} Tage" if mddur>0 else "–",help=f"Längster Zeitraum unter Peak: {fmt_date_de(dds)} – {fmt_date_de(dde)}." if mddur>0 else "Kein Drawdown.")
     with cols[3]: st.metric("Drawdown-Tief am",fmt_date_de(mddd),help="Datum des tiefsten Drawdown-Punkts.")
 
-# PDF helpers for performance
-def _mpl_line_chart(x_dates, traces, y_label, title, use_volume, startwert=100.0):
-    fig,ax=plt.subplots(figsize=(10,4.5)); fig.patch.set_facecolor(FFPB_DARK); ax.set_facecolor(FFPB_DARK)
-    # FFPB_PALETTE[0] = Fuggerblau = Hintergrund → würde unsichtbar; deshalb ab Index 1.
-    colors=FFPB_PALETTE[1:]
-    for i,(l,y) in enumerate(traces): ax.plot(x_dates,y,label=l,color=colors[i%len(colors)],linewidth=1.3)
-
-    # Endwerte am rechten Rand jeder Linie
-    for i,(l,y) in enumerate(traces):
-        end_val = float(y[-1])
-        if use_volume:
-            pct = (end_val / startwert - 1.0) * 100
-            label = f"{pct:+.2f}%".replace(".",",")
-        else:
-            label = f"{end_val:.2f}".replace(".",",")
-        ax.annotate(label, xy=(x_dates[-1], end_val), xytext=(8, 0),
-            textcoords="offset points", fontsize=7, color=colors[i%len(colors)],
-            fontweight="bold", va="center",
-            bbox=dict(boxstyle="round,pad=0.2", facecolor=FFPB_DARK, edgecolor=colors[i%len(colors)], alpha=0.8))
-
-    ax.set_title(title,color="white",fontsize=11,fontweight="bold",loc="left")
-    ax.set_ylabel(y_label,color="white",fontsize=9); ax.tick_params(colors="white",labelsize=8)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m.%Y")); ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    fig.autofmt_xdate(rotation=30)
-    for s in ax.spines.values(): s.set_color("#1A4880")
-    ax.grid(axis="y",color="#0A4576",linewidth=0.5)
-    ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#1A4880",labelcolor="white",loc="upper left")
-    if use_volume: ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:,.0f} €"))
-    buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=180,bbox_inches="tight",facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
-
-def _mpl_drawdown_chart(x_dates, traces, title, use_volume):
-    fig,ax=plt.subplots(figsize=(10,3)); fig.patch.set_facecolor(FFPB_DARK); ax.set_facecolor(FFPB_DARK)
-    colors=[FFPB_GOLD,FFPB_BLUE2]
-    for i,(l,y) in enumerate(traces):
-        ax.fill_between(x_dates,y,alpha=0.3,color=colors[i%2]); ax.plot(x_dates,y,label=l,color=colors[i%2],linewidth=1.2)
-    ax.set_title(title,color="white",fontsize=11,fontweight="bold",loc="left")
-    ax.set_ylabel("Drawdown",color="white",fontsize=9); ax.tick_params(colors="white",labelsize=8)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m.%Y")); fig.autofmt_xdate(rotation=30)
-    if use_volume: ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:,.0f} €"))
-    else: ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:.0%}"))
-    for s in ax.spines.values(): s.set_color("#1A4880")
-    ax.grid(axis="y",color="#0A4576",linewidth=0.5)
-    ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#1A4880",labelcolor="white")
-    buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=180,bbox_inches="tight",facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
-
-def _mpl_bar_chart(bar_df, label, bench_name, title):
-    fig,ax=plt.subplots(figsize=(10,4)); fig.patch.set_facecolor(FFPB_DARK); ax.set_facecolor(FFPB_DARK)
-    labels=bar_df["label"].tolist(); cp=f"{label} (nach Kosten)"
-    pv=bar_df[cp].tolist() if cp in bar_df.columns else []
-    bv=bar_df["ret_bm_raw"].tolist() if "ret_bm_raw" in bar_df.columns else []; hb=any(pd.notna(v) for v in bv)
-    x=np.arange(len(labels)); w=0.35
-    if pv:
-        o=-w/2 if hb else 0; b1=ax.bar(x+o,pv,w if hb else w*1.5,label=f"{label} (nach Kosten)",color=FFPB_GOLD)
-        for b,v in zip(b1,pv): ax.text(b.get_x()+b.get_width()/2,b.get_height(),f"{v:+.2f}%",ha="center",va="bottom" if v>=0 else "top",fontsize=7,color="white")
-    if hb:
-        bc=[v if pd.notna(v) else 0 for v in bv]; b2=ax.bar(x+w/2,bc,w,label=bench_name,color=FFPB_LIGHT)
-        for b,v,o2 in zip(b2,bc,bv):
-            if pd.notna(o2): ax.text(b.get_x()+b.get_width()/2,b.get_height(),f"{v:+.2f}%",ha="center",va="bottom" if v>=0 else "top",fontsize=7,color="white")
-    ax.set_xticks(x); ax.set_xticklabels(labels,fontsize=8,color="white",rotation=30,ha="right")
-    ax.set_title(title,color="white",fontsize=10,fontweight="bold",loc="left"); ax.axhline(y=0,color="white",linewidth=0.5)
-    ax.tick_params(colors="white",labelsize=8); ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x,_:f"{x:.1f}%"))
-    for s in ax.spines.values(): s.set_color("#1A4880")
-    ax.grid(axis="y",color="#0A4576",linewidth=0.5); ax.legend(fontsize=7,facecolor=FFPB_DARK,edgecolor="#1A4880",labelcolor="white")
-    buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=180,bbox_inches="tight",facecolor=fig.get_facecolor()); plt.close(fig); buf.seek(0); return buf
-
-def generate_perf_pdf(logo_path, label_1, label_2, bench_name_1, bench_name_2, bench_text_1, bench_text_2,
-    fee_pct_1, fee_pct_2, anlagevolumen, use_volume, start_date, end_date, x_dates, line_traces, y_label,
-    show_drawdown, dd_traces, show_table, df_roll, show_bar, bar_data_list, metrics_data, mwst_suffix=""):
-    nk = f"nach Kosten{mwst_suffix}"
-    buf=io.BytesIO()
-    doc=SimpleDocTemplate(buf,pagesize=A4,topMargin=15*mm,bottomMargin=15*mm,leftMargin=15*mm,rightMargin=15*mm)
-    styles=getSampleStyleSheet()
-    st_t=ParagraphStyle("T",parent=styles["Title"],fontName=PDF_FONT_BOLD,textColor=HexColor(FFPB_DARK),fontSize=16,spaceAfter=6)
-    st_s=ParagraphStyle("S",parent=styles["Heading2"],fontName=PDF_FONT_BOLD,textColor=HexColor(FFPB_DARK),fontSize=12,spaceAfter=4,spaceBefore=10)
-    st_n=ParagraphStyle("N",parent=styles["Normal"],fontName=PDF_FONT,textColor=HexColor("#333333"),fontSize=9,leading=12)
-    st_sm=ParagraphStyle("SM",parent=styles["Normal"],fontName=PDF_FONT,textColor=HexColor("#666666"),fontSize=7.5,leading=10)
-    la=get_logo_aspect(logo_path); story=[]
-    if logo_path and os.path.exists(logo_path):
-        lw=50*mm; story.append(RLImage(logo_path,width=lw,height=lw*la)); story.append(Spacer(1,4*mm))
-    story.append(Paragraph("Performancevergleich",st_t))
-    story.append(HRFlowable(width="100%",thickness=1,color=HexColor(FFPB_DARK))); story.append(Spacer(1,3*mm))
-    ml=[f"<b>Portfolio:</b> {label_1}"]
-    if label_2: ml.append(f"<b>Vergleich:</b> {label_2}")
-    ml.append(f"<b>Zeitraum:</b> {fmt_date_de(start_date)} – {fmt_date_de(end_date)}")
-    ml.append(f"<b>Kosten {label_1}:</b> {fee_pct_1:.2f}% p.a.{mwst_suffix}")
-    if label_2 and fee_pct_2 is not None: ml.append(f"<b>Kosten {label_2}:</b> {fee_pct_2:.2f}% p.a.{mwst_suffix}")
-    if use_volume: ml.append(f"<b>Anlagevolumen:</b> {fmt_eur_de(anlagevolumen)}")
-    # Ø Risikofreier Zins p.a. (Zeitraum) — nimmt rf von erstem Portfolio (gilt zeitraumweise gleich für beide)
-    rf_meta = None
-    if metrics_data and metrics_data[0].get("rf_pa") is not None:
-        rf_meta = metrics_data[0]["rf_pa"]
-    if rf_meta is not None:
-        ml.append(f"<b>Ø Risikofreier Zins p.a. (Zeitraum):</b> {fmt_pct_de(rf_meta)}")
-    ml.append(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {fmt_date_de(end_date)}")
-    for l in ml: story.append(Paragraph(l,st_n))
-    story.append(Spacer(1,4*mm))
-    story.append(Paragraph(f"Kennzahlen ({nk})",st_s))
-    for m in metrics_data:
-        p=[f"<b>{m['label']}:</b>"]
-        if m.get("auflagedatum"): p.append(f"Auflage: {fmt_date_de(m['auflagedatum'])}")
-        if m.get("cagr") is not None: p.append(f"CAGR: {fmt_pct_de(m['cagr'])}")
-        if m.get("vola") is not None: p.append(f"Vola: {fmt_pct_de(m['vola'])}")
-        if m.get("calmar") is not None: p.append(f"Calmar: {m['calmar']:.2f}".replace(".",","))
-        if m.get("sharpe") is not None: p.append(f"Sharpe: {m['sharpe']:.2f}".replace(".",","))
-        if use_volume and m.get("endwert"): p.append(f"Endwert: {fmt_eur_de(m['endwert'])}")
-        if m.get("max_dd_val") is not None:
-            ds=f"Max DD: {fmt_pct_de(m['max_dd_val'])} am {fmt_date_de(m['max_dd_date'])}"
-            if use_volume and m.get("max_dd_eur"): ds+=f" ({fmt_eur_de(m['max_dd_eur'])})"
-            p.append(ds)
-        if m.get("recovery_days"): p.append(f"Recovery: {m['recovery_days']} Tage")
-        elif m.get("max_dd_val") is not None: p.append("Recovery: n.n. erholt")
-        if m.get("max_dd_dur") and m["max_dd_dur"]>0: p.append(f"Längste DD: {m['max_dd_dur']} Tage")
-        story.append(Paragraph(" | ".join(p),st_n))
-    story.append(Spacer(1,5*mm))
-    story.append(Paragraph("Performance-Index",st_s))
-    lt=f"Wertentwicklung ({fmt_eur_de(anlagevolumen)})" if use_volume else "Performance-Index (Start = 100)"
-    sw_pdf = anlagevolumen if use_volume else 100.0
-    story.append(RLImage(_mpl_line_chart(x_dates,line_traces,y_label,lt,use_volume,sw_pdf),width=170*mm,height=80*mm))
-    story.append(Spacer(1,2*mm))
-    if bench_text_1 and str(bench_text_1).strip().lower() not in ("","nan","haben keine benchmark"):
-        story.append(Paragraph(f"<b>BM {label_1}:</b> {bench_text_1}",st_sm))
-    if label_2 and bench_text_2 and str(bench_text_2).strip().lower() not in ("","nan","haben keine benchmark"):
-        story.append(Paragraph(f"<b>BM {label_2}:</b> {bench_text_2}",st_sm))
-    if show_drawdown and dd_traces:
-        story.append(Spacer(1,4*mm)); ddt="Drawdown in €" if use_volume else "Drawdown"
-        story.append(Paragraph(ddt,st_s))
-        story.append(RLImage(_mpl_drawdown_chart(x_dates,dd_traces,ddt,use_volume),width=170*mm,height=60*mm))
-    if show_table and df_roll is not None and not df_roll.empty:
-        story.append(PageBreak())
-        if logo_path and os.path.exists(logo_path): lws=35*mm; story.append(RLImage(logo_path,width=lws,height=lws*la)); story.append(Spacer(1,3*mm))
-        story.append(Paragraph("Wertentwicklung rollierend",st_s)); story.append(Spacer(1,2*mm))
-        hdr=[str(c) if isinstance(c,str) else f"{c[0]}\n{c[1]}" for c in df_roll.columns]
-        td=[hdr]+df_roll.values.tolist(); nc=len(hdr); fw=45*mm; ow=(170*mm-fw)/max(nc-1,1); cw=[fw]+[ow]*(nc-1)
-        t=Table(td,colWidths=cw,repeatRows=1)
-        t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),HexColor(FFPB_DARK)),("TEXTCOLOR",(0,0),(-1,0),white),
-            ("FONTSIZE",(0,0),(-1,-1),7),("FONTNAME",(0,0),(-1,0),PDF_FONT_BOLD),("ALIGN",(1,0),(-1,-1),"RIGHT"),
-            ("ALIGN",(0,0),(0,-1),"LEFT"),("GRID",(0,0),(-1,-1),0.5,HexColor("#CCCCCC")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[white,HexColor("#F5F5F5")]),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-            ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3)])); story.append(t)
-    if show_bar and bar_data_list:
-        story.append(PageBreak())
-        if logo_path and os.path.exists(logo_path): lws=35*mm; story.append(RLImage(logo_path,width=lws,height=lws*la)); story.append(Spacer(1,3*mm))
-        story.append(Paragraph("Performance blockweise",st_s))
-        for bd,bl,bb,bt2,bbt in bar_data_list:
-            if bd.empty: continue
-            story.append(Spacer(1,3*mm)); story.append(RLImage(_mpl_bar_chart(bd,bl,bb,bt2),width=170*mm,height=75*mm))
-            story.append(Spacer(1,2*mm))
-            if bbt and str(bbt).strip().lower() not in ("","nan","haben keine benchmark"):
-                story.append(Paragraph(f"<b>BM {bl}:</b> {bbt}",st_sm))
-
-    # ── Disclaimer ──
-    story.append(PageBreak())
-    if logo_path and os.path.exists(logo_path):
-        lws=35*mm; story.append(RLImage(logo_path,width=lws,height=lws*la)); story.append(Spacer(1,3*mm))
-    story.append(Paragraph("Disclaimer",st_s))
-    story.append(Spacer(1,3*mm))
-
-    disclaimer_texts = [
-        "Die angegebenen Werte beziehen sich auf die historische Wertentwicklung. "
-        "Der Wert sowie die Erträge einer Kapitalanlage können sowohl steigen als auch fallen. "
-        "Eine positive Wertentwicklung in der Vergangenheit stellt keine Garantie für zukünftige "
-        "Entwicklungen dar. Die Wertentwicklung wird in Euro (€) gemessen.",
-
-        "Die ausgewiesene Performance wird auf täglicher Basis berechnet. "
-        "Der jährliche Honorarsatz wird dabei in eine äquivalente tägliche Belastung umgerechnet "
-        "und unter Berücksichtigung des Zinseszinseffekts taggenau von der Performance abgezogen; "
-        "eine halbjährliche Berücksichtigung erfolgt nicht.",
-
-        "Dieses Performancetool dient ausschließlich der unverbindlichen Veranschaulichung der "
-        "Vermögensverwaltungsstrategien im Kundengespräch. Alle Berechnungen sind unverbindlich und erfolgen ohne Gewähr.",
-    ]
-    for txt in disclaimer_texts:
-        story.append(Paragraph(txt, st_n))
-        story.append(Spacer(1, 2*mm))
-
-    story.append(Spacer(1, 3*mm))
-    story.append(Paragraph(f"<b>Quelle:</b> Infront &amp; eigene Berechnungen, Stand: {fmt_date_de(end_date)}", st_n))
-    story.append(Paragraph("<b>Ansprechpartner:</b> PBAM", st_n))
-
-    # ── Glossar ──
-    story.append(PageBreak())
-    if logo_path and os.path.exists(logo_path):
-        lws=35*mm; story.append(RLImage(logo_path,width=lws,height=lws*la)); story.append(Spacer(1,3*mm))
-    story.append(Paragraph("Glossar – Kennzahlen",st_s))
-    story.append(Spacer(1,3*mm))
-
-    glossar = [
-        ("Auflagedatum im PM",
-         "Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement. "
-         "Ab diesem Datum liegen historische Performancedaten vor."),
-        ("CAGR (⌀ Rendite p.a.)",
-         "Compound Annual Growth Rate – die annualisierte Rendite nach Abzug aller Kosten. "
-         "Berechnung: (Endwert / Startwert)^(365 / Anzahl Tage) − 1. "
-         "Gibt die durchschnittliche jährliche Wertentwicklung über den gewählten Zeitraum an."),
-        ("Volatilität p.a.",
-         "Annualisierte Schwankungsbreite der täglichen Renditen nach Kosten. "
-         "Berechnung: Standardabweichung der Tagesrenditen × √365. "
-         "Je höher die Volatilität, desto stärker schwankt der Portfoliowert."),
-        ("Calmar Ratio",
-         "Verhältnis von annualisierter Rendite (CAGR) zum maximalen Drawdown. "
-         "Berechnung: CAGR / |Max. Drawdown|. "
-         "Je höher der Wert, desto besser die risikoadjustierte Rendite. "
-         "Ein Wert > 1 bedeutet, dass die Rendite den größten Verlust übersteigt."),
-        ("Sharpe Ratio",
-         "Risikoadjustierte Rendite nach Sharpe (1994). Wissenschaftlich saubere Variante "
-         "auf Basis täglicher Überrenditen. "
-         "Berechnung: (1) Pro Handelstag wird der annualisierte risikofreie Zins in den "
-         "korrespondierenden Tagessatz umgerechnet. (2) Tägliche Excess Return = Portfolio-"
-         "Tagesrendite (nach Kosten) minus Tagessatz rf. (3) Sharpe = Mittelwert der Excess "
-         "Returns geteilt durch deren Standardabweichung, anschließend × √365 annualisiert. "
-         "Misst, wie viel Rendite pro Einheit Risiko über die risikofreie Alternative hinaus "
-         "erzielt wurde. Je höher, desto besser die risikoadjustierte Rendite."),
-        ("Ø Risikofreier Zins p.a. (Zeitraum)",
-         "Durchschnittlicher annualisierter risikofreier Zinssatz über den gewählten Zeitraum. "
-         "Aggregiert aus den täglichen Werten der Datenquelle (geometrisches Aufkompoundieren der "
-         "Tagessätze, anschließend Annualisierung). Wird zur Information ausgewiesen; die "
-         "Sharpe-Ratio-Berechnung selbst nutzt die tägliche rf-Zeitreihe direkt."),
-        ("Maximaler Drawdown",
-         "Größter Verlust vom Höchststand bis zum Tiefpunkt im gewählten Zeitraum. "
-         "Angabe in Prozent (und Euro, wenn ein Anlagevolumen eingegeben wurde). "
-         "Zeigt das Worst-Case-Verlustrisiko der Strategie."),
-        ("Recovery (Erholungsdauer)",
-         "Anzahl der Tage vom Drawdown-Tief bis zur vollständigen Erholung auf das vorherige Hoch. "
-         "Gibt an, wie lange ein Anleger nach dem größten Verlust warten musste, bis der Wert wieder hergestellt war."),
-        ("Längste Drawdown-Phase",
-         "Längster zusammenhängender Zeitraum, in dem das Portfolio unterhalb eines vorherigen Höchststands lag. "
-         "Zeigt die maximale Dauer einer Verlustphase – relevant für die Geduld des Anlegers."),
-        ("Benchmark",
-         "Vergleichsmaßstab für die Portfolioperformance, bestehend aus einem oder mehreren Marktindizes. "
-         "Die Zusammensetzung wird unterhalb der Charts angegeben."),
-        ("Vor Kosten / Nach Kosten",
-         "Die Performance vor Kosten zeigt die Bruttorendite der Anlagestrategie. "
-         "Nach Kosten werden die Verwaltungsgebühren (Honorarsatz p.a.) täglich anteilig abgezogen. "
-         "Bei aktivierter MwSt.-Option wird zusätzlich 19% Mehrwertsteuer auf das Honorar berechnet."),
-    ]
-    for term, desc in glossar:
-        story.append(Paragraph(f"<b>{term}</b>", st_n))
-        story.append(Paragraph(desc, st_sm))
-        story.append(Spacer(1, 2*mm))
-
-    story.append(Spacer(1,10*mm)); story.append(HRFlowable(width="100%",thickness=0.5,color=HexColor("#CCCCCC")))
-    story.append(Paragraph(f"Erstellt am {fmt_date_de(dt.date.today())} | Fürst Fugger Privatbank",st_sm))
-    doc.build(story); buf.seek(0); return buf.getvalue()
-
 # Data loading
 # ENTFERNT 07.08.2026: Hier standen bis dahin EIGENE Kopien von
 # load_all_csvs / read_one_csv / parse_dates_col / extract_benchmark_name /
@@ -641,7 +378,7 @@ if not check_login(): st.stop()
 # nicht persistieren (sonst würde z.B. ein Klick "hängen bleiben") und ihre
 # Keys lassen sich per API ohnehin nicht setzen. Das try/except fängt
 # künftige, hier nicht gelistete Trigger-Keys defensiv ab.
-_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed", "perf_pdf", "perf_dl",
+_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed",
                      "pf_pptx_btn", "pf_pptx_dl"}
 for _k in list(st.session_state.keys()):
     if _k in _KEEPALIVE_SPERRE:
@@ -798,11 +535,11 @@ if ansicht == _VIEW_PERF:
 
     rc1,rc2=st.columns(2)
     with rc1:
-        if st.button(f"Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", use_container_width=True):
+        if st.button(f"Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", width="stretch"):
             st.session_state.p_sd_reset += 1
             st.rerun()
     with rc2:
-        if st.button(f"Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", use_container_width=True):
+        if st.button(f"Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", width="stretch"):
             st.session_state.p_ed_reset += 1
             st.rerun()
 
@@ -888,13 +625,6 @@ if ansicht == _VIEW_PERF:
         sh2=calc_sharpe_excess(draf2, df2["rf"]) if ("rf" in df2.columns and df2["rf"].notna().any()) else None
         rd2,rdt2=calc_drawdown_recovery(ia2_100,xd); dur2,ds2_,de2_=calc_max_drawdown_duration(ia2_100,xd)
 
-    md=[{"label":l1,"auflagedatum":ad1,"cagr":cg1,"vola":vo1,"endwert":ew1,"calmar":cm1,"sharpe":sh1,"rf_pa":rf_pa_1,
-        "max_dd_val":mddv1 if sdd else None,"max_dd_date":mddd1 if sdd else None,"max_dd_eur":mdde1 if sdd else None,
-        "recovery_days":rd1 if sdd else None,"recovery_date":rdt1 if sdd else None,"max_dd_dur":dur1 if sdd else None}]
-    if df2 is not None and l2:
-        md.append({"label":l2,"auflagedatum":ad2,"cagr":cg2,"vola":vo2,"endwert":ew2,"calmar":cm2,"sharpe":sh2,"rf_pa":rf_pa_2,
-            "max_dd_val":mddv2 if sdd else None,"max_dd_date":mddd2 if sdd else None,"max_dd_eur":mdde2 if sdd else None,
-            "recovery_days":rd2 if sdd else None,"recovery_date":rdt2 if sdd else None,"max_dd_dur":dur2 if sdd else None})
 
     nk_label = f"nach Kosten{mwst_suffix}"
     st.subheader(f"Kennzahlen ({nk_label})")
@@ -974,7 +704,7 @@ if ansicht == _VIEW_PERF:
         # Plotly nutzt Locale – wir überschreiben mit separatethousands
         fig.update_layout(separators=",.")
 
-    st.plotly_chart(fig,use_container_width=True,config={"displayModeBar": False})
+    st.plotly_chart(fig,config={"displayModeBar": False})
     if sb: show_benchmark_composition(l1,bt1,l2,bt2)
 
     if sdd:
@@ -990,15 +720,14 @@ if ansicht == _VIEW_PERF:
             fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia1_100),mode="lines",name=f"{l1} – DD (nK)"))
             if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia2_100),mode="lines",name=f"{l2} – DD (nK)"))
             fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="Drawdown",hovermode="x unified",colorway=FFPB_PALETTE)
-        st.plotly_chart(fdd,use_container_width=True,config={"displayModeBar": False})
+        st.plotly_chart(fdd,config={"displayModeBar": False})
 
     dfr=None
     if stbl:
         sl=f"Seit: {fmt_date_de(df1.index.min())}"
         dfr=build_rolling_table(sb1t,sa1t,l1,sb2t,sa2t,l2,sl)
-        st.subheader("Wertentwicklung rollierend"); st.dataframe(dfr,use_container_width=True)
+        st.subheader("Wertentwicklung rollierend"); st.dataframe(dfr)
 
-    bdl=[]
     if sbar:
         st.markdown("---"); st.subheader("Performance blockweise")
         bl,br=st.columns([1,3])
@@ -1012,19 +741,27 @@ if ansicht == _VIEW_PERF:
         def _rb(dfs,fee,lab,bname,btxt,cont,suffix="1"):
             bd=compute_bar_data(dfs,fee,bm,lab,csb,ceb)
             if bd.empty: cont.info(f"Keine Daten für {lab}."); return
-            btt=f"{tm[bm]} – {lab}"; bdl.append((bd,lab,bname,btt,btxt))
-            cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),use_container_width=True,config={"displayModeBar": False},key=f"bar_chart_{suffix}")
+            btt=f"{tm[bm]} – {lab}"
+            cont.plotly_chart(build_bar_chart(bd,lab,bname,title=btt),config={"displayModeBar": False},key=f"bar_chart_{suffix}")
             show_tbl = cont.checkbox(f"Tabelle anzeigen – {lab}", value=False, key=f"bar_tbl_{lab}_{suffix}")
             if show_tbl:
                 cp=f"{lab} (nach Kosten)"; dp=bd[["label",cp,"ret_bm_raw"]].copy()
                 dp[cp]=dp[cp].map(lambda x:f"{x:+.2f}%"); dp["ret_bm_raw"]=dp["ret_bm_raw"].map(lambda x:f"{x:+.2f}%" if pd.notna(x) else "–")
-                dp.columns=["Zeitraum",f"{lab} nK",bname]; cont.dataframe(dp,use_container_width=True,hide_index=True)
+                dp.columns=["Zeitraum",f"{lab} nK",bname]; cont.dataframe(dp,hide_index=True)
         with br:
             _rb(df1,fdec1,l1,bn1,bt1,st.container(),suffix="p1")
-            show_benchmark_composition(l1,bt1)
+            # Benchmark-Zusammensetzung nur, wenn sie NICHT schon oben am
+            # Performance-Chart steht (11.08.2026). Bis dahin erschien sie
+            # doppelt und wortgleich, sobald "Benchmark" und "Balken-Chart"
+            # aktiv waren — beide sind standardmaessig an, der Doppel-Eintrag
+            # war also der Normalfall. Ist der Benchmark-Schalter aus, gehoert
+            # sie hierher: die Balken zeigen die Benchmark trotzdem.
+            if not sb:
+                show_benchmark_composition(l1,bt1)
             if df2 is not None and fdec2 is not None and ps2:
                 st.markdown("---"); _rb(df2,fdec2,l2,bn2 or "BM",bt2 or "",st.container(),suffix="p2")
-                show_benchmark_composition(l2,bt2)
+                if not sb:
+                    show_benchmark_composition(l2,bt2)
 
     # Disclaimer
     st.markdown("---")
@@ -1047,31 +784,6 @@ if ansicht == _VIEW_PERF:
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
     st.markdown("**Ansprechpartner:** PBAM")
-
-    # PDF Performance
-    st.markdown("---")
-    plt_=[(f"{l1} – {nk_label} ({eff_fee_1:.2f}%)",ia1)]
-    if ia2 is not None: plt_.append((f"{l2} – {nk_label} ({eff_fee_2:.2f}%)",ia2))
-    if sv: plt_.append((f"{l1} – vK",ib1));
-    if sv and ib2 is not None: plt_.append((f"{l2} – vK",ib2))
-    if sb and has_benchmark(df1["ret_bm"]):
-        plt_.append((f"BM {l1}: {bn1}",make_index_from_returns(df1["ret_bm"].fillna(0).to_numpy(float),sw)))
-        if df2 is not None and has_benchmark(df2["ret_bm"]):
-            plt_.append((f"BM {l2}: {bn2}",make_index_from_returns(df2["ret_bm"].fillna(0).to_numpy(float),sw)))
-    # rf-Linie ins PDF wenn aktiv UND Daten vorhanden
-    if sb_rf and rf_idx is not None:
-        plt_.append(("Risikofreier Zins", rf_idx))
-    pdd=[]
-    if sdd:
-        if use_volume: pdd.append((f"{l1} DD €",drawdown_euro_from_index(ia1)));
-        else: pdd.append((f"{l1} DD",drawdown_from_index(ia1_100)))
-        if df2 is not None:
-            if use_volume: pdd.append((f"{l2} DD €",drawdown_euro_from_index(ia2)))
-            else: pdd.append((f"{l2} DD",drawdown_from_index(ia2_100)))
-    lp=get_logo_path()
-    if st.button("PDF Performance",key="perf_pdf"):
-        with st.spinner("PDF..."): pb=generate_perf_pdf(lp,l1,l2,bn1,bn2,bt1,bt2,eff_fee_1,eff_fee_2 if fp2 is not None else None,anlagevolumen,use_volume,sd,ed,xd,plt_,yl,sdd,pdd,stbl,dfr,sbar,bdl,md,mwst_suffix)
-        st.download_button("PDF",pb,f"Performance_{l1}_{fmt_date_de(sd)}-{fmt_date_de(ed)}.pdf","application/pdf",key="perf_dl")
 
 
 # ===========================================================================

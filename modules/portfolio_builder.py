@@ -250,7 +250,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     sz_cols = st.columns(5)
     for i, name in enumerate(SCHNELLZUGRIFFE.keys()):
         with sz_cols[i % 5]:
-            if st.button(name, key=f"sz_{i}", use_container_width=True):
+            if st.button(name, key=f"sz_{i}", width="stretch"):
                 preset = SCHNELLZUGRIFFE[name]
                 st.session_state["f_asset"] = preset.get("Assetklasse", [])
                 st.session_state["f_region"] = preset.get("Region", [])
@@ -353,7 +353,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     if show_table:
         show_cols = ["Name", "WKN", "ISIN", "Assetklasse", "Segment", "Region", "Kupon", "Duration", "Fälligkeit", "Marktrisikowert"]
         st.dataframe(filtered[[c for c in show_cols if c in filtered.columns]].head(200),
-                     use_container_width=True, hide_index=True)
+                     hide_index=True)
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 3: TITEL HINZUFÜGEN (Multiselect – nur zum Hinzufügen!)
@@ -410,7 +410,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             wkn = label_to_wkn.get(lbl)
             if wkn:
                 _add_to_portfolio(wkn, 0.0)
-        if st.button("✅ Ausgewählte Titel ins Portfolio übernehmen", key="confirm_add", use_container_width=True):
+        if st.button("✅ Ausgewählte Titel ins Portfolio übernehmen", key="confirm_add", width="stretch"):
             st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════
@@ -443,7 +443,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
         )
     with eq_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button(f"Gewichte gleichverteilen", key="equalize", use_container_width=True):
+        if st.button(f"Gewichte gleichverteilen", key="equalize", width="stretch"):
             cash_dec = cash_pct_input / 100.0
             w = (1.0 - cash_dec) / n_titel
             for wkn in portfolio:
@@ -451,7 +451,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             st.rerun()
     with reset_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Alles zurücksetzen", key="reset_pf", use_container_width=True):
+        if st.button("Alles zurücksetzen", key="reset_pf", width="stretch"):
             _reset_portfolio()
             st.rerun()
 
@@ -503,7 +503,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             "Gewicht (%)": st.column_config.NumberColumn("Gewicht (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.2f"),
         },
         disabled=["Name", "WKN", "Assetklasse", "Kupon", "Duration", "Fälligkeit"],
-        hide_index=True, use_container_width=True, key="builder_pf_editor"
+        hide_index=True, width="stretch", key="builder_pf_editor"
     )
 
     # Gewichte zurückschreiben + angehakte Titel entfernen
@@ -541,7 +541,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
 
     # Excel Export
     st.markdown("---")
-    if st.button("Portfolio als Excel speichern", key="csv_export", use_container_width=True):
+    if st.button("Portfolio als Excel speichern", key="csv_export", width="stretch"):
         exp = edited_pf.copy() if edited_pf is not None else pf_df.copy()
 
         # 🗑️-Spalte entfernen
@@ -636,33 +636,33 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 fig_f.update_layout(
                     height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
                     yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
-                st.plotly_chart(fig_f, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_f, config={"displayModeBar": False})
 
     # Ring-Diagramme
     st.markdown("---")
     r1, r2, r3 = st.columns(3)
     with r1:
         ag = build_allocation(analysis_df, "Gattung")
-        if not ag.empty: st.plotly_chart(build_ring_chart(ag, "Gattung", "Gattung"), use_container_width=True, config={"displayModeBar": False})
+        if not ag.empty: st.plotly_chart(build_ring_chart(ag, "Gattung", "Gattung"), config={"displayModeBar": False})
     with r2:
         ar = build_allocation(analysis_df, "Region")
-        if not ar.empty: st.plotly_chart(build_ring_chart(ar, "Region", "Region"), use_container_width=True, config={"displayModeBar": False})
+        if not ar.empty: st.plotly_chart(build_ring_chart(ar, "Region", "Region"), config={"displayModeBar": False})
     with r3:
         aseg = build_allocation(analysis_df, "Segment")
-        if not aseg.empty: st.plotly_chart(build_ring_chart(aseg, "Segment", "Segment"), use_container_width=True, config={"displayModeBar": False})
+        if not aseg.empty: st.plotly_chart(build_ring_chart(aseg, "Segment", "Segment"), config={"displayModeBar": False})
 
     # Top 5
     st.markdown("---")
     top5 = get_top_holdings(analysis_df, n=5)
     if not top5.empty:
-        st.plotly_chart(build_top5_bar_chart(top5, "Top 5 Holdings"), use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(build_top5_bar_chart(top5, "Top 5 Holdings"), config={"displayModeBar": False})
 
     # Gruppierte Tabelle
     st.markdown("**Einzeltitel-Übersicht**")
     grouped = build_grouped_title_table(analysis_df, anlagevolumen if use_volume else 0.0, show_ytd=False)
     for gname, gw, disp in grouped:
         st.markdown(f"**{gname}** – {fmt_pct_de(gw)}")
-        st.dataframe(disp, use_container_width=True, hide_index=True)
+        st.dataframe(disp, hide_index=True)
 
     # ══════════════════════════════════════════════════════════════════════
     # BEREICH 6: VERGLEICH MIT MUSTERPORTFOLIO
@@ -685,13 +685,13 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                 vr1, vr2, vr3 = st.columns(3)
                 with vr1:
                     vg = build_allocation(vgl_df, "Gattung")
-                    if not vg.empty: st.plotly_chart(build_ring_chart(vg, "Gattung", f"Gattung – {vgl_sel}"), use_container_width=True, config={"displayModeBar": False})
+                    if not vg.empty: st.plotly_chart(build_ring_chart(vg, "Gattung", f"Gattung – {vgl_sel}"), config={"displayModeBar": False})
                 with vr2:
                     vr = build_allocation(vgl_df, "Region")
-                    if not vr.empty: st.plotly_chart(build_ring_chart(vr, "Region", f"Region – {vgl_sel}"), use_container_width=True, config={"displayModeBar": False})
+                    if not vr.empty: st.plotly_chart(build_ring_chart(vr, "Region", f"Region – {vgl_sel}"), config={"displayModeBar": False})
                 with vr3:
                     vs = build_allocation(vgl_df, "Segment")
-                    if not vs.empty: st.plotly_chart(build_ring_chart(vs, "Segment", f"Segment – {vgl_sel}"), use_container_width=True, config={"displayModeBar": False})
+                    if not vs.empty: st.plotly_chart(build_ring_chart(vs, "Segment", f"Segment – {vgl_sel}"), config={"displayModeBar": False})
     else:
         st.info("Keine Musterportfolios verfügbar.")
 

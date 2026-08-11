@@ -90,6 +90,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
 | **Piktogramme raus** | *(10.08.)* 67 Emoji aus Überschriften, Hinweisen und Schaltflächen entfernt — unpassend für eine Privatbank. Zwei davon steuerten Logik und wurden durch Konstanten ersetzt. |
+| **Bedienbarkeit, Runde 1** | *(11.08.)* PDF-Ausgabe komplett entfernt (−296 Zeilen, reportlab + matplotlib raus), doppelte Benchmark-Zeile behoben, 33 abgekündigte `use_container_width` migriert. |
 
 Netto etwa −1.500 Zeilen bei mehr Funktion.
 
@@ -114,6 +115,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 
 | Test | Braucht | Prüft |
 |---|---|---|
+| `test_streamlit_api.py` | **nichts** | keine abgekündigten Streamlit-Parameter (`use_container_width`) |
 | `test_keine_piktogramme.py` | **nichts** | keine Emoji in Überschriften, Hinweisen, Schaltflächen (Kommentare/Doku ausgenommen) |
 | `test_anlagekriterien.py` | pandas **+ streamlit** | 14 Strategien, Schreibweise, Banner-Bauweise, AppTest in beiden Ansichten; **mit Ordner-Argument** zusätzlich der Kasten in den erzeugten Broschüren |
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
@@ -125,6 +127,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
 ```
+python tests/test_streamlit_api.py
 python tests/test_keine_piktogramme.py
 python tests/test_anlagekriterien.py [C:\pfad\zur\ausgabe]
 python tests/test_app_titel.py

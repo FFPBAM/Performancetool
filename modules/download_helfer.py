@@ -113,5 +113,5 @@ def download_bereich(daten: bytes, dateiname: str) -> None:
             file_name=dateiname,
             mime=PPTX_MIMETYPE,
             key="pf_pptx_dl",
-            use_container_width=True,
+            width="stretch",
         )
