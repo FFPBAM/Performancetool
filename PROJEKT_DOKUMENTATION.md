@@ -1,5 +1,10 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: 07.08.2026 (Phase 4: Code-Review — Benchmark-Bugfix, Deploy-Konfiguration repariert, ~1.900 Zeilen toter Code entfernt)
+## Stand: 11.08.2026 (Phase 4: Code-Review — Benchmark-Bugfix, Deploy-Konfiguration repariert, ~2.200 Zeilen toter Code entfernt)
+
+> **Neu am 11.08.2026:** Transferwissen **#46** (ein Platzhalterwert pflanzt
+> sich fort — bis in den Fließtext). Backlog **A** und **C** sind damit
+> erledigt; im Backlog §15 bleibt als einziger Sachpunkt das Pinnen von
+> `pandas`/`numpy`.
 
 > **Neu am 07.08.2026:** Transferwissen **#41** (Null-Spalten sind keine Daten —
 > der Benchmark-Bug), `.streamlit`-Ordner repariert, `lxml` in den requirements
@@ -1601,6 +1606,94 @@ def kriterien_tabelle(slide):
 
 ---
 
+### 46. Ein Platzhalterwert pflanzt sich fort — bis in den Fließtext (BUG, NEU 11.08.2026) ⭐
+
+**Situation:** Am 07.08.2026 wurde der Null-Benchmark-Bug behoben (#41): Eine
+Spalte aus lauter Nullen ist keine Benchmark, `has_benchmark` erkennt das, die
+Kennzahlen zeigen „–". Fall abgeschlossen — dachten wir.
+
+**Falle:** Die Erkennung war richtig, aber sie wurde nur an EINER Stelle
+ausgewertet. `compute_performance_data` füllte die Chart-Serien weiterhin auf:
+
+```python
+if has_bm:
+    pa_bench.append(calc_period_return(rb_y))
+else:
+    pa_bench.append(0.0)          # ← „keine Benchmark" wird zu „Benchmark = 0"
+...
+wert_bench = [1.0] * len(dates)   # ← und zu einer Index-Linie bei 100 %
+```
+
+Damit war die Information „es gibt keine Benchmark" **hinter der Datenstruktur
+verschwunden**. Jede nachgelagerte Stelle sah eine gültige, vollständige Serie
+und tat pflichtschuldig das Ihre.
+
+**Was am echten Artefakt herauskam** (*Muster SCHWEIZ Substanz*, Themen-Broschüre):
+
+| Stelle | Was stand da |
+|---|---|
+| Säulen-Chart | Serie „Benchmark" mit vier Nullen → vier Null-Balken |
+| Linien-Chart | nichts — diese Folie übergibt ohnehin nur eine Serie |
+| Legenden-Textbox | „Musterdepot     Benchmark***" |
+| Fußnote | „*** 50% EuroStoxx 50; 50% MSCI World Euro" |
+
+Die letzte Zeile ist der eigentliche Fund. Der Code schrieb die ***-Zeile nur
+dann um, wenn ein Benchmark-Text vorlag — sonst blieb der **Vorlagentext**
+stehen. Die Vorlage stammt von „Pro". Die Kundenbroschüre für SCHWEIZ nannte
+also die Benchmark-Zusammensetzung einer fremden Strategie: keine Optik,
+sondern eine **falsche Sachaussage in einem Kundendokument**.
+
+**Zwei übertragbare Lehren:**
+
+**1. Ein Fehlwert darf nicht wie ein Messwert aussehen.** `0.0` und `1.0` sind
+gültige Zahlen; „nicht vorhanden" ist keine. Wer auffüllt, um die Struktur
+gleich lang zu halten, verschiebt das Problem nur nach hinten — dorthin, wo
+niemand mehr nachfragen kann. Richtig ist eine leere Liste plus ein
+ausdrückliches Kennzeichen:
+
+```python
+return {
+    "has_benchmark": has_bm,          # explizit, nicht aus Daten erratbar
+    "performance_pa": {"jahre": jahre, "referenz": pa_ref,
+                       "benchmark": pa_bench},   # leer, wenn has_bm False
+}
+```
+
+**2. „Nicht vorhanden" muss ÜBERALL ankommen, auch im statischen Text.**
+Eine Vorlage besteht nicht nur aus Charts. Beim Weglassen einer Größe ist
+jeder Ort zu prüfen, an dem sie vorkommt:
+
+- die **Chart-Serie** (python-pptx entfernt überzählige `<c:ser>` von selbst,
+  wenn man schlicht eine Serie weniger übergibt — inklusive Legendeneintrag
+  des Charts; siehe `_adjust_ser_count` in `pptx/chart/xmlwriter.py`)
+- die **statische Legenden-Textbox** daneben (kein Chart-Element!)
+- die **Fußnote** und jeder Verweis darauf (`*`, `**`, `***`)
+- der **Folientitel** („… (mit Benchmark)")
+
+Am schwersten zu finden ist der statische Text: ein Chart mit falschen Zahlen
+fällt beim Durchblättern auf, eine Fußnote mit *plausiblen, aber fremden*
+Angaben nicht.
+
+**3. Beim Wegnehmen ist der Standardwert die wichtigste Entscheidung.** Der
+Schalter heißt `has_benchmark` und wird mit **`.get("has_benchmark", True)`**
+gelesen, nicht mit `.get("has_benchmark")`. Nur ein ausdrückliches `False`
+lässt Inhalte verschwinden. Der umgekehrte Standard hätte bei jedem Aufrufer,
+der ein unvollständiges Dict baut, still Legendeneinträge und Fußnotenzeilen
+aus Broschüren gelöscht — auch bei Strategien MIT Benchmark. Genau das fiel
+beim ersten Entwurf auf, weil `test_legende_musterdepot.py` rot wurde: dessen
+Fixture kennt den neuen Schlüssel nicht. Ein Test, der eine Design-
+Entscheidung kippt, hat seinen Zweck erfüllt.
+
+**Diagnose-Rezept (das, was hier funktioniert hat):** Broschüre bauen, dann
+Serien-Namen und -Werte direkt aus der Chart-XML lesen sowie jeden Text-Frame
+der Folie ausgeben — und **immer einen Kontrollfall mitbauen**, der das
+Merkmal HAT (hier „Pro"). Ohne den weiß man nach der Korrektur nicht, ob man
+nur den Fehler oder auch die Funktion entfernt hat.
+
+Prüfstein: `tests/test_benchmark_charts.py` (Datenschicht + echtes Artefakt).
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -2449,21 +2542,25 @@ mehr nötig.
 
 **Neu aufgenommen (aus dem Code-Review vom 07.08.2026):**
 
-- **A. Benchmark-Serie auch aus den PPTX-Charts nehmen.** `has_benchmark`
-  korrigiert die KENNZAHLEN (Folie zeigt „–"), aber `analytics` füllt die
-  Chartreihen weiterhin mit `0.0` bzw. `1.0` — die SCHWEIZ-Broschüren zeigen
-  also weiter eine flache Benchmark-Linie und Null-Balken. Das sauber zu
-  lösen heißt, die Serie im Vorlagen-Chart zu entfernen (`pptx_slides`), und
-  das ist ohne lokalen PPTX-Test nicht verifizierbar. **Vor dem nächsten
-  Versand einer SCHWEIZ-Broschüre klären.**
+- ~~**A. Benchmark-Serie auch aus den PPTX-Charts nehmen.**~~ — **erledigt
+  11.08.2026**, siehe Transferwissen **#46**. Der Befund war größer als hier
+  beschrieben: Die flache Linie gab es auf der Themen-Folie gar nicht, dafür
+  standen Legendeneintrag und ***-Fußnote noch da — letztere mit dem
+  unveränderten Vorlagentext, also der Benchmark einer FREMDEN Strategie.
 - **B. Die zwei verbliebenen Mathe-Helfer in `pptx_export.py`**
   (`_annual_fee_to_daily_drag`, `_make_index_after_fee`) sind Duplikate von
   `analytics`. Umziehen, sobald `compute_wertentwicklung_data` angefasst wird
   (steht als Hinweis auch im dortigen Docstring).
-- **C. Der Wrapper-Block in `pptx_export.py`** (rund 300 Zeilen reine
-  Durchreichfunktionen `_find_shape_by_name` → `find_shape_by_name` usw.)
-  hat seit der Modultrennung keinen Zweck mehr. Rein mechanisch zu entfernen,
-  aber viele Aufrufstellen — nur mit lauffähiger Testumgebung angehen.
+- ~~**C. Der Wrapper-Block in `pptx_export.py`**~~ — **erledigt 11.08.2026**
+  (−292 Zeilen, 1303 → 1010). Die Warnung „viele Aufrufstellen" war falsch:
+  27 der 40 Wrapper wurden NIRGENDS aufgerufen, die übrigen 13 an je einer
+  bis drei Stellen, alle in derselben Datei. Vor dem Umbau erst zählen, dann
+  schätzen. Beweis der Wirkungsgleichheit: alle sieben Broschüren vorher/
+  nachher rekursiv verglichen — von 2056 ZIP-Einträgen unterschieden sich 34,
+  ausnahmslos `docProps/core.xml` (Erzeugungs-Zeitstempel).
+  **Gleichartiger Block in `streamlit_app.py` (Zeilen 62–88) bleibt** — der
+  ist nicht tot, die UI ruft ihn überall auf, und zwischen den Durchreichern
+  stehen echte UI-Helfer.
 - **D. Testabdeckung ausbauen.** `tests/` enthält bisher einen Test. Die
   streamlit-freien Module (`analytics`, `formats`) sind auch ohne Firmen-IT
   testbar — dort lohnt sich mehr.
@@ -2508,6 +2605,37 @@ mehr nötig.
 ---
 
 ## 16. Changelog
+
+### 11.08.2026 – SCHWEIZ ohne Benchmark; 40 Durchreich-Funktionen entfernt
+
+**Backlog A — der Vergleichsmaßstab war noch an drei Stellen da.** Nachdem
+`has_benchmark` am 07.08. die Kennzahlen korrigiert hatte, zeigte die
+SCHWEIZ-Broschüre die Benchmark weiterhin im Säulen-Chart (vier Null-Balken),
+in der Legenden-Textbox und in der Fußnote. Die Fußnote trug den
+**unveränderten Vorlagentext** — die Benchmark der Strategie „Pro". Ursache:
+`analytics` füllte die Chart-Serien mit `0.0`/`1.0` auf, statt sie leer zu
+lassen; „es gibt keine" war damit von „sie ist null" nicht mehr zu
+unterscheiden. Jetzt liefert `compute_performance_data` ein
+`has_benchmark`-Kennzeichen und leere Listen, `pptx_slides` legt die Serie
+gar nicht erst an (python-pptx entfernt das überzählige `<c:ser>` selbst) und
+räumt Legendeneintrag und ***-Zeile ab. Standardwert des Schalters ist
+bewusst `True`. Vollständige Herleitung: **Transferwissen #46**.
+Prüfstein: `tests/test_benchmark_charts.py`.
+
+**Backlog C — Wrapper raus.** 40 Durchreich-Funktionen aus `pptx_export.py`
+entfernt (1303 → 1010 Zeilen). 27 davon wurden nirgends aufgerufen, die
+übrigen 13 an je einer bis drei Stellen; die Backlog-Warnung „viele
+Aufrufstellen" war schlicht falsch. `_load_template` blieb — sie ist kein
+Durchreicher, sondern ergänzt einen Folienzahl-Guard. Der Import-Block
+schrumpfte von 115 auf 58 Zeilen, pyflakes meldet die Datei jetzt ohne
+Beanstandung (vorher 44 ungenutzte Importe). Beweis der Wirkungsgleichheit:
+alle sieben Broschüren vorher/nachher rekursiv verglichen, von 2056
+ZIP-Einträgen unterschieden sich 34 — ausnahmslos `docProps/core.xml`, also
+der Erzeugungs-Zeitstempel.
+
+**Nicht angefasst:** der gleichartige Wrapper-Block in `streamlit_app.py`
+(Zeilen 62–88). Der ist nicht tot, und zwischen den Durchreichern stehen
+echte UI-Helfer.
 
 ### 11.08.2026 – Bedienbarkeit, Runden 2–4: Beschriftungen, Bedienfluss, Auftritt
 

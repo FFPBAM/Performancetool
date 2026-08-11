@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 11.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 28 Commits vor `main`
+· 31 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -108,8 +108,36 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Piktogramme raus** | *(10.08.)* 67 Emoji aus Überschriften, Hinweisen und Schaltflächen entfernt — unpassend für eine Privatbank. Zwei davon steuerten Logik und wurden durch Konstanten ersetzt. |
 | **Bedienbarkeit, Runde 1** | *(11.08.)* PDF-Ausgabe komplett entfernt (−296 Zeilen, reportlab + matplotlib raus), doppelte Benchmark-Zeile behoben, 33 abgekündigte `use_container_width` migriert. |
 | **Bedienbarkeit, Runden 2–4** | *(11.08.)* Kennzahlen-Beschriftungen entklammert, 8 fehlende Hilfetexte ergänzt, Honorarfeld als „netto" benannt, Zeitraum-Schnellwahl (1/3/5/10 J · seit Auflage) mit optionalem eigenem Datum, Seitenleiste gruppiert, Logo auf dem Anmeldebildschirm, Datenstand nach oben. |
+| **SCHWEIZ ohne Benchmark** | *(11.08.)* Backlog A erledigt — und dabei mehr gefunden als dort stand. Details unten. |
+| **Wrapper raus** | *(11.08.)* Backlog C erledigt: 40 Durchreich-Funktionen aus `pptx_export.py`, −292 Zeilen. Broschüren vorher/nachher bewiesen identisch. |
 
-Netto etwa −1.500 Zeilen bei mehr Funktion.
+Netto etwa −1.800 Zeilen bei mehr Funktion.
+
+### SCHWEIZ: der Vergleichsmaßstab war an drei Stellen noch da
+
+Der Backlog nannte „flache Benchmark-Linie und Null-Balken". Am echten
+Artefakt (*Muster SCHWEIZ Substanz*) nachgesehen, stimmte davon die Hälfte —
+und es kam etwas Schwereres dazu:
+
+| Stelle | Befund |
+|---|---|
+| Säulen-Chart | Serie „Benchmark" aus vier Nullen → Null-Balken. **Bestätigt.** |
+| Linien-Chart | Zeigte nur *eine* Serie. Die im Backlog vermutete flache 100-%-Linie gab es auf der Themen-Folie **nicht**. |
+| Legenden-Box | „Musterdepot     Benchmark***" — benannte einen Balken, den es nicht gibt. |
+| Fußnote | „*** 50% EuroStoxx 50; 50% MSCI World Euro" — der **unveränderte Vorlagentext**, also die Benchmark der Strategie *Pro*. |
+
+Die Fußnote wog am schwersten und stand in keinem Backlog: kein optischer
+Makel, sondern eine **falsche Sachaussage in einem Kundendokument**.
+
+Ursache überall dieselbe: `analytics` füllte die Benchmark-Serien mit `0.0`
+bzw. `1.0` auf, statt sie leer zu lassen — die nachgelagerten Stellen konnten
+„es gibt keine" nicht von „sie ist null" unterscheiden. Jetzt liefert
+`compute_performance_data` ein `has_benchmark`-Kennzeichen und leere Listen;
+Chart-Serie, Legendeneintrag und ***-Zeile entfallen dann.
+
+Der Schalter hat bewusst den Standardwert **True**: nur ein ausdrückliches
+`has_benchmark=False` lässt Inhalte verschwinden. Ein fehlender Schlüssel darf
+nicht still Text aus einer Broschüre löschen.
 
 ### Sichtprüfung in echtem PowerPoint — ERLEDIGT
 
@@ -138,7 +166,8 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_anlagekriterien.py` | pandas **+ streamlit** | 14 Strategien, Schreibweise, Banner-Bauweise, AppTest in beiden Ansichten; **mit Ordner-Argument** zusätzlich der Kasten in den erzeugten Broschüren |
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
 | `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
-| `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert |
+| `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert (**Kennzahlen**) |
+| `test_benchmark_charts.py` | pandas; Schritt 2 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende und Fußnote** — Schritt 2 baut zwei echte Broschüren und liest nach, mit „Pro" als Kontrollfall |
 | `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
 | `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
@@ -152,6 +181,7 @@ python tests/test_anlagekriterien.py [C:\pfad\zur\ausgabe]
 python tests/test_app_titel.py
 python tests/test_legende_musterdepot.py
 python tests/test_benchmark_erkennung.py
+python tests/test_benchmark_charts.py
 python tests/test_historie_ab.py
 python tests/test_folien_config.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
@@ -199,16 +229,22 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
 1. **PR mergen** — alles andere hängt daran.
-2. **Flache Benchmark-Linie bei SCHWEIZ** (Backlog A). Die *Kennzahlen* sind
-   korrigiert, die *Charts* zeigen weiter eine 0-%-Linie und Null-Balken.
-   Sauber wäre, die Serie im Vorlagen-Chart zu entfernen (`pptx_slides`).
-   Philip: „lassen wir erstmal" — vor dem nächsten SCHWEIZ-Versand klären.
+2. **SCHWEIZ in echtem PowerPoint ansehen.** Der Fix ist im XML und per Test
+   belegt, aber noch nicht vom Auge geprüft — genau die Lücke, aus der beide
+   Fehler der Sitzung vom 07.08. kamen (#16/#28). Eine Broschüre *Muster
+   SCHWEIZ Substanz* reicht: Säulen-Chart, Legende, Fußnote.
 3. **`pandas`/`numpy` pinnen** (Backlog 1). Genau die beiden verursachten den
-   Ausfall am 06.07. Jetzt testbar, weil die venv läuft.
-4. **~300 Zeilen Durchreich-Wrapper in `pptx_export.py`** (Backlog C) —
-   mechanisch entfernbar, viele Aufrufstellen.
-5. **`use_container_width` → `width`** (Backlog 7) — Streamlit warnt und
-   entfernt den Parameter künftig.
+   Ausfall am 06.07. Jetzt testbar, weil die venv läuft. **Einziger echter
+   Backlog-Punkt, der offen bleibt.**
+4. **Wrapper-Block in `streamlit_app.py`** (Zeilen 62–88) — dasselbe Muster
+   wie das gerade entfernte in `pptx_export.py`, aber **nicht tot**: die UI
+   ruft ihn überall auf, und zwischen den Durchreichern stehen echte
+   UI-Helfer (Euro-Drawdown, Calmar, DD-Dauer). Eigenes Thema, mehr Risiko.
+
+**Erledigt am 11.08.2026, war vorher hier gelistet:** Backlog A (SCHWEIZ),
+Backlog C (Wrapper in `pptx_export.py`), Backlog 7 (`use_container_width` →
+`width` — stand hier noch als offen, war aber schon migriert; der Parameter
+kommt nur noch in dem Test vor, der ihn verbietet).
 
 **Nicht offen, sondern entschieden:** Die beiden Ansichten sind
 unterschiedlich dicht — 19 Bedienelemente in der Performance-Ansicht gegen 9
