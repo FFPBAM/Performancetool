@@ -727,6 +727,27 @@ if ansicht == _VIEW_PERF:
 
 
     nk_label = f"nach Kosten{mwst_suffix}"
+
+    # ── Hinweis: Strategie ohne Vergleichsmaßstab (11.08.2026) ──────────────
+    # Betrifft aktuell die beiden SCHWEIZ-Strategien ("Haben keine Benchmark"
+    # laut Mapping_Namen.xlsx). Die Erkennung läuft aber über has_benchmark,
+    # NICHT über eine Namensliste — der Hinweis gilt damit automatisch für
+    # jede weitere Strategie ohne Benchmark, ohne dass ihn jemand nachpflegt.
+    #
+    # Steht bewusst HIER, oberhalb der Kennzahlen: Die Kacheln zeigen gleich
+    # darunter "–" statt eines Benchmark-Vergleichs, und das soll erklärt
+    # sein, bevor es auffällt. Der frühere Hinweis unter dem Linien-Chart
+    # erschien nur, wenn der Benchmark-Schalter überhaupt an war — war der
+    # aus, blieb das "–" unkommentiert.
+    _ohne_bm = [name for name, d in ((l1, df1), (l2, df2))
+                if d is not None and name and "ret_bm" in d.columns
+                and not has_benchmark(d["ret_bm"])]
+    if _ohne_bm:
+        st.caption(f"Für {' und '.join(_ohne_bm)} ist kein Vergleichsmaßstab "
+                   "(Benchmark) hinterlegt. Benchmark-Kennzahlen zeigen "
+                   "deshalb „–\", und im Chart wird keine Benchmark-Linie "
+                   "gezeichnet.")
+
     # Der Kostenhinweis steht jetzt in display_metrics über jeder Kachelreihe
     # (11.08.2026) — hier wäre er die zweite Klammer in der Klammer.
     st.subheader("Kennzahlen")
@@ -780,10 +801,10 @@ if ansicht == _VIEW_PERF:
         if df2 is not None and has_benchmark(df2["ret_bm"]):
             rbm2=df2["ret_bm"].fillna(0).to_numpy(float); ibm2=make_index_from_returns(rbm2,sw)
             _add_line(xd, ibm2, f"BM {l2}: {bn2}")
-    elif sb:
-        # Ohne Benchmark wurde bisher stillschweigend eine flache Linie bei
-        # 100 gezeichnet — jetzt sagen wir, warum nichts zu sehen ist.
-        st.caption("Für diese Strategie ist keine Benchmark hinterlegt.")
+    # Kein zweiter Hinweis an dieser Stelle (11.08.2026): Der Fall wird jetzt
+    # EINMAL oberhalb der Kennzahlen benannt, unabhängig vom Benchmark-Schalter.
+    # Hier stand bis dahin dieselbe Aussage noch einmal — bei eingeschaltetem
+    # Schalter also doppelt.
     # rf-Linie (nur eine, da für gleichen Zeitraum identisch)
     rf_idx = None
     if sb_rf and not rf_series_1.empty and rf_series_1.notna().any():

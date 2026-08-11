@@ -111,6 +111,29 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **SCHWEIZ ohne Benchmark** | *(11.08.)* Backlog A erledigt — und dabei mehr gefunden als dort stand. Details unten. |
 | **Wrapper raus** | *(11.08.)* Backlog C erledigt: 40 Durchreich-Funktionen aus `pptx_export.py`, −292 Zeilen. Broschüren vorher/nachher bewiesen identisch. |
 | **Versionen gedeckelt** | *(11.08.)* Backlog 1 erledigt: **jede** Zeile der requirements hat jetzt eine Obergrenze auf die nächste Hauptversion — ein Cloud-Rebuild kann keine neue Hauptversion mehr einschleppen. Bewusst keine `==`-Pins. |
+| **Honorar SCHWEIZ** | *(11.08.)* Beide SCHWEIZ-Strategien **fehlten** im Honorar-Mapping und liefen deshalb still mit 0 % Kosten. Jetzt 1,55 % netto. **Ändert die ausgewiesenen Zahlen** — siehe unten. |
+| **Hinweis ohne Benchmark** | *(11.08.)* Kleiner Hinweis über den Kennzahlen, wenn eine Strategie keinen Vergleichsmaßstab hat. Ersetzt den alten Hinweis unter dem Chart, der nur bei eingeschaltetem Benchmark-Schalter erschien. |
+
+### Honorar SCHWEIZ: die Zahlen ändern sich
+
+`Mapping_Honorarsatz.xlsx` hatte 17 Zeilen bei 19 Strategien — die beiden
+SCHWEIZ-Strategien fehlten. Das fiel nicht auf, weil der Loader den Fehlschlag
+abfängt und still auf `0.0` zurückfällt (`shared.py`, `except: fd = 0.0`). Die
+App zeigte also „nach Kosten"-Zahlen, in denen keine Kosten steckten.
+
+Mit 1,55 % netto (Festlegung Philip) verschieben sich die Werte spürbar:
+
+| Strategie | Kennzahl | vorher (0 %) | jetzt (1,55 %) |
+|---|---|---:|---:|
+| SCHWEIZ Substanz | Performance p.a. | 6,96 % | **5,33 %** |
+| SCHWEIZ Substanz | kumuliert gesamt | 29,43 % | **22,02 %** |
+| SCHWEIZ Aktien | Performance p.a. | 9,01 % | **7,35 %** |
+| SCHWEIZ Aktien | kumuliert gesamt | 39,52 % | **31,47 %** |
+
+Die neuen Werte sind die richtigen; die alten waren zu hoch, weil das Honorar
+fehlte. **Wer eine SCHWEIZ-Broschüre vor dem 11.08.2026 verschickt hat, hat zu
+gute Zahlen verschickt.** Prüfstein `tests/test_honorarsatz.py` schlägt künftig
+an, sobald eine Strategie ohne Satz dasteht.
 
 Netto etwa −1.800 Zeilen bei mehr Funktion.
 
@@ -168,7 +191,8 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
 | `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
 | `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert (**Kennzahlen**) |
-| `test_benchmark_charts.py` | pandas; Schritt 2 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende und Fußnote** — Schritt 2 baut zwei echte Broschüren und liest nach, mit „Pro" als Kontrollfall |
+| `test_benchmark_charts.py` | pandas; Schritte 2+3 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende, Fußnote und den Hinweis im Tool** — Schritt 2 baut zwei echte Broschüren und liest nach, Schritt 3 prüft den Hinweis an der gerenderten Oberfläche; „Pro" ist jeweils Kontrollfall |
+| `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 % — fängt das stille Zurückfallen auf 0 % ab; SCHWEIZ auf 1,55 % festgenagelt |
 | `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
 | `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
@@ -183,6 +207,7 @@ python tests/test_app_titel.py
 python tests/test_legende_musterdepot.py
 python tests/test_benchmark_erkennung.py
 python tests/test_benchmark_charts.py
+python tests/test_honorarsatz.py
 python tests/test_historie_ab.py
 python tests/test_folien_config.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
@@ -276,7 +301,11 @@ Thema wieder aufmacht, fängt dort an und nicht bei null.
   *(Nebenbei: Streamlit Cloud kann auch private Repos — erweiterter
   OAuth-Scope, freier Tarif erlaubt ~1 private App.)*
 - **Daten liegen im Repo und werden von Philip selbst ausgetauscht.**
-  `Daten/`, `Daten_PF/`, `Mapping_*.xlsx` nicht anfassen.
+  `Daten/`, `Daten_PF/`, `Mapping_*.xlsx` nicht anfassen — **außer auf
+  ausdrückliche Ansage.** Am 11.08.2026 einmal geschehen:
+  `Mapping_Honorarsatz.xlsx` um die beiden fehlenden SCHWEIZ-Zeilen ergänzt,
+  auf Philips Anweisung. Die Regel gilt weiter; von selbst wird an diesen
+  Dateien nichts geändert.
 - **Nicht im Repo, obwohl die Doku es lange behauptete:**
   `erstelle_broschueren.py` und `modules/dataload.py`. Nie committet.
   §13 bleibt als Bauplan stehen.

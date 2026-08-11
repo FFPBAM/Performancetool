@@ -2621,6 +2621,37 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 11.08.2026 – Honorarsatz SCHWEIZ ergänzt; Hinweis „keine Benchmark" im Tool
+
+**Die beiden SCHWEIZ-Strategien fehlten in `Mapping_Honorarsatz.xlsx`** — 17
+Zeilen bei 19 Strategien. Aufgefallen ist das nie, weil `shared.py` den
+Fehlschlag abfängt und still auf `fd = 0.0` zurückfällt. Die App zeigte für
+beide „nach Kosten"-Zahlen, in denen keine Kosten steckten. Auf Philips
+Anweisung jetzt mit **1,55 % netto** ergänzt (Brutto 1,8445 % = ×1,19, wie in
+allen übrigen Zeilen außer Comdirect).
+
+Das verschiebt die ausgewiesenen Werte deutlich:
+
+| Strategie | Performance p.a. | kumuliert gesamt |
+|---|---|---|
+| SCHWEIZ Substanz | 6,96 % → **5,33 %** | 29,43 % → **22,02 %** |
+| SCHWEIZ Aktien | 9,01 % → **7,35 %** | 39,52 % → **31,47 %** |
+
+Die neuen Werte sind die richtigen. Neuer Prüfstein
+`tests/test_honorarsatz.py`: jede Strategie in den Daten braucht eine Zeile im
+Mapping und einen Satz zwischen 0,5 % und 3 % p.a. Der Rückfall auf `0.0`
+bleibt als Schutz im Code — er taugt nur nicht als Anzeige, und genau das
+fängt der Test jetzt ab.
+
+**Hinweis im Tool.** Über den Kennzahlen steht jetzt eine Caption, wenn eine
+Strategie keinen Vergleichsmaßstab hat. Sie ersetzt den bisherigen Hinweis
+unter dem Linien-Chart, der nur erschien, wenn der Benchmark-Schalter an war —
+war er aus, blieb das „–" in den Kacheln unkommentiert. Die Erkennung läuft
+über `has_benchmark`, nicht über eine Namensliste: der Hinweis gilt damit
+automatisch für jede weitere Strategie ohne Benchmark. Geprüft an der
+gerenderten Oberfläche (`test_benchmark_charts.py`, Schritt 3): genau einmal
+bei SCHWEIZ, nie bei „Pro", in beiden Schalterstellungen.
+
 ### 11.08.2026 – SCHWEIZ ohne Benchmark; Wrapper raus; Versionen gedeckelt
 
 **Backlog A — der Vergleichsmaßstab war noch an drei Stellen da.** Nachdem

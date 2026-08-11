@@ -24,8 +24,12 @@ Geprueft wird in zwei Schritten:
                              Stellen noch eine Benchmark; die Kontroll-
                              strategie "Pro" ist Zeichen fuer Zeichen
                              unveraendert.
+  Schritt 3 (+ streamlit)  — der Hinweis im TOOL, an der gerenderten
+                             Oberflaeche: genau einmal bei SCHWEIZ, nie bei
+                             "Pro", und zwar UNABHAENGIG vom
+                             Benchmark-Schalter.
 
-Ohne pptx/streamlit wird Schritt 2 sauber uebersprungen.
+Ohne pptx/streamlit werden die Schritte 2 und 3 sauber uebersprungen.
 
     python tests/test_benchmark_charts.py
 
@@ -190,8 +194,64 @@ def _pruefe_artefakt():
     return fehler
 
 
+# ───────────────────────────── Schritt 3 ──────────────────────────────────
+
+HINWEIS_MARKE = "kein Vergleichsmaßstab"
+
+
+def _pruefe_hinweis():
+    """Der Hinweis im Tool — an der GERENDERTEN Oberflaeche, nicht im Quelltext.
+
+    Wichtig ist das Verhalten BEI AUSGESCHALTETEM Benchmark-Schalter: bis
+    11.08.2026 hing der Hinweis am Linien-Chart und erschien nur, wenn der
+    Schalter an war. War er aus, blieb das "-" in den Kacheln unkommentiert.
+    """
+    print("\n3. Hinweis in der laufenden App (AppTest)")
+    try:
+        from streamlit.testing.v1 import AppTest
+    except ImportError as ex:
+        print(f"   UEBERSPRUNGEN — {ex}")
+        return 0
+
+    def lauf(strategie, benchmark_an):
+        at = AppTest.from_file(os.path.join(WURZEL, "streamlit_app.py"),
+                               default_timeout=400)
+        at.secrets["passwords"] = {"t": "t"}
+        at.session_state["logged_in"] = True
+        at.session_state["username"] = "t"
+        at.session_state["p_bm"] = benchmark_an
+        at.run()
+        sel = next((s for s in at.selectbox
+                    if strategie in [str(o) for o in s.options]), None)
+        if sel is None:
+            return None
+        sel.set_value(strategie).run()
+        texte = [str(e.value) for sammlung in (at.caption, at.markdown, at.info)
+                 for e in sammlung]
+        return [t for t in texte if HINWEIS_MARKE in t]
+
+    faelle = [
+        (FALL_OHNE, True,  1), (FALL_OHNE, False, 1),
+        (FALL_MIT,  True,  0), (FALL_MIT,  False, 0),
+    ]
+    fehler = 0
+    for strategie, bm_an, soll in faelle:
+        treffer = lauf(strategie, bm_an)
+        schalter = "AN " if bm_an else "AUS"
+        if treffer is None:
+            print(f"   {strategie[:28]:28s} Schalter {schalter}  "
+                  f"UEBERSPRUNGEN (nicht in der Auswahl)")
+            continue
+        ok = len(treffer) == soll
+        fehler += 0 if ok else 1
+        print(f"   {strategie[:28]:28s} Schalter {schalter}  "
+              f"erwartet {soll}x, gefunden {len(treffer)}x  "
+              f"{'OK' if ok else 'FEHLER'}")
+    return fehler
+
+
 def main():
-    fehler = _pruefe_daten() + _pruefe_artefakt()
+    fehler = _pruefe_daten() + _pruefe_artefakt() + _pruefe_hinweis()
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
