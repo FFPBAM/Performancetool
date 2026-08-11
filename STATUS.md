@@ -110,6 +110,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Bedienbarkeit, Runden 2–4** | *(11.08.)* Kennzahlen-Beschriftungen entklammert, 8 fehlende Hilfetexte ergänzt, Honorarfeld als „netto" benannt, Zeitraum-Schnellwahl (1/3/5/10 J · seit Auflage) mit optionalem eigenem Datum, Seitenleiste gruppiert, Logo auf dem Anmeldebildschirm, Datenstand nach oben. |
 | **SCHWEIZ ohne Benchmark** | *(11.08.)* Backlog A erledigt — und dabei mehr gefunden als dort stand. Details unten. |
 | **Wrapper raus** | *(11.08.)* Backlog C erledigt: 40 Durchreich-Funktionen aus `pptx_export.py`, −292 Zeilen. Broschüren vorher/nachher bewiesen identisch. |
+| **Versionen gedeckelt** | *(11.08.)* Backlog 1 erledigt: **jede** Zeile der requirements hat jetzt eine Obergrenze auf die nächste Hauptversion — ein Cloud-Rebuild kann keine neue Hauptversion mehr einschleppen. Bewusst keine `==`-Pins. |
 
 Netto etwa −1.800 Zeilen bei mehr Funktion.
 
@@ -233,18 +234,21 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
    belegt, aber noch nicht vom Auge geprüft — genau die Lücke, aus der beide
    Fehler der Sitzung vom 07.08. kamen (#16/#28). Eine Broschüre *Muster
    SCHWEIZ Substanz* reicht: Säulen-Chart, Legende, Fußnote.
-3. **`pandas`/`numpy` pinnen** (Backlog 1). Genau die beiden verursachten den
-   Ausfall am 06.07. Jetzt testbar, weil die venv läuft. **Einziger echter
-   Backlog-Punkt, der offen bleibt.**
+3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
+   requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
+   unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
+   einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
+   wird. Fünf Minuten, die im Zweifel Stunden sparen (#20).
 4. **Wrapper-Block in `streamlit_app.py`** (Zeilen 62–88) — dasselbe Muster
    wie das gerade entfernte in `pptx_export.py`, aber **nicht tot**: die UI
    ruft ihn überall auf, und zwischen den Durchreichern stehen echte
    UI-Helfer (Euro-Drawdown, Calmar, DD-Dauer). Eigenes Thema, mehr Risiko.
 
 **Erledigt am 11.08.2026, war vorher hier gelistet:** Backlog A (SCHWEIZ),
-Backlog C (Wrapper in `pptx_export.py`), Backlog 7 (`use_container_width` →
-`width` — stand hier noch als offen, war aber schon migriert; der Parameter
-kommt nur noch in dem Test vor, der ihn verbietet).
+Backlog C (Wrapper in `pptx_export.py`), Backlog 1 (requirements gedeckelt),
+Backlog 7 (`use_container_width` → `width` — stand hier noch als offen, war
+aber schon migriert; der Parameter kommt nur noch in dem Test vor, der ihn
+verbietet). **Damit ist der Backlog bis auf Nachrangiges leer.**
 
 **Nicht offen, sondern entschieden:** Die beiden Ansichten sind
 unterschiedlich dicht — 19 Bedienelemente in der Performance-Ansicht gegen 9

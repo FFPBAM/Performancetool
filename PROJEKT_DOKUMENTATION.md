@@ -2,9 +2,9 @@
 ## Stand: 11.08.2026 (Phase 4: Code-Review — Benchmark-Bugfix, Deploy-Konfiguration repariert, ~2.200 Zeilen toter Code entfernt)
 
 > **Neu am 11.08.2026:** Transferwissen **#46** (ein Platzhalterwert pflanzt
-> sich fort — bis in den Fließtext). Backlog **A** und **C** sind damit
-> erledigt; im Backlog §15 bleibt als einziger Sachpunkt das Pinnen von
-> `pandas`/`numpy`.
+> sich fort — bis in den Fließtext) sowie ein vierter Punkt in **#20**
+> (Obergrenzen statt `==`-Pins). Backlog **A**, **C** und **1** sind damit
+> erledigt — der Backlog §15 enthält nur noch Nachrangiges.
 
 > **Neu am 07.08.2026:** Transferwissen **#41** (Null-Spalten sind keine Daten —
 > der Benchmark-Bug), `.streamlit`-Ordner repariert, `lxml` in den requirements
@@ -929,7 +929,8 @@ for _k in list(st.session_state.keys()):
 
 **Learnings:**
 1. Bei "lief gestern noch, heute kaputt" auf Streamlit Cloud IMMER ZUERST ins **Deploy-Log** schauen (Manage app → schwarze Konsole) — dort stehen die installierten Paketversionen. Hätte hier Stunden gespart.
-2. Versionen pinnen ist richtig, aber NUR auf Versionen, die mit der Cloud-Python-Version (aktuell 3.14) kompatibel sind. Erst prüfen, welche streamlit/pandas/numpy-Kombination unter 3.14 baut, DANN pinnen. (Offener Backlog-Punkt.)
+2. Versionen pinnen ist richtig, aber NUR auf Versionen, die mit der Cloud-Python-Version (aktuell 3.14) kompatibel sind. Erst prüfen, welche streamlit/pandas/numpy-Kombination unter 3.14 baut, DANN pinnen.
+4. **Umgesetzt am 11.08.2026 — und zwar mit OBERGRENZEN, nicht mit `==`.** Ein exakter Pin löst Falle 1 und läuft direkt in Falle 2: er friert auch die Python-Kompatibilität ein, und beim nächsten Python-Sprung der Cloud baut das Paket nicht mehr. `paket>=geprüfte.version,<nächste_hauptversion` sperrt den Bruch aus (Hauptversionen sind es, die brechen) und lässt Fehlerkorrekturen sowie neue Python-Builds weiterhin durch. Untergrenze ist immer eine Version, die man selbst hat laufen sehen — nicht eine, die gut klingt.
 3. Python-3.14/pandas-3-Nebenwirkung im Code: Arrow-String-dtypes → siehe #21.
 
 ---
@@ -1790,20 +1791,29 @@ leeren Platzhalter-`.md` in `Daten/`, `Daten_PF/`, `Vorlage/`, `fonts/`,
 
 **Es gibt ZWEI Mappings — nicht verwechseln:** `build_portfolio_timeseries` erwartet das HONORARSATZ-Mapping (`Mapping_Honorarsatz.xlsx`, Spalten "Inhaber" + "Honorarsatz Standard"); Familien/Benchmark/Duration nutzen das NAMEN-Mapping (`Mapping_Namen.xlsx`, Spalten A–D + "Powerpoint Familie").
 
-### requirements.txt (Stand 07.08.2026)
+### requirements.txt (Stand 11.08.2026 — jede Zeile mit Obergrenze)
 ```
-streamlit==1.61.0                    ← gepinnt (Transferwissen #20)
+streamlit==1.61.0                    ← exakt (Transferwissen #20)
 starlette<1.4.0
-pandas>=2.0
-numpy>=1.24
-plotly>=5.18
-openpyxl>=3.1
-matplotlib>=3.7
-reportlab>=4.0
-Pillow>=10.0
-python-pptx>=1.0
-lxml>=4.9                            ← KRITISCH für Chart-XML-Manipulation
+pandas>=3.0.5,<4                     ← die beiden aus dem Ausfall vom 06.07.
+numpy>=2.5.2,<3
+plotly>=6.9,<7
+openpyxl>=3.1.5,<4
+Pillow>=12.3,<13
+python-pptx>=1.0.2,<2
+lxml>=6.1,<7                         ← KRITISCH für Chart-XML-Manipulation
 ```
+**Am 11.08.2026 umgestellt** (Backlog 1 erledigt): Untergrenze = der Stand,
+mit dem alle zwölf Testsuiten und sieben Broschüren durchliefen; Obergrenze =
+nächste Hauptversion. Die Datei selbst trägt die vollständige Begründung als
+Kommentar — sie ist die Stelle, an der jemand nachschaut, wenn die App wieder
+„gestern noch lief". `matplotlib` und `reportlab` sind mit dem PDF-Weg am
+11.08. entfallen.
+
+Ein `pip install --dry-run --ignore-installed -r requirements.txt` landet
+exakt auf dem getesteten Satz (pandas 3.0.5, numpy 2.5.2, streamlit 1.61.0,
+…) — die Grenzen widersprechen sich also nicht. **Grenze dieser Prüfung:**
+lokal unter Python 3.12 gelaufen, die Cloud nutzt 3.14.
 ⚠️ **`lxml` fehlte bis 07.08.2026 in dieser Datei**, obwohl `pptx_charts.py`,
 `pptx_export.py` und `chart_dynamik.py` es DIREKT importieren
 (`from lxml import etree`). Es kam nur zufällig als transitive Abhängigkeit von
@@ -1811,9 +1821,10 @@ python-pptx mit — ein Wechsel der python-pptx-Version hätte die Chart-XML-
 Manipulation jederzeit lahmlegen können. Ebenfalls am 07.08. korrigiert:
 `python-pptx>=0.6.21` (Untergrenze von 2021) → `>=1.0`.
 
-⚠️ Siehe Transferwissen #20: Cloud zieht bei Reboot die NEUESTEN Versionen der
-NICHT gepinnten Pakete. Streamlit ist inzwischen fest auf 1.61.0; pandas/numpy
-stehen weiter auf `>=` und könnten unter Python 3.14 erneut überraschen.
+⚠️ Siehe Transferwissen #20: Die Cloud zieht bei jedem Reboot die NEUESTEN
+Versionen der nach oben offenen Pakete. Seit 11.08.2026 ist keine Zeile mehr
+nach oben offen — der Reboot kann damit keine neue Hauptversion mehr
+einschleppen.
 
 **Merksatz:** Was der Code direkt importiert, gehört in die requirements —
 transitive Abhängigkeiten sind kein Vertrag.
@@ -2565,10 +2576,14 @@ mehr nötig.
   streamlit-freien Module (`analytics`, `formats`) sind auch ohne Firmen-IT
   testbar — dort lohnt sich mehr.
 
-1. **requirements.txt Python-3.14-kompatibel pinnen** (Transferwissen #20).
-   Teilweise erledigt: streamlit==1.61.0, starlette<1.4.0, lxml ergänzt.
-   OFFEN bleiben pandas/numpy — dort steht weiter `>=`, und genau diese
-   beiden hatten am 06.07. den Ausfall verursacht.
+1. ~~**requirements.txt Python-3.14-kompatibel pinnen**~~ — **erledigt
+   11.08.2026.** Jede Zeile hat jetzt eine Obergrenze auf die nächste
+   Hauptversion, Untergrenze ist der nachweislich laufende Stand. Bewusst
+   keine `==`-Pins: die waren am 06.07. der zweite Fehlschlag (Details in
+   Transferwissen #20, Punkt 4). Verifiziert per `pip install --dry-run
+   --ignore-installed` — die Auflösung landet exakt auf dem getesteten Satz.
+   **Offen bleibt nur die Bestätigung im Deploy-Log** (Cloud = Python 3.14,
+   lokal geprüft wurde unter 3.12).
 2. ~~**Duration-Inkonsistenz Batch vs. App**~~ — **gegenstandslos (07.08.2026):**
    Der Batch existiert nicht im Repo (siehe Abschnitt 13), es gibt also keine
    zweite Implementierung, die abweichen könnte. Die App rechnet Duration und
@@ -2606,7 +2621,7 @@ mehr nötig.
 
 ## 16. Changelog
 
-### 11.08.2026 – SCHWEIZ ohne Benchmark; 40 Durchreich-Funktionen entfernt
+### 11.08.2026 – SCHWEIZ ohne Benchmark; Wrapper raus; Versionen gedeckelt
 
 **Backlog A — der Vergleichsmaßstab war noch an drei Stellen da.** Nachdem
 `has_benchmark` am 07.08. die Kennzahlen korrigiert hatte, zeigte die
@@ -2636,6 +2651,19 @@ der Erzeugungs-Zeitstempel.
 **Nicht angefasst:** der gleichartige Wrapper-Block in `streamlit_app.py`
 (Zeilen 62–88). Der ist nicht tot, und zwischen den Durchreichern stehen
 echte UI-Helfer.
+
+**Backlog 1 — requirements nach oben gedeckelt.** Bis dahin standen
+`pandas>=2.0` und `numpy>=1.24` nach oben offen; genau diese beiden hatten am
+06.07. den Ausfall verursacht. Jetzt hat **jede** Zeile eine Obergrenze auf
+die nächste Hauptversion, Untergrenze ist der Stand, mit dem an diesem Tag
+alle zwölf Testsuiten und sieben Broschüren durchgelaufen sind. Bewusst keine
+`==`-Pins: die waren am 06.07. der zweite Fehlschlag, weil sie auch die
+Python-Kompatibilität einfrieren (Transferwissen #20, Punkt 4). Die Datei
+trägt die Begründung als Kommentar — dort schaut jemand nach, wenn die App
+wieder „gestern noch lief". Verifiziert per `pip install --dry-run
+--ignore-installed`: die Auflösung landet exakt auf dem getesteten Satz.
+Offen bleibt die Bestätigung im Deploy-Log, weil lokal unter Python 3.12
+geprüft wurde und die Cloud 3.14 nutzt.
 
 ### 11.08.2026 – Bedienbarkeit, Runden 2–4: Beschriftungen, Bedienfluss, Auftritt
 

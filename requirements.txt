@@ -1,9 +1,46 @@
+# Abhängigkeiten der App — Stand 11.08.2026
+#
+# JEDE Zeile hat eine Obergrenze. Das ist der eigentliche Zweck dieser Datei.
+#
+# WARUM: Streamlit Community Cloud installiert bei jedem Rebuild neu. Ohne
+# Obergrenze entscheidet der Release-Kalender der Pakete, wann sich die App
+# ändert — nicht wir. Am 06.07.2026 hat genau das die App lahmgelegt: ein
+# Rebuild zog pandas 3.0 und numpy 2.5 herein, ohne dass eine Zeile eigener
+# Code geändert wurde. Der Verdacht fiel reflexhaft auf den letzten Commit
+# (Transferwissen #20).
+#
+# WARUM KEINE EXAKTEN PINS (==): Das wurde am 06.07. versucht und war die
+# zweite Falle. Pins auf die damals alten Versionen (pandas==2.2.3,
+# numpy==1.26.4) ließen den Rebuild HÄNGEN — die bauen unter der
+# Cloud-Python-Version 3.14 nicht mehr. Eine Obergrenze auf die nächste
+# Hauptversion sperrt den Bruch aus und lässt Fehlerkorrekturen und Builds
+# für künftige Python-Versionen weiterhin durch.
+#
+# UNTERGRENZE = der Stand, mit dem am 11.08.2026 alle zwölf Testsuiten und
+# sieben Broschüren durchgelaufen sind.
+#
+# ACHTUNG, GRENZE DIESER PRÜFUNG: getestet wurde lokal unter Python 3.12,
+# die Cloud läuft unter 3.14. Nach dem nächsten Deploy einmal ins Deploy-Log
+# sehen (Manage app → schwarze Konsole) und die installierten Versionen
+# abgleichen — das ist die einzige Stelle, an der die Cloud-Kombination
+# wirklich sichtbar wird.
+#
+# Eine Hauptversion anheben (etwa pandas <4 → <5) ist eine bewusste
+# Entscheidung mit Testlauf, nichts, was nebenbei passiert.
+
 streamlit==1.61.0
 starlette<1.4.0
-pandas>=2.0
-numpy>=1.24
-plotly>=5.18
-openpyxl>=3.1
-Pillow>=10.0
-python-pptx>=1.0
-lxml>=4.9
+# Beide unverändert übernommen (Philip, 05.08.2026) — bewusst exakt bzw.
+# gedeckelt, nicht anfassen ohne Grund.
+
+pandas>=3.0.5,<4
+numpy>=2.5.2,<3
+# Die beiden aus dem Ausfall vom 06.07.2026.
+
+plotly>=6.9,<7
+openpyxl>=3.1.5,<4
+# openpyxl wird nicht direkt importiert, sondern von pandas.read_excel für
+# die Mapping_*.xlsx gebraucht.
+Pillow>=12.3,<13
+python-pptx>=1.0.2,<2
+lxml>=6.1,<7
