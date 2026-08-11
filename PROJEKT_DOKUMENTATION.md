@@ -2509,6 +2509,56 @@ mehr nötig.
 
 ## 16. Changelog
 
+### 11.08.2026 – Bedienbarkeit, Runden 2–4: Beschriftungen, Bedienfluss, Auftritt
+
+**Beschriftungen.** Der Kostenhinweis stand in *jeder* Kennzahlen-Kachel und
+erzeugte Klammern in Klammern („⌀ Rendite p.a. (nach Kosten (exkl.
+MwSt.))"). Er steht jetzt **einmal** über der Kachelreihe; die Kacheln heißen
+schlicht „⌀ Rendite p.a.", „Volatilität p.a.", „Calmar Ratio", „Sharpe
+Ratio". „Auflagedatum im PM" → „Auflage der Strategie", „Recovery" →
+„Erholungsdauer". Das Honorarfeld heißt jetzt **„Honorar % p.a. (netto)"** —
+vorher verriet erst der Schalter darunter, dass die Eingabe ohne MwSt.
+gemeint ist. Acht Schalter haben Hilfetexte bekommen; „Vor Kosten" erklärt
+ausdrücklich, dass es nur eine zusätzliche Linie einblendet und die
+Kennzahlen unberührt lässt.
+
+**Zeitraum-Schnellwahl.** Statt zweier Kalenderfelder plus zweier
+Zurücksetzen-Schaltflächen: **1 Jahr · 3 Jahre · 5 Jahre · 10 Jahre · Seit
+Auflage**. Die Kalenderfelder erscheinen nur, wenn „Eigener Zeitraum"
+angehakt ist (Wunsch Philip). „Seit Auflage" ersetzt beide
+Zurücksetzen-Schaltflächen. Gemessen: 3 Jahre = 1096 Tage, 1 Jahr = 365,
+10 Jahre = 3652. Liegt der berechnete Start vor dem ersten Datenpunkt,
+gewinnt der erste Datenpunkt — sonst zeigte „10 Jahre" bei einer jungen
+Strategie einen leeren Anfang.
+
+**Seitenleiste gruppiert** in *Auswahl · Darstellung · Honorar*. Keine
+Funktion ändert sich, nur die Ordnung. Die Fehlermeldung bei verdrehtem
+Zeitraum sagt jetzt, was zu tun ist.
+
+**Auftritt.** Das Logo lag im Repo und wurde ausschließlich in die frühere
+PDF-Ausgabe eingebettet — es steht jetzt über dem Anmeldetitel. Der
+Datenstand steht neben der Ansichtsumschaltung statt als Fußzeile.
+
+⚠️ **Eine Falle beim Expander.** „Erweiterte Einstellungen" war ein
+Kontrollkästchen und sollte laut Durchsicht ein `st.expander` werden. Beim
+Umbau fiel auf: **Ein Expander rendert seinen Inhalt immer, auch
+zugeklappt.** Hätte man den Datenstand-Wechsel allein daran gekoppelt, wäre
+ein einmal eingetippter Date-Tag für immer wirksam geblieben — auch wenn
+längst neuere Daten vorliegen, und ohne dass man es sieht. Deshalb: Expander
+für die *Gruppierung*, ein ausdrückliches Häkchen „Anderen Datenstand
+verwenden" als *Auslöser*.
+
+**Prüfstein** `tests/test_bedienung.py` — prüft alles am **laufenden
+Programm** per AppTest: die Zeitraum-Rechnung für drei Stufen, dass keine
+PDF-Schaltfläche und keine reportlab/matplotlib-Reste existieren, dass die
+Benchmark-Zusammensetzung in beiden Schalterstellungen **genau einmal**
+erscheint, und dass Logo und Datenstand da sind.
+
+Beim Schreiben des Tests selbst gelernt: `at.get("imgs")` liefert eine
+**leere Liste statt eines Fehlers** — der Elementname heißt in Streamlit 1.61
+`"image"`. Wer auf das Gelingen des Aufrufs prüft statt auf den Inhalt,
+bekommt einen falschen Fehlschlag. Und `at.session_state` kennt kein `.get()`.
+
 ### 11.08.2026 – Bedienbarkeit, Runde 1: die drei echten Fehler
 
 Aus der Durchsicht der Anwendung (14 Befunde, erhoben per `AppTest` am

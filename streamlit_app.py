@@ -275,34 +275,39 @@ def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar
        Reihe 2: Calmar | Sharpe | (Endwert wenn Volumen)
        Ø Risikofreier Zins p.a. (Zeitraum) als Caption unter den Kacheln.
     """
+    # Der Kostenhinweis steht EINMAL über der Kachelreihe (11.08.2026).
+    # Vorher trug ihn jede einzelne Kachel — „⌀ Rendite p.a. (nach Kosten
+    # (exkl. MwSt.))" — Klammern in Klammern, und die eigentliche Aussage
+    # verschwand dahinter. Die Angabe gilt für alle Kacheln der Reihe.
     nk = f"nach Kosten{mwst_suffix}"
-    st.markdown(f"**{label}**")
+    st.markdown(f"**{label}** · {nk}")
     # Reihe 1
     r1 = st.columns(3)
     with r1[0]:
-        st.metric("Auflagedatum im PM", fmt_date_de(auflagedatum),
-                  help="Erster verfügbarer Datenpunkt der Strategie im Portfoliomanagement.")
+        st.metric("Auflage der Strategie", fmt_date_de(auflagedatum),
+                  help="Erster verfügbarer Datenpunkt der Strategie im "
+                       "Portfoliomanagement-System.")
     with r1[1]:
-        st.metric(f"⌀ Rendite p.a. ({nk})", fmt_pct_de(cagr) if cagr else "–",
-                  help="Annualisierte Rendite nach Kosten (CAGR): (Endwert/Startwert)^(365/Tage) − 1.")
+        st.metric("⌀ Rendite p.a.", fmt_pct_de(cagr) if cagr else "–",
+                  help=f"Annualisierte Rendite {nk} (CAGR): "
+                       f"(Endwert/Startwert)^(365/Tage) − 1.")
     with r1[2]:
-        st.metric(f"Volatilität p.a. ({nk})", fmt_pct_de(vola) if vola else "–",
+        st.metric("Volatilität p.a.", fmt_pct_de(vola) if vola else "–",
                   help="Annualisierte Schwankungsbreite: Standardabweichung der Tagesrenditen × √365.")
     # Reihe 2
-    n2 = 3 if use_volume else 2
     r2 = st.columns(3)
     with r2[0]:
-        st.metric(f"Calmar Ratio ({nk})",
+        st.metric("Calmar Ratio",
                   f"{calmar:.2f}".replace(".",",") if calmar else "–",
                   help="CAGR / |Max Drawdown|. Je höher, desto besser die risikoadjustierte Rendite.")
     with r2[1]:
-        st.metric(f"Sharpe Ratio ({nk})",
+        st.metric("Sharpe Ratio",
                   f"{sharpe:.2f}".replace(".",",") if sharpe is not None else "–",
                   help="Sharpe Ratio nach Sharpe (1994): Mittelwert der täglichen Überrenditen (Portfolio − rf) geteilt durch deren Standardabweichung, anschließend × √365 annualisiert. Misst die Überrendite über den risikofreien Zins pro Risikoeinheit.")
     if use_volume and endwert:
         with r2[2]:
-            st.metric(f"Endwert ({nk})", fmt_eur_de(endwert),
-                      help="Aktueller Wert des Anlagevolumens nach Abzug aller Kosten.")
+            st.metric("Endwert", fmt_eur_de(endwert),
+                      help=f"Wert des Anlagevolumens am Ende des Zeitraums, {nk}.")
     # Aggregierter rf als Caption
     if rf_pa is not None:
         st.caption(f"Ø Risikofreier Zins p.a. (Zeitraum): **{fmt_pct_de(rf_pa)}**")
@@ -313,10 +318,10 @@ def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds,
     rv=f"{rd} Tage" if rd else "noch nicht erholt"; rh=f" Erholt am {fmt_date_de(rdate)}." if rd else ""
     cols=st.columns(4)
     with cols[0]:
-        st.metric(f"Max. Drawdown ({nk})",fmt_pct_de(mddv),help=f"Größter Verlust vom Höchststand. Tiefpunkt am {fmt_date_de(mddd)}.")
+        st.metric("Max. Drawdown",fmt_pct_de(mddv),help=f"Größter Verlust vom Höchststand ({nk}). Tiefpunkt am {fmt_date_de(mddd)}.")
         if uv and mdde is not None:
             st.caption(f"entspricht {fmt_eur_de(mdde)}")
-    with cols[1]: st.metric("Recovery",rv,help=f"Tage vom Tief bis zur Erholung.{rh}")
+    with cols[1]: st.metric("Erholungsdauer",rv,help=f"Tage vom Tief bis zurück zum alten Höchststand.{rh}")
     with cols[2]: st.metric("Längste Drawdown-Phase",f"{mddur} Tage" if mddur>0 else "–",help=f"Längster Zeitraum unter Peak: {fmt_date_de(dds)} – {fmt_date_de(dde)}." if mddur>0 else "Kein Drawdown.")
     with cols[3]: st.metric("Drawdown-Tief am",fmt_date_de(mddd),help="Datum des tiefsten Drawdown-Punkts.")
 
@@ -378,8 +383,9 @@ if not check_login(): st.stop()
 # nicht persistieren (sonst würde z.B. ein Klick "hängen bleiben") und ihre
 # Keys lassen sich per API ohnehin nicht setzen. Das try/except fängt
 # künftige, hier nicht gelistete Trigger-Keys defensiv ab.
-_KEEPALIVE_SPERRE = {"reset_sd", "reset_ed",
-                     "pf_pptx_btn", "pf_pptx_dl"}
+# 11.08.2026: "reset_sd"/"reset_ed" entfallen — die beiden
+# Zurücksetzen-Schaltflächen sind durch die Zeitraum-Schnellwahl ersetzt.
+_KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl"}
 for _k in list(st.session_state.keys()):
     if _k in _KEEPALIVE_SPERRE:
         continue
@@ -402,6 +408,13 @@ with st.sidebar:
         min_value=0.0, max_value=1_000_000_000.0, value=0.0, step=10_000.0, format="%.2f",
         help="Gilt für beide Bereiche. Wenn > 0: Werte in Euro.")
     use_volume = anlagevolumen > 0
+    # Der Hinweis stand bisher nur im Tooltip (11.08.2026). Das Feld sitzt
+    # über den ansichtseigenen Einstellungen und wirkt auf BEIDE Bereiche —
+    # das sollte man sehen, ohne den Mauszeiger darüber zu halten.
+    st.caption("Wirkt in beiden Ansichten: 0 zeigt Prozente, ein Betrag "
+               "rechnet alles zusätzlich in Euro."
+               if not use_volume else
+               "Wirkt in beiden Ansichten — Werte werden in Euro gezeigt.")
 
 # ── ZENTRALE DATENBEREITSTELLUNG (läuft bei JEDEM Run, VOR der Navigation) ──
 # Der PowerPoint-Export im Portfolioanalyse-Bereich braucht perf_timeseries /
@@ -450,9 +463,18 @@ _VIEW_PERF = "Performance"
 _VIEW_PF = "Portfolioanalyse"
 if "nav_view" not in st.session_state:
     st.session_state["nav_view"] = _VIEW_PERF
-ansicht = st.segmented_control("Ansicht", [_VIEW_PERF, _VIEW_PF],
-                               key="nav_view", required=True,
-                               label_visibility="collapsed")
+# Datenstand neben die Ansichtsumschaltung (11.08.2026): Er stand bisher nur
+# als kleine Fußzeile zwischen Kennzahlen und Zeitraum. Im Kundengespräch ist
+# der Stichtag eine der ersten Fragen — er gehört nach oben.
+_nav_l, _nav_r = st.columns([3, 2])
+with _nav_l:
+    ansicht = st.segmented_control("Ansicht", [_VIEW_PERF, _VIEW_PF],
+                                   key="nav_view", required=True,
+                                   label_visibility="collapsed")
+with _nav_r:
+    _stand = auto_tag if len(auto_tag) == 6 else None
+    if _stand:
+        st.caption(f"Datenstand **{_stand[4:6]}.{_stand[2:4]}.20{_stand[0:2]}**")
 
 
 # ===========================================================================
@@ -462,8 +484,17 @@ if ansicht == _VIEW_PERF:
     with st.sidebar:
         st.markdown("---")
         st.subheader("Performance")
-        show_adv_perf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_perf")
-        if show_adv_perf:
+        # Aufklappbereich statt Kontrollkästchen für die GRUPPIERUNG
+        # (11.08.2026) — der AUSLÖSER bleibt aber ein ausdrückliches Häkchen.
+        # Grund: Ein Expander rendert seinen Inhalt immer, auch zugeklappt.
+        # Würde man allein daran koppeln, griffe ein einmal eingetippter
+        # Datenstand für immer weiter — auch wenn längst neuere Daten da sind.
+        # Das Häkchen macht diese Abweichung sichtbar und rücknehmbar.
+        with st.expander("Erweiterte Einstellungen"):
+            st.checkbox("Anderen Datenstand verwenden", value=False,
+                key="adv_perf",
+                help="Normalerweise wird automatisch der neueste Datenstand "
+                     "genommen. Nur für den Blick auf ältere Stände.")
             # Der Wert wird OBEN in der zentralen Datenbereitstellung gelesen
             # (session_state["perf_tag"]) — hier nur das Widget rendern.
             st.text_input("Date-Tag (yyMMdd)", value=auto_tag,
@@ -476,28 +507,60 @@ if ansicht == _VIEW_PERF:
         st.error(perf_daten_fehler); st.stop()
 
     with st.sidebar:
-        ds1=st.selectbox("Portfolio",dn_ordered,key="p_sel1"); ps1=d2c[ds1]
-        sc=st.checkbox("Vergleichsportfolio",value=False,key="p_cmp"); ps2=ds2=None
-        if sc: ds2=st.selectbox("Vergleichsportfolio",dn_ordered,key="p_sel2"); ps2=d2c[ds2]
-        sv=st.checkbox("Vor Kosten",value=True,key="p_vk"); sb=st.checkbox("Benchmark",value=True,key="p_bm")
+        # Gruppiert (11.08.2026): vorher standen 11 Schalter flach
+        # untereinander — Auswahl, Darstellung und Honorar ohne Trennung.
+        # Es ändert sich keine Funktion, nur die Ordnung.
+        st.caption("**Auswahl**")
+        ds1=st.selectbox("Portfolio",dn_ordered,key="p_sel1",
+            help="Die Anlagestrategie, deren Wertentwicklung ausgewertet wird.")
+        ps1=d2c[ds1]
+        sc=st.checkbox("Vergleichsportfolio",value=False,key="p_cmp",
+            help="Stellt eine zweite Strategie daneben — in Chart, Kennzahlen und Tabellen.")
+        ps2=ds2=None
+        if sc:
+            ds2=st.selectbox("Vergleichsportfolio",dn_ordered,key="p_sel2")
+            ps2=d2c[ds2]
+
+        st.caption("**Darstellung**")
+        sv=st.checkbox("Vor Kosten",value=True,key="p_vk",
+            help="Zeigt zusätzlich eine Linie OHNE Honorarabzug. Die Kennzahlen "
+                 "bleiben davon unberührt — die sind immer nach Kosten.")
+        sb=st.checkbox("Benchmark",value=True,key="p_bm",
+            help="Zeigt die hinterlegte Vergleichsgröße als eigene Linie. "
+                 "Strategien ohne Benchmark im Mapping bleiben ohne.")
         sb_rf=st.checkbox("Risikofreier Zins",value=False,key="p_rf",
             help="Zeigt den risikofreien Zins als zusätzliche Linie im Performance-Chart (kompoundiert aus den täglichen Werten).")
-        sdd=st.checkbox("Drawdown (nach Kosten)",value=False,key="p_dd")
-        stbl=st.checkbox("Tabelle rollierend",value=True,key="p_tbl"); sbar=st.checkbox("Balken-Chart",value=True,key="p_bar")
+        sdd=st.checkbox("Drawdown",value=False,key="p_dd",
+            help="Blendet Verlustphasen ein: Chart des Rückgangs vom jeweiligen "
+                 "Höchststand plus Kennzahlen zu Tiefe und Erholungsdauer.")
+        stbl=st.checkbox("Tabelle rollierend",value=True,key="p_tbl",
+            help="Tabelle der Wertentwicklung über rollierende Zeiträume "
+                 "(z. B. jeweils 1, 3 und 5 Jahre).")
+        sbar=st.checkbox("Balken-Chart",value=True,key="p_bar",
+            help="Wertentwicklung je Kalenderjahr bzw. Zeitraum als Balken, "
+                 "im Vergleich zur Benchmark.")
         st.markdown("---")
+        st.caption("**Honorar**")
         fd1=float(data[ps1]["fee_default"].iloc[0]) if len(data[ps1]) else 0.0
         # Dynamischer Key: wenn Portfolio wechselt, wird der Default neu geladen
         fee_key_1 = f"p_fee1_{ps1}"
         if fee_key_1 not in st.session_state:
             st.session_state[fee_key_1] = float(round(fd1*100, 4))
-        fp1=st.number_input(f"Kosten % – {ds1}",0.0,20.0,step=0.05,key=fee_key_1)
+        # Beschriftung nennt „netto" ausdrücklich (11.08.2026): Erst der
+        # Schalter darunter verriet bisher, dass die Eingabe ohne MwSt. gemeint
+        # ist. Der Strategiename entfällt — er steht direkt darüber im Feld
+        # „Portfolio" und machte die Beschriftung nur lang.
+        fp1=st.number_input("Honorar % p.a. (netto)",0.0,20.0,step=0.05,key=fee_key_1,
+            help="Jährlicher Honorarsatz ohne Mehrwertsteuer. Vorbelegt aus dem "
+                 "Honorarsatz-Mapping; für Einzelfälle überschreibbar.")
         fdec2=fp2=None
         if sc and ps2:
             fd2=float(data[ps2]["fee_default"].iloc[0]) if len(data[ps2]) else 0.0
             fee_key_2 = f"p_fee2_{ps2}"
             if fee_key_2 not in st.session_state:
                 st.session_state[fee_key_2] = float(round(fd2*100, 4))
-            fp2=st.number_input(f"Kosten % – {ds2}",0.0,20.0,step=0.05,key=fee_key_2)
+            fp2=st.number_input(f"Honorar % p.a. (netto) – {ds2}",0.0,20.0,step=0.05,key=fee_key_2,
+                help="Honorarsatz des Vergleichsportfolios, ohne Mehrwertsteuer.")
 
         # MwSt-Option
         st.markdown("---")
@@ -524,26 +587,63 @@ if ansicht == _VIEW_PERF:
     st.caption("**Hinweise:** Siehe Disclaimer unten!")
     st.caption(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
 
-    st.markdown("#### Zeitraum auswählen")
-    # Reset-Logik: Counter ändert den Widget-Key, sodass das Widget frisch mit Default rendert
-    if "p_sd_reset" not in st.session_state: st.session_state.p_sd_reset = 0
-    if "p_ed_reset" not in st.session_state: st.session_state.p_ed_reset = 0
+    # ── Zeitraum (überarbeitet 11.08.2026) ────────────────────────────────
+    # Vorher: zwei Kalenderfelder plus zwei Zurücksetzen-Schaltflächen. Für
+    # „die letzten drei Jahre" waren zwei Klickfolgen im Kalender nötig — im
+    # Kundengespräch der häufigste Griff überhaupt.
+    # Jetzt: Schnellwahl als Normalfall, die Kalenderfelder erscheinen nur auf
+    # Wunsch (Philip, 11.08.2026). „Seit Auflage" ersetzt beide
+    # Zurücksetzen-Schaltflächen.
+    st.markdown("#### Zeitraum")
 
-    c1,c2=st.columns(2)
-    with c1: sd=st.date_input("Start",value=mind,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_sd_{st.session_state.p_sd_reset}")
-    with c2: ed=st.date_input("Ende",value=maxd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key=f"p_ed_{st.session_state.p_ed_reset}")
+    ZEITRAEUME = [("1 Jahr", 1), ("3 Jahre", 3), ("5 Jahre", 5),
+                  ("10 Jahre", 10), ("Seit Auflage", None)]
+    if "p_zeitraum" not in st.session_state:
+        st.session_state["p_zeitraum"] = "Seit Auflage"
 
-    rc1,rc2=st.columns(2)
-    with rc1:
-        if st.button(f"Startdatum zurücksetzen ({fmt_date_de(mind)})", key="reset_sd", width="stretch"):
-            st.session_state.p_sd_reset += 1
-            st.rerun()
-    with rc2:
-        if st.button(f"Enddatum zurücksetzen ({fmt_date_de(maxd)})", key="reset_ed", width="stretch"):
-            st.session_state.p_ed_reset += 1
-            st.rerun()
+    zc1, zc2 = st.columns([3, 1])
+    with zc1:
+        # required=True: ein Klick auf das aktive Segment darf nicht abwählen,
+        # sonst gäbe es den Zustand „kein Zeitraum gewählt" (wie bei nav_view).
+        wahl = st.segmented_control(
+            "Zeitraum", [n for n, _ in ZEITRAEUME], key="p_zeitraum",
+            required=True, label_visibility="collapsed",
+            help="Der Zeitraum endet immer am aktuellen Datenstand.")
+    with zc2:
+        eigener = st.checkbox("Eigener Zeitraum", value=False, key="p_zeit_frei",
+            help="Blendet Kalenderfelder für Start und Ende ein.")
 
-    if sd>ed: st.error("Start > Ende."); st.stop()
+    # Aus der Schnellwahl abgeleitete Vorgabe. Liegt der berechnete Start vor
+    # dem ersten Datenpunkt, gewinnt der erste Datenpunkt — sonst zeigte die
+    # Auswahl „10 Jahre" bei einer jüngeren Strategie einen leeren Anfang.
+    jahre = dict(ZEITRAEUME).get(wahl)
+    if jahre is None:
+        sd_vor = mind
+    else:
+        # Über pd.Timestamp rechnen: mind/maxd sind datetime.date, und
+        # date − DateOffset ist nicht definiert.
+        rueck = (pd.Timestamp(maxd) - pd.DateOffset(years=jahre)).date()
+        sd_vor = max(mind, rueck)
+    ed_vor = maxd
+
+    if eigener:
+        c1, c2 = st.columns(2)
+        with c1:
+            sd = st.date_input("Start", value=sd_vor, min_value=mind,
+                               max_value=maxd, format="DD.MM.YYYY", key="p_sd")
+        with c2:
+            ed = st.date_input("Ende", value=ed_vor, min_value=mind,
+                               max_value=maxd, format="DD.MM.YYYY", key="p_ed")
+    else:
+        sd, ed = sd_vor, ed_vor
+        st.caption(f"{fmt_date_de(sd)} – {fmt_date_de(ed)}")
+
+    # Fehlermeldung sagt, was zu tun ist, und bricht die Seite NICHT ab
+    # (vorher: st.error("Start > Ende."); st.stop() → leere Seite).
+    if sd > ed:
+        st.error("Das Startdatum liegt nach dem Enddatum. "
+                 "Bitte den Zeitraum korrigieren.")
+        st.stop()
 
     df1=data[ps1].copy(); df1=df1.loc[(df1.index.date>=sd)&(df1.index.date<=ed)].copy(); df2=None
     if sc and ps2:
@@ -627,7 +727,9 @@ if ansicht == _VIEW_PERF:
 
 
     nk_label = f"nach Kosten{mwst_suffix}"
-    st.subheader(f"Kennzahlen ({nk_label})")
+    # Der Kostenhinweis steht jetzt in display_metrics über jeder Kachelreihe
+    # (11.08.2026) — hier wäre er die zweite Klammer in der Klammer.
+    st.subheader("Kennzahlen")
     display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix)
     if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix)
 
@@ -732,7 +834,9 @@ if ansicht == _VIEW_PERF:
         st.markdown("---"); st.subheader("Performance blockweise")
         bl,br=st.columns([1,3])
         with bl:
-            bm=st.radio("Zeitraum",["Kalenderjahre","Quartale","Benutzerdefiniert"],key="p_bm_r")
+            bm=st.radio("Zeitraum",["Kalenderjahre","Quartale","Benutzerdefiniert"],key="p_bm_r",
+                help=("Wie die Balken gruppiert werden. Benutzerdefiniert "
+                      "teilt den gewählten Zeitraum in gleich lange Blöcke."))
             csb=ceb=None
             if bm=="Benutzerdefiniert":
                 csb=st.date_input("Von",value=sd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bv")

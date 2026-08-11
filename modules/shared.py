@@ -98,6 +98,13 @@ def check_login() -> bool:
         return False
 
     if not st.session_state.logged_in:
+        # Logo über dem Titel (11.08.2026): Es lag im Repo und wurde
+        # ausschließlich in die frühere PDF-Ausgabe eingebettet — in der
+        # Oberfläche tauchte es nie auf. Der Anmeldebildschirm ist die erste
+        # Seite, die ein Berater sieht.
+        logo = get_logo_path()
+        if logo:
+            st.image(logo, width=260)
         st.title(APP_TITLE)
         st.write("Bitte melden Sie sich an, um fortzufahren.")
         st.text_input("Benutzername", key="username_input")
@@ -107,7 +114,8 @@ def check_login() -> bool:
                 st.success("Erfolgreich eingeloggt!")
                 st.rerun()
             else:
-                st.error("❌ Falscher Benutzername oder Passwort")
+                st.error("Benutzername oder Passwort stimmt nicht. "
+                         "Bitte erneut versuchen.")
         return False
 
     with st.sidebar:

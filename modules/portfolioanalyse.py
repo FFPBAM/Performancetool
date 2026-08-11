@@ -660,13 +660,23 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     with st.sidebar:
         st.markdown("---")
         st.subheader("Portfolioanalyse")
-        show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd")
+        show_ytd = st.checkbox("YTD Performance anzeigen", value=False, key="pf_show_ytd",
+            help="Ergänzt die Einzeltitel-Tabelle um Wertentwicklung und "
+                 "Performancebeitrag seit Jahresbeginn und zeigt Top/Flop 5.")
         pf_brutto_mwst = st.checkbox("Bruttohonorar (inkl. 19% MwSt.)", value=False, key="pf_mwst",
             help="Aktiviert MwSt für die Performance-Kennzahlen auf Slide 8 der PowerPoint.")
-        show_adv_pf = st.checkbox("Erweiterte Einstellungen", value=False, key="adv_pf")
-        if show_adv_pf:
-            date_tag_pf = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
+        # Aufklappbereich für die Gruppierung, Häkchen als Auslöser
+        # (11.08.2026 — dieselbe Begründung wie in der Performance-Ansicht:
+        # ein Expander rendert seinen Inhalt auch zugeklappt).
+        with st.expander("Erweiterte Einstellungen"):
+            show_adv_pf = st.checkbox("Anderen Datenstand verwenden", value=False,
+                key="adv_pf",
+                help="Normalerweise wird automatisch der neueste Datenstand "
+                     "genommen. Nur für den Blick auf ältere Stände.")
+            eingabe_tag = st.text_input("Date-Tag Portfolioanalyse (yyMMdd)", value=auto_tag_pf,
                 help="Neuester Tag automatisch erkannt. Nur ändern um auf ältere Stände zuzugreifen.", key="pf_date_tag")
+            if show_adv_pf:
+                date_tag_pf = eingabe_tag
 
     pf_files = load_pf_csvs(DATA_FOLDER_PF, date_tag_pf)
     if not pf_files:
@@ -700,7 +710,9 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     # entfällt seit 03.07.2026).
     dur_1 = duration_info_aus_bestand(df_pf_1)
 
-    show_compare_pf = st.checkbox("Vergleichsportfolio anzeigen", value=False, key="pf_compare")
+    show_compare_pf = st.checkbox("Vergleichsportfolio anzeigen", value=False, key="pf_compare",
+        help="Stellt ein zweites Portfolio darunter — mit eigenen Kennzahlen, "
+             "Ringen und Einzeltiteln.")
     pf_sel_2 = csv_name_2 = df_pf_2 = dur_2 = None
     if show_compare_pf:
         pf_sel_2 = st.selectbox("Vergleichsportfolio auswählen", display_names_pf, key="pf_sel_2")

@@ -82,6 +82,7 @@ ohne Streamlit braucht, zieht es in ein UI-freies Modul — er kopiert es nicht.
 ## Testen
 
 ```
+python tests/test_bedienung.py               # + streamlit (AppTest)
 python tests/test_streamlit_api.py           # ohne jedes Paket
 python tests/test_keine_piktogramme.py       # ohne jedes Paket
 python tests/test_anlagekriterien.py         # pandas + streamlit
