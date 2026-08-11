@@ -1,7 +1,7 @@
 ﻿# Arbeitsanweisung für Claude — FFPB Performancetool
 
 **Zuerst lesen:** `STATUS.md` (wo stehen wir), dann `PROJEKT_DOKUMENTATION.md`
-(45 Transferwissen-Einträge, Architektur, Compliance).
+(46 Transferwissen-Einträge, Architektur, Compliance).
 
 Streamlit-App der Fürst Fugger Privatbank, die aus Corporate-Vorlagen
 PowerPoint-Broschüren erzeugt. **Die Ergebnisse gehen an Kunden.**
@@ -41,6 +41,21 @@ vergleichen, Zeitstempel ignorieren.
   erlaubt. Prüfstein: `tests/test_keine_piktogramme.py`.
 - **`chart.replace_data()` ist verseucht** (#12, vier Bugs). Immer
   `replace_chart_data_safe()`, Ringe über `replace_chart_data`.
+- **Neuer `st.button(key=…)` → Key in `_KEEPALIVE_SPERRE`** (oben in
+  `streamlit_app.py`). Sonst stürzt die Seite ab: Das Keep-Alive schreibt
+  alle session_state-Keys zurück, und für Button-Keys ist das verboten. Die
+  Zuweisung selbst wirft nichts — erst das spätere `st.button()`, weshalb der
+  Traceback auf den Button zeigt statt auf die Ursache und das `try/except`
+  im Keep-Alive **nicht** hilft (#19, korrigiert 11.08.2026).
+- **Datumsfelder zurücksetzen nur über Counter-Keys** (#4, Lösung A):
+  `st.session_state["p_sd"] = …` wirft bei aktivem Widget. Ein neuer Key
+  (`p_sd_0` → `p_sd_1`) erzeugt ein frisches Widget mit seinem Default.
+- **Ein Fehlwert darf nicht wie ein Messwert aussehen** (#46, 11.08.2026).
+  Fehlt eine Größe, wird die Liste **leer** gelassen und ein ausdrückliches
+  Kennzeichen mitgegeben — nicht mit `0.0`/`1.0` aufgefüllt. Sonst kann keine
+  nachgelagerte Stelle „gibt es nicht" von „ist null" unterscheiden. Und beim
+  Weglassen einer Größe ist **jeder** Ort zu prüfen, an dem sie vorkommt:
+  Chart-Serie, statische Legenden-Textbox, Fußnote, Folientitel.
 - **Statischer Vorlagentext wird in der VORLAGE geändert, nicht im Code.**
   Bis 10.08.2026 schrieb der Export die Legende der Wertentwicklungs-Folie
   von „Musterdepot" auf „Referenzportfolio" um — niemand sah der Vorlage noch
@@ -89,6 +104,8 @@ python tests/test_anlagekriterien.py         # pandas + streamlit
 python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
 python tests/test_benchmark_erkennung.py     # nur pandas
+python tests/test_benchmark_charts.py        # Schritt 1 pandas, 2+3 + pptx/streamlit
+python tests/test_honorarsatz.py             # pandas + streamlit
 python tests/test_historie_ab.py             # pandas + streamlit
 python tests/test_folien_config.py           # pandas + streamlit
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
