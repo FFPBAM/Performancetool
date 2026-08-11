@@ -1,0 +1,43 @@
+START-PROMPT — FFPB Performancetool
+Stand: 11.08.2026 · Branch verbesserungen · 28 Commits vor main
+
+==========================================================================
+DIESE DREI ZEILEN IN DEN CHAT KOPIEREN:
+==========================================================================
+
+Arbeite im Repo C:\Entwicklung\Performancetool.
+Lies zuerst STATUS.md, dann PROJEKT_DOKUMENTATION.md.
+Hol den aktuellen Stand von GitHub und sag mir, wo wir stehen.
+
+==========================================================================
+FALLS DU GLEICH ETWAS BESTIMMTES WILLST, HAENG EINE ZEILE AN:
+==========================================================================
+
+  ... Danach: den PR nach main mergen.
+  ... Danach: <dein Thema>.
+
+==========================================================================
+WAS OFFEN IST (Details in STATUS.md)
+==========================================================================
+
+1. PR MERGEN — daran haengt alles. 28 Commits warten:
+   https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen
+   Solange main steht, sieht der Streamlit-Deploy nichts davon.
+
+2. SICHTPRUEFUNG in echtem PowerPoint — die Anlagekriterien-Kaesten sind
+   nur numerisch geprueft. CVV.pptx Folie 15 hat sich am meisten geaendert.
+
+3. Backlog: pandas/numpy pinnen · flache Benchmark-Linie bei SCHWEIZ ·
+   Durchreich-Wrapper in pptx_export.py
+
+==========================================================================
+WICHTIG FUER DIE NAECHSTE SITZUNG
+==========================================================================
+
+- Gearbeitet wird auf C:, NICHT auf H: (DRACOON). H: wird am Sessionende
+  nachgezogen. Warum: pip dauert dort 20x laenger, und es tauchen
+  Geisterdateien auf.
+- .venv liegt im Projekt und uebersteht den Neustart.
+- Elf Testsuiten unter tests/ — vor jedem Push alle gruen.
+- Keine Emoji in der Oberflaeche, kein use_container_width. Beides ist
+  per Test gesperrt.

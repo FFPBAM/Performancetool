@@ -1,6 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 10.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
+**Letzte Sitzung:** 11.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
+· 28 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -8,9 +9,9 @@ wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
 
 ---
 
-## So starten wir nächste Woche
+## So starten wir beim nächsten Mal
 
-Diese drei Zeilen im Chat genügen:
+Diese drei Zeilen im Chat genügen (stehen auch in `Start.txt` zum Kopieren):
 
 > Arbeite im Repo `C:\Entwicklung\Performancetool`.
 > Lies zuerst `STATUS.md`, dann `PROJEKT_DOKUMENTATION.md`.
@@ -25,6 +26,21 @@ Diese drei Zeilen im Chat genügen:
    Angemeldet als `FFPBAM`, Schreibrechte auf `FFPBAM/Performancetool`.
 2. **Stand holen:** `git fetch origin && git status -sb`
 3. **Testumgebung:** `.venv` liegt im Projekt und übersteht den Neustart.
+   Falls sie doch fehlt, steht das Anlegen weiter unten.
+
+**App lokal ansehen** (nicht nötig zum Arbeiten, aber praktisch):
+
+```
+.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+```
+
+Braucht `.streamlit\secrets.toml` mit einem Testzugang — die Datei ist
+gitignored und muss lokal angelegt werden:
+
+```toml
+[passwords]
+test = "test"
+```
 
 ### Gearbeitet wird auf C:, nicht auf DRACOON (NEU 10.08.2026)
 
