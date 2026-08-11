@@ -1318,7 +1318,7 @@ def fill_anlagevorschlag_slides(prs, slide_7_idx: int,
         strategy_name: Name der Strategie für den Titel (schon bereinigt)
         eval_date: Auswertungsdatum (für Source-Annotation im Ring-Chart).
             Optional — das Quelle-Datum wird zentral über
-            pptx_export._update_quelle_datum gesetzt (steht statisch im Template).
+            pptx_helpers.update_quelle_datum gesetzt (steht statisch im Template).
         titel_text: NEU (09.07.2026) — expliziter Folientitel. None (Default)
             = bisheriges Verhalten ("Strategieentwurf … - <Name>").
             "" = Titel gar nicht anfassen (CVV: die Vorlage trägt bereits

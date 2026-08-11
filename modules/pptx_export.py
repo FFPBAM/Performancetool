@@ -22,22 +22,11 @@ früh mit einer klaren Fehlermeldung (siehe _EXPECTED_TEMPLATE_SLIDES).
 
 import os
 import io
-import copy
 import datetime as dt
 from typing import Optional
 
 import pandas as pd
 from pptx import Presentation
-from pptx.util import Pt, Emu
-from pptx.chart.data import CategoryChartData
-from lxml import etree
-
-# Format-Helpers + Konstanten (Single Source of Truth — siehe modules/formats.py)
-try:
-    from modules.formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
-except ImportError:
-    # Fallback für lokalen Skript-Aufruf (ohne modules/-Prefix im sys.path)
-    from formats import fmt_pct, fmt_ratio, fmt_date_de, PCT_FORMAT_CODE
 
 # Datenbasierte Chart-Nachbearbeitung (Achse, Ring-Labels, holeSize) — siehe
 # modules/chart_dynamik.py. Läuft am Ende über alle Charts.
@@ -46,94 +35,48 @@ try:
 except ImportError:
     from chart_dynamik import nachbearbeiten as _charts_nachbearbeiten
 
-# Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen, Vorlage, Slide-Manipulation)
+# Generische PPTX-Helpers (Shape-Lookup, Vorlage, Slide-Manipulation)
 try:
     from modules.pptx_helpers import (
-        find_shape_by_name, replace_text_in_shape,
-        set_cell_text, set_cell_text_preserve_format,
-        clear_table, safe_float, load_template,
-        duplicate_slide, clone_chart_part, move_slide, remove_slide,
-        save_and_reload, update_quelle_datum, update_slide_numbers,
+        find_shape_by_name, load_template,
+        duplicate_slide, remove_slide, save_and_reload,
+        update_quelle_datum, update_slide_numbers,
     )
 except ImportError:
     from pptx_helpers import (
-        find_shape_by_name, replace_text_in_shape,
-        set_cell_text, set_cell_text_preserve_format,
-        clear_table, safe_float, load_template,
-        duplicate_slide, clone_chart_part, move_slide, remove_slide,
-        save_and_reload, update_quelle_datum, update_slide_numbers,
+        find_shape_by_name, load_template,
+        duplicate_slide, remove_slide, save_and_reload,
+        update_quelle_datum, update_slide_numbers,
     )
 
-# Chart-Manipulation (XML-basierte Datenersetzung + python-pptx Bug-Workaround)
+# Chart-Nachbearbeitung der CVV-Vergleichsfolie (Folie 19)
 try:
-    from modules.pptx_charts import (
-        NS_CHART,
-        replace_chart_data, update_cache_elements,
-        replace_chart_data_safe, restore_data_label_format,
-        update_chart_values_inplace,
-            set_line_series_sparse, set_series_line_colors,
-    )
+    from modules.pptx_charts import set_line_series_sparse, set_series_line_colors
 except ImportError:
-    from pptx_charts import (
-        NS_CHART,
-        replace_chart_data, update_cache_elements,
-        replace_chart_data_safe, restore_data_label_format,
-        update_chart_values_inplace,
-            set_line_series_sparse, set_series_line_colors,
-    )
+    from pptx_charts import set_line_series_sparse, set_series_line_colors
 
-# Slide-Befüllungs-Logik (Domain: Anlagevorschlag, Wertentwicklung, Performance,
-# Portfoliozusammenstellung)
+# Slide-Befüllung (Domain: Anlagevorschlag, Wertentwicklung, Performance,
+# Portfoliozusammenstellung). Dieses Modul ORCHESTRIERT nur: es ruft je Rolle
+# die passende fill_*-Funktion auf, die Folien-Details liegen in pptx_slides.
+#
+# Der Import war bis 11.08.2026 rund viermal so lang — er zog Konstanten und
+# Helfer herein, die ausschließlich die Durchreich-Wrapper unten brauchten
+# (siehe das Aufräum-Band weiter unten). Mit den Wrappern sind sie entfallen.
 try:
     from modules.pptx_slides import (
-        # Konstanten
-        STRATEGY_PREFIXES, STRATEGIEENTWURF_TITLE,
-        SHAPE_CHART_ALLOCATION, SHAPE_TABLE, SHAPE_CHART_LEFT, SHAPE_CHART_RIGHT,
-        SHAPE_TITLE, SHAPE_TITLE_ALT,
-        GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET,
-        GROUP_SONSTIGE, GROUP_ORDER,
-        COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL,
-        COL_RATING, COL_SPACERS,
-        SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS,
-        # Public API: clean_strategy_name (kein Underscore-Prefix)
         clean_strategy_name,
-        # Funktionen (werden über Wrapper unten weiterhin als _xxx exponiert)
-        set_title_with_autoscale, safe_marktrisikowert, classify_gattung,
-        group_portfolio_positions, distribute_positions_to_slides,
-        remove_empty_table_rows, fit_shape_to_table, adjust_table_shape_height,
-        consolidate_small_segments, build_ring_series,
-        fill_table_with_positions, fill_anlagevorschlag_slides,
-        fill_kennzahlen_table, fill_performance_slide,
-        fill_wertentwicklung_slide,
-        fill_zusammenstellung_slide,
-        fill_rollierend_slide,
-        fill_einzeltitel_themen_slide,
-        fill_uebersicht_slide,
-        fill_anlagekriterien_slide,
+        fill_anlagevorschlag_slides, fill_performance_slide,
+        fill_wertentwicklung_slide, fill_zusammenstellung_slide,
+        fill_rollierend_slide, fill_einzeltitel_themen_slide,
+        fill_uebersicht_slide, fill_anlagekriterien_slide,
     )
 except ImportError:
     from pptx_slides import (
-        STRATEGY_PREFIXES, STRATEGIEENTWURF_TITLE,
-        SHAPE_CHART_ALLOCATION, SHAPE_TABLE, SHAPE_CHART_LEFT, SHAPE_CHART_RIGHT,
-        SHAPE_TITLE, SHAPE_TITLE_ALT,
-        GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET,
-        GROUP_SONSTIGE, GROUP_ORDER,
-        COL_WERTPAPIER, COL_KUPON, COL_FAELLIGKEIT, COL_WKN, COL_ANTEIL,
-        COL_RATING, COL_SPACERS,
-        SLIDE_7_DATA_ROWS, SLIDE_8_DATA_ROWS,
         clean_strategy_name,
-        set_title_with_autoscale, safe_marktrisikowert, classify_gattung,
-        group_portfolio_positions, distribute_positions_to_slides,
-        remove_empty_table_rows, fit_shape_to_table, adjust_table_shape_height,
-        consolidate_small_segments, build_ring_series,
-        fill_table_with_positions, fill_anlagevorschlag_slides,
-        fill_kennzahlen_table, fill_performance_slide,
-        fill_wertentwicklung_slide,
-        fill_zusammenstellung_slide,
-        fill_rollierend_slide,
-        fill_einzeltitel_themen_slide,
-        fill_uebersicht_slide,
-        fill_anlagekriterien_slide,
+        fill_anlagevorschlag_slides, fill_performance_slide,
+        fill_wertentwicklung_slide, fill_zusammenstellung_slide,
+        fill_rollierend_slide, fill_einzeltitel_themen_slide,
+        fill_uebersicht_slide, fill_anlagekriterien_slide,
     )
 
 # Anlagekriterien-Konfiguration. BEWUSST das UI-freie Modul, nicht shared.py:
@@ -215,68 +158,12 @@ SHAPE_FOLIENNUMMER_NAMES = (
 
 
 # ---------------------------------------------------------------------------
-# Shape-Helpers
-# ---------------------------------------------------------------------------
-def _find_shape_by_name(slide, name: str):
-    """Wrapper für pptx_helpers.find_shape_by_name."""
-    return find_shape_by_name(slide, name)
-
-
-def _replace_text_in_shape(shape, new_text: str):
-    """Wrapper für pptx_helpers.replace_text_in_shape."""
-    return replace_text_in_shape(shape, new_text)
-
-
-# ---------------------------------------------------------------------------
-# Slide-Duplikation (für Vergleichsportfolio)
-# ---------------------------------------------------------------------------
-def _duplicate_slide(prs, source_idx: int):
-    """Wrapper für pptx_helpers.duplicate_slide."""
-    return duplicate_slide(prs, source_idx)
-
-
-def _clone_chart_part(prs, source_chart_part):
-    """Wrapper für pptx_helpers.clone_chart_part."""
-    return clone_chart_part(prs, source_chart_part)
-
-
-# ---------------------------------------------------------------------------
-# Chart-Befüllung — Wrapper für pptx_charts (Backwards-Compat)
-# ---------------------------------------------------------------------------
-# _NS_CHART als Alias auf NS_CHART aus pptx_charts (Backwards-Compat,
-# falls anderer Code im Modul es noch direkt referenziert)
-_NS_CHART = NS_CHART
-
-
-def _replace_chart_data(chart_shape, categories: list, values: list, series_name: str = "Anteil"):
-    """Wrapper für pptx_charts.replace_chart_data."""
-    return replace_chart_data(chart_shape, categories, values, series_name)
-
-
-def _update_cache_elements(parent, new_values, is_numeric: bool):
-    """Wrapper für pptx_charts.update_cache_elements."""
-    return update_cache_elements(parent, new_values, is_numeric)
-
-
-# ---------------------------------------------------------------------------
-# Tabellen-Befüllung
-# ---------------------------------------------------------------------------
-def _set_cell_text(cell, text: str, is_bold: bool = None):
-    """Wrapper für pptx_helpers.set_cell_text."""
-    return set_cell_text(cell, text, is_bold)
-
-
-def _clear_table(table, keep_header_rows: int = 1):
-    """Wrapper für pptx_helpers.clear_table."""
-    return clear_table(table, keep_header_rows)
-
-
-# ---------------------------------------------------------------------------
-# Template laden
+# Vorlage laden
 # ---------------------------------------------------------------------------
 def _load_template(template_path: Optional[str] = None,
                    erwartete_folien: Optional[int] = None) -> Presentation:
-    """Wrapper für pptx_helpers.load_template mit Folienzahl-Guard.
+    """Lädt die Vorlage über pptx_helpers.load_template und prüft dabei
+    die Folienzahl.
 
     Ein Folienzahl-Mismatch bedeutet fast immer 'Code/Konfig und Vorlage
     passen nicht zusammen' (klassischer Deploy-Fehler) und würde sonst
@@ -301,209 +188,30 @@ def _load_template(template_path: Optional[str] = None,
 
 
 # ---------------------------------------------------------------------------
-# Formatierungs-Helpers — Wrapper für modules.formats (Backwards-Compat)
+# AUFGERÄUMT 11.08.2026: hier standen 40 Durchreich-Funktionen
 # ---------------------------------------------------------------------------
-def _fmt_pct(value) -> str:
-    """Wrapper für formats.fmt_pct. Behält die alte Signatur für internen Code bei."""
-    return fmt_pct(value)
-
-
-def _fmt_date_de(value) -> str:
-    """Wrapper für formats.fmt_date_de."""
-    return fmt_date_de(value)
-
-
-def _fmt_ratio(val) -> str:
-    """Wrapper für formats.fmt_ratio."""
-    return fmt_ratio(val)
-
-
+# Nach der Modul-Aufteilung Ende Juni 2026 (pptx_helpers / pptx_charts /
+# pptx_slides / pptx_export) blieben in dieser Datei 40 Funktionen der Form
+#
+#     def _find_shape_by_name(slide, name):
+#         """Wrapper für pptx_helpers.find_shape_by_name."""
+#         return find_shape_by_name(slide, name)
+#
+# stehen — rund 290 Zeilen, ein Fünftel der Datei. 27 davon wurden nirgends
+# aufgerufen, die übrigen 13 an genau einer bis drei Stellen, alle in dieser
+# Datei. Schaden haben sie keinen angerichtet, aber Substanz vorgetäuscht:
+# wer die Logik suchte, landete hier statt im zuständigen Modul.
+#
+# Die Aufrufe gehen jetzt direkt an die importierten Funktionen (Import-Block
+# oben). Wer eine alte `_name`-Schreibweise sucht: Unterstrich weglassen —
+# die Funktion liegt unverändert in ihrem Modul.
+#
+# _load_template ist als einzige geblieben. Sie ist kein Durchreicher,
+# sondern ergänzt load_template um den Folienzahl-Guard.
+#
+# Ebenfalls entfallen: der Alias _NS_CHART auf pptx_charts.NS_CHART, den
+# seit der Modultrennung niemand mehr referenziert hat.
 # ---------------------------------------------------------------------------
-# Weitere Wrapper (Backwards-Compat für Alt-Aufrufer)
-# ---------------------------------------------------------------------------
-def _set_title_with_autoscale(title_shape, text: str):
-    """Wrapper für pptx_slides.set_title_with_autoscale."""
-    return set_title_with_autoscale(title_shape, text)
-
-
-def _safe_float(value, default: float = 0.0) -> float:
-    """Wrapper für pptx_helpers.safe_float."""
-    return safe_float(value, default)
-
-
-def _safe_marktrisikowert(value):
-    """Wrapper für pptx_slides.safe_marktrisikowert."""
-    return safe_marktrisikowert(value)
-
-
-def _classify_gattung(gattung):
-    """Wrapper für pptx_slides.classify_gattung."""
-    return classify_gattung(gattung)
-
-
-def _group_portfolio_positions(df: pd.DataFrame):
-    """Wrapper für pptx_slides.group_portfolio_positions."""
-    return group_portfolio_positions(df)
-
-
-def _distribute_positions_to_slides(groups: dict):
-    """Wrapper für pptx_slides.distribute_positions_to_slides."""
-    return distribute_positions_to_slides(groups)
-
-
-def _fill_table_with_positions(table, slide_data: dict, total_weight: float = 1.0, shape_height: int = 0):
-    """Wrapper für pptx_slides.fill_table_with_positions."""
-    return fill_table_with_positions(table, slide_data, total_weight, shape_height)
-
-
-def _fill_anlagevorschlag_slides(prs, slide_7_idx: int, df: pd.DataFrame,
-                                  strategy_name: str, eval_date=None, **opt):
-    """Wrapper für pptx_slides.fill_anlagevorschlag_slides.
-
-    **opt reicht vorlagenspezifische Optionen durch (NEU 09.07.2026):
-    titel_text, max_bottom_inch — siehe template_config['rollen_optionen'].
-    Ohne Optionen exakt wie bisher.
-    """
-    return fill_anlagevorschlag_slides(prs, slide_7_idx, df, strategy_name,
-                                        eval_date=eval_date, **opt)
-
-
-def _fill_uebersicht_slide(prs, slide_idx: int, rollierend_liste,
-                           stand_date_str=None, **opt):
-    """Wrapper für pptx_slides.fill_uebersicht_slide (NEU 10.07.2026).
-
-    Strategieübergreifende Tabelle (CVV Folie 17) — läuft EINMAL, bekommt die
-    rollierenden Daten ALLER Strategien in Spaltenreihenfolge.
-    """
-    return fill_uebersicht_slide(prs, slide_idx, rollierend_liste,
-                                 stand_date_str=stand_date_str, **opt)
-
-
-def _fill_performance_slide(prs, slide_idx: int, strategy_name: str, performance_data=None,
-                             stand_date_str=None):
-    """Wrapper für pptx_slides.fill_performance_slide."""
-    return fill_performance_slide(prs, slide_idx, strategy_name, performance_data,
-                                  stand_date_str=stand_date_str)
-
-
-def _fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str, we_data=None,
-                                 stand_date_str=None):
-    """Wrapper für pptx_slides.fill_wertentwicklung_slide (NEU Juli 2026)."""
-    return fill_wertentwicklung_slide(prs, slide_idx, strategy_name, we_data,
-                                      stand_date_str=stand_date_str)
-
-
-def _fill_rollierend_slide(prs, slide_idx: int, strategy_name: str,
-                            rollierend_data=None, stand_date_str=None):
-    """Wrapper für pptx_slides.fill_rollierend_slide (NEU 06.07.2026 —
-    rollierende Wertentwicklungs-Tabelle der Themen-Broschüren)."""
-    return fill_rollierend_slide(prs, slide_idx, strategy_name,
-                                 rollierend_data=rollierend_data,
-                                 stand_date_str=stand_date_str)
-
-
-def _fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
-                                    eval_date=None):
-    """Wrapper für pptx_slides.fill_einzeltitel_themen_slide (NEU 06.07.2026 —
-    Einzeltitel-Folie der Themen-Broschüren, 7-Spalten-Layout mit Währung)."""
-    return fill_einzeltitel_themen_slide(prs, slide_idx, df, strategy_name,
-                                         eval_date=eval_date)
-
-
-def _replace_chart_data_safe(chart_shape, categories: list, series_data: list,
-                              data_label_format: Optional[str] = None):
-    """Wrapper für pptx_charts.replace_chart_data_safe.
-
-    Behält die Signatur des bisherigen Aufrufstellen-Codes. Die volle
-    Bug-Workaround-Logik (4 Bugs!) lebt jetzt in modules/pptx_charts.py.
-    """
-    return replace_chart_data_safe(chart_shape, categories, series_data, data_label_format)
-
-
-def _restore_data_label_format(chart_shape, format_code: str):
-    """Wrapper für pptx_charts.restore_data_label_format."""
-    return restore_data_label_format(chart_shape, format_code)
-
-
-def _fill_kennzahlen_table(table, kz: dict):
-    """Wrapper für pptx_slides.fill_kennzahlen_table."""
-    return fill_kennzahlen_table(table, kz)
-
-
-def _set_cell_text_preserve_format(cell, text: str):
-    """Wrapper für pptx_helpers.set_cell_text_preserve_format."""
-    return set_cell_text_preserve_format(cell, text)
-
-
-def _update_chart_values_inplace(chart_shape, categories: list, series_data: list):
-    """Wrapper für pptx_charts.update_chart_values_inplace."""
-    return update_chart_values_inplace(chart_shape, categories, series_data)
-
-
-def _remove_empty_table_rows(table):
-    """Wrapper für pptx_slides.remove_empty_table_rows."""
-    return remove_empty_table_rows(table)
-
-
-def _fit_shape_to_table(table_shape):
-    """Wrapper für pptx_slides.fit_shape_to_table."""
-    return fit_shape_to_table(table_shape)
-
-
-def _adjust_table_shape_height(prs, table_shape, n_data_rows: int, needs_summary: bool):
-    """Wrapper für pptx_slides.adjust_table_shape_height."""
-    return adjust_table_shape_height(prs, table_shape, n_data_rows, needs_summary)
-
-
-def _consolidate_small_segments(agg_series: pd.Series, threshold: float = None, max_segments: int = None):
-    """Wrapper für pptx_slides.consolidate_small_segments."""
-    kwargs = {}
-    if threshold is not None:
-        kwargs["threshold"] = threshold
-    if max_segments is not None:
-        kwargs["max_segments"] = max_segments
-    return consolidate_small_segments(agg_series, **kwargs)
-
-
-def _build_ring_series(df: pd.DataFrame, dim_col: str):
-    """Wrapper für pptx_slides.build_ring_series."""
-    return build_ring_series(df, dim_col)
-
-
-def _fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
-                                  strategy_name: str, eval_date=None):
-    """Wrapper für pptx_slides.fill_zusammenstellung_slide."""
-    return fill_zusammenstellung_slide(prs, slide_idx, df, strategy_name,
-                                        eval_date=eval_date)
-
-
-# ---------------------------------------------------------------------------
-# Slide-Manipulation: Wrapper für pptx_helpers
-# ---------------------------------------------------------------------------
-def _update_quelle_datum(prs, datum_str: str):
-    """Wrapper für pptx_helpers.update_quelle_datum."""
-    return update_quelle_datum(prs, datum_str)
-
-
-def _update_slide_numbers(prs):
-    """Wrapper für pptx_helpers.update_slide_numbers — übergibt die lokal
-    konfigurierten SHAPE_FOLIENNUMMER_NAMES (Single Source of Truth)."""
-    return update_slide_numbers(prs, SHAPE_FOLIENNUMMER_NAMES)
-
-
-def _move_slide(prs, from_idx: int, to_idx: int):
-    """Wrapper für pptx_helpers.move_slide."""
-    return move_slide(prs, from_idx, to_idx)
-
-
-def _remove_slide(prs, slide_idx: int):
-    """Wrapper für pptx_helpers.remove_slide."""
-    return remove_slide(prs, slide_idx)
-
-
-def _save_and_reload(prs) -> Presentation:
-    """Wrapper für pptx_helpers.save_and_reload."""
-    return save_and_reload(prs)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -1000,7 +708,7 @@ def _normalisiere_vorlage(prs, template_config: dict) -> int:
     entfernen_idx = sorted([p - 1 for p in template_config.get("entfernen", [])],
                            reverse=True)
     for i in entfernen_idx:
-        _remove_slide(prs, i)
+        remove_slide(prs, i)
 
     # Block-Positionen um die Entfernungen korrigieren
     def _nach_entfernung(pos1: int) -> int:
@@ -1046,7 +754,7 @@ def _vervielfaeltige_block(prs, block_start: int, n_strategien: int,
     for offset in range(B - 1, -1, -1):
         src = block_start + offset
         for _ in range(n_strategien - 1):
-            _duplicate_slide(prs, src)
+            duplicate_slide(prs, src)
     n = len(prs.slides._sldIdLst)
     new_order = list(range(block_start))
     for k in range(n_strategien):
@@ -1129,9 +837,9 @@ def generate_portfolioanalyse_pptx(
     if feste_bloecke:
         # Nur Entfernungen anwenden; keine Umsortierung, keine Duplikation.
         for i in sorted([p - 1 for p in cfg.get("entfernen", [])], reverse=True):
-            _remove_slide(prs, i)
+            remove_slide(prs, i)
         if cfg.get("entfernen"):
-            prs = _save_and_reload(prs)
+            prs = save_and_reload(prs)
         if n_strategien > len(feste_bloecke):
             _record_build_error(
                 "Vorlage",
@@ -1142,14 +850,14 @@ def generate_portfolioanalyse_pptx(
     else:
         # ── Schritt 1: Vorlage normalisieren (Entfernungen + Block kanonisch) ──
         block_start = _normalisiere_vorlage(prs, cfg)
-        prs = _save_and_reload(prs)
+        prs = save_and_reload(prs)
 
         # ── Schritt 2: Block auf N Strategien vervielfältigen ──
         reihenfolge = cfg.get("block_reihenfolge", BLOCK_REIHENFOLGE)
         B = len(reihenfolge)
         _vervielfaeltige_block(prs, block_start, n_strategien, block_laenge=B)
         if n_strategien > 1:
-            prs = _save_and_reload(prs)
+            prs = save_and_reload(prs)
 
     # ── Schritt 3: jede Strategie in ihren Block füllen ──
     # Dispatch: Rolle → Fill-Aufruf. Der Offset innerhalb des Blocks ergibt
@@ -1183,7 +891,7 @@ def generate_portfolioanalyse_pptx(
         for idx, rolle in ziele:
             opt = dict(rollen_optionen.get(rolle, {}))
             if rolle == "anlagevorschlag":
-                _fill_anlagevorschlag_slides(prs, idx, df, strategy_name,
+                fill_anlagevorschlag_slides(prs, idx, df, strategy_name,
                                              eval_date=eval_date, **opt)
                 # Anlagekriterien-Kasten aus der Konfiguration (NEU 10.08.2026).
                 # Schluessel ist der UNGEKUERZTE Anzeigename aus dem Mapping
@@ -1195,21 +903,21 @@ def generate_portfolioanalyse_pptx(
                     _anlagekriterien.fuer(display_name, kriterien_cfg),
                     _anlagekriterien.anzeigename(display_name, kriterien_cfg))
             elif rolle == "wertentwicklung":
-                _fill_wertentwicklung_slide(prs, idx, strategy_name,
+                fill_wertentwicklung_slide(prs, idx, strategy_name,
                                             we_data=we_data, stand_date_str=stand)
             elif rolle == "performance":
-                _fill_performance_slide(prs, idx, strategy_name,
+                fill_performance_slide(prs, idx, strategy_name,
                                         performance_data=perf_data,
                                         stand_date_str=stand)
             elif rolle == "zusammenstellung":
-                _fill_zusammenstellung_slide(prs, idx, df, strategy_name,
+                fill_zusammenstellung_slide(prs, idx, df, strategy_name,
                                              eval_date=eval_date)
             elif rolle == "rollierend":
-                _fill_rollierend_slide(prs, idx, strategy_name,
+                fill_rollierend_slide(prs, idx, strategy_name,
                                        rollierend_data=roll_data,
                                        stand_date_str=stand)
             elif rolle == "einzeltitel_themen":
-                _fill_einzeltitel_themen_slide(prs, idx, df, strategy_name,
+                fill_einzeltitel_themen_slide(prs, idx, df, strategy_name,
                                                eval_date=eval_date)
             else:
                 _record_build_error(
@@ -1227,7 +935,7 @@ def generate_portfolioanalyse_pptx(
         try:
             if hasattr(datum_obj, 'strftime'):
                 datum_str = datum_obj.strftime("%d.%m.%Y")
-                _update_quelle_datum(prs, datum_str)
+                update_quelle_datum(prs, datum_str)
         except Exception:
             pass
 
@@ -1249,7 +957,7 @@ def generate_portfolioanalyse_pptx(
                                    "Übersichtstabelle behält die Vorlagen-Werte."))
                     continue
                 _stand = _stand_str(portfolios[0][2]) if portfolios else None
-                _fill_uebersicht_slide(prs, idx, roll_liste,
+                fill_uebersicht_slide(prs, idx, roll_liste,
                                        stand_date_str=_stand,
                                        **(rollen_optionen.get(rolle, {})))
             elif rolle == "vergleich":
@@ -1262,7 +970,7 @@ def generate_portfolioanalyse_pptx(
                         ValueError("Keine Performance-Zeitreihen übergeben — "
                                    "Vergleichs-Chart behält die Vorlagen-Werte."))
                     continue
-                shape = _find_shape_by_name(prs.slides[idx], "Diagramm")
+                shape = find_shape_by_name(prs.slides[idx], "Diagramm")
                 if shape is None or not getattr(shape, "has_chart", False):
                     _record_build_error(
                         f"Folie {pos}",
@@ -1281,7 +989,7 @@ def generate_portfolioanalyse_pptx(
     # Foliennummern dynamisch setzen (NACH allen Add/Remove/Duplicate-Operationen,
     # VOR dem Speichern). Korrigiert die statischen Werte aus der Vorlage
     # (Slide 7 hat z.B. "13", soll aber "7" sein nach Renumber).
-    _update_slide_numbers(prs)
+    update_slide_numbers(prs)
 
     # Charts datenbasiert nachziehen (NEU 07.07.2026): Wertentwicklungs-Linie
     # auf die echte Datenspanne skalieren (kein Leerraum vor/nach der Kurve),
