@@ -194,6 +194,14 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 5. **`use_container_width` → `width`** (Backlog 7) — Streamlit warnt und
    entfernt den Parameter künftig.
 
+**Nicht offen, sondern entschieden:** Die beiden Ansichten sind
+unterschiedlich dicht — 19 Bedienelemente in der Performance-Ansicht gegen 9
+in der Portfolioanalyse. Das ist **kein Missstand und braucht keine
+Angleichung** (Philip, 11.08.2026): In der Performance gibt es viel zum
+Ausprobieren (Zeitraum, Vergleich, Benchmark, Honorar, Darstellung), die
+Portfolioanalyse zeigt einen Bestand zum Stichtag. Die Dichte folgt der
+Aufgabe.
+
 **Nicht offen, sondern entschieden:** Die Ring-Label-Positionierung bei
 kleinen/dicht benachbarten Segmenten wurde am 10.08.2026 vollständig
 vermessen und diagnostiziert — Philip: „wir sind am Zenit angekommen",
