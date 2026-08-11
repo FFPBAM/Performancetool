@@ -677,8 +677,8 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
 
     Returns:
         Dict mit Keys: auflage_jahr, laufendes_jahr, kum_nach_kosten,
-        pa_nach_kosten, ytd, duration, benchmark_text, performance_pa,
-        wertentwicklung.
+        pa_nach_kosten, ytd, duration, benchmark_text, has_benchmark,
+        performance_pa, wertentwicklung.
     """
     ts = timeseries_df.sort_index()
     dates = pd.to_datetime(ts.index)
@@ -722,6 +722,9 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
         "ytd": ytd,
         "duration": duration,
         "benchmark_text": benchmark_text,
+        # Durchgereicht (11.08.2026): die Folie muss Chart-Serie, Legende und
+        # ***-Fußnote weglassen, wenn es keinen Vergleichsmaßstab gibt.
+        "has_benchmark": bool(charts.get("has_benchmark")),
         "performance_pa": charts.get("performance_pa", {}),
         "wertentwicklung": charts.get("wertentwicklung", {}),
     }
@@ -782,14 +785,20 @@ def _append_current_year_bar(perf: dict, ts: pd.DataFrame, fee: float) -> dict:
     if not mask.any():
         return perf
     r = pd.to_numeric(ts_sorted["ret_port"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
-    rb = pd.to_numeric(ts_sorted.get("ret_bm"), errors="coerce").fillna(0.0).to_numpy(dtype=float)
     drag = _annual_fee_to_daily_drag(fee)
     ref_ytd = float(_np.prod(1.0 + (r[mask] - drag)) - 1.0)
-    bm_ytd = float(_np.prod(1.0 + rb[mask]) - 1.0)
+    # Ohne Benchmark bleibt die Benchmark-Liste leer (11.08.2026) — sonst
+    # bekäme eine ansonsten leere Liste hier doch noch einen (Null-)Wert und
+    # die Serie wäre um genau einen Balken länger als die Jahresliste.
+    bench = list(pa.get("benchmark") or [])
+    if perf.get("has_benchmark"):
+        rb = pd.to_numeric(ts_sorted.get("ret_bm"),
+                           errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        bench = bench + [float(_np.prod(1.0 + rb[mask]) - 1.0)]
     new_pa = {
         "jahre": jahre + [cur_year],
         "referenz": list(pa.get("referenz") or []) + [ref_ytd],
-        "benchmark": list(pa.get("benchmark") or []) + [bm_ytd],
+        "benchmark": bench,
     }
     out = dict(perf)
     out["performance_pa"] = new_pa

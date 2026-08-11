@@ -260,6 +260,7 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
     Returns:
         Dict im Format das die Performance-Folie erwartet:
         {
+            "has_benchmark": True/False,
             "kennzahlen": {
                 "performance_pa_ref", "performance_pa_bench",
                 "volatilitaet_ref", "volatilitaet_bench",
@@ -270,11 +271,17 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
             "wertentwicklung": {"dates": [...], "referenz": [...], "benchmark": [...]},
         }
 
+        OHNE Benchmark (has_benchmark=False) sind die "bench"-Kennzahlen None
+        UND die beiden "benchmark"-Listen LEER — es gibt dann nichts zu
+        zeichnen. Wer daraus Chart-Serien baut, darf die Benchmark-Serie in
+        diesem Fall nicht anlegen (siehe pptx_slides).
+
         Bei leerem DataFrame: Dict mit leeren Sub-Dicts.
     """
     df = timeseries_df.copy()
     if df.empty:
-        return {"kennzahlen": {}, "performance_pa": {}, "wertentwicklung": {}}
+        return {"has_benchmark": False, "kennzahlen": {},
+                "performance_pa": {}, "wertentwicklung": {}}
 
     rp = df["ret_port"].to_numpy(float)
     # has_benchmark statt notna().any(): eine Spalte aus lauter Nullen ist
@@ -334,9 +341,14 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
         if has_bm:
             rb_y = sub["ret_bm"].fillna(0.0).to_numpy(float)
             pa_bench.append(calc_period_return(rb_y))
-        else:
-            pa_bench.append(0.0)
 
+    # Ohne Benchmark bleibt die Liste LEER (11.08.2026) — vorher stand hier
+    # je Jahr eine 0.0. Die Kennzahlen zeigten dank has_benchmark zwar "–",
+    # der Säulen-Chart der Broschüre bekam aber eine Serie aus lauter Nullen
+    # und zeichnete Null-Balken neben das Musterdepot (an "Muster SCHWEIZ
+    # Substanz" am echten Artefakt reproduziert). Eine leere Liste ist die
+    # ehrliche Antwort: es gibt nichts zu zeichnen. Wer die Serie befüllt,
+    # prüft has_benchmark — siehe pptx_slides.
     performance_pa = {
         "jahre":    jahre,
         "referenz": pa_ref,
@@ -352,7 +364,9 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
         ib_bench_norm = make_index_from_returns(rb, 100.0) / 100.0
         wert_bench = list(ib_bench_norm.astype(float))
     else:
-        wert_bench = [1.0] * len(dates)
+        # Ohne Benchmark leer statt einer Reihe aus lauter 1.0 (11.08.2026) —
+        # die hätte im Linien-Chart eine schnurgerade 100-%-Linie gezeichnet.
+        wert_bench = []
 
     wertentwicklung = {
         "dates":     dates,
@@ -361,6 +375,7 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
     }
 
     return {
+        "has_benchmark":   has_bm,
         "kennzahlen":      kennzahlen,
         "performance_pa":  performance_pa,
         "wertentwicklung": wertentwicklung,

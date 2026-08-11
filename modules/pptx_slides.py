@@ -136,6 +136,10 @@ SHAPE_WE_CHART_BAR = "Diagramm links"      # Säulen: Perf p.a. im Benchmarkverg
 SHAPE_WE_CHART_LINE = "Diagramm rechts"    # Linie: Wertentwicklung (Index)
 SHAPE_WE_FUSSNOTE = "Fußnote"
 SHAPE_WE_QUELLE = "Quelle"
+SHAPE_WE_LEGENDE = "Legende Diagramm links"
+"""Statische Legenden-Textbox NEBEN dem Säulen-Chart (kein Chart-Element).
+Enthält je Eintrag Farbquadrat + Abstand + Beschriftung als eigene Runs —
+siehe remove_legend_entry."""
 
 WE_TITLE_FORMAT = "Anlagestrategie {name} | Wertentwicklung"
 """Titel-Muster der Wertentwicklungs-Folie (wie in der alten cVV-Broschüre)."""
@@ -177,6 +181,12 @@ WE_LINE_WIDTH_PT = 1.5
 """Linienstärke des F8-Wertentwicklungs-Charts (03.07.2026): angeglichen an
 F9 (Vorlage F8: 0,75pt — für 211 Monatspunkte ausgelegt, bei Tagesdaten
 zu unruhig)."""
+
+WE_FOOTNOTE_STAR3_PREFIX = "***"
+"""Präfix der Benchmark-Zeile in der Fußnote der Wertentwicklungs-Folie.
+Matcht NUR die ***-Zeile: '** ' (mit Leerzeichen) greift dort nicht, weil an
+Position 3 ein Stern steht. Bei Strategien OHNE Benchmark wird die Zeile
+nicht umgeschrieben, sondern ganz entfernt (11.08.2026)."""
 
 WE_FOOTNOTE_STAR2_PREFIX = "** "
 WE_FOOTNOTE_STAR2_NEW = "** nach Kosten (taggenauer Honorarabzug)"
@@ -504,6 +514,84 @@ def replace_substring_in_runs(text_frame, old: str, new: str) -> bool:
                 run.text = run.text.replace(old, new)
                 replaced = True
     return replaced
+
+
+def remove_paragraph_by_prefix(text_frame, prefix: str) -> bool:
+    """Entfernt GANZ EINEN Absatz — den ersten, dessen Text (getrimmt) mit
+    `prefix` beginnt (NEU 11.08.2026, für die ***-Benchmark-Fußnote bei
+    Strategien ohne Vergleichsmaßstab).
+
+    Unterschied zu replace_paragraph_text_by_prefix: dort bleibt die Zeile
+    stehen und bekommt neuen Text. Hier verschwindet sie samt Absatzmarke —
+    gewollt, wenn es zur Fußnote schlicht nichts zu sagen gibt (eine leere
+    ***-Zeile hinterließe eine Lücke und einen Verweis ins Nichts).
+
+    Der letzte verbliebene Absatz wird NIE entfernt: ein Text-Frame ohne
+    Absatz ist in der Datei ungültig.
+
+    Returns:
+        True wenn ein Absatz entfernt wurde, sonst False.
+    """
+    absaetze = list(text_frame.paragraphs)
+    if len(absaetze) <= 1:
+        return False
+    for para in absaetze:
+        if para.text.strip().startswith(prefix):
+            para._p.getparent().remove(para._p)
+            return True
+    return False
+
+
+def _ist_schmuck_run(run) -> bool:
+    """True, wenn ein Run nur Leerraum oder ein Symbol-Zeichen enthält.
+
+    Die Legenden-Boxen der Vorlagen bestehen je Eintrag aus drei Runs:
+    Farbquadrat + Abstand + Beschriftung. Das Quadrat ist KEIN Rechteck-Shape,
+    sondern ein Zeichen aus dem Private-Use-Bereich (U+F0A2, Wingdings-
+    Herkunft) — sichtbar nur an seiner Schriftfarbe. Beides zählt hier als
+    Schmuck: es gehört zum Eintrag, trägt aber keine Aussage.
+    """
+    text = (run.text or "").strip()
+    if not text:
+        return True
+    return all(0xE000 <= ord(zeichen) <= 0xF8FF for zeichen in text)
+
+
+def remove_legend_entry(text_frame, label: str) -> bool:
+    """Entfernt einen Eintrag aus einer statischen Legenden-Textbox — den Run
+    mit der Beschriftung `label` samt zugehörigem Farbquadrat und Abstand
+    (NEU 11.08.2026, für Strategien ohne Benchmark).
+
+    Vorgehen: den Run finden, der `label` enthält, und von dort RÜCKWÄRTS
+    alle Schmuck-Runs (Leerraum, Farbquadrat) mitnehmen, bis echter Text
+    kommt — der gehört zum vorherigen Eintrag und bleibt stehen.
+
+    Beispiel Vorlage_Thema, Box "Legende Diagramm links":
+        ['■', ' ', 'Musterdepot ', '     ', '■', ' ', 'Benchmark***']
+        remove_legend_entry(tf, "Benchmark") →
+        ['■', ' ', 'Musterdepot ']
+
+    Bewusst rückwärts statt über feste Indizes: die Vorlagen unterscheiden
+    sich in der Zahl der Abstands-Runs, die Reihenfolge Quadrat-Abstand-Text
+    ist dagegen überall gleich. Formatierung der bleibenden Runs wird nicht
+    angefasst.
+
+    Returns:
+        True wenn ein Eintrag entfernt wurde, sonst False.
+    """
+    for para in text_frame.paragraphs:
+        runs = list(para.runs)
+        treffer = next((i for i, r in enumerate(runs) if label in (r.text or "")),
+                       None)
+        if treffer is None:
+            continue
+        start = treffer
+        while start > 0 and _ist_schmuck_run(runs[start - 1]):
+            start -= 1
+        for run in runs[start:treffer + 1]:
+            run._r.getparent().remove(run._r)
+        return True
+    return False
 
 
 # XML-Namespace für DrawingML (für set_shape_text_static)
@@ -2293,15 +2381,22 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
     # ihrer eigenen Vorlage. Wer das vereinheitlichen will, ändert die
     # Vorlagen, nicht diese Konstanten.
     pa = performance_data.get("performance_pa", {})
+    # Standard TRUE — Begruendung siehe fill_wertentwicklung_slide.
+    hat_benchmark = bool(performance_data.get("has_benchmark", True))
     chart_links = find_shape_by_name(slide, "Diagramm links")
     if chart_links and chart_links.has_chart and pa.get("jahre"):
+        # Ohne Benchmark keine zweite Serie (11.08.2026) — analog zur
+        # Wertentwicklungs-Folie, siehe dort. Diese Folie wird aktuell von
+        # keiner Familien-Konfiguration verwendet (nur von
+        # DEFAULT_TEMPLATE_CONFIG); die Behandlung steht hier trotzdem,
+        # damit beide Folien nicht auseinanderlaufen.
+        serien = [("Referenzportfolio", pa.get("referenz", []))]
+        if hat_benchmark:
+            serien.append(("Benchmark", pa.get("benchmark", [])))
         replace_chart_data_safe(
             chart_links,
             categories=[str(y) for y in pa["jahre"]],
-            series_data=[
-                ("Referenzportfolio", pa.get("referenz", [])),
-                ("Benchmark", pa.get("benchmark", [])),
-            ],
+            series_data=serien,
             data_label_format=PCT_FORMAT_CODE,
             # NEU (Juni 2026, Bug 4): Ohne diesen Parameter zeigte die
             # Y-Achse Rohwerte (0.05, 0.1, ...) statt Prozent (5%, 10%, ...),
@@ -2315,13 +2410,13 @@ def fill_performance_slide(prs, slide_idx: int, strategy_name: str,
     we = performance_data.get("wertentwicklung", {})
     chart_rechts = find_shape_by_name(slide, "Diagramm rechts")
     if chart_rechts and chart_rechts.has_chart and we.get("dates"):
+        linien = [("Referenzportfolio", we.get("referenz", []))]
+        if hat_benchmark:
+            linien.append(("Benchmark", we.get("benchmark", [])))
         replace_chart_data_safe(
             chart_rechts,
             categories=we["dates"],
-            series_data=[
-                ("Referenzportfolio", we.get("referenz", [])),
-                ("Benchmark", we.get("benchmark", [])),
-            ],
+            series_data=linien,
             data_label_format=None,  # Linien-Chart hat keine Daten-Labels
         )
         # 02.07.2026 (Punkt 2): datenbasierte Untergrenze über BEIDE Serien
@@ -2384,6 +2479,14 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
     - Legende: bleibt unangetastet ("Musterdepot     Benchmark***" wie in der
       Vorlage). Der Angleich an F9 vom 02.07.2026 ist am 10.08.2026
       zurückgenommen — Begründung siehe WE_SERIES_PORTFOLIO.
+
+    OHNE Benchmark (has_benchmark=False, z.B. "Muster SCHWEIZ Substanz")
+    verschwindet der Vergleichsmaßstab VOLLSTÄNDIG von der Folie
+    (11.08.2026): keine Benchmark-Serie im Säulen-Chart, kein
+    "Benchmark***" in der Legenden-Box, keine ***-Zeile in der Fußnote.
+    Vorher blieb an allen drei Stellen etwas stehen — im Chart Null-Balken,
+    in der Fußnote sogar die Benchmark einer FREMDEN Strategie (der
+    Vorlagentext von "Pro").
     - Quelle: Datumsfeld → statischer Text mit Datenstand (02.07.2026,
       Punkt 6 — vorher zeigte die Box das ÖFFNUNGS-Datum der Datei)
     - Fußnote: *-, **- und ***-Zeilen sowie Disclaimer-Satz dynamisch
@@ -2437,15 +2540,29 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
     # Datenbasis identisch zur Performance-Folie: nur VOLLE Kalenderjahre
     # (Fußnote *: "nach Kosten bis zum 31.12. des Vorjahres").
     pa = we_data.get("performance_pa", {})
+    # Standard TRUE, nicht False (11.08.2026): Nur ein AUSDRÜCKLICHES
+    # has_benchmark=False laesst Serie, Legendeneintrag und Fußnotenzeile
+    # verschwinden. Fehlt der Schluessel — etwa weil ein Aufrufer ein
+    # unvollstaendiges Dict baut —, bleibt alles stehen. Der umgekehrte
+    # Standard waere gefaehrlich: er wuerde bei jedem solchen Aufruf still
+    # Inhalte aus einer Kundenbroschuere entfernen, auch bei Strategien MIT
+    # Vergleichsmassstab. compute_wertentwicklung_data setzt den Schluessel
+    # immer, der Normalfall ist davon also unberuehrt.
+    hat_benchmark = bool(we_data.get("has_benchmark", True))
     chart_bar = find_shape_by_name(slide, SHAPE_WE_CHART_BAR)
     if chart_bar and getattr(chart_bar, "has_chart", False) and pa.get("jahre"):
+        # Ohne Benchmark wird die zweite Serie GAR NICHT übergeben
+        # (11.08.2026). replace_chart_data_safe reicht das an python-pptx
+        # weiter, das überzählige <c:ser> entfernt — die Vorlagen-Serie
+        # verschwindet also samt Legendeneintrag des Charts, statt als Reihe
+        # von Null-Balken stehen zu bleiben.
+        serien = [(WE_SERIES_PORTFOLIO, pa.get("referenz", []))]
+        if hat_benchmark:
+            serien.append((WE_SERIES_BENCHMARK, pa.get("benchmark", [])))
         replace_chart_data_safe(
             chart_bar,
             categories=[str(y) for y in pa["jahre"]],
-            series_data=[
-                (WE_SERIES_PORTFOLIO, pa.get("referenz", [])),
-                (WE_SERIES_BENCHMARK, pa.get("benchmark", [])),
-            ],
+            series_data=serien,
             # Daten-Labels wie cVV-Original 2-stellig ("6,04%"); die ACHSE
             # dagegen "0%" ("5%, 10%, …") — 02.07.2026 (Punkt 1) angeglichen
             # an F9, vorher zeigte F8 klobige "5,00%/10,00%"-Achsenticks.
@@ -2488,9 +2605,19 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         # WICHTIG: Reihenfolge — *** VOR ** ersetzen ist nicht nötig, denn
         # Präfix "** " (mit Leerzeichen) matcht die ***-Zeile NICHT
         # ("***…" hat an Position 3 einen Stern, kein Leerzeichen).
+        #
+        # OHNE Benchmark fliegt die Zeile RAUS (BUGFIX 11.08.2026): Bis dahin
+        # wurde sie nur dann überschrieben, wenn ein Benchmark-Text vorlag —
+        # bei "Muster SCHWEIZ Substanz"/"…Aktien" blieb deshalb der
+        # Vorlagentext stehen und die Kundenbroschüre nannte die Benchmark
+        # der Strategie "Pro" ("50% EuroStoxx 50; 50% MSCI World Euro").
+        # Am echten Artefakt reproduziert.
         bm_text = we_data.get("benchmark_text")
-        if bm_text:
-            replace_paragraph_text_by_prefix(fn.text_frame, "***", f"*** {bm_text}")
+        if not hat_benchmark:
+            remove_paragraph_by_prefix(fn.text_frame, WE_FOOTNOTE_STAR3_PREFIX)
+        elif bm_text:
+            replace_paragraph_text_by_prefix(
+                fn.text_frame, WE_FOOTNOTE_STAR3_PREFIX, f"*** {bm_text}")
         # *-Zeile (02.07.2026, Punkt 7): Kennzahlen 1+2 laufen jetzt bis zum
         # letzten Datenpunkt → "bis zum 31.12. des Vorjahres" entfällt.
         replace_paragraph_text_by_prefix(
@@ -2502,15 +2629,22 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         for prefix, new_text in WE_DISCLAIMER_REPLACEMENTS:
             replace_paragraph_text_by_prefix(fn.text_frame, prefix, new_text)
 
-    # ── Legende: bewusst NICHT angefasst (10.08.2026) ──────────────────────
-    # Die Textbox "Legende Diagramm links" steht in jeder Vorlage bereits auf
-    # "Musterdepot     Benchmark***" — genau so, wie sie gedruckt werden soll.
-    # Bis 10.08.2026 schrieb hier eine Ersetzung 'Musterdepot ' →
-    # 'Referenzportfolio ' und kürzte zum Ausgleich den 5-Leerzeichen-Run auf
-    # 3 (02.07.2026, Punkt 3). Das ist zurückgenommen; Begründung siehe
-    # WE_SERIES_PORTFOLIO. Wer den Begriff künftig ändern will, ändert die
-    # VORLAGE — nicht den Code: die Box trägt Wingdings-Farbquadrate und
-    # hochgestellte Runs, die eine Ersetzung nur unnötig gefährdet.
+    # ── Legende: nur der Benchmark-Eintrag, und nur wenn es keine gibt ─────
+    # Die Textbox "Legende Diagramm links" steht in jeder Vorlage auf
+    # "Musterdepot     Benchmark***" — genau so, wie sie gedruckt werden soll,
+    # SOLANGE die Strategie eine Benchmark hat. Hat sie keine, nennt die
+    # Legende einen Balken, den es im Chart nicht mehr gibt; dann wird der
+    # Eintrag samt Farbquadrat entfernt (11.08.2026).
+    #
+    # 'Musterdepot' bleibt in JEDEM Fall unangetastet: Bis 10.08.2026 schrieb
+    # hier eine Ersetzung 'Musterdepot ' → 'Referenzportfolio ' und kürzte zum
+    # Ausgleich den 5-Leerzeichen-Run auf 3 (02.07.2026, Punkt 3). Das ist
+    # zurückgenommen; Begründung siehe WE_SERIES_PORTFOLIO. Wer den BEGRIFF
+    # ändern will, ändert die VORLAGE — nicht den Code.
+    if not hat_benchmark:
+        legende = find_shape_by_name(slide, SHAPE_WE_LEGENDE)
+        if legende and legende.has_text_frame:
+            remove_legend_entry(legende.text_frame, WE_SERIES_BENCHMARK)
 
     # ── Quelle (02.07.2026, Punkt 6): Datumsfeld → statischer Datenstand ──
     if stand_date_str:
