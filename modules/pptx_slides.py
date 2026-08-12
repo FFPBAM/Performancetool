@@ -60,7 +60,7 @@ import pandas as pd
 from typing import Optional
 from copy import deepcopy
 
-from pptx.util import Pt, Emu
+from pptx.util import Pt, Emu, Cm
 from pptx.oxml.ns import qn
 
 # Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen)
@@ -204,12 +204,58 @@ WE_DISCLAIMER_REPLACEMENTS = [
     # (Absatz-Präfix in der Vorlage, neuer Absatz-Text)
     ("Der unterjährige Performance Ausweis",
      "Sämtliche Performance Angaben wurden nach Kosten berechnet; der jährliche "
-     "Honorarsatz wird in eine äquivalente tägliche Belastung umgerechnet und "),
+     "Honorarsatz wird als äquivalente tägliche Belastung taggenau abgezogen "),
     ("Kosten berechnet.",
-     "taggenau abgezogen (keine halbjährliche Berücksichtigung). Sowohl das VV "
-     "Honorar als auch fremde Spesen und evtl. Produktkosten wurden "
-     "berücksichtigt. Die Inflation kann negative Auswirkun-"),
+     "(keine halbjährliche Berücksichtigung). Berücksichtigt sind VV-Honorar, "
+     "fremde Spesen und evtl. Produktkosten. Die Inflation kann negative "
+     "Auswirkun-"),
 ]
+"""12.08.2026 GEKÜRZT — die zweite Zeile hatte 189 Zeichen bei 149 Zeichen
+Zeilenbreite und brach still um; alles darunter rutschte eine Zeile tiefer
+(siehe WE_QUELLE_TOP_CM und WE_FUSSNOTE_ZEILE_MAX). Jetzt 145 + 149 Zeichen.
+Die Aussagen sind unverändert — nach Kosten, Honorar als äquivalente tägliche
+Belastung taggenau abgezogen, keine halbjährliche Berücksichtigung, VV-Honorar
++ fremde Spesen + evtl. Produktkosten berücksichtigt; nur die Satzführung ist
+gestrafft ("in eine … umgerechnet und taggenau abgezogen" → "als … taggenau
+abgezogen"; "Sowohl … als auch … wurden berücksichtigt" → "Berücksichtigt sind
+…"). Der Schluss "Auswirkun-" MUSS stehen bleiben: Der Folgeabsatz der Vorlage
+beginnt mit "gen auf den Wert …"."""
+
+WE_FUSSNOTE_ZEILE_MAX = 149
+"""Maximale Zeichenzahl einer Fußnoten-Zeile der Wertentwicklungs-Folie.
+
+Der Disclaimer ist in ALLEN sechs Vorlagen hart umbrochen: Die Sätze sind
+von Hand auf Absätze verteilt, die bei 6 pt genau die Boxbreite (15,6 cm)
+füllen — die längste Vorlagenzeile hat 149 Zeichen. Diese Breite steht
+nirgends in der Datei; sie ergibt sich erst beim Rendern. Ein Ersatztext
+darüber bricht still um, und ALLES darunter rutscht eine Zeile tiefer.
+Genau das war am 12.08.2026 der Fall (siehe WE_QUELLE_TOP_CM). Prüfstein:
+tests/test_quelle_position.py, Schritt 2 — der misst, was der Kommentar
+über WE_DISCLAIMER_REPLACEMENTS bisher nur versprochen hat."""
+
+WE_QUELLE_TOP_CM = 14.75
+"""Oberkante der Quellen-Textbox der Wertentwicklungs-Folie (12.08.2026).
+
+BUGFIX: In allen sechs Vorlagen liegt die Box "Quelle" bei 13,89–14,19 cm
+und damit MITTEN IM Textfeld "Fußnote" (12,50–28,10 × 11,16–16,20 cm). Der
+Disclaimer belegt 13 Zeilen (eine davon leer) und reicht bis 14,47 cm —
+die Quellenangabe wurde also vom Fließtext überdruckt. Betroffen war JEDE
+Wertentwicklungs-Folie: 16 Stück über sechs Vorlagen, auf den Emu
+identisch positioniert. Gemeldet wurde eine einzige (Offensiv), am
+PowerPoint-Rendering nachgemessen waren es alle.
+
+14,75 cm liegt rund eine Zeilenhöhe (0,253 cm, am Rendering gemessen)
+unter der Unterkante des Disclaimers — und zwar in BEIDEN Zuständen: mit
+umbrechendem Ersatztext (14,47 cm) wie ohne (14,21 cm). Die Position hält
+also unabhängig davon, ob WE_DISCLAIMER_REPLACEMENTS die Zeilenbreite
+einhält. Nach unten ist reichlich Luft: die Foliennummer beginnt erst bei
+17,17 cm.
+
+Warum im CODE und nicht in der Vorlage (Abweichung von der Regel in
+CLAUDE.md): Es geht um die POSITION einer Box, deren INHALT der Code
+ohnehin schreibt (das Stand-Datum, siehe fill_wertentwicklung_slide). Ein
+Eingriff deckt alle 16 Folien in sechs Vorlagen ab, die sonst einzeln in
+PowerPoint nachzuziehen wären — inklusive jeder künftigen Vorlage."""
 
 
 # ─── Asset-Gruppen (Reihenfolge in Tabelle + Ring) ──────────────────────────
@@ -2651,6 +2697,12 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         if quelle:
             set_shape_text_static(
                 quelle, f"Quelle: Eigene Berechnung, Stand {stand_date_str}")
+            # ── unter den Disclaimer rücken (BUGFIX 12.08.2026) ──
+            # Die Vorlagen-Position liegt IM Fußnotentext; die Quellenangabe
+            # wurde überdruckt. Nur die Oberkante wird gesetzt — links,
+            # Breite und Höhe bleiben, die Zeile steht weiter rechtsbündig
+            # unten rechts. Begründung und Messwerte: WE_QUELLE_TOP_CM.
+            quelle.top = Cm(WE_QUELLE_TOP_CM)
 
 
 def fill_zusammenstellung_slide(prs, slide_idx: int, df: pd.DataFrame,
