@@ -35,9 +35,10 @@ except ImportError as ex:
     sys.exit(0)
 
 from modules.analytics import (  # noqa: E402
-    calc_cagr, calc_daily_returns_after_fee, calc_max_drawdown,
-    calc_period_return, calc_period_return_after_fee, calc_sharpe_excess,
-    calc_vola, compute_performance_data, drawdown_from_index, has_benchmark,
+    annual_fee_to_daily_drag, annual_to_daily_rate, calc_cagr,
+    calc_daily_returns_after_fee, calc_max_drawdown, calc_period_return,
+    calc_period_return_after_fee, calc_sharpe_excess, calc_vola,
+    compute_performance_data, drawdown_from_index, has_benchmark,
     make_index_after_fee, make_index_from_returns,
 )
 
@@ -104,6 +105,24 @@ def schritt1_bausteine():
     # Eine nur steigende Reihe hat keinen Drawdown.
     f += _nah("calc_max_drawdown(steigend)",
               calc_max_drawdown([100.0, 101.0, 102.0]), 0.0)
+
+    # Annualisierter Satz → Tagessatz (Backlog E, 12.08.2026). 365 Tage
+    # aufgezinst muessen wieder den Jahressatz ergeben — sonst stimmt die
+    # Basis nicht (Kalendertage, nicht Handelstage).
+    tag = float(annual_to_daily_rate(0.03))
+    f += _nah("annual_to_daily_rate(0.03)", tag, 8.098629905317623e-05, 1e-18)
+    f += _nah("365 Tage zurueckgerechnet", (1 + tag) ** 365 - 1, 0.03, 1e-12)
+    f += _nah("0 % ergibt 0", float(annual_to_daily_rate(0.0)), 0.0)
+    # Derselbe Wert wie beim Honorar — die Mathematik ist identisch, nur die
+    # Groesse ist eine andere (der eine Satz wird abgezogen, der andere
+    # gutgeschrieben). Laufen die beiden auseinander, stimmt etwas nicht.
+    f += _ist("annual_fee_to_daily_drag == annual_to_daily_rate",
+              annual_fee_to_daily_drag(0.0155) == float(annual_to_daily_rate(0.0155)),
+              True)
+    # Reihe statt Einzelwert: der rf kommt als Zeitreihe.
+    reihe_tag = annual_to_daily_rate([0.03, 0.0, 0.025])
+    f += _ist("Reihe bleibt eine Reihe", len(reihe_tag), 3)
+    f += _nah("Reihe[0] == Einzelwert", reihe_tag[0], tag, 0.0)
 
     # Nach-Kosten-Renditen: jeder Tag traegt denselben Abzug.
     netto = calc_daily_returns_after_fee([0.01, 0.02], 0.0155)
@@ -327,12 +346,55 @@ def schritt5_streamlitfrei():
     return 0
 
 
+def schritt6_umrechnung_nur_einmal():
+    print("Schritt 6 — die 365-Umrechnung steht nur in analytics.py")
+    # Backlog E (12.08.2026): `(1 + x) ** (1/365) - 1` stand an vier Stellen
+    # — zweimal in analytics.py und zweimal in streamlit_app.py. Formelgleich
+    # und damit dasselbe Risiko wie bei der Honorar-Mathematik: Eine
+    # Korrektur haette die anderen drei nicht erreicht.
+    import re
+    muster = re.compile(r"\*\*\s*\(?\s*1(\.0)?\s*/\s*365")
+    erlaubt = os.path.join("modules", "analytics.py")
+
+    dateien = [os.path.join("streamlit_app.py")]
+    for name in sorted(os.listdir("modules")):
+        if name.endswith(".py"):
+            dateien.append(os.path.join("modules", name))
+
+    treffer = []
+    in_erlaubter_datei = 0
+    for pfad in dateien:
+        with open(pfad, encoding="utf-8") as fh:
+            for nr, zeile in enumerate(fh, start=1):
+                if zeile.lstrip().startswith("#") or not muster.search(zeile):
+                    continue
+                if os.path.normpath(pfad) == os.path.normpath(erlaubt):
+                    in_erlaubter_datei += 1
+                else:
+                    treffer.append(f"{pfad}:{nr}: {zeile.strip()}")
+
+    if in_erlaubter_datei != 1:
+        print(f"    FEHLER — in {erlaubt} steht die Umrechnung "
+              f"{in_erlaubter_datei}× statt genau einmal")
+        return 1
+    print(f"    OK — {erlaubt} enthaelt sie genau einmal")
+
+    if treffer:
+        print(f"    FEHLER — {len(treffer)} weitere Fundstelle(n):")
+        for t in treffer:
+            print(f"      ! {t}")
+        print("    annual_to_daily_rate aus modules/analytics.py benutzen.")
+        return 1
+    print(f"    OK — keine zweite Fundstelle in {len(dateien)} Dateien")
+    return 0
+
+
 def main():
     print("Pruefstein: modules/analytics.py\n")
     fehler = 0
     for schritt in (schritt1_bausteine, schritt2_degeneriert,
                     schritt3_has_benchmark, schritt4_vertrag,
-                    schritt5_streamlitfrei):
+                    schritt5_streamlitfrei, schritt6_umrechnung_nur_einmal):
         fehler += schritt()
         print()
     if fehler:

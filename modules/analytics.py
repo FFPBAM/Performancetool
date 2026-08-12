@@ -28,6 +28,46 @@ import pandas as pd
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sätze: annualisiert → täglich (365-Kalendertage-Basis)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def annual_to_daily_rate(annual_rate):
+    """Rechnet einen annualisierten Satz auf den Tagessatz um.
+
+    Formel: daily = (1 + annual)^(1/365) - 1
+
+    Nimmt einen einzelnen Wert ODER eine Reihe: Der Honorarsatz ist eine
+    Zahl, der risikofreie Zins kommt als Zeitreihe (ein annualisierter Wert
+    je Tag). Die Umrechnung ist in beiden Fällen dieselbe.
+
+    ZUSAMMENGEFÜHRT 12.08.2026 (Backlog E): Diese drei Zeilen standen an
+    vier Stellen — hier, in `calc_sharpe_excess` und zweimal in
+    `streamlit_app.py` (`aggregate_rf_geometric`, `make_index_from_rf`).
+    Formelgleich, und damit dasselbe Risiko wie bei der Honorar-Mathematik:
+    Eine Korrektur an einer Stelle hätte die anderen drei nicht erreicht.
+
+    WARUM DER HONORARSATZ TROTZDEM SEINEN EIGENEN NAMEN BEHÄLT: Die
+    Mathematik ist identisch, die Größen sind es nicht. Ein Honorar wird
+    ABGEZOGEN, ein Zins wird GUTGESCHRIEBEN. Wer im Code
+    `annual_to_daily_rate(fee)` liest, sieht dem Aufruf das Vorzeichen nicht
+    mehr an — deshalb ruft `annual_fee_to_daily_drag` diese Funktion nur auf,
+    statt zu verschwinden.
+
+    Args:
+        annual_rate: Annualisierter Satz als Dezimal (0.03 = 3 % p.a.),
+            einzeln oder als Sequence/Array/Series.
+
+    Returns:
+        Tagessatz — als np.float64 bei einem Einzelwert, sonst als Array.
+
+    Examples:
+        >>> round(float(annual_to_daily_rate(0.03)), 10)
+        8.09863e-05
+    """
+    return (1.0 + np.asarray(annual_rate, dtype=float)) ** (1.0 / 365.0) - 1.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Kosten-Modellierung (Honorarsatz → tägliche Belastung)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -46,7 +86,11 @@ def annual_fee_to_daily_drag(fee_pa_decimal: float) -> float:
         >>> round(annual_fee_to_daily_drag(0.012), 8)
         3.268e-05
     """
-    return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
+    # Dieselbe Umrechnung wie beim risikofreien Zins (siehe dort), aber mit
+    # sprechendem Namen: Diese Größe wird abgezogen, nicht gutgeschrieben.
+    # Bit-identisch zur früheren Fassung `(1.0 + fee) ** (1 / 365) - 1`
+    # (12.08.2026 an allen vorkommenden Sätzen nachgemessen).
+    return float(annual_to_daily_rate(fee_pa_decimal))
 
 
 def calc_daily_returns_after_fee(d_returns_decimal: Sequence[float],
@@ -233,7 +277,7 @@ def calc_sharpe_excess(daily_returns_after_fee: Sequence[float],
         else:
             rf_ser = rf_ser.reindex(range(len(rp)))
     rf_ann = rf_ser.fillna(0.0).to_numpy(dtype=float)
-    daily_rf = (1.0 + rf_ann) ** (1.0/365.0) - 1.0
+    daily_rf = annual_to_daily_rate(rf_ann)
     mask = ~np.isnan(rp)
     if mask.sum() < 2:
         return None

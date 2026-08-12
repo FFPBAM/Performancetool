@@ -35,6 +35,7 @@ from modules.shared import (
 )
 # Performance-Berechnungs-Funktionen (Single Source of Truth — siehe modules/analytics.py)
 from modules.analytics import (
+    annual_to_daily_rate,
     annual_fee_to_daily_drag as _ana_annual_fee_to_daily_drag,
     make_index_from_returns as _ana_make_index_from_returns,
     make_index_after_fee as _ana_make_index_after_fee,
@@ -141,7 +142,7 @@ def aggregate_rf_geometric(rf_annual_series, n_days):
     rf = pd.Series(rf_annual_series).dropna().to_numpy(dtype=float)
     if len(rf) == 0 or n_days <= 0:
         return None
-    daily = (1.0 + rf) ** (1.0/365.0) - 1.0
+    daily = annual_to_daily_rate(rf)
     growth = float(np.prod(1.0 + daily))
     if growth <= 0:
         return None
@@ -155,7 +156,7 @@ def make_index_from_rf(rf_annual_series, startwert=100.0):
     """UI-spezifisch: Baut einen Index aus täglich variablen rf-Werten.
     Jeder Tag verzinst sich mit seinem eigenen Tagessatz. Bleibt lokal."""
     rf = pd.Series(rf_annual_series).fillna(0).to_numpy(dtype=float)
-    daily = (1.0 + rf) ** (1.0/365.0) - 1.0
+    daily = annual_to_daily_rate(rf)
     return make_index_from_returns(daily, startwert)
 
 # -------------------------------------------------------------------------
