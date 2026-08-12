@@ -28,9 +28,19 @@ sys.path.insert(0, WURZEL)
 # portfolioanalyse (12.08.2026): Es ist ein privater Helfer der Konfiguration,
 # und ein privater Name gehoert nicht durch ein UI-Modul weitergereicht.
 # VORLAGEN_FAMILIEN bleibt bewusst ueber portfolioanalyse — so prueft der Test
-# genau den Weg, den auch der Export nimmt.
-from modules.portfolioanalyse import VORLAGEN_FAMILIEN  # noqa: E402
-from modules.vorlagen_config import _folien_config  # noqa: E402
+# genau den Weg, den auch der Export nimmt. Genau deshalb zieht dieser Test
+# streamlit herein: portfolioanalyse ist ein UI-Modul.
+#
+# ABBRUCH -> UEBERSPRUNGEN (12.08.2026): Bis heute war dies der einzige Test,
+# der ohne streamlit mit einem ModuleNotFoundError abbrach statt sich sauber
+# zu ueberspringen. In einer Umgebung ohne Pakete sah das aus wie ein echter
+# Fehlschlag. Alle anderen Suiten machen es so wie hier jetzt auch.
+try:
+    from modules.portfolioanalyse import VORLAGEN_FAMILIEN  # noqa: E402
+    from modules.vorlagen_config import _folien_config  # noqa: E402
+except ImportError as ex:
+    print(f"UEBERSPRUNGEN — Abhaengigkeit fehlt: {ex}")
+    sys.exit(0)
 
 # ── Referenz: die handgeschriebene Fassung vor der Umstellung ────────────
 THEMA_ORIGINAL = {

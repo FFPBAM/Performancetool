@@ -10,8 +10,9 @@ darf NIE als "nan", "None" oder "NaT" in ein Kundendokument geraten
 Genau daran hat es gefehlt: fmt_date_de(float('nan')) lieferte woertlich
 "nan", eine leere Excel-Zelle kommt naemlich als NaN an und nicht als None.
 
-Laeuft OHNE jede Installation. Schritt 5 braucht pandas und ueberspringt
-sich sonst selbst.
+Die Schritte 1-4 und 6 laufen OHNE jede Installation. Schritt 5 braucht
+pandas, Schritt 7 zusaetzlich streamlit (er importiert modules/shared.py);
+beide ueberspringen sich sauber, wenn das Paket fehlt.
 
     python tests/test_formats.py
 """
