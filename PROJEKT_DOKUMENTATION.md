@@ -1807,7 +1807,7 @@ Prüfstein: `tests/test_anlagekriterien.py` (Schritte 4, 4b, 9b).
 
 ---
 
-### 49. Die Ticks einer Datumsachse hängen am Achsen-Minimum, nicht am Kalender (BUG, NEU 12.08.2026) ⭐
+### 49. Die Ticks einer Achse hängen am Achsen-Minimum, nicht am Kalender (BUG, NEU 12.08.2026) ⭐
 
 Gemeldet aus der Praxis: In der ETF-Broschüre laufen die Daten bis Juli 2026,
 die Datumsachse zeigt aber **kein 2026**.
@@ -1866,15 +1866,43 @@ es **anlegen können**; und zwar an der vom Schema verlangten Stelle
 `minorUnit`, `minorTimeUnit`). Ein `SubElement()` hängt hinten an und landet
 damit hinter `minorTimeUnit` — die Datei ist dann für PowerPoint unlesbar.
 
+**(c) Dieselbe Falle steht senkrecht daneben.** Am selben Tag, nach dem Fix
+der Datumsachse, kam der zweite Hinweis: Auf den cVV-Folien fehlt die
+**100-%-Linie**. Ursache identisch — das Minimum wurde datenbasiert gesetzt
+(0,9), die Schrittweite kam unverändert aus der Vorlage (0,2), also lagen die
+Ticks bei 90/110/130 %. Die Bezugslinie, auf die sich *jede* Aussage der
+Folie stützt, kam auf der Achse **nicht vor**. Bei ESG/ETF/comdirect stand
+sie da — durch Zufall, weil deren Vorlagen 0,05 tragen.
+
+Regel für Achsen mit einem fachlichen Bezugswert: **Die Schrittweite muss ein
+Teiler des Bezugswerts sein, und das Minimum ein Vielfaches der Schrittweite.**
+Dann liegt der Bezugswert zwangsläufig auf dem Raster. Gewählt wird die
+feinste Stufe, die die Beschriftungsgrenze noch einhält — feiner heißt
+zugleich: weniger Leerraum unter der Kurve.
+
+Was dabei **nicht** geht: die Achse bei 100 % beginnen zu lassen. Jede
+Strategie war zeitweise darunter (cVV dynamic 85,3 %, cVV ausgewogen 91,4 %);
+ein Minimum von 100 % würde diese Drawdowns abschneiden — ein stiller
+Datenverlust in einem Kundendokument (§10.9). Der Wunsch „soll dort starten"
+wird stattdessen so weit erfüllt, wie es das Raster zulässt: bei cVV
+konservativ rückt die Achse von 90 % auf **95 %**.
+
+Nebenbei aufgefallen: Die alte Luft-Regel („klebt die Kurve oben, eine Stufe
+drauflegen") wird mit grobem Raster teuer — eine Stufe sind dann **zwanzig**
+leere Prozentpunkte. Luft ist deshalb ein fester kleiner Betrag (fünf
+Prozentpunkte), nicht eine Rastereinheit.
+
 **Übertragbar:** Wenn ein Renderer ein Raster aus einem Startwert ableitet,
 entscheidet der Startwert über **alle** Positionen. Die Frage ist nie „ist der
 Anfang richtig?", sondern „liegt das Raster dort, wo es gelesen werden soll?" —
 und das Ende ist meist wichtiger als der Anfang. Und: **Eine Prüfregel, die
 nur an den Rändern misst (min/max), sieht so ein Raster nie.** Der Prüfstein
-rechnet deshalb die Tickfolge nach, statt Achsengrenzen zu vergleichen.
+rechnet deshalb die Tickfolge nach, statt Achsengrenzen zu vergleichen. Genau
+daran hingen alle vier Funde dieses Tages.
 
-Prüfstein: `tests/test_datumsachse.py`. Konfiguration der Schrittweite:
-`DATUMSACHSE_STUFEN` im CONFIG-Block von `modules/chart_dynamik.py`.
+Prüfstein: `tests/test_chartachsen.py`. Konfiguration der Schrittweiten:
+`DATUMSACHSE_STUFEN` und `WERTACHSE_STUFEN` im CONFIG-Block von
+`modules/chart_dynamik.py`.
 
 ---
 
@@ -2897,6 +2925,59 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 ## 16. Changelog
 
+### 12.08.2026 (abends, 4) – Wertachse: die 100-%-Linie fehlte auf den cVV-Folien
+
+**Auslöser:** Philips Sichtprüfung des vorigen Fixes. „Die 100 % sollen bei
+der cVV in der Y-Achse dranstehen, und es soll dort starten, nicht mit dem
+kleinen Abstand."
+
+**Befund:** Dieselbe Mechanik wie waagerecht — das Minimum wurde datenbasiert
+gesetzt (0,9), die Schrittweite kam unverändert aus der Vorlage (0,2). Ticks
+also bei 90/110/130 %; die Linie, auf die sich jede Aussage der Folie bezieht,
+kam auf der Achse **nicht vor**. Bei ESG/ETF/comdirect stand sie da, weil
+deren Vorlagen zufällig 0,05 tragen.
+
+**Der Teil des Wunsches, der nicht geht — und warum.** „Bei 100 % starten"
+würde Kurve abschneiden: **Jede** Strategie war zeitweise darunter.
+
+| Strategie | tiefster Punkt |
+|---|---:|
+| cVV konservativ | 99,10 % |
+| cVV defensiv | 96,76 % |
+| cVV defensiv plus | 92,25 % |
+| cVV ausgewogen | 91,43 % |
+| cVV dynamic | 85,33 % |
+
+Ein Minimum von 100 % hätte diese Drawdowns unsichtbar gemacht — stiller
+Datenverlust in einem Kundendokument, §10.9. **Entschieden (Philip):** 100 %
+ist immer eine beschriftete Linie, die Achse beginnt auf der Rasterlinie
+direkt unter dem tiefsten Kurvenpunkt. Damit rückt sie so nah heran, wie es
+geht (cVV konservativ: von 90 % auf **95 %**), ohne etwas abzuschneiden.
+
+**Umsetzung:** `wert_raster` in `modules/chart_dynamik.py` — Schrittweite aus
+`WERTACHSE_STUFEN` (5/10/20/25/50/100 Prozentpunkte; **jede ein Teiler von
+100 %**, damit die Bezugslinie zwangsläufig auf dem Raster liegt), Minimum als
+Vielfaches davon, gewählt wird die feinste Stufe unter 13 Gitterlinien.
+`majorUnit` der `valAx` wird jetzt mitgesetzt statt aus der Vorlage übernommen.
+
+Dabei fiel die alte Luft-Regel auf („klebt die Kurve oben, eine Stufe
+drauflegen"): Bei grobem Raster sind das **zwanzig** leere Prozentpunkte über
+der Kurve. Luft ist jetzt ein fester kleiner Betrag von fünf Prozentpunkten.
+Zwei Charts profitieren sichtbar: ETF ausgewogen (140 % → 135 %) und
+comdirect 30 (125 % → 120 %).
+
+**Wirkung, Beispiele:** cVV konservativ 90–160 % Schritt 20 → **95–155 %
+Schritt 5** (Ticks 95/100/105/…); cVV ausgewogen 90–230 % Schritt 20 →
+**80–225 % Schritt 20** (Ticks 80/100/120/…).
+
+**Beweis:** Broschüren vorher/nachher verglichen — Abweichungen ausschließlich
+in den Chart-XML, dort je `c:min`, `c:max` und `c:majorUnit` der Wertachse.
+`test_chartachsen`, `test_export_smoke`, `test_trennstriche`,
+`test_benchmark_charts` grün, `pyflakes` über 33 Dateien bei 0. Der Prüfstein
+heißt seit dieser Runde `test_chartachsen.py` (vorher `test_datumsachse.py`) —
+er deckt beide Achsen ab, und ein Name, der nur die halbe Zusage nennt, führt
+in sechs Monaten in die Irre.
+
 ### 12.08.2026 (abends, 3) – Datumsachse: das aktuelle Jahr fehlte auf jeder Achse
 
 **Auslöser:** Hinweis eines Kollegen — in der ETF-Broschüre laufen die Daten
@@ -2946,7 +3027,7 @@ drei Elemente (`c:min`, `c:majorUnit`, `c:majorTimeUnit`) — sonst nichts.
 `test_export_smoke`, `test_trennstriche`, `test_benchmark_charts` und
 `test_folien_config` grün, `pyflakes` über alle 33 Dateien bei 0.
 
-**Prüfstein:** `tests/test_datumsachse.py`. Schritt 1 rechnet den Kern gegen
+**Prüfstein:** `tests/test_chartachsen.py`. Schritt 1 rechnet den Kern gegen
 dreizehn von Hand nachgerechnete Fälle (die acht echten Reihen plus
 Grenzfälle: ein einziger Datenpunkt, Spanne unter einem Monat, Beginn im
 Januar, genau auf der Stufengrenze) und braucht **keine Installation**;

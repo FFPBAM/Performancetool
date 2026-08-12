@@ -93,7 +93,8 @@ prüfte statt gegen eine Schwelle (#47).
   Achsen-Element, das eine von sechs Vorlagen nicht hat, macht aus
   `if el is not None` einen stillen Aussetzer — Elemente müssen **angelegt**
   werden können, in Schema-Reihenfolge. Prüfstein:
-  `tests/test_datumsachse.py`, Stellschrauben: `DATUMSACHSE_STUFEN`.
+  `tests/test_chartachsen.py`, Stellschrauben: `DATUMSACHSE_STUFEN` und
+  `WERTACHSE_STUFEN`.
 - **Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen.** Wo eine
   Strategie keine Anleihen hält, steht dort die **Liquiditätsgrenze**: `cVV
   dynamic` „max. 10 %", Pro und Pro Dividende „max. 15 %". Die Bank-Webseite
@@ -147,7 +148,7 @@ python tests/test_benchmark_charts.py        # Schritt 1 pandas, 2+3 + pptx/stre
 python tests/test_honorarsatz.py             # pandas + streamlit
 python tests/test_historie_ab.py             # pandas + streamlit
 python tests/test_folien_config.py           # pandas + streamlit
-python tests/test_datumsachse.py [<ordner>]  # Schritt 1 ohne jedes Paket
+python tests/test_chartachsen.py [<ordner>]  # Schritte 1+2 ohne jedes Paket
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 ```

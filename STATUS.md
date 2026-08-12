@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 53 Commits vor `main`
+· 54 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -118,7 +118,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Prüfsteine für die Rechenmodule** | *(12.08.)* Backlog D erledigt: `analytics` und `formats` hatten keine eigenen Tests, obwohl jede Kennzahl jeder Kundenfolie durch sie läuft. **Drei Fehler dabei gefunden** — siehe unten. |
 | **Eine Funktion, ein Ort** | *(12.08.)* Backlog E, F und der Wrapper-Block in einem Zug. Wichtigster Fund: `shared.fmt_date_de` warf bei `pd.NaT` eine **ValueError** — die Oberfläche wäre abgestürzt, wo sie „–" hätte zeigen sollen. Dazu die rf-Umrechnung (vier Stellen) und zehn Durchreicher. |
 | **`pyflakes` sauber** | *(12.08.)* Backlog 7a: 16 Meldungen auf 0. Kein Laufzeitfehler darunter — aber die Prüfung wird jetzt wieder gelesen. Zwei Funde mit Substanz: die tote `holeSize`-Kette in beiden Ring-Funktionen und ein `is_bond`, das laut Historie einmal zwei Abfragen steuerte. |
-| **Datumsachse** | *(12.08.)* Hinweis eines Kollegen: Die ETF-Broschüre zeigt kein 2026, obwohl die Daten bis Juli 2026 laufen. Am Artefakt nachgemessen: **21 Datumsachsen, keine einzige in Ordnung.** Details unten. |
+| **Chart-Achsen** | *(12.08.)* Hinweis eines Kollegen: Die ETF-Broschüre zeigt kein 2026, obwohl die Daten bis Juli 2026 laufen. Am Artefakt nachgemessen: **21 Datumsachsen, keine einzige in Ordnung.** Bei der Sichtprüfung kam die Wertachse dazu — auf den cVV-Folien fehlte die **100-%-Linie**. Gleicher Mechanismus, Details unten. |
 | **Anlagekriterien für Thema** | *(12.08.)* Die Excel kannte nur 14 Strategien — weil sie aus den PPTX-Vorlagen abgeleitet wurde und die Thema-Vorlage keinen Kriterien-Kasten hat. Offensiv, Pro und Pro Dividende sind jetzt drin (Werte von der Bank-Webseite) und erscheinen **im Tool**; die Broschüren bleiben byte-identisch. **17 von 19** — SCHWEIZ fehlt noch. |
 
 ### Die Datumsachse: gemeldet war eine Achse, betroffen waren alle
@@ -167,9 +167,41 @@ in der **Zukunft** nicht.
 Die Lehre steht als Transferwissen **#49**: Wenn ein Renderer ein Raster aus
 einem Startwert ableitet, entscheidet der Startwert über *alle* Positionen —
 und das Ende ist wichtiger als der Anfang. Prüfstein
-`tests/test_datumsachse.py`; alle sieben Broschüren vorher/nachher verglichen:
+`tests/test_chartachsen.py`; alle sieben Broschüren vorher/nachher verglichen:
 2056 ZIP-Einträge, 55 Abweichungen, ausschließlich die 21 Chart-XML und die
 Zeitstempel.
+
+### Dieselbe Falle stand senkrecht daneben: die fehlende 100-%-Linie
+
+Bei der Sichtprüfung des Datumsachsen-Fixes fiel Philip auf, dass die
+cVV-Folien **keine 100-%-Linie** haben. Ursache identisch: Das Minimum war
+datenbasiert (90 %), die Schrittweite kam unverändert aus der Vorlage (20) —
+Ticks also bei 90/110/130 %. Die Bezugslinie, auf die sich jede Aussage der
+Folie stützt, kam auf der Achse nicht vor. Bei ESG/ETF/comdirect stand sie da,
+weil deren Vorlagen zufällig 5 tragen.
+
+Der zweite Teil des Wunsches — „soll auch dort starten" — geht **nicht**:
+Jede Strategie war zeitweise unter 100 % (cVV dynamic 85,3 %, ausgewogen
+91,4 %, selbst konservativ 99,1 %). Eine Achse ab 100 % hätte diese Drawdowns
+abgeschnitten; das wäre ein stiller Datenverlust in einem Kundendokument
+(§10.9). Stattdessen liegt 100 % jetzt **immer** auf dem Raster, und die
+Achse beginnt auf der Rasterlinie direkt unter dem tiefsten Kurvenpunkt —
+also so dicht, wie es ohne Abschneiden geht:
+
+| Chart | vorher | jetzt |
+|---|---|---|
+| cVV konservativ | 90–160 %, Ticks 90/110/130/150 | **95–155 %, Ticks 95/100/105/…** |
+| cVV ausgewogen | 90–230 %, Ticks 90/110/130/… | **80–225 %, Ticks 80/100/120/…** |
+| ETF ausgewogen | 90–140 % | 90–135 % |
+| comdirect 30 | 95–125 % | 95–120 % |
+
+Die letzten beiden Zeilen sind ein Nebenfund: Die alte Luft-Regel legte, wenn
+die Kurve oben an einer Linie klebt, **eine ganze Rasterstufe** drauf — bei
+grobem Raster zwanzig leere Prozentpunkte. Jetzt sind es feste fünf.
+
+Der Prüfstein heißt seit dieser Runde `test_chartachsen.py`: Er deckt beide
+Achsen ab, und ein Name, der nur die halbe Zusage nennt, führt in sechs
+Monaten in die Irre.
 
 ### Die drei Funde der Testrunde (Backlog D) — alle aus Grenzfällen
 
@@ -263,7 +295,7 @@ Der Schalter hat bewusst den Standardwert **True**: nur ein ausdrückliches
 `has_benchmark=False` lässt Inhalte verschwinden. Ein fehlender Schlüssel darf
 nicht still Text aus einer Broschüre löschen.
 
-### Sichtprüfung in echtem PowerPoint — ERLEDIGT
+### Sichtprüfung in echtem PowerPoint — bis auf die Wertachse erledigt
 
 Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
 
@@ -274,10 +306,15 @@ Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
   heikelste, weil dort eine **falsche Sachaussage** in einem Kundendokument
   stand (die Fußnote nannte die Benchmark einer fremden Strategie).
 
-**Neu offen seit dem 12.08.2026 (abends):** die Datumsachse — siehe Punkt 0
-unter „Offene Punkte". Der Fund kam übrigens genau aus dieser Richtung: Kein
-Test hat ihn gefunden, sondern ein Kollege, der die Achse mit den Daten
-verglichen hat. Das Auge bleibt unersetzlich.
+- **12.08.2026 (abends)** — Datumsachse: Philip hat den Fix am Endprodukt
+  gesichtet, die Achsen sitzen. **Dabei kam die Wertachse als neuer Befund
+  heraus** (fehlende 100-%-Linie) — die steht noch aus, siehe Punkt 0 unter
+  „Offene Punkte".
+
+Beide Funde dieses Abends kamen aus dem **Auge**, nicht aus einem Test: erst
+ein Kollege, der die Datumsachse mit den Daten verglich, dann Philip an der
+frisch korrigierten Broschüre. Die Methode hat sie danach vervierfacht — aber
+gesehen hat sie niemand am Bildschirm des Testlaufs.
 
 ### Nach dem Merge noch testen (in der App)
 
@@ -307,7 +344,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 % — fängt das stille Zurückfallen auf 0 % ab; SCHWEIZ auf 1,55 % festgenagelt |
 | `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
 | `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
-| `test_datumsachse.py` | **nichts** (Schritt 1); Schritt 2 **+ python-pptx, streamlit** | Schritt 1 rechnet `achsen_raster` gegen 13 von Hand nachgerechnete Fälle nach (acht echte Reihen plus Grenzfälle); Schritt 2 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach** — der letzte Tick muss im Jahr des letzten Datenpunkts liegen, nichts abschneiden, nichts in die Zukunft reichen |
+| `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -326,7 +363,7 @@ python tests/test_benchmark_charts.py
 python tests/test_honorarsatz.py
 python tests/test_historie_ab.py
 python tests/test_folien_config.py
-python tests/test_datumsachse.py [C:\pfad\zur\ausgabe]
+python tests/test_chartachsen.py [C:\pfad\zur\ausgabe]
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
@@ -338,7 +375,7 @@ dem System-Python gestartet (hat pandas und numpy, aber **kein** streamlit und
 | Verhalten ohne streamlit/pptx | Suiten |
 |---|---|
 | laufen vollständig durch | `test_analytics`, `test_formats`, `test_kosten_mathematik`, `test_benchmark_erkennung`, `test_streamlit_api`, `test_keine_piktogramme` |
-| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_datumsachse` |
+| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_chartachsen` |
 | überspringen sich ganz (Rückgabewert 0) | `test_bedienung`, `test_historie_ab`, `test_honorarsatz`, `test_export_smoke`, `test_trennstriche`, `test_folien_config` |
 | **brechen ab** | keine |
 
@@ -387,11 +424,12 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
 **Es sind nur noch vier — und alle vier liegen bei Philip:**
 
-0. **Sichtprüfung der Datumsachse in echtem PowerPoint** (#16/#28), drei
-   Stichproben genügen und decken alle drei Mechanismen ab: **ETF**
-   (Jahresschritt, „Jul/26" muss dastehen), **SCHWEIZ** (Halbjahresschritt
-   statt 47 Monatsticks) und **cVV Folie 19** (der `majorUnit=12`-Fund, vorher
-   zwei Beschriftungen). Broschüren dafür einfach neu erzeugen.
+0. **Sichtprüfung der Wertachse in echtem PowerPoint** (#16/#28). Die
+   Datumsachse ist am 12.08.2026 gesichtet und in Ordnung; die Wertachse kam
+   danach dazu und steht noch aus. Drei Stichproben genügen: **cVV
+   konservativ** (Achse 95–155 %, die 100 % muss dastehen), **cVV ausgewogen**
+   (80–225 %, Ticks 80/100/120/…) und **ETF ausgewogen** (weniger Leerraum
+   über der Kurve). Broschüren dafür einfach neu erzeugen.
 1. **PR mergen** — alles andere hängt daran.
 2. **Anlagekriterien SCHWEIZ liefern** (Backlog G, neu 12.08.2026). Seit dem
    12.08. sind 17 der 19 Strategien erfasst; `Schweiz_substanzorientiert` und

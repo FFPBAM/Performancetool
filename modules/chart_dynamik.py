@@ -95,6 +95,20 @@ LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
 DATUMSACHSE_STUFEN      = ((36, 3), (84, 6))   # <=3 Jahre: Quartal, <=7: Halbjahr
 DATUMSACHSE_SCHRITT_LANG = 12                  # darüber: Jahresschritt
 
+# ── Wertachse der Linien-Charts (NEU 12.08.2026) ───────────────────────────
+# Mögliche Abstände der Gitterlinien, von fein nach grob. JEDER Wert ist ein
+# Teiler von 1,0 — nur so liegt die 100-%-Linie zwangsläufig auf dem Raster
+# (Wunsch Philip 12.08.2026), und jeder ist ein Vielfaches von 0,05, damit
+# das Achsenformat "0%" keine krummen Beschriftungen erzeugt.
+# Genommen wird die feinste Stufe, die noch unter MAX_TICKS bleibt: je feiner,
+# desto dichter rückt die Achse an den tiefsten Kurvenpunkt.
+WERTACHSE_STUFEN    = (0.05, 0.1, 0.2, 0.25, 0.5, 1.0)
+WERTACHSE_MAX_TICKS = 13
+# Luft über der höchsten Linie, falls sie an der Oberkante klebt: fünf
+# Prozentpunkte — die feinste Rasterstufe. Bewusst NICHT "eine Stufe", denn
+# das wären bei grobem Raster zwanzig leere Prozentpunkte über der Kurve.
+WERTACHSE_LUFT      = 0.05
+
 # ── Familien-spezifische Ring-Optik (NEU 27.07.2026) ────────────────────────
 # NUR die hier gelisteten Familien weichen von den globalen Defaults ab; alle
 # anderen nutzen die Defaults → deren Ringe bleiben UNVERÄNDERT. Steuerbar:
@@ -275,6 +289,16 @@ _DATEAX_ORDNUNG = (
 )
 
 
+# Dasselbe für <c:valAx> (CT_ValAx). Unterscheidet sich am Ende von CT_DateAx:
+# dort crossBetween/majorUnit/minorUnit/dispUnits statt der Zeit-Elemente.
+_VALAX_ORDNUNG = (
+    "axId", "scaling", "delete", "axPos", "majorGridlines", "minorGridlines",
+    "title", "numFmt", "majorTickMark", "minorTickMark", "tickLblPos", "spPr",
+    "txPr", "crossAx", "crosses", "crossesAt", "crossBetween", "majorUnit",
+    "minorUnit", "dispUnits", "extLst",
+)
+
+
 def _monatsindex(d):
     """Datum -> fortlaufende Monatsnummer. Rechnet Monatsarithmetik ohne
     Jahresüberlauf-Sonderfälle."""
@@ -286,7 +310,7 @@ def _monatsanfang(index):
     return dt.date(index // 12, index % 12 + 1, 1)
 
 
-def _ax_wert_setzen(ax, tag, wert):
+def _ax_wert_setzen(ax, tag, wert, ordnung=_DATEAX_ORDNUNG):
     """Setzt <c:TAG val="WERT"/> in einer Achse — und legt das Element an der
     vom Schema verlangten Stelle an, falls es fehlt.
 
@@ -299,18 +323,62 @@ def _ax_wert_setzen(ax, tag, wert):
     el = ax.find(_q(tag))
     if el is None:
         el = etree.Element(_q(tag))
-        rang = _DATEAX_ORDNUNG.index(tag)
+        rang = ordnung.index(tag)
         for kind in ax:
             if not isinstance(kind.tag, str):
                 continue                       # Kommentare o. Ä. überspringen
             name = etree.QName(kind).localname
-            if name in _DATEAX_ORDNUNG and _DATEAX_ORDNUNG.index(name) > rang:
+            if name in ordnung and ordnung.index(name) > rang:
                 kind.addprevious(el)
                 break
         else:
             ax.append(el)
     el.set("val", str(wert))
     return el
+
+
+def wert_raster(dmin, dmax):
+    """Grenzen und Tick-Abstand der WERTACHSE eines Index-Charts.
+
+    Gibt (min, max, schritt) als Dezimalwerte zurück (1.0 = 100 %).
+
+    Dasselbe Thema wie bei der Datumsachse, nur senkrecht: PowerPoint hängt
+    die Ticks ans Achsen-MINIMUM. Bis zum 12.08.2026 wurde nur das Minimum
+    datenbasiert gesetzt (auf den 10-%-Schritt unter dem Tiefpunkt), die
+    Schrittweite blieb die der Vorlage. Bei den cVV-Folien traf das
+    aufeinander: Minimum 0,9 und Schritt 0,2 ergeben Ticks bei
+    90/110/130 % — die **100-%-Linie fehlte**, obwohl sich jede Aussage der
+    Folie auf sie bezieht (Philip, 12.08.2026).
+
+    Regel deshalb: Die Schrittweite ist ein Teiler von 1,0 (5/10/20/25/50/
+    100 Prozentpunkte), und das Minimum liegt auf einem Vielfachen davon.
+    Damit ist 100 % **immer** eine beschriftete Linie. Gewählt wird die
+    FEINSTE Stufe, die noch unter der Beschriftungsgrenze bleibt — feiner
+    heißt: das Minimum rückt näher an den Tiefpunkt heran, der leere Streifen
+    unter der Kurve wird kleiner.
+
+    Die Achse beginnt bewusst NICHT bei 100 %: Jede Strategie war zeitweise
+    darunter (cVV dynamic bei 85,3 %, cVV ausgewogen bei 91,4 %). Ein
+    Achsenminimum von 100 % würde diese Drawdowns abschneiden — ein stiller
+    Datenverlust in einem Kundendokument (§10.9, Anti-Cherry-Picking).
+    """
+    schritt = WERTACHSE_STUFEN[-1]
+    ymin = ymax = None
+    for stufe in WERTACHSE_STUFEN:
+        schritt = stufe
+        ymin = math.floor(dmin / stufe + 1e-9) * stufe
+        # 100 % ist die Bezugslinie und gehört immer aufs Raster. Der Fall
+        # "Kurve nie unter 100 %" kommt heute nicht vor (jede Reihe startet
+        # per Definition bei 1.0), wäre aber genau der, in dem die Linie
+        # verschwände.
+        ymin = min(ymin, 1.0)
+        ymax = math.ceil(dmax / stufe - 1e-9) * stufe
+        if ymax - dmax < stufe * 0.2:   # Kurve klebt sonst an der Oberkante
+            ymax += WERTACHSE_LUFT
+        # +1e-6 gegen Fließkomma: 0.6/0.05 ergibt 11.999999… statt 12.
+        if int((ymax - ymin) / stufe + 1e-6) + 1 <= WERTACHSE_MAX_TICKS:
+            break
+    return round(ymin, 2), round(ymax, 2), schritt
 
 
 def achsen_raster(erster_tag, letzter_tag):
@@ -430,23 +498,20 @@ def datumsachse_an_daten(chart):
     yvals = [float(v.text)
              for val in root.findall(".//" + _q("val"))
              for v in val.iter(_q("v")) if v.text]
-    if yvals:
-        import math as _m
-        dmin, dmax = min(yvals), max(yvals)
-        ymin = _m.floor(dmin * 10) / 10.0          # z.B. 0.897 -> 0.8
-        ymax = _m.ceil(dmax * 10) / 10.0           # z.B. 2.872 -> 2.9
-        # Luft über der höchsten Linie: klebt sie an der Achsengrenze,
-        # eine 10%-Stufe drauflegen.
-        if ymax - dmax < 0.02:
-            ymax += 0.1
-        vax = root.find(".//" + _q("valAx"))
-        if vax is not None:
-            vsc = vax.find(_q("scaling"))
-            for tag, val in (("max", ymax), ("min", ymin)):
-                el = vsc.find(_q(tag))
-                if el is None:
-                    el = etree.SubElement(vsc, _q(tag))
-                el.set("val", f"{val:.2f}")
+    vax = root.find(".//" + _q("valAx"))
+    if yvals and vax is not None:
+        ymin, ymax, yschritt = wert_raster(min(yvals), max(yvals))
+        vsc = vax.find(_q("scaling"))
+        for tag, val in (("max", ymax), ("min", ymin)):
+            el = vsc.find(_q(tag))
+            if el is None:
+                el = etree.SubElement(vsc, _q(tag))
+            el.set("val", f"{val:.2f}")
+        # Auch hier gilt: Grenzen ohne Schrittweite reichen nicht. Die
+        # cVV-Vorlage trägt majorUnit=0.2; zusammen mit einem Minimum von 0.9
+        # ergab das Ticks bei 90/110/130 % — die 100-%-Linie, auf die sich
+        # jede Aussage der Folie bezieht, kam auf der Achse NICHT vor.
+        _ax_wert_setzen(vax, "majorUnit", f"{yschritt:.2f}", _VALAX_ORDNUNG)
     return (lo, hi)
 
 

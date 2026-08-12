@@ -1,7 +1,15 @@
-"""Regressionstest: die Datumsachse zeigt den letzten Datenzeitraum (12.08.2026).
+"""Regressionstest: BEIDE Achsen der Linien-Charts (12.08.2026).
 
-Gemeldet wurde: In der ETF-Broschuere laufen die Daten bis Juli 2026, die
-Datumsachse endet aber bei "Dez/25" — 2026 kommt auf der Achse nicht vor.
+Zwei Meldungen aus der Praxis, ein Mechanismus — PowerPoint haengt die Ticks
+einer Achse ans ACHSEN-MINIMUM und zaehlt in festen Schritten weiter:
+
+  * waagerecht: In der ETF-Broschuere laufen die Daten bis Juli 2026, die
+    Datumsachse endet aber bei "Nov/25" — 2026 kommt nicht vor.
+  * senkrecht:  Bei den cVV-Folien fehlt die 100-%-Linie. Minimum 0,9 und
+    Schrittweite 0,2 (aus der Vorlage) ergeben Ticks bei 90/110/130 %,
+    obwohl sich jede Aussage der Folie auf die 100 % bezieht.
+
+Der erste Teil steht ausfuehrlich unten, der zweite in Schritt 3.
 
 URSACHE. PowerPoint setzt die Ticks einer Datumsachse beim ACHSEN-MINIMUM an
 und zaehlt in Schritten von majorUnit x majorTimeUnit weiter — NICHT an
@@ -27,20 +35,22 @@ Zwei weitere Fehler derselben Stelle, die dieser Test mit abdeckt:
   * majorTimeUnit fehlt in Vorlage_comdirect.pptx ganz. Wegen
     "if mtu is not None" lief die Anpassung dort ueberhaupt nicht.
 
-Geprueft wird in zwei Schritten:
+Geprueft wird in drei Schritten:
 
   Schritt 1 (ohne Installation) — der Rechenkern achsen_raster gegen von Hand
                      nachgerechnete Faelle, dazu die Grenzfaelle (ein
                      Datenpunkt, Beginn exakt im Januar, Spanne unter einem
                      Monat).
-  Schritt 2 (+ python-pptx, streamlit) — am ECHTEN Artefakt: je Familie eine
-                     gebaute Broschuere, jedes Chart mit Datumsachse
-                     nachgerechnet. Der letzte Tick muss im Jahr des letzten
-                     Datenpunkts liegen.
+  Schritt 2 (ohne Installation) — dasselbe fuer wert_raster: 100 % liegt
+                     IMMER auf dem Raster, und kein Kurvenpunkt faellt aus
+                     der Achse.
+  Schritt 3 (+ python-pptx, streamlit) — am ECHTEN Artefakt: je Familie eine
+                     gebaute Broschuere, beide Achsen jedes Linien-Charts
+                     nachgerechnet.
 
-Ohne pptx/streamlit wird Schritt 2 sauber uebersprungen.
+Ohne pptx/streamlit wird Schritt 3 sauber uebersprungen.
 
-    python tests/test_datumsachse.py [ausgabeordner]
+    python tests/test_chartachsen.py [ausgabeordner]
 
 Rueckgabewert 0 = bestanden, 1 = fehlgeschlagen.
 """
@@ -56,7 +66,7 @@ sys.path.insert(0, WURZEL)
 sys.path.insert(0, os.path.join(WURZEL, "tests"))
 os.chdir(WURZEL)   # Vorlage/ und Daten/ werden relativ geladen
 
-from modules.chart_dynamik import achsen_raster  # noqa: E402
+from modules.chart_dynamik import achsen_raster, wert_raster  # noqa: E402
 
 NS_C = {"c": "http://schemas.openxmlformats.org/drawingml/2006/chart"}
 EPOCHE = dt.date(1899, 12, 30)      # Excel-Seriennummer 0
@@ -182,9 +192,86 @@ def _pruefe_rechenkern():
 
 # ───────────────────────────── Schritt 2 ──────────────────────────────────
 
+# Die gemessenen Wertebereiche der 21 Linien-Charts (Datenstand 260721) und
+# was die Achse daraus machen soll. Sollwerte von Hand nachgerechnet.
+#
+#   (Bezeichnung, tiefster Kurvenpunkt, hoechster, Soll-min, Soll-max, Schritt)
+WERT_FAELLE = [
+    # Der gemeldete Fall: Ticks lagen bei 90/110/130 %, die 100 % fehlte.
+    ("cVV konservativ",  0.9910, 1.5161, 0.95, 1.55, 0.05),
+    ("cVV defensiv",     0.9676, 1.8353, 0.90, 1.90, 0.10),
+    # Hoechststand 218,65 % dicht unter der Rasterlinie 220 % -> fuenf
+    # Prozentpunkte Luft, NICHT eine ganze Stufe (das waeren 240 %).
+    ("cVV ausgewogen",   0.9143, 2.1865, 0.80, 2.25, 0.20),
+    ("cVV defensiv+",    0.9225, 2.5044, 0.80, 2.60, 0.20),
+    ("cVV dynamic",      0.8533, 1.8145, 0.80, 1.90, 0.10),
+    ("cVV Vergleich",    0.9118, 2.5498, 0.80, 2.60, 0.20),
+    ("ESG defensiv",     0.9187, 1.1580, 0.90, 1.20, 0.05),
+    ("ESG offensiv",     0.9471, 1.6618, 0.90, 1.70, 0.10),
+    ("ETF ausgewogen",   0.9496, 1.3354, 0.90, 1.35, 0.05),
+    ("Thema Offensiv",   0.8940, 2.9526, 0.80, 3.00, 0.20),
+    ("Pro",              0.9592, 1.6901, 0.90, 1.75, 0.10),
+    ("comdirect 30",     0.9976, 1.1844, 0.95, 1.20, 0.05),
+    # ── Grenzfaelle ────────────────────────────────────────────────────────
+    # Kurve endet exakt auf einer Rasterlinie -> Luft, sonst klebt sie oben.
+    ("Hoechststand exakt auf dem Raster", 0.9500, 1.2000, 0.95, 1.25, 0.05),
+    # Fast keine Bewegung -> feinstes Raster, Achse dicht an der Kurve.
+    ("kaum Bewegung",    0.9990, 1.0050, 0.95, 1.05, 0.05),
+    # Extrem gestiegen: Bei zehnfachem Anstieg wird das Raster so grob, dass
+    # die Achse bei 0 % beginnt — 100 % liegt trotzdem darauf. (Nicht 9.8
+    # als Hoechststand: der laege exakt auf der Luft-Schwelle, und der Fall
+    # pruefte dann Fliesskomma-Glueck statt der Regel.)
+    ("Verzehnfachung",   0.9000, 9.5000, 0.00, 10.0, 1.00),
+]
+
+
+def _pruefe_wertkern():
+    print("\n2. Rechenkern wert_raster (ohne PowerPoint)")
+    kopf = (f"   {'Fall':34s} {'Achse ab':>9s} {'bis':>6s} {'Schritt':>8s} "
+            f"{'n':>3s} {'100%?':>6s}  Ergebnis")
+    print(kopf)
+    print("   " + "-" * (len(kopf) - 3))
+
+    fehler = 0
+    for (name, dmin, dmax, s_min, s_max, s_schritt) in WERT_FAELLE:
+        ymin, ymax, schritt = wert_raster(dmin, dmax)
+        n = int((ymax - ymin) / schritt + 1e-6) + 1
+        # Liegt 1.0 auf dem Raster? (Vielfaches des Schritts ab dem Minimum.)
+        stufen_bis_100 = (1.0 - ymin) / schritt
+        auf_raster = (abs(stufen_bis_100 - round(stufen_bis_100)) < 1e-6
+                      and ymin <= 1.0 <= ymax)
+
+        ok = (abs(ymin - s_min) < 1e-9 and abs(ymax - s_max) < 1e-9
+              and abs(schritt - s_schritt) < 1e-9 and auf_raster)
+        # Nichts abschneiden — das ist der Grund, warum die Achse NICHT bei
+        # 100 % beginnt (jede Strategie war zeitweise darunter).
+        if ymin > dmin or ymax < dmax:
+            ok = False
+        fehler += 0 if ok else 1
+        print(f"   {name[:34]:34s} {ymin*100:8.1f}% {ymax*100:5.0f}% "
+              f"{schritt*100:7.1f}% {n:3d} {('ja' if auf_raster else 'NEIN'):>6s}  "
+              f"{'OK' if ok else 'FEHLER'}")
+        if not ok:
+            print(f"        erwartet: {s_min} .. {s_max}, Schritt {s_schritt}")
+    return fehler
+
+
+# ───────────────────────────── Schritt 3 ──────────────────────────────────
+
 def _achsen_befund(chart_shape):
-    """Liest je Datumsachse des Charts, was tatsaechlich in der XML steht."""
+    """Liest beide Achsen des Charts so, wie sie in der XML stehen."""
     cs = chart_shape.chart._chartSpace
+
+    def _zahl(el, name):
+        k = el.find(name, NS_C) if el is not None else None
+        return float(k.get("val")) if k is not None else None
+
+    # Wertachse: je Chart eine, gilt fuer alle Serien.
+    ywerte = [float(v.text) for val in cs.findall(".//c:val", NS_C)
+              for v in val.iter(f"{{{NS_C['c']}}}v") if v.text]
+    vax = cs.find(".//c:valAx", NS_C)
+    vsc = vax.find("c:scaling", NS_C) if vax is not None else None
+
     raus = []
     for ax in cs.findall(".//c:dateAx", NS_C):
         werte = []
@@ -204,8 +291,33 @@ def _achsen_befund(chart_shape):
             "max": _d(mx.get("val")) if mx is not None else None,
             "major_unit": mu.get("val") if mu is not None else None,
             "major_time_unit": mtu.get("val") if mtu is not None else None,
+            "y_tief": min(ywerte) if ywerte else None,
+            "y_hoch": max(ywerte) if ywerte else None,
+            "y_min": _zahl(vsc, "c:min"),
+            "y_max": _zahl(vsc, "c:max"),
+            "y_schritt": _zahl(vax, "c:majorUnit"),
         })
     return raus
+
+
+def _wertachse_maengel(b):
+    """Die drei Zusagen an die Wertachse: 100 % steht drauf, nichts wird
+    abgeschnitten, die Zahl der Gitterlinien bleibt lesbar."""
+    if b["y_tief"] is None:
+        return []
+    if b["y_min"] is None or b["y_max"] is None or b["y_schritt"] is None:
+        return ["Wertachse ohne Grenzen oder Schrittweite"]
+    maengel = []
+    stufen = (1.0 - b["y_min"]) / b["y_schritt"]
+    if not (b["y_min"] <= 1.0 <= b["y_max"]
+            and abs(stufen - round(stufen)) < 1e-6):
+        maengel.append("100 % liegt nicht auf dem Raster")
+    if b["y_min"] > b["y_tief"] or b["y_max"] < b["y_hoch"]:
+        maengel.append("Wertachse schneidet die Kurve ab")
+    n = int((b["y_max"] - b["y_min"]) / b["y_schritt"] + 1e-6) + 1
+    if not MIN_TICKS <= n <= MAX_TICKS:
+        maengel.append(f"{n} Gitterlinien")
+    return maengel
 
 
 def _pruefe_datei(pfad, etikett):
@@ -253,18 +365,22 @@ def _pruefe_datei(pfad, etikett):
                     maengel.append(f"{len(ticks)} Beschriftungen")
                 if vorlauf >= schritt:
                     maengel.append(f"{vorlauf} Monate Vorlauf")
+                maengel += _wertachse_maengel(b)
 
                 ok = not maengel
                 fehler += 0 if ok else 1
                 schritt_txt = (f"{b['major_unit']} Jahr(e)"
                                if b["major_time_unit"] == "years"
                                else f"{b['major_unit']} Monate")
+                y_txt = ("-" if b["y_min"] is None
+                         else f"{b['y_min']*100:.0f}-{b['y_max']*100:.0f}%/"
+                              f"{b['y_schritt']*100:.0f}")
                 print(f"   {etikett:12s} {nr:3d} "
                       f"{b['letzt'].isoformat():>10s} "
                       f"{b['min'].isoformat():>10s} {vorlauf:4d}M "
                       f"{schritt_txt:>9s} "
                       f"{(ticks[-1].isoformat() if ticks else '-'):>12s} "
-                      f"{len(ticks):3d}  {'OK' if ok else 'FEHLER'}")
+                      f"{len(ticks):3d} {y_txt:>13s}  {'OK' if ok else 'FEHLER'}")
                 if maengel:
                     print(f"        {'; '.join(maengel)}")
     return geprueft, fehler
@@ -280,7 +396,7 @@ THEMA_ZUSATZ = [
 
 
 def _pruefe_artefakt(ausgabe):
-    print("\n2. Wirkung am echten Artefakt (gebaute Broschueren)")
+    print("\n3. Wirkung am echten Artefakt (gebaute Broschueren)")
     # find_spec statt import: pyflakes kennt kein noqa, und ein importierter,
     # aber hier nicht benutzter Name waere eine Meldung (_pruefe_datei
     # importiert Presentation selbst).
@@ -302,7 +418,7 @@ def _pruefe_artefakt(ausgabe):
     d = _daten()
     kopf = (f"   {'Broschuere':12s} {'Fo':>3s} {'Daten bis':>10s} "
             f"{'Achse ab':>10s} {'Vorl.':>5s} {'Schritt':>9s} "
-            f"{'letzter Tick':>12s} {'n':>3s}  Ergebnis")
+            f"{'letzter Tick':>12s} {'n':>3s} {'Wertachse':>13s}  Ergebnis")
     print(kopf)
     print("   " + "-" * (len(kopf) - 3))
 
@@ -366,13 +482,15 @@ def main():
                else tempfile.mkdtemp(prefix="ffpb_datumsachse_"))
     os.makedirs(ausgabe, exist_ok=True)
 
-    fehler = _pruefe_rechenkern() + _pruefe_artefakt(ausgabe)
+    fehler = (_pruefe_rechenkern() + _pruefe_wertkern()
+              + _pruefe_artefakt(ausgabe))
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
         return 1
     print("BESTANDEN — jede Datumsachse beschriftet den letzten Datenzeitraum,")
-    print("            schneidet nichts ab und bleibt lesbar.")
+    print("            jede Wertachse zeigt die 100-%-Linie, keine schneidet")
+    print("            etwas ab, beide bleiben lesbar.")
     return 0
 
 
