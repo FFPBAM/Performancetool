@@ -1,11 +1,11 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 51 Commits vor `main`
+· 52 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
-`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#47) — hier nur der Zustand.
+`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#48) — hier nur der Zustand.
 
 ---
 
@@ -123,10 +123,10 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 ### Die drei Funde der Testrunde (Backlog D) — alle aus Grenzfällen
 
 Die neuen Prüfsteine für `analytics` und `formats` haben drei Fehler
-aufgedeckt. (Der 12.08. brachte noch zwei weitere, die aus anderen Runden
-stammen: der `NaT`-Absturz in `shared.fmt_date_de` und die tote
-`holeSize`-Kette — siehe die Tabelle oben.) Bemerkenswert ist, **wo** sie saßen: ausnahmslos in
-degenerierten Eingaben, kein einziger in den fachlich interessanten Fällen.
+aufgedeckt. Bemerkenswert ist, **wo** sie saßen: ausnahmslos in degenerierten
+Eingaben, kein einziger in den fachlich interessanten Fällen. (Der 12.08.
+brachte noch zwei weitere aus anderen Runden: den `NaT`-Absturz in
+`shared.fmt_date_de` und die tote `holeSize`-Kette — siehe Tabelle oben.)
 
 | Fund | Wirkung | Status |
 |---|---|---|
@@ -179,8 +179,8 @@ an, sobald eine Strategie ohne Satz dasteht.
 | | Zeilen |
 |---|---:|
 | Produktivcode (14 Dateien) | +2.251 / −3.585 → **netto −1.334** |
-| Tests (17 Dateien, vorher gab es keine) | **+3.393** |
-| Dokumentation | +1.920 / −87 |
+| Tests (17 Dateien, vorher gab es keine) | **+3.593** |
+| Dokumentation | +2.058 / −87 |
 
 Weniger Produktivcode bei mehr Funktion, und zum ersten Mal ein Netz darunter.
 *(Die frühere Angabe „netto etwa −1.800 Zeilen" stammte vom 11.08. und stimmt
@@ -330,13 +330,13 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 **Es sind nur noch drei — und alle drei liegen bei Philip:**
 
 1. **PR mergen** — alles andere hängt daran.
-1b. **Anlagekriterien SCHWEIZ liefern** (Backlog G, neu 12.08.2026). Seit
-   heute sind 17 der 19 Strategien erfasst; `Schweiz_substanzorientiert` und
+2. **Anlagekriterien SCHWEIZ liefern** (Backlog G, neu 12.08.2026). Seit dem
+   12.08. sind 17 der 19 Strategien erfasst; `Schweiz_substanzorientiert` und
    `Schweiz_aktienorientiert` fehlen, weil sie **bewusst nicht auf der
    Webseite stehen**. Gebraucht werden vier Werte je Strategie: Anlageregion,
    Aktienanteil, Anleihenanteil/Liquidität, Fremdwährungen. Bis dahin zeigt
    das Tool dort korrekt keinen Banner.
-2. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
+3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
@@ -369,6 +369,8 @@ vier statt drei Stellen → `annual_to_daily_rate`), **F** (`fmt_date_de`
 zweifach — die UI-Fassung **stürzte bei `NaT` ab**), der **Wrapper-Block
 in `streamlit_app.py`** (zehn Durchreicher statt der vermuteten sieben, einer
 davon tot, 25 Aufrufstellen) und **7a** (`pyflakes` von 16 Meldungen auf 0).
+Dazu die **Anlagekriterien für die Thema-Strategien** (Offensiv, Pro, Pro
+Dividende — 17 von 19; die Lehre daraus steht als Transferwissen **#48**).
 Außerdem **abgehakt statt abgearbeitet**:
 Backlog 3 (Spalte „Währung" — alle 38 CSVs führen sie, gesichtet), Backlog 4
 (Familien ESG/CVV/ETF — alle Vorlagen da, alle 19 Strategien zugeordnet,
@@ -379,7 +381,7 @@ stand nur noch fälschlich in der Liste).
 Backlog C (Wrapper in `pptx_export.py`), Backlog 1 (requirements gedeckelt),
 Backlog 7 (`use_container_width` → `width` — stand hier noch als offen, war
 aber schon migriert; der Parameter kommt nur noch in dem Test vor, der ihn
-verbietet). **Damit ist der Backlog bis auf Nachrangiges leer.**
+verbietet).
 
 **Nicht offen, sondern entschieden:** Die beiden Ansichten sind
 unterschiedlich dicht — 19 Bedienelemente in der Performance-Ansicht gegen 9

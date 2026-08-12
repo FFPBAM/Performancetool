@@ -1765,6 +1765,46 @@ Kategorie, keiner aus den fachlich interessanten Fällen.
 
 Prüfsteine: `tests/test_analytics.py`, `tests/test_formats.py`.
 
+### 48. Eine abgeleitete Konfiguration erbt die blinden Flecken ihrer Quelle (NEU 12.08.2026) ⭐
+
+Am 10.08.2026 wurden die Anlagekriterien aus den PPTX-Vorlagen in
+`Mapping_Anlagekriterien.xlsx` überführt — sauber gemacht, mit Test. Die
+Datei erfasste **14 von 19 Strategien**, und niemandem fiel das auf: Die
+fünf fehlenden gehören zur Familie *Thema*, und deren Vorlage hat als einzige
+keinen Kriterien-Kasten. Der Test schrieb das sogar ausdrücklich fest
+(„Thema hat bewusst keinen").
+
+**Der Denkfehler:** Die Excel hatte die Sicht ihrer Quelle übernommen. Sie
+kannte 14 Strategien, weil **14 Vorlagen einen Kasten hatten** — nicht, weil
+es nur 14 Strategien mit Anlagekriterien gäbe. Tatsächlich hat *jede*
+Strategie welche; dass eine Vorlage sie nicht abdruckt, ist eine Eigenschaft
+der **Darstellung**, keine der Sache. Drei der fünf standen die ganze Zeit
+öffentlich auf der Bank-Webseite.
+
+**Regel:** Wer eine Konfigurationsdatei aus einem Artefakt ableitet, fragt
+sich: *Beschreibt die Quelle die Sache oder nur ihre Darstellung?* Und danach:
+*Welche Fälle kennt die Quelle systematisch nicht?* Ein Vollständigkeits-Test
+gegen die **fachliche** Grundgesamtheit (hier: `Mapping_Namen.xlsx` mit 19
+Strategien) hätte die Lücke am ersten Tag gezeigt — der vorhandene Test prüfte
+stattdessen gegen die eigene, abgeleitete Liste und war deshalb immer grün.
+
+**Der zweite Teil ist PPTX-spezifisch und gefährlicher.** Ob ein Excel-Eintrag
+in einer **Kundenbroschüre** landet, entscheidet nicht die Excel, sondern die
+Vorlage: `pptx_export` ruft `fill_anlagekriterien_slide` für *jede* Familie
+auf, und die Funktion steigt nur deshalb aus, weil
+`finde_anlagekriterien_tabelle` in `Vorlage_Thema.pptx` nichts findet. Wer
+dieser Vorlage eines Tages eine Tabelle gibt, **druckt die Werte damit
+automatisch** — ohne eine Zeile Code zu ändern. Solche stillen Kopplungen
+gehören getestet, nicht kommentiert: `tests/test_anlagekriterien.py` tastet
+seit dem 12.08.2026 alle sechs Vorlagen ab und schlägt an, sobald sich das
+ändert.
+
+**Übertragbar:** Wenn Daten und Darstellung an verschiedenen Orten liegen,
+ist die Frage „wird das gedruckt?" eine Eigenschaft der *Verbindung* — und
+die hat niemand im Blick, solange sie zufällig das Richtige tut.
+
+Prüfstein: `tests/test_anlagekriterien.py` (Schritte 4, 4b, 9b).
+
 ---
 
 ## 1. Projektübersicht
