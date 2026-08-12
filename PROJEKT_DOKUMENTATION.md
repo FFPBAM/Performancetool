@@ -2625,10 +2625,21 @@ mehr nötig.
 
 ## 15. Backlog (Stand 12.08.2026, nach Priorität)
 
-**Stand 12.08.2026 (abends) — was wirklich noch offen ist:** nur noch
-**8–10** (internes Hosting, Alt-Aufgaben aus Phase 2, Varianten). Alles
-andere ist abgeschlossen; die Punkte bleiben durchgestrichen stehen, weil die
-Begründungen mehr wert sind als die Aufgaben.
+**Stand 12.08.2026 (abends) — was wirklich noch offen ist:** **G**
+(Anlagekriterien SCHWEIZ) sowie **8–10** (internes Hosting, Alt-Aufgaben aus
+Phase 2, Varianten). Alles andere ist abgeschlossen; die Punkte bleiben
+durchgestrichen stehen, weil die Begründungen mehr wert sind als die
+Aufgaben.
+
+- **G. Anlagekriterien für die beiden SCHWEIZ-Strategien** *(neu 12.08.2026)*.
+  Seit heute sind 17 der 19 Strategien in `Mapping_Anlagekriterien.xlsx`
+  erfasst; `Schweiz_substanzorientiert` und `Schweiz_aktienorientiert` fehlen.
+  **Sie stehen bewusst nicht auf der Webseite** (Philip) — die Werte müssen
+  aus dem Haus kommen (Vermögensverwaltungsvertrag, Factsheet o. ä.). Bis
+  dahin zeigt das Tool dort korrekt keinen Banner; `anlagekriterien_fuer`
+  liefert `[]`. Zum Eintragen: die vier Felder in die Excel, dann in
+  `tests/test_anlagekriterien.py` die Liste `NOCH_OFFEN` leeren — der Test
+  weist mit einem HINWEIS darauf hin, sobald Werte auftauchen.
 
 E, F und der Wrapper-Block in `streamlit_app.py` waren **dieselbe
 Krankheit** — eine Funktion, die zweimal existiert und deren Kopien
@@ -2774,6 +2785,68 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 (abends, 2) – Anlagekriterien auch für die Thema-Strategien
+
+`Mapping_Anlagekriterien.xlsx` deckte 14 der 19 Strategien ab. Der Grund war
+historisch, nicht fachlich: Die Datei entstand am 10.08.2026 **aus den
+PPTX-Vorlagen** und hat damit deren Sicht übernommen — die Thema-Vorlage hat
+als einzige keinen Kriterien-Kasten, also stand Thema auch nicht in der Excel.
+
+**Das ist falsch herum gedacht.** Jede Strategie hat Anlagekriterien; dass
+eine Vorlage sie nicht abdruckt, ist eine Eigenschaft der **Vorlage**, keine
+der Strategie. Im Tool gehören sie überall hin (Philip).
+
+Drei der fünf fehlenden stehen öffentlich auf
+`fuggerbank.de/private-banking/pro/` — in genau derselben Vier-Felder-Tabelle
+wie die klassischen Strategien:
+
+| Strategie | Anlageregion | Aktienanteil | Anleihenanteil / Liquidität | Fremdwährungen |
+|---|---|---|---|---|
+| Offensiv | Weltweit | mind. 50 %, max. 100 % | max. 50 % | Unbegrenzt |
+| Pro | Weltweit | max. 100 % | **max. 15 %** | Unbegrenzt |
+| Pro Dividende | Weltweit | max. 100 % | **max. 15 %** | Unbegrenzt |
+
+**Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen — das ist
+Absicht und kein Fehler.** Die Webseite nennt bei Pro „Anleihenanteil 0 %"
+und im Fließtext eine vertragliche Liquiditätsgrenze von 15 %. Bei
+`cVV dynamic` steht in der Excel aus demselben Grund „max. 10 %" — das ist
+**die Liquidität**, nicht ein Anleihenanteil (Klarstellung Philip,
+12.08.2026). Wer die Zeile mit der Webseite vergleicht und dort „0 %" liest,
+möge sie **nicht „korrigieren"**.
+
+**Abgleich der 14 bestehenden Zeilen gegen die Webseite:** 11 der 12
+prüfbaren stimmen wörtlich (ESG alle vier, ETF beide, cVV vier von fünf), die
+zwölfte ist der eben erklärte Dynamic-Fall. Die drei comdirect-Zeilen sind
+nicht prüfbar — **comdirect tritt auf der Homepage nur als Depotbank auf**,
+nicht mit eigenen Strategieseiten.
+
+**Warum die Broschüren dabei nicht kippen konnten** (die eigentliche Gefahr):
+`pptx_export.py` ruft `fill_anlagekriterien_slide` für **jede** Familie auf —
+gesteuert wird der Kasten also von der **Excel**, nicht von der Vorlage. Der
+Kommentar dort sagte „Strategien ohne Eintrag (Familie Thema) lassen die
+Vorlage unberührt"; mit den neuen Zeilen greift diese Bedingung nicht mehr.
+Vorher am Artefakt geprüft: `fill_anlagekriterien_slide` steigt aus, sobald
+`finde_anlagekriterien_tabelle` nichts findet, und `Vorlage_Thema.pptx`
+enthält keine solche Tabelle. Danach bewiesen: alle sieben Broschüren neu
+gebaut, 2056 ZIP-Einträge, 34 Abweichungen, ausnahmslos `docProps/core.xml`
+— auch bei Thema, Thema_2 und Thema_3.
+
+**Der Prüfstein trennt jetzt, was vorher vermischt war:** `MIT_KASTEN` (14,
+Broschüre) · `THEMA_MIT_EINTRAG` (3, nur Tool) · `NOCH_OFFEN` (2× SCHWEIZ,
+bekannte Lücke statt Fehler). Neuer Schritt **4b** tastet alle sechs Vorlagen
+ab und schlägt an, wenn `Vorlage_Thema.pptx` eines Tages doch eine
+Kriterien-Tabelle bekommt — dann stünden die neuen Werte **plötzlich in
+Kundenbroschüren**, ohne dass jemand Code angefasst hat. Neuer Schritt **9b**
+wählt in der laufenden App eine Thema-Strategie aus und liest die vier Werte
+am Markup nach; Schritt 9 prüft nur die vorausgewählte Strategie und hätte
+die Neuerung nicht abgedeckt.
+
+**Übertragbar:** Wenn eine Konfigurationsdatei aus einem Artefakt *abgeleitet*
+wird, erbt sie dessen blinde Flecken. Die Excel kannte 14 Strategien, weil 14
+Vorlagen einen Kasten hatten — nicht, weil es nur 14 Strategien mit Kriterien
+gäbe. Beim Extrahieren lohnt die Frage: Beschreibt die Quelle die Sache oder
+nur ihre Darstellung?
 
 ### 12.08.2026 (spät) – pyflakes über das ganze Repo sauber
 

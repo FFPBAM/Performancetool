@@ -77,6 +77,18 @@ prüfte statt gegen eine Schwelle (#47).
   10.08.2026). Der Unterschied zum Musterdepot-Fall: Dort widersprach der
   Code der Vorlage *heimlich*; hier ersetzt eine sichtbare Datei sie als
   Quelle. Wer eine weitere solche Ausnahme anlegt, dokumentiert sie hier.
+- **Ein Eintrag in `Mapping_Anlagekriterien.xlsx` kann in einer Kundenbroschüre
+  landen** (12.08.2026). `pptx_export` ruft `fill_anlagekriterien_slide` für
+  **jede** Familie auf — ob gedruckt wird, entscheidet allein, ob die Vorlage
+  eine Kriterien-Tabelle hat. `Vorlage_Thema.pptx` hat keine, deshalb stehen
+  Offensiv/Pro/Pro Dividende seit dem 12.08.2026 nur im **Tool**. Wer dieser
+  Vorlage eine Tabelle gibt, druckt sie damit **automatisch** — Schritt 4b in
+  `tests/test_anlagekriterien.py` schlägt in dem Fall an.
+- **Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen.** Wo eine
+  Strategie keine Anleihen hält, steht dort die **Liquiditätsgrenze**: `cVV
+  dynamic` „max. 10 %", Pro und Pro Dividende „max. 15 %". Die Bank-Webseite
+  nennt an dieser Stelle „0 %" — das ist **kein Widerspruch** und nicht zu
+  „korrigieren" (Philip, 12.08.2026).
 
 ---
 
