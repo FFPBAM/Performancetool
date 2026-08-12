@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 56 Commits vor `main`
+· 58 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
