@@ -34,43 +34,48 @@ from modules.shared import (
     load_all_csvs, build_portfolio_timeseries,
 )
 # Performance-Berechnungs-Funktionen (Single Source of Truth — siehe modules/analytics.py)
+#
+# AUFGERÄUMT 12.08.2026: Die Namen kamen bis dahin mit `as _ana_…` herein und
+# wurden unten durch zehn Funktionen wieder durchgereicht, die nichts taten
+# als weiterzurufen. Jetzt heißen sie hier so, wie sie in analytics heißen —
+# die 25 Aufrufstellen im Programm sind unverändert geblieben.
 from modules.analytics import (
     annual_to_daily_rate,
-    annual_fee_to_daily_drag as _ana_annual_fee_to_daily_drag,
-    make_index_from_returns as _ana_make_index_from_returns,
-    make_index_after_fee as _ana_make_index_after_fee,
-    drawdown_from_index as _ana_drawdown_from_index,
-    calc_cagr as _ana_calc_cagr,
-    calc_vola as _ana_calc_vola,
-    calc_daily_returns_after_fee as _ana_calc_daily_returns_after_fee,
-    calc_sharpe_excess as _ana_calc_sharpe_excess,
-    calc_period_return as _ana_calc_period_return,
-    calc_period_return_after_fee as _ana_calc_period_return_after_fee,
+    make_index_from_returns,
+    make_index_after_fee,
+    drawdown_from_index,
+    calc_cagr,
+    calc_vola,
+    calc_daily_returns_after_fee,
+    calc_sharpe_excess,
+    calc_period_return,
+    calc_period_return_after_fee,
     has_benchmark,
 )
 from modules.portfolioanalyse import render_portfolioanalyse
 
 
 # ==========================================================================
-# PERFORMANCE HELPERS — Wrapper für modules.analytics (Backwards-Compat)
+# PERFORMANCE HELPERS — die UI-spezifischen Ergänzungen zu analytics
 # ==========================================================================
-# Die zentrale Berechnungs-Logik lebt in modules/analytics.py und wird auch
-# vom PPTX-Export (modules/pptx_export.py) genutzt. Diese Wrapper behalten
-# die Signatur und delegieren weiter — UI-Code bleibt unverändert.
-# UI-spezifische Erweiterungen (Euro-Drawdown, Calmar, DD-Dauer, rf-Index)
-# bleiben weiterhin lokal definiert.
-
-def annual_fee_to_daily_drag(fee_pa_decimal):
-    return _ana_annual_fee_to_daily_drag(fee_pa_decimal)
-
-def make_index_from_returns(d_returns_decimal, startwert=100.0):
-    return _ana_make_index_from_returns(d_returns_decimal, startwert)
-
-def make_index_after_fee(d_returns_decimal, fee_pa_decimal, startwert=100.0):
-    return _ana_make_index_after_fee(d_returns_decimal, fee_pa_decimal, startwert)
-
-def drawdown_from_index(idx):
-    return _ana_drawdown_from_index(idx)
+# Die Berechnungs-Logik lebt in modules/analytics.py und wird auch vom
+# PPTX-Export genutzt. Hier stehen nur noch die Funktionen, die es dort NICHT
+# gibt, weil sie die Broschüre nicht braucht: der Euro-Drawdown, die
+# Calmar-Ratio, die Drawdown-Dauer und -Erholung, die Datums-Varianten des
+# MDD und der rf-Index.
+#
+# AUFGERÄUMT 12.08.2026: Zwischen diesen Helfern standen zehn Funktionen, die
+# nichts taten, als eine gleichnamige analytics-Funktion aufzurufen. Eine
+# davon (annual_fee_to_daily_drag) rief niemand auf, die übrigen neun an 25
+# Stellen. Die Aufrufstellen sind unverändert geblieben — die Namen kommen
+# jetzt direkt aus dem Import oben. Wer eine Berechnung sucht, findet sie
+# damit dort, wo sie hingehört, und nicht in einer Attrappe hier.
+#
+# Der Unterschied zu den 40 Wrappern, die am 11.08. aus pptx_export.py
+# geflogen sind: Dort waren 27 von 40 tot. Hier war es einer von zehn —
+# der Ertrag ist entsprechend klein (rund 25 Zeilen). Aufgeräumt wurde
+# trotzdem, weil eine Attrappe mit dem Namen einer echten Funktion die
+# Suche in die Irre führt.
 
 def drawdown_euro_from_index(idx):
     """UI-spezifisch: Euro-Drawdown (idx - peak), bleibt lokal."""
@@ -78,19 +83,10 @@ def drawdown_euro_from_index(idx):
 
 # to_decimal_interval kommt jetzt aus modules.shared (siehe Import oben)
 
-def calc_cagr(idx_after, n_days):
-    return _ana_calc_cagr(idx_after, n_days)
-
-def calc_vola(daily_returns_after_fee):
-    return _ana_calc_vola(daily_returns_after_fee)
-
-def calc_daily_returns_after_fee(d_returns_decimal, fee_pa_decimal):
-    return _ana_calc_daily_returns_after_fee(d_returns_decimal, fee_pa_decimal)
-
 def calc_max_drawdown(idx_after, dates_list):
     """UI-Variante: gibt (mdd_wert, datum) Tupel zurück — wird auf der UI angezeigt.
     Nutzt intern analytics.drawdown_from_index für die Mathematik."""
-    dd = _ana_drawdown_from_index(idx_after); mi = np.argmin(dd)
+    dd = drawdown_from_index(idx_after); mi = np.argmin(dd)
     return float(dd[mi]), dates_list[mi]
 
 def calc_max_drawdown_euro(idx_after, dates_list):
@@ -105,7 +101,7 @@ def calc_calmar_ratio(cagr, max_dd):
 
 def calc_drawdown_recovery(idx_after, dates_list):
     """UI-spezifisch: Erholungs-Dauer nach maximalem DD. Bleibt lokal."""
-    dd = _ana_drawdown_from_index(idx_after); mi = np.argmin(dd)
+    dd = drawdown_from_index(idx_after); mi = np.argmin(dd)
     for i in range(mi+1, len(dd)):
         if dd[i] >= 0.0:
             rd = dates_list[i]; td = dates_list[mi]
@@ -114,7 +110,7 @@ def calc_drawdown_recovery(idx_after, dates_list):
 
 def calc_max_drawdown_duration(idx_after, dates_list):
     """UI-spezifisch: längste DD-Phase. Bleibt lokal."""
-    dd = _ana_drawdown_from_index(idx_after)
+    dd = drawdown_from_index(idx_after)
     max_dur = 0; max_start = 0; max_end = 0; current_start = None
     for i in range(len(dd)):
         if dd[i] < 0:
@@ -147,10 +143,6 @@ def aggregate_rf_geometric(rf_annual_series, n_days):
     if growth <= 0:
         return None
     return growth ** (365.0 / n_days) - 1.0
-
-def calc_sharpe_excess(daily_returns_after_fee, rf_annual_series):
-    """Sharpe Ratio nach Sharpe (1994) — Wrapper für modules.analytics."""
-    return _ana_calc_sharpe_excess(daily_returns_after_fee, rf_annual_series)
 
 def make_index_from_rf(rf_annual_series, startwert=100.0):
     """UI-spezifisch: Baut einen Index aus täglich variablen rf-Werten.
@@ -204,12 +196,6 @@ def build_rolling_table(idx_before_1, idx_after_1, label_1, idx_before_2=None, i
         return f"{x*100:.3f}%".replace(".",",")
     for c in multi: df[c] = df[c].apply(fmt)
     return df
-
-def calc_period_return(returns):
-    return _ana_calc_period_return(returns)
-
-def calc_period_return_after_fee(returns, fee_pa_decimal):
-    return _ana_calc_period_return_after_fee(returns, fee_pa_decimal)
 
 def compute_bar_data(df, fee_dec, mode, label, custom_start=None, custom_end=None):
     rows = []
