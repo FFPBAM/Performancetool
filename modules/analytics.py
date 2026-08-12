@@ -67,7 +67,12 @@ def calc_period_return(returns: Sequence[float]) -> float:
 
     Examples:
         >>> round(calc_period_return([0.01, 0.01, -0.02]), 6)
-        -0.000198
+        -0.000302
+
+    (Der Wert stand bis 12.08.2026 als -0.000198 hier — schlicht falsch
+    gerechnet: 1,01 × 1,01 × 0,98 = 0,999698. Der Code war immer richtig,
+    nur das Beispiel nicht. Aufgefallen beim Schreiben von
+    tests/test_analytics.py; Doctests laufen hier sonst nicht mit.)
     """
     return float(np.prod(1.0 + np.asarray(returns, dtype=float)) - 1.0)
 
@@ -235,7 +240,14 @@ def calc_sharpe_excess(daily_returns_after_fee: Sequence[float],
     excess = rp[mask] - daily_rf[mask]
     mu = float(np.mean(excess))
     sd = float(np.std(excess, ddof=1))
-    if sd == 0:
+    # NICHT auf exakte Null pruefen (korrigiert 12.08.2026). Bei lauter
+    # Nullen liefert numpy sauber 0.0, bei KONSTANTEN Renditen ungleich null
+    # dagegen eine Reststreuung von rund 2e-19 — und mu/sd wird dann zu einer
+    # Zahl der Groessenordnung 1e16. Die stuende als "Sharpe Ratio" in einer
+    # Kundenbroschuere, wie schon einmal die -67,48 (Transferwissen #41).
+    # Alles unter 1e-12 Tagesstreuung ist keine Streuung mehr, sondern
+    # Rechenrauschen: das waere eine Schwankung von 0,0000000001 % am Tag.
+    if not np.isfinite(sd) or sd < 1e-12:
         return None
     return (mu / sd) * np.sqrt(365.0)
 

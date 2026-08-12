@@ -1710,6 +1710,61 @@ nur den Fehler oder auch die Funktion entfernt hat.
 
 Prüfstein: `tests/test_benchmark_charts.py` (Datenschicht + echtes Artefakt).
 
+### 47. Ein Guard auf `== 0` greift bei Fließkomma nicht (BUG, NEU 12.08.2026) ⭐
+
+`calc_sharpe_excess` endete mit dem üblichen Schutz gegen Division durch
+null:
+
+```python
+sd = float(np.std(excess, ddof=1))
+if sd == 0:
+    return None
+```
+
+Der Schutz wirkt bei **lauter Nullen** — da liefert numpy sauber `0.0`. Bei
+**konstanten Renditen ungleich null** aber nicht: `np.std([0.001]*10, ddof=1)`
+ergibt `2.28e-19`, nicht `0.0`. Die Prüfung greift nicht, und aus
+`mu / sd × √365` wird:
+
+```
+Sharpe Ratio = 83.584.821.264.662.160
+```
+
+Das ist dieselbe Fehlerfamilie wie die **−67,48** aus Transferwissen #41 und
+wie #46: **Ein Fehlwert sieht aus wie ein Messwert.** Nur hätte man diesen
+hier nicht einmal für plausibel halten können — was ihn paradoxerweise
+ungefährlicher macht als die −67,48, die jemand für eine schlechte Kennzahl
+hielt statt für einen Fehler.
+
+**Regel:** Degenerierte Fließkomma-Zustände nie auf Gleichheit prüfen,
+sondern gegen eine fachlich begründete Schwelle:
+
+```python
+if not np.isfinite(sd) or sd < 1e-12:
+    return None
+```
+
+Die Schwelle braucht eine **fachliche** Begründung, keine mathematische:
+1e-12 Tagesstreuung wären 0,0000000001 % Schwankung am Tag — das ist keine
+Streuung mehr, sondern Rechenrauschen. Ein `np.isclose(sd, 0)` wäre hier
+falsch, weil dessen Standardtoleranz (`atol=1e-8`) für Tagesrenditen viel zu
+grob ist.
+
+**Wie es gefunden wurde:** nicht durch Lesen, sondern weil ein neuer Test
+(`tests/test_analytics.py`) grundsätzlich jede Funktion auch mit
+degenerierter Eingabe aufruft und `None` erwartet. Dieselbe Runde brachte
+zwei weitere Funde derselben Art: `fmt_date_de(float('nan'))` lieferte
+wörtlich `"nan"` (eine leere Excel-Zelle kommt als NaN an, nicht als None),
+und der Doctest von `calc_period_return` behauptete seit jeher einen falsch
+gerechneten Wert (`-0.000198` statt `-0.000302`; der Code war richtig).
+
+**Übertragbar:** Wer eine rechnende Funktion testet, ruft sie mit leerer
+Liste, einem Element, konstanten Werten, NaN und Null auf — nicht nur mit
+plausiblen Daten. Die drei Funde dieser Runde kamen ausnahmslos aus dieser
+Kategorie, keiner aus den fachlich interessanten Fällen.
+
+Prüfsteine: `tests/test_analytics.py`, `tests/test_formats.py`.
+
 ---
 
 ## 1. Projektübersicht
@@ -2570,11 +2625,16 @@ mehr nötig.
 
 ## 15. Backlog (Stand 12.08.2026, nach Priorität)
 
-**Stand 12.08.2026 — was wirklich noch offen ist:** D (Testabdeckung), E
-(rf-Umrechnung dreifach), 8–10 (internes Hosting, Alt-Aufgaben aus Phase 2,
-Varianten) sowie der Wrapper-Block in `streamlit_app.py`. Die Punkte 1–7 und
-A, B, C sind abgeschlossen; sie bleiben durchgestrichen stehen, weil die
-Begründungen mehr wert sind als die Aufgaben.
+**Stand 12.08.2026 — was wirklich noch offen ist:** E (rf-Umrechnung
+dreifach), **F (`fmt_date_de` zweifach, mit unterschiedlichem Verhalten —
+der einzige Punkt mit Absturzrisiko)**, 8–10 (internes Hosting, Alt-Aufgaben
+aus Phase 2, Varianten) sowie der Wrapper-Block in `streamlit_app.py`. Die
+Punkte 1–7 und A–D sind abgeschlossen; sie bleiben durchgestrichen stehen,
+weil die Begründungen mehr wert sind als die Aufgaben.
+
+Auffällig: E, F und der Wrapper-Block sind **dieselbe Krankheit** — eine
+Funktion, die zweimal existiert und deren Kopien auseinanderlaufen. Wer Zeit
+hat, arbeitet sie am besten in einem Zug ab.
 
 **Am 07.08.2026 erledigt:** Punkt 5 (`generate_pf_pdf` entfernt), Punkt 6
 (`enableStaticServing` + `medien_download_url` entfernt), Teile von Punkt 1
@@ -2614,9 +2674,31 @@ Begründungen mehr wert sind als die Aufgaben.
   nicht die ausgewiesene Rendite. Vor dem Umbau prüfen, ob die beiden
   UI-Stellen wirklich identisch rechnen oder ob eine davon absichtlich
   abweicht.
-- **D. Testabdeckung ausbauen.** `tests/` enthält bisher einen Test. Die
-  streamlit-freien Module (`analytics`, `formats`) sind auch ohne Firmen-IT
-  testbar — dort lohnt sich mehr.
+- ~~**D. Testabdeckung ausbauen.**~~ — **erledigt 12.08.2026.**
+  `tests/test_analytics.py` (Bausteine gegen von Hand nachrechenbare Werte,
+  degenerierte Eingaben, `has_benchmark`, der Vertrag von
+  `compute_performance_data`) und `tests/test_formats.py` (deutsche Notation,
+  Fehlwerte, Datum, Disclaimer-Anker). Beide brauchen kein Streamlit,
+  `test_formats` gar keine Installation. Die Runde hat **drei Fehler
+  gefunden** — siehe Transferwissen **#47**; alle drei kamen aus
+  degenerierten Eingaben, keiner aus den fachlich interessanten Fällen.
+- **F. `fmt_date_de` existiert zweimal — und die beiden verhalten sich
+  unterschiedlich** *(neu 12.08.2026)*. `modules/formats.py` (Broschüre) und
+  `modules/shared.py:133` (Oberfläche). Gemessen:
+
+  | Eingabe | `formats` | `shared` |
+  |---|---|---|
+  | `None` | `–` | `'None'` |
+  | `pd.NaT` | `–` | **ValueError** |
+  | `float('nan')` | `–` | `'nan'` |
+
+  Dieselbe Bauart wie Backlog B, nur bei der Formatierung statt der
+  Mathematik: Die eine Fassung wurde gehärtet, die andere nicht. `shared`
+  wird von `streamlit_app.py` an rund 15 Stellen benutzt (Auflagedatum,
+  Drawdown-Daten, Quelle-Zeile) — ein `NaT` dort **stürzt die Ansicht ab**.
+  Auch `shared.fmt_pct_de(None)` wirft, wo `formats.fmt_pct` ein `–` liefert.
+  Vorgehen: `shared` auf die `formats`-Fassung umstellen (nicht umgekehrt),
+  vorher prüfen, wo heute bewusst `str(d)` durchgereicht wird.
 
 1. ~~**requirements.txt Python-3.14-kompatibel pinnen**~~ — **erledigt
    11.08.2026.** Jede Zeile hat jetzt eine Obergrenze auf die nächste
@@ -2666,6 +2748,47 @@ Begründungen mehr wert sind als die Aufgaben.
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 – Prüfsteine für analytics und formats; drei Fehler dabei gefunden
+
+**Backlog D erledigt.** Die beiden streamlit-freien Module hatten keine
+eigenen Tests: `analytics.py` wurde nur indirekt über zwei Suiten mitgezogen,
+`formats.py` gar nicht — obwohl **jede Kennzahl jeder Kundenfolie** durch
+dessen vier Funktionen läuft.
+
+Neu: `tests/test_analytics.py` (braucht nur numpy/pandas) und
+`tests/test_formats.py` (braucht **gar nichts**, Schritt 5 nutzt pandas, wenn
+vorhanden). Zusammen 90 Einzelprüfungen.
+
+**Die Runde hat drei Fehler gefunden** — alle drei bei degenerierten
+Eingaben, keiner bei den fachlich interessanten Fällen (Transferwissen #47):
+
+| Fund | Wirkung | Status |
+|---|---|---|
+| `calc_sharpe_excess` prüfte `sd == 0` | Bei konstanten Renditen bleibt eine Reststreuung von 2,3e-19; die Sharpe Ratio wurde zu **8,36e16** | korrigiert: `sd < 1e-12` |
+| `fmt_date_de(float('nan'))` | lieferte wörtlich **`"nan"`** — eine leere Excel-Zelle kommt als NaN an, nicht als None | korrigiert: `–` |
+| Doctest von `calc_period_return` | behauptete `-0.000198`, richtig ist `-0.000302` (1,01 × 1,01 × 0,98) | Doku korrigiert, **Code war richtig** |
+
+Nur die ersten beiden ändern Verhalten, und beide nur dort, wo bisher Unsinn
+herauskam. **Beweis, dass sonst nichts kippt:** alle sieben Broschüren erneut
+gegen den Ausgangsstand von heute früh verglichen — 2056 ZIP-Einträge, 34
+Abweichungen, ausnahmslos `docProps/core.xml`. Alle 16 Testsuiten grün,
+`pyflakes` sauber.
+
+**Was die Tests inhaltlich festnageln** — über die Grenzfälle hinaus:
+die 10-%-hoch-10-%-runter-Falle (100 → 110 → **99**, nicht 100), Drawdown von
+120 auf 90 als **−25 %** und nicht −10 %, die Gleichheit von
+Periodenrendite-nach-Kosten und Index-Endstand (zwei Wege durch dieselbe
+Mathematik — laufen sie auseinander, widersprechen sich Kennzahlen-Tabelle
+und Chart), und die Längengleichheit von `dates` und `referenz` im
+Linien-Chart. Dazu der Vertrag aus #46: ohne Benchmark sind die Listen
+**leer**, nicht mit Nullen gefüllt.
+
+**Neu aufgenommen: Backlog F.** Beim Testen fiel auf, dass `fmt_date_de`
+zweimal existiert — in `formats.py` (gehärtet) und in `shared.py` (nicht).
+`shared.fmt_date_de(pd.NaT)` wirft eine **ValueError**, und die Oberfläche
+ruft die Funktion an rund 15 Stellen auf. Nicht in dieser Runde angefasst:
+eigenes Thema, eigener Beweis.
 
 ### 12.08.2026 – Die Honorar-Mathematik steht nur noch an einer Stelle
 

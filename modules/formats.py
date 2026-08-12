@@ -163,7 +163,13 @@ def fmt_date_de(value) -> str:
     if value is None:
         return EMPTY_VALUE
     try:
-        # pandas/numpy NaN-Check ohne pandas-Import (für Streamlit-freie Nutzung)
+        # Ein Fehlwert darf nie wie ein Datum aussehen (Transferwissen #46).
+        # Eine leere Zelle kommt aus Excel/pandas als float('nan') an, nicht
+        # als None — ohne diesen Zweig stand in der Broschüre wörtlich "nan"
+        # (gefunden 12.08.2026 beim Schreiben von tests/test_formats.py).
+        if isinstance(value, float) and math.isnan(value):
+            return EMPTY_VALUE
+        # pandas/numpy NaT-Check ohne pandas-Import (für Streamlit-freie Nutzung)
         if hasattr(value, '__class__') and value.__class__.__name__ in ('NaTType', 'NaT'):
             return EMPTY_VALUE
         if hasattr(value, 'strftime'):

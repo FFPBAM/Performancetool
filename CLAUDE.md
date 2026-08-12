@@ -1,7 +1,7 @@
 ﻿# Arbeitsanweisung für Claude — FFPB Performancetool
 
 **Zuerst lesen:** `STATUS.md` (wo stehen wir), dann `PROJEKT_DOKUMENTATION.md`
-(46 Transferwissen-Einträge, Architektur, Compliance).
+(47 Transferwissen-Einträge, Architektur, Compliance).
 
 Streamlit-App der Fürst Fugger Privatbank, die aus Corporate-Vorlagen
 PowerPoint-Broschüren erzeugt. **Die Ergebnisse gehen an Kunden.**
@@ -22,6 +22,12 @@ beweist nichts.
 **3. Beweisen, dass nichts kaputtgeht.** Bei Umbauten die Ergebnisse
 vorher/nachher vergleichen. PPTX sind ZIPs mit eingebetteten ZIPs — rekursiv
 vergleichen, Zeitstempel ignorieren.
+
+**Und beim Testen rechnender Funktionen:** immer auch leere Liste, ein
+Element, konstante Werte, NaN und Null durchschicken. Alle drei Fehler der
+Testrunde vom 12.08.2026 saßen dort und keiner in den fachlich interessanten
+Fällen — darunter eine Sharpe Ratio von 8,4·10¹⁶, weil ein Guard auf `== 0`
+prüfte statt gegen eine Schwelle (#47).
 
 ---
 
@@ -109,6 +115,8 @@ python tests/test_anlagekriterien.py         # pandas + streamlit
 python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
 python tests/test_kosten_mathematik.py       # Schritt 1 ohne jedes Paket
+python tests/test_formats.py                 # ohne jedes Paket
+python tests/test_analytics.py               # nur numpy + pandas
 python tests/test_benchmark_erkennung.py     # nur pandas
 python tests/test_benchmark_charts.py        # Schritt 1 pandas, 2+3 + pptx/streamlit
 python tests/test_honorarsatz.py             # pandas + streamlit

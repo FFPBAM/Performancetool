@@ -115,6 +115,28 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Hinweis ohne Benchmark** | *(11.08.)* Kleiner Hinweis über den Kennzahlen, wenn eine Strategie keinen Vergleichsmaßstab hat. Ersetzt den alten Hinweis unter dem Chart, der nur bei eingeschaltetem Benchmark-Schalter erschien. |
 | **Zurücksetzen im Zeitraum** | *(11.08.)* Knopf neben den Kalenderfeldern, nur bei „Eigener Zeitraum". Vorher klebten die Felder an ihren Werten, sobald man sie einmal angefasst hatte. Dabei ist ein Fehler in der Doku zu #19 aufgeflogen — siehe unten. |
 | **Kosten-Mathematik zentral** | *(12.08.)* Backlog B erledigt: `pptx_export.py` rechnete den Honorarabzug mit eigenen Kopien. Formelgleich — und genau das war die Gefahr: Eine Korrektur in `analytics` hätte die **Broschüre nicht erreicht**. Broschüren vorher/nachher byte-identisch bewiesen. |
+| **Prüfsteine für die Rechenmodule** | *(12.08.)* Backlog D erledigt: `analytics` und `formats` hatten keine eigenen Tests, obwohl jede Kennzahl jeder Kundenfolie durch sie läuft. **Drei Fehler dabei gefunden** — siehe unten. |
+
+### Die drei Funde vom 12.08.2026 — alle aus Grenzfällen
+
+Die neuen Prüfsteine für `analytics` und `formats` haben drei Fehler
+aufgedeckt. Bemerkenswert ist, **wo** sie saßen: ausnahmslos in
+degenerierten Eingaben, kein einziger in den fachlich interessanten Fällen.
+
+| Fund | Wirkung | Status |
+|---|---|---|
+| `calc_sharpe_excess` prüfte `sd == 0` | Bei **konstanten** Renditen lässt numpy eine Reststreuung von 2,3e-19 stehen — der Guard griff nicht, die Sharpe Ratio wurde **8,36 × 10¹⁶** | korrigiert: Schwelle `sd < 1e-12` |
+| `fmt_date_de(float('nan'))` | lieferte wörtlich **„nan"**. Eine leere Excel-Zelle kommt als NaN an, nicht als None | korrigiert: „–" |
+| Doctest von `calc_period_return` | behauptete `-0.000198`; richtig ist `-0.000302` (1,01 × 1,01 × 0,98 = 0,999698) | Doku korrigiert, **der Code war richtig** |
+
+Nur die ersten beiden ändern Verhalten, und beide nur dort, wo bisher Unsinn
+herauskam. Alle sieben Broschüren wurden gegen den Ausgangsstand des Tages
+geprüft: **inhaltlich Byte für Byte identisch**.
+
+Die Lehre steht als Transferwissen **#47** in der Doku: Ein Guard auf `== 0`
+greift bei Fließkomma nicht — es braucht eine fachlich begründete Schwelle.
+Und: Wer eine rechnende Funktion testet, ruft sie mit leerer Liste, einem
+Element, konstanten Werten, NaN und Null auf.
 
 ### Falle beim nächsten Button: `_KEEPALIVE_SPERRE`
 
@@ -203,6 +225,8 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
 | `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
 | `test_kosten_mathematik.py` | **nichts** (Schritt 1) | Die Honorar-Formel steht nur in `analytics.py`; Schritt 2 prüft die Objekt-Identität in `pptx_export` (braucht pandas + python-pptx), Schritt 3 nagelt die Zahlen fest |
+| `test_formats.py` | **nichts** (Schritt 5 nutzt pandas, wenn da) | Deutsche Notation, Datum, Disclaimer-Anker — vor allem: ein Fehlwert wird „–" und niemals „nan"/„None"/„NaT" |
+| `test_analytics.py` | numpy + pandas | Bausteine gegen von Hand nachrechenbare Werte, degenerierte Eingaben liefern `None` statt Absturz, `has_benchmark`, der Vertrag von `compute_performance_data` (Längen, leere Listen) |
 | `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert (**Kennzahlen**) |
 | `test_benchmark_charts.py` | pandas; Schritte 2+3 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende, Fußnote und den Hinweis im Tool** — Schritt 2 baut zwei echte Broschüren und liest nach, Schritt 3 prüft den Hinweis an der gerenderten Oberfläche; „Pro" ist jeweils Kontrollfall |
 | `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 % — fängt das stille Zurückfallen auf 0 % ab; SCHWEIZ auf 1,55 % festgenagelt |
@@ -219,6 +243,8 @@ python tests/test_anlagekriterien.py [C:\pfad\zur\ausgabe]
 python tests/test_app_titel.py
 python tests/test_legende_musterdepot.py
 python tests/test_kosten_mathematik.py
+python tests/test_formats.py
+python tests/test_analytics.py
 python tests/test_benchmark_erkennung.py
 python tests/test_benchmark_charts.py
 python tests/test_honorarsatz.py
@@ -287,14 +313,25 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
    den Rendering-Pfad der Oberfläche — anders als bei `pptx_export.py`, wo 27
    von 40 Wrappern schlicht niemand aufrief. Wenn, dann die kleine Variante:
    den toten löschen, die sechs anderen durch direkte Importe ersetzen.
-5. **rf-Tagessatz-Umrechnung steht dreifach** (Backlog E, neu 12.08.2026):
+5. **`fmt_date_de` existiert zweimal — und stürzt in einer der beiden
+   Fassungen ab** (Backlog F, neu 12.08.2026). `formats.py` (Broschüre)
+   liefert bei `None`/`NaT`/`nan` sauber „–"; `shared.py:133` (Oberfläche)
+   liefert „None" bzw. „nan" — und bei `pd.NaT` eine **ValueError**. Die UI
+   ruft die Funktion an rund 15 Stellen auf. Von den offenen Punkten der
+   einzige mit Absturzrisiko.
+6. **rf-Tagessatz-Umrechnung steht dreifach** (Backlog E, neu 12.08.2026):
    `analytics.py:231`, `streamlit_app.py:144` und `:158`. Dieselbe Bauart wie
-   die gerade zusammengeführte Honorar-Mathematik, aber kleinere Wirkung —
-   der rf beeinflusst nur die Sharpe Ratio, nicht die ausgewiesene Rendite.
+   die zusammengeführte Honorar-Mathematik, aber kleinere Wirkung — der rf
+   beeinflusst nur die Sharpe Ratio, nicht die ausgewiesene Rendite.
+
+Die Punkte 4–6 sind **dieselbe Krankheit**: eine Funktion, die zweimal
+existiert und deren Kopien auseinanderlaufen. Am besten in einem Zug.
 
 **Erledigt am 12.08.2026:** Backlog **B** (Honorar-Mathematik nur noch in
 `analytics`, Broschüren byte-identisch bewiesen, neuer Prüfstein
-`test_kosten_mathematik.py`). Außerdem **abgehakt statt abgearbeitet**:
+`test_kosten_mathematik.py`) und Backlog **D** (Prüfsteine für `analytics`
+und `formats` — die Runde hat dabei **drei Fehler gefunden**, siehe oben).
+Außerdem **abgehakt statt abgearbeitet**:
 Backlog 3 (Spalte „Währung" — alle 38 CSVs führen sie, gesichtet), Backlog 4
 (Familien ESG/CVV/ETF — alle Vorlagen da, alle 19 Strategien zugeordnet,
 gesichtet) und Backlog 6 (Download-Toter-Code — war schon am 07.08. entfernt,
