@@ -445,16 +445,22 @@ Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
   ist die Kette dieses Abends geschlossen: Datumsachse → Wertachse →
   Quelle, jede Korrektur am Endprodukt bestätigt.
 
-- **OFFEN (12.08.2026, abends, 3)** — **Rumpfjahr im Säulen-Chart.** Wieder
-  ein Fund aus Philips Auge, wieder am Endprodukt zu prüfen. Vier Punkte:
-  1. **Pro**-Broschüre: nur noch **2024** und **2025**. Sehen Balkenbreite
-     und Achse mit zwei Balken vernünftig aus?
-  2. **Comdirect** und **Pro Dividende**: nur **2025** — hält das Layout mit
-     einem einzigen Balkenpaar? Das ist die Stelle, an der eine Änderung
-     nötig würde, und sie lässt sich nur am Bildschirm entscheiden.
-  3. **SCHWEIZ Substanz**: 2023–2025, weiterhin **ohne** Benchmark-Balken
-     (der Fix vom 11.08. darf nicht gekippt sein).
-  4. **Eine cVV-Broschüre** als Kontrolle: unverändert 2021–2025.
+- **12.08.2026 (abends, 3)** — **Rumpfjahr im Säulen-Chart, Pro bestätigt.**
+  Philip hat die Broschüre **selbst aus Streamlit exportiert** und die
+  Pro-Folie gesichtet: zwei Jahresbalken (2024, 2025), Darstellung in
+  Ordnung. Damit ist nicht nur die Korrektur bestätigt, sondern der ganze
+  Weg — Tool → Export → Folie, nicht nur die Testdateien.
+
+  **Noch offen sind die drei übrigen Punkte** (Dateien liegen in
+  `C:\Entwicklung\Sichtpruefung_Saeulen_20260812`):
+  1. **Comdirect** (Folie 7/9/11) und **Pro Dividende** (`Thema_x3.pptx`,
+     Folie 20): nur **2025**, also ein einziges Balkenpaar. Hält das Layout
+     das? Das ist der Punkt, der sich nur am Bildschirm entscheiden lässt —
+     falls nicht, sind die Wege die Balkenlücke in der Vorlage oder doch die
+     beschriftete Variante („2024 ab 12.03.").
+  2. **SCHWEIZ Substanz** (`SCHWEIZ.pptx`, Folie 12): 2023–2025, weiterhin
+     **ohne** Benchmark-Balken (der Fix vom 11.08. darf nicht gekippt sein).
+  3. **Eine cVV-Broschüre** als Kontrolle: unverändert 2021–2025.
 
 Alle Funde dieses Abends kamen aus dem **Auge**, nicht aus einem Test: erst
 ein Kollege, der die Datumsachse mit den Daten verglich, dann Philip an der
@@ -578,11 +584,12 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 **Es sind drei — alle liegen bei Philip.** Zwei weitere Punkte sind
 **bewusst zurückgestellt** und stehen darunter.
 
-1. **Sichtprüfung Säulen-Chart** (Rumpfjahr, 12.08. abends) — die vier
-   Punkte stehen oben unter „Sichtprüfung in echtem PowerPoint". Der
-   kritische ist Comdirect/Pro Dividende mit nur **einem** Balkenpaar: ob
-   das Layout das trägt, lässt sich nur am Bildschirm entscheiden. Alle
-   übrigen Sichtprüfungen sind erledigt.
+1. **Sichtprüfung Säulen-Chart, Rest** (Rumpfjahr, 12.08. abends) — **Pro ist
+   gesichtet und in Ordnung** (Philip, aus Streamlit exportiert). Offen
+   bleibt der kritische Fall: Comdirect und Pro Dividende mit nur **einem**
+   Balkenpaar. Ob das Layout das trägt, lässt sich nur am Bildschirm
+   entscheiden; Dateien und Foliennummern stehen oben. Alle übrigen
+   Sichtprüfungen des Branches sind erledigt.
 2. **PR mergen** — alles andere hängt daran.
 3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
