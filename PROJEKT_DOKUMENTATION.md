@@ -1906,6 +1906,77 @@ Prüfstein: `tests/test_chartachsen.py`. Konfiguration der Schrittweiten:
 
 ---
 
+### 50. Ein Versprechen im Kommentar ist kein Prüfstein (BUG, NEU 12.08.2026) ⭐
+
+Gemeldet wurde eine Folie: In der **Offensiv**-Broschüre wird
+„Quelle: Eigene Berechnung, Stand 20.07.2026" vom Disclaimer überdruckt.
+Nachgemessen waren es **16** — jede Wertentwicklungs-Folie in allen sechs
+Vorlagen, auf den Emu identisch positioniert:
+
+```
+Quelle    23,30–28,10 × 13,89–14,19 cm
+Fußnote   12,50–28,10 × 11,16–16,20 cm     ← die Quelle liegt DARIN
+```
+
+Die Quelle lag also seit jeher im Disclaimer-Feld. Sichtbar wurde das erst,
+als der Text lang genug wurde — und dafür sorgte der Code.
+
+**Der Mechanismus.** Der Disclaimer ist in der Vorlage **hart umbrochen**:
+Die Sätze sind von Hand auf Absätze verteilt, die bei 6 pt genau die
+Boxbreite füllen (längste Vorlagenzeile: 149 Zeichen). Diese Breite steht
+**nirgends in der Datei** — sie entsteht erst beim Rendern.
+`WE_DISCLAIMER_REPLACEMENTS` ersetzte einen dieser Absätze durch **189
+Zeichen**. Der bricht um, und alles darunter rutscht eine Zeile tiefer:
+Unterkante 14,21 → 14,47 cm, mitten durch die Quellenzeile.
+
+Das Bittere daran steht direkt über der Konstanten, seit Juli 2026:
+
+> „Die Ersetzung arbeitet daher absatzweise über eindeutige Präfixe; die
+> neuen Zeilen sind **auf ähnliche Länge kalibriert, damit das Layout
+> hält**."
+
+Der Kommentar hatte recht — er beschrieb genau die Bedingung, auf die es
+ankam. Nur hat sie nie jemand **gemessen**. Ein Wert von 189 gegen ein
+Limit von 149 ist in einer Sekunde geprüft; er stand über einen Monat da.
+
+**Übertragbar — drei Sätze:**
+
+1. **Wer Text in eine Box mit fester Geometrie schreibt, muss die Geometrie
+   mitdenken.** Hart umbrochener Vorlagentext hat eine Zeilenbreite, die
+   nirgends deklariert ist. Sie gehört als Konstante in den Code
+   (`WE_FUSSNOTE_ZEILE_MAX`) — sonst kann niemand dagegen prüfen.
+2. **Eine Bedingung, die ein Kommentar nennt, ist ein Testfall.** Wenn ein
+   Kommentar sagt „das muss kurz genug bleiben", „das muss vor X laufen",
+   „das darf nicht null sein" — dann ist das die Zusage, und eine Zusage
+   ohne Messung ist eine Hoffnung. Verwandt mit #47: dort war der Guard da,
+   aber falsch; hier war die Regel da, aber ungeprüft.
+3. **Ein Fehler, der erst durch Zusammenwirken sichtbar wird, hat mehr als
+   eine Ursache — und man behebt beide.** Die Vorlagenposition war schon
+   immer riskant, der Ersatztext machte sie zum Fehler. Nur den Text zu
+   kürzen hätte 0,28 cm Luft gelassen; nur die Box zu verschieben hätte das
+   stille Umbrechen stehen gelassen. Behoben sind beide, und die Position
+   ist bewusst so gewählt, dass sie **auch mit dem alten Text** hält.
+
+**Und die Methodenlehre aus #49 gilt weiter:** Gemeldet war eine Instanz,
+gemessen wurden alle. Dass die Zahl wieder bei „alle" landete (16 von 16,
+wie vorher 21 von 21 Achsen), ist kein Zufall: Was in einer Vorlage steht,
+steht meist in allen sechs — Vorlagen werden kopiert, nicht neu gebaut.
+
+**Gemessen wurde am Rendering, nicht im XML.** python-pptx kennt keine
+Zeilenumbrüche; die Kollision ist im XML unsichtbar (beide Shapes haben
+gültige, sich überlappende Rechtecke — das allein wäre noch kein Fehler).
+PowerPoint hat die Folien per COM als PNG ausgegeben, gemessen wurde
+zeilenweise über die dunklen Pixelreihen. Daraus stammen die Kennwerte im
+Prüfstein: erste Zeile 0,06 cm unter der Boxkante, Zeilenabstand 0,2533 cm
+bei 6 pt. Das ist die Fortsetzung von #16/#28 mit anderen Mitteln —
+LibreOffice reicht nicht, aber ein PNG aus echtem PowerPoint schon, und das
+kann ein Test selbst erzeugen.
+
+Prüfstein: `tests/test_quelle_position.py`. Stellschrauben:
+`WE_QUELLE_TOP_CM` und `WE_FUSSNOTE_ZEILE_MAX` in `modules/pptx_slides.py`.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -2765,10 +2836,53 @@ mehr nötig.
 ## 15. Backlog (Stand 12.08.2026, nach Priorität)
 
 **Stand 12.08.2026 (abends) — was wirklich noch offen ist:** **G**
-(Anlagekriterien SCHWEIZ) sowie **8–10** (internes Hosting, Alt-Aufgaben aus
-Phase 2, Varianten). Alles andere ist abgeschlossen; die Punkte bleiben
-durchgestrichen stehen, weil die Begründungen mehr wert sind als die
-Aufgaben.
+(Anlagekriterien SCHWEIZ), **H** (comdirect-Disclaimer) sowie **8–10**
+(internes Hosting, Alt-Aufgaben aus Phase 2, Varianten). Alles andere ist
+abgeschlossen; die Punkte bleiben durchgestrichen stehen, weil die
+Begründungen mehr wert sind als die Aufgaben.
+
+- **H. Der comdirect-Disclaimer beschreibt noch die alte Kostenregel**
+  *(neu 12.08.2026, FACHLICH — Entscheidung Philip)*. Aufgefallen beim
+  Vorher/Nachher-Vergleich zur Quelle-Korrektur: Von 15 Folien änderten
+  sich die Disclaimer-Absätze nur auf 12. Die drei comdirect-Folien
+  blieben unberührt — und tragen deshalb weiterhin den **Vorlagentext**:
+
+  > „Der unterjährige Performance-Ausweis erfolgt vor Kosten (ab 30.06.
+  > abzüglich des halbjährigen Honorarsatzes)."
+
+  Das ist seit Juli 2026 **nicht mehr richtig**: Gerechnet wird nach
+  Kosten mit taggenauem Honorarabzug. Genau diesen Satz ersetzt
+  `WE_DISCLAIMER_REPLACEMENTS` in allen anderen Vorlagen.
+
+  **Ursache — ein Bindestrich.** Der Präfix-Anker lautet
+  `"Der unterjährige Performance Ausweis"`; `Vorlage_comdirect.pptx`
+  schreibt „Performance**-**Ausweis". Der Präfix matcht nicht, die
+  Ersetzung läuft ins Leere — **ohne Fehler, ohne Meldung**, genau wie
+  das fehlende `majorTimeUnit` bei #49. Der zweite Anker
+  (`"Kosten berechnet."`) greift ebenfalls nicht: comdirect führt den
+  ganzen Disclaimer als **einen** Absatz, der Anker sitzt dort mitten im
+  Satz statt am Absatzanfang.
+
+  Damit steht in einem Kundendokument eine **falsche Aussage über die
+  Kostenberechnung** — dieselbe Klasse wie die SCHWEIZ-Fußnote (#46),
+  und deshalb nicht nur kosmetisch (§10.9). Verschärfend: Die `*`- und
+  `**`-Zeilen **wurden** ersetzt (ihre Anker passen). Dieselbe Fußnote
+  sagt oben „nach Kosten (taggenauer Honorarabzug)" und unten „vor Kosten
+  (ab 30.06. abzüglich des halbjährigen Honorarsatzes)" — sie widerspricht
+  sich also selbst.
+
+  **Warum nicht sofort behoben:** Die Korrektur ändert einen
+  Compliance-Text und ist keine reine Technikfrage. Zwei Wege:
+  (a) die Anker toleranter machen (z. B. auf „Der unterjährige
+  Performance" kürzen) — greift dann aber nur für den ersten Satz, weil
+  comdirect einen einzigen Absatz hat; (b) den Vorlagentext in
+  `Vorlage_comdirect.pptx` angleichen, dann greifen die vorhandenen Anker
+  wie überall. **(b) ist der saubere Weg** und entspricht der Regel
+  „statischer Vorlagentext gehört in die Vorlage" (CLAUDE.md).
+
+  Prüfstein, der so etwas künftig findet: fehlt noch. Ein Test „nach dem
+  Befüllen enthält keine Fußnote mehr den Wortlaut der alten Kostenregel"
+  wäre für alle sechs Vorlagen in wenigen Zeilen zu haben.
 
 - **G. Anlagekriterien für die beiden SCHWEIZ-Strategien** *(neu 12.08.2026)*.
   Seit heute sind 17 der 19 Strategien in `Mapping_Anlagekriterien.xlsx`
@@ -2924,6 +3038,56 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 (abends, 5) – Die Quellenangabe lag im Disclaimer (16 von 16 Folien)
+
+**Auslöser:** Philip an der Offensiv-Broschüre — „Quelle: Eigene Berechnung,
+Stand 20.07.2026" wird vom Disclaimer überdruckt.
+
+**Befund:** Wieder alle. In allen sechs Vorlagen liegt die Box `Quelle`
+(23,30–28,10 × 13,89–14,19 cm) **innerhalb** der Box `Fußnote`
+(12,50–28,10 × 11,16–16,20 cm) — 16 Wertentwicklungs-Folien, auf den Emu
+identisch. Zwei Ursachen, die sich addieren: die Vorlagenposition, und ein
+Ersatztext mit **189 Zeichen** bei 149 Zeichen Zeilenbreite, der still
+umbrach und alles darunter eine Zeile tiefer schob (14,21 → 14,47 cm).
+
+**Gemessen am Rendering, nicht im XML.** python-pptx kennt keine
+Zeilenumbrüche; die Kollision ist dort unsichtbar. PowerPoint 16.0 hat die
+Folien per COM als PNG ausgegeben (1920 × 1225 px), gemessen wurde
+zeilenweise über die dunklen Pixelreihen — daher auch die Kennwerte im
+Prüfstein (erste Zeile 0,06 cm unter der Boxkante, Zeilenabstand 0,2533 cm).
+
+| | Disclaimer bis | Quelle ab | |
+|---|---|---|---|
+| vorher | 14,47 cm | 13,89 cm | überdruckt |
+| nachher | 14,21 cm | 14,80 cm | 0,59 cm Luft |
+
+**Korrektur:** `WE_QUELLE_TOP_CM = 14,75` (in
+`fill_wertentwicklung_slide` gesetzt, deckt alle 16 Folien ab) und
+`WE_DISCLAIMER_REPLACEMENTS` von 146/189 auf 145/149 Zeichen gekürzt —
+Aussagen unverändert, nur die Satzführung gestrafft. Die Position hält
+**auch mit dem alten Text** (dann 0,28 cm Luft), die Kürzung ist also
+einzeln rücknehmbar.
+
+**Beweis:** fünf Broschüren vorher/nachher rekursiv verglichen — 1510
+ZIP-Einträge, 15 Abweichungen, ausschließlich die 15 Folien-XML; darin
+genau drei Änderungsarten (15× `<a:off>` der Quelle-Box, 12× die beiden
+Disclaimer-Absätze). 18 Suiten grün, `pyflakes` 0.
+
+**Zwei Nebenbefunde:**
+
+- `tests/test_analytics.py` brach mit **UnicodeEncodeError** ab statt zu
+  melden — ein „→" (U+2192) in der letzten Zeile des letzten Schrittes, das
+  cp1252 nicht kennt. Alle Prüfungen hatten bestanden, der Rückgabewert war
+  trotzdem 1. Behoben; repo-weit geprüft, es war die einzige Stelle, an der
+  so ein Zeichen zur Laufzeit gedruckt wird.
+- Der **comdirect-Disclaimer** wird gar nicht ersetzt — der Anker heißt
+  „Performance Ausweis", die Vorlage schreibt „Performance-Ausweis". Dort
+  steht deshalb weiter die alte Kostenregel, im Widerspruch zur `**`-Zeile
+  derselben Fußnote. Als **Backlog H** aufgenommen (§15), nicht behoben:
+  Wortlaut-Entscheidung.
+
+Transferwissen **#50**. Prüfstein `tests/test_quelle_position.py`.
 
 ### 12.08.2026 (abends, 4) – Wertachse: die 100-%-Linie fehlte auf den cVV-Folien
 

@@ -1,7 +1,7 @@
 ﻿# Arbeitsanweisung für Claude — FFPB Performancetool
 
 **Zuerst lesen:** `STATUS.md` (wo stehen wir), dann `PROJEKT_DOKUMENTATION.md`
-(49 Transferwissen-Einträge, Architektur, Compliance).
+(50 Transferwissen-Einträge, Architektur, Compliance).
 
 Streamlit-App der Fürst Fugger Privatbank, die aus Corporate-Vorlagen
 PowerPoint-Broschüren erzeugt. **Die Ergebnisse gehen an Kunden.**
@@ -77,6 +77,29 @@ prüfte statt gegen eine Schwelle (#47).
   10.08.2026). Der Unterschied zum Musterdepot-Fall: Dort widersprach der
   Code der Vorlage *heimlich*; hier ersetzt eine sichtbare Datei sie als
   Quelle. Wer eine weitere solche Ausnahme anlegt, dokumentiert sie hier.
+  **Die zweite Ausnahme** *(12.08.2026)*: die **Position** der Quelle-Box
+  auf der Wertentwicklungs-Folie (`WE_QUELLE_TOP_CM`). Es geht nicht um
+  Text, sondern um Geometrie — und um eine Box, deren Inhalt der Code
+  ohnehin schreibt (das Stand-Datum). Ein Eingriff deckt 16 Folien in
+  sechs Vorlagen ab, die sonst einzeln in PowerPoint nachzuziehen wären.
+- **Wer Text in eine Box mit fester Geometrie schreibt, muss die Geometrie
+  mitdenken** (#50, 12.08.2026). Der Disclaimer der Wertentwicklungs-Folie
+  ist in der Vorlage **hart umbrochen**; die Zeilenbreite (149 Zeichen bei
+  6 pt) steht nirgends in der Datei. Ein Ersatztext darüber bricht **still**
+  um, und alles darunter rutscht eine Zeile tiefer — so landete die
+  Quellenangabe unter dem Fließtext. Die Breite steht jetzt als
+  `WE_FUSSNOTE_ZEILE_MAX` im Code, Prüfstein
+  `tests/test_quelle_position.py`. Und die allgemeine Lehre: **Eine
+  Bedingung, die ein Kommentar nennt, ist ein Testfall.** Genau diese Regel
+  stand seit Juli 2026 als Kommentar da („auf ähnliche Länge kalibriert,
+  damit das Layout hält") — gemessen hat sie nie jemand.
+- **Kollisionen sieht man nicht im XML.** python-pptx kennt keine
+  Zeilenumbrüche; zwei überlappende Rechtecke sind für sich noch kein
+  Fehler. Wo es um Layout geht, gibt PowerPoint per COM die Folie als PNG
+  aus, und gemessen wird das Bild:
+  `$ppt = New-Object -ComObject PowerPoint.Application` →
+  `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`. Das ist
+  #16/#28 mit anderen Mitteln — und ein Test kann es selbst erzeugen.
 - **Ein Eintrag in `Mapping_Anlagekriterien.xlsx` kann in einer Kundenbroschüre
   landen** (12.08.2026). `pptx_export` ruft `fill_anlagekriterien_slide` für
   **jede** Familie auf — ob gedruckt wird, entscheidet allein, ob die Vorlage
@@ -149,6 +172,7 @@ python tests/test_honorarsatz.py             # pandas + streamlit
 python tests/test_historie_ab.py             # pandas + streamlit
 python tests/test_folien_config.py           # pandas + streamlit
 python tests/test_chartachsen.py [<ordner>]  # Schritte 1+2 ohne jedes Paket
+python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 ```

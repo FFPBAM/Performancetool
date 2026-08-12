@@ -1,11 +1,11 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 54 Commits vor `main`
+· 56 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
-`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#48) — hier nur der Zustand.
+`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#50) — hier nur der Zustand.
 
 ---
 
@@ -101,7 +101,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Toter Code** | ~1.900 Zeilen: `performance.py`, `macrobond_upload.py`, `generate_pf_pdf`, Platzhalter-Dateien. |
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
-| **Tests** | **17 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Tests** | **18 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
@@ -119,6 +119,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Eine Funktion, ein Ort** | *(12.08.)* Backlog E, F und der Wrapper-Block in einem Zug. Wichtigster Fund: `shared.fmt_date_de` warf bei `pd.NaT` eine **ValueError** — die Oberfläche wäre abgestürzt, wo sie „–" hätte zeigen sollen. Dazu die rf-Umrechnung (vier Stellen) und zehn Durchreicher. |
 | **`pyflakes` sauber** | *(12.08.)* Backlog 7a: 16 Meldungen auf 0. Kein Laufzeitfehler darunter — aber die Prüfung wird jetzt wieder gelesen. Zwei Funde mit Substanz: die tote `holeSize`-Kette in beiden Ring-Funktionen und ein `is_bond`, das laut Historie einmal zwei Abfragen steuerte. |
 | **Chart-Achsen** | *(12.08.)* Hinweis eines Kollegen: Die ETF-Broschüre zeigt kein 2026, obwohl die Daten bis Juli 2026 laufen. Am Artefakt nachgemessen: **21 Datumsachsen, keine einzige in Ordnung.** Bei der Sichtprüfung kam die Wertachse dazu — auf den cVV-Folien fehlte die **100-%-Linie**. Gleicher Mechanismus, Details unten. |
+| **Quelle im Disclaimer** | *(12.08.)* Hinweis von Philip an der Offensiv-Broschüre: Die Quellenangabe wird vom Disclaimer überdruckt. Am PowerPoint-Rendering nachgemessen: **16 von 16** Wertentwicklungs-Folien, alle sechs Vorlagen. Zwei Ursachen, beide behoben. Details unten. |
 | **Anlagekriterien für Thema** | *(12.08.)* Die Excel kannte nur 14 Strategien — weil sie aus den PPTX-Vorlagen abgeleitet wurde und die Thema-Vorlage keinen Kriterien-Kasten hat. Offensiv, Pro und Pro Dividende sind jetzt drin (Werte von der Bank-Webseite) und erscheinen **im Tool**; die Broschüren bleiben byte-identisch. **17 von 19** — SCHWEIZ fehlt noch. |
 
 ### Die Datumsachse: gemeldet war eine Achse, betroffen waren alle
@@ -170,6 +171,54 @@ und das Ende ist wichtiger als der Anfang. Prüfstein
 `tests/test_chartachsen.py`; alle sieben Broschüren vorher/nachher verglichen:
 2056 ZIP-Einträge, 55 Abweichungen, ausschließlich die 21 Chart-XML und die
 Zeitstempel.
+
+### Die Quellenangabe lag im Disclaimer — und zwar überall
+
+Philip hat an der **Offensiv**-Broschüre gesehen, dass „Quelle: Eigene
+Berechnung, Stand 20.07.2026" vom Disclaimer-Fließtext überdruckt wird.
+Nachgemessen war es wieder **jede**: In allen sechs Vorlagen liegt die
+Textbox `Quelle` auf den Emu identisch **innerhalb** der Disclaimer-Box.
+
+| Shape | Rechteck |
+|---|---|
+| `Fußnote` (Disclaimer) | 12,50–28,10 × 11,16–16,20 cm |
+| `Quelle` | 23,30–28,10 × **13,89–14,19 cm** |
+
+Betroffen: cVV 5 Folien, ESG 4, comdirect 3, ETF 2, Thema 1, FFPB 1 —
+zusammen **16**. Alle tragen dieselbe Rolle und laufen durch **eine**
+Funktion, deshalb genügte dort eine Korrektur.
+
+**Zwei Ursachen, die sich addieren.** Die Vorlagenposition war immer schon
+riskant — sichtbar wurde sie erst, als der Text lang genug wurde, und dafür
+sorgte der Code: Der Disclaimer ist in der Vorlage hart umbrochen (längste
+Zeile 149 Zeichen bei 6 pt), und eine Ersetzung schrieb dort **189 Zeichen**
+hinein. Der Absatz bricht um, alles darunter rutscht eine Zeile tiefer.
+
+Das Ärgerliche: Genau diese Bedingung stand seit Juli 2026 als Kommentar
+über der Konstanten — „auf ähnliche Länge kalibriert, damit das Layout
+hält". Gemessen hat sie nie jemand. Das ist Transferwissen **#50**: *Eine
+Bedingung, die ein Kommentar nennt, ist ein Testfall.*
+
+**Gemessen, nicht geschätzt.** Im XML ist die Kollision unsichtbar —
+python-pptx kennt keine Zeilenumbrüche. PowerPoint hat die Folien deshalb
+per COM als PNG ausgegeben, vermessen wurde das Rendering:
+
+| | Disclaimer bis | Quelle ab | Ergebnis |
+|---|---|---|---|
+| vorher | 14,47 cm | 13,89 cm | **überdruckt** |
+| nachher | 14,21 cm | 14,80 cm | 0,59 cm Luft |
+
+Behoben sind **beide** Ursachen: Die Quelle-Box rückt beim Befüllen auf
+14,75 cm (`WE_QUELLE_TOP_CM`), und der Ersatztext ist auf 145/149 Zeichen
+gekürzt. Die Position ist bewusst so gewählt, dass sie **auch mit dem alten
+Text** hielte — wer den gekürzten Wortlaut nicht will, nimmt allein diese
+eine Konstante zurück.
+
+Prüfstein `tests/test_quelle_position.py`; fünf Broschüren vorher/nachher
+verglichen: 1510 ZIP-Einträge, 15 Abweichungen, ausschließlich die 15
+Folien-XML — darin genau drei Änderungsarten (15× die Position der
+Quelle-Box, 12× die zwei Disclaimer-Absätze). Kein Chart, keine Tabelle,
+keine Legende.
 
 ### Dieselbe Falle stand senkrecht daneben: die fehlende 100-%-Linie
 
@@ -261,9 +310,9 @@ an, sobald eine Strategie ohne Satz dasteht.
 
 | | Zeilen |
 |---|---:|
-| Produktivcode (14 Dateien) | +2.251 / −3.585 → **netto −1.334** |
-| Tests (17 Dateien, vorher gab es keine) | **+3.593** |
-| Dokumentation | +2.058 / −87 |
+| Produktivcode (14 Dateien) | +2.537 / −3.627 → **netto −1.090** |
+| Tests (19 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+4.474** |
+| Dokumentation (8 Dateien) | +2.426 / −87 |
 
 Weniger Produktivcode bei mehr Funktion, und zum ersten Mal ein Netz darunter.
 *(Die frühere Angabe „netto etwa −1.800 Zeilen" stammte vom 11.08. und stimmt
@@ -345,6 +394,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
 | `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
+| `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -364,11 +414,12 @@ python tests/test_honorarsatz.py
 python tests/test_historie_ab.py
 python tests/test_folien_config.py
 python tests/test_chartachsen.py [C:\pfad\zur\ausgabe]
+python tests/test_quelle_position.py [C:\pfad\zur\ausgabe]
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
 
-**Nachgemessen am 12.08.2026** — nicht geschätzt: Alle 17 Suiten wurden mit
+**Nachgemessen am 12.08.2026** — nicht geschätzt: Alle **18** Suiten wurden mit
 dem System-Python gestartet (hat pandas und numpy, aber **kein** streamlit und
 **kein** python-pptx). Ergebnis:
 
@@ -376,7 +427,7 @@ dem System-Python gestartet (hat pandas und numpy, aber **kein** streamlit und
 |---|---|
 | laufen vollständig durch | `test_analytics`, `test_formats`, `test_kosten_mathematik`, `test_benchmark_erkennung`, `test_streamlit_api`, `test_keine_piktogramme` |
 | laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_chartachsen` |
-| überspringen sich ganz (Rückgabewert 0) | `test_bedienung`, `test_historie_ab`, `test_honorarsatz`, `test_export_smoke`, `test_trennstriche`, `test_folien_config` |
+| überspringen sich ganz (Rückgabewert 0) | `test_bedienung`, `test_historie_ab`, `test_honorarsatz`, `test_export_smoke`, `test_trennstriche`, `test_folien_config`, `test_quelle_position` |
 | **brechen ab** | keine |
 
 Die „Braucht"-Spalte oben nennt also, was ein Test für seinen **vollen**
@@ -422,7 +473,24 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind nur noch vier — und alle vier liegen bei Philip:**
+**Es sind nur noch sechs — und alle liegen bei Philip:**
+
+0b. **Der comdirect-Disclaimer sagt noch die alte Kostenregel** (Backlog H,
+   neu 12.08.2026). Nebenbefund aus dem Vorher/Nachher-Vergleich: In
+   `Vorlage_comdirect.pptx` steht „Der unterjährige Performance**-**Ausweis
+   erfolgt vor Kosten (ab 30.06. abzüglich des halbjährigen Honorarsatzes)"
+   — der Code ersetzt diesen Satz überall, nur dort nicht, weil der Anker
+   „Performance Ausweis" heißt und die Vorlage einen **Bindestrich** hat.
+   Dieselbe Fußnote sagt oben „nach Kosten (taggenauer Honorarabzug)" und
+   unten „vor Kosten": Sie widerspricht sich selbst, und die untere Aussage
+   ist falsch. **Nicht kosmetisch** (§10.9), aber eine Wortlaut-Entscheidung
+   — sauberster Weg ist, den Satz in der Vorlage anzugleichen, dann greifen
+   die vorhandenen Anker. Details in `PROJEKT_DOKUMENTATION.md` §15 H.
+
+0a. **Sichtprüfung der Quellenangabe in echtem PowerPoint.** Die Korrektur
+   ist am PowerPoint-Rendering gemessen (PNG-Export, 0,59 cm Luft) und
+   sieht sauber aus — aber gesehen hat sie noch niemand am Bildschirm.
+   Eine Stichprobe genügt: **Offensiv**, die gemeldete Folie.
 
 0. **Sichtprüfung der Wertachse in echtem PowerPoint** (#16/#28). Die
    Datumsachse ist am 12.08.2026 gesichtet und in Ordnung; die Wertachse kam
@@ -547,6 +615,12 @@ Bewährt in der letzten Sitzung und bitte beibehalten:
 - **Was das Auge findet, findet kein Test.** Beide Fehler der Sitzung vom
   07.08.2026 kamen aus Philips Sichtprüfung. Broschüren stichprobenartig in
   *echtem* PowerPoint öffnen — LibreOffice reicht nicht (#16/#28).
+- **Für Layout-Fragen kann der Test das Auge nachbauen** *(12.08.2026)*:
+  PowerPoint gibt eine Folie per COM als PNG aus
+  (`$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`), und über
+  die dunklen Pixelreihen lässt sich zeilenweise messen. So wurde die
+  Quelle-Kollision belegt (Disclaimer bis 14,47 cm, Quelle ab 13,89) — im
+  XML war sie unsichtbar, weil python-pptx keine Zeilenumbrüche kennt.
 - **Umgekehrt gilt es aber auch** *(12.08.2026)*: Die fünf Fehler dieses Tages
   hat **kein Auge** gefunden, sondern durchweg die Methode — Grenzfälle
   durchtesten, Kopien nebeneinanderlegen, `pyflakes` lesen. Beides wird
