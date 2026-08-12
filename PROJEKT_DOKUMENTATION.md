@@ -1807,6 +1807,77 @@ Prüfstein: `tests/test_anlagekriterien.py` (Schritte 4, 4b, 9b).
 
 ---
 
+### 49. Die Ticks einer Datumsachse hängen am Achsen-Minimum, nicht am Kalender (BUG, NEU 12.08.2026) ⭐
+
+Gemeldet aus der Praxis: In der ETF-Broschüre laufen die Daten bis Juli 2026,
+die Datumsachse zeigt aber **kein 2026**.
+
+**Der Mechanismus.** PowerPoint setzt die Ticks einer `<c:dateAx>` beim
+**Achsen-Minimum** an und zählt von dort in Schritten von
+`majorUnit × majorTimeUnit` weiter. Kalendergrenzen spielen **keine Rolle** —
+ein Jahresschritt heißt „alle zwölf Monate ab dem Minimum", nicht „jeden
+1. Januar".
+
+`chart_dynamik.datumsachse_an_daten` legte das Minimum auf den Monatsanfang des
+ersten Datenpunkts — bewusst, gegen den Leerraum vor der Kurve. Damit war
+aber das ganze Raster auf den **Anfangsmonat** der Reihe verankert:
+
+| Reihe | Daten ab | Ticks | letzte Beschriftung |
+|---|---|---|---|
+| ETF | 30.11.2015 | Nov/15, Nov/16, … | **Nov/25** |
+| ESG | 30.09.2020 | Sep/20, Sep/21, … | **Sep/25** |
+| cVV klassisch | 31.12.2008 | Dez/08, Dez/09, … | **Dez/25** |
+
+Nachgemessen an sieben gebauten Broschüren: **21 Datumsachsen, keine einzige
+in Ordnung.** Der Fehler stand seit dem 07.07.2026 in jeder Broschüre und ist
+niemandem aufgefallen — bis ein Kollege die Achse mit den Daten verglich.
+
+**Die Lösung: den Anker hinten setzen, nicht vorn.** Zwei Kandidaten, es
+gewinnt der mit dem kleineren Vorlauf (der leeren Achsenstrecke vor der Kurve):
+
+1. der Monat des **letzten** Datenpunkts — dann trägt genau er die letzte
+   Beschriftung;
+2. die nächste **Kalendergrenze** davor (Januar beim Jahres-, Jan/Jul beim
+   Halbjahres-, Jan/Apr/Jul/Okt beim Quartalsschritt).
+
+Für die ETF-Reihe gewinnt (1) mit vier statt elf leeren Monaten, für die
+cVV-Vergleichsreihe (Beginn 31.01.2009) gewinnt (2) mit glatten Januar-Ticks
+bei null Vorlauf. Ein Kandidat, dessen letzter Tick **hinter** dem letzten
+Datenpunkt läge, wird verworfen — ein Achsendatum in der Zukunft hat in einer
+Kundenbroschüre nichts zu suchen. Kandidat (1) erfüllt das immer, es bleibt
+also stets einer übrig.
+
+**Zwei Nebenfunde, beide teurer als der gemeldete:**
+
+**(a) Wer `majorTimeUnit` ändert, muss `majorUnit` mitziehen.** Der Code
+stellte nur die Zeiteinheit um („bei langen Historien Jahres- statt
+Monatsticks"). Die cVV-Vergleichsfolie trägt in der Vorlage aber
+`majorUnit=12` mit `majorTimeUnit="months"` — gemeint waren zwölf **Monate**.
+Nach dem Umstellen auf `years` las PowerPoint daraus zwölf **Jahre**: zwei
+Beschriftungen auf siebzehneinhalb Jahren Historie. Die beiden Werte sind ein
+Paar; einen davon allein zu setzen ist immer falsch.
+
+**(b) `if el is not None` ist ein stiller Aussetzer, wenn eine von sechs
+Vorlagen das Element nicht hat.** In `Vorlage_comdirect.pptx` fehlt
+`<c:majorTimeUnit>` — dort lief die Anpassung schlicht **nie**. Kein Fehler,
+keine Meldung, kein Unterschied im Log. Wer ein Vorlagen-Element ändert, muss
+es **anlegen können**; und zwar an der vom Schema verlangten Stelle
+(`CT_DateAx`: … `lblOffset`, `baseTimeUnit`, `majorUnit`, `majorTimeUnit`,
+`minorUnit`, `minorTimeUnit`). Ein `SubElement()` hängt hinten an und landet
+damit hinter `minorTimeUnit` — die Datei ist dann für PowerPoint unlesbar.
+
+**Übertragbar:** Wenn ein Renderer ein Raster aus einem Startwert ableitet,
+entscheidet der Startwert über **alle** Positionen. Die Frage ist nie „ist der
+Anfang richtig?", sondern „liegt das Raster dort, wo es gelesen werden soll?" —
+und das Ende ist meist wichtiger als der Anfang. Und: **Eine Prüfregel, die
+nur an den Rändern misst (min/max), sieht so ein Raster nie.** Der Prüfstein
+rechnet deshalb die Tickfolge nach, statt Achsengrenzen zu vergleichen.
+
+Prüfstein: `tests/test_datumsachse.py`. Konfiguration der Schrittweite:
+`DATUMSACHSE_STUFEN` im CONFIG-Block von `modules/chart_dynamik.py`.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -2825,6 +2896,67 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 (abends, 3) – Datumsachse: das aktuelle Jahr fehlte auf jeder Achse
+
+**Auslöser:** Hinweis eines Kollegen — in der ETF-Broschüre laufen die Daten
+bis Juli 2026, die Datumsachse zeigt aber kein 2026.
+
+**Befund am Artefakt** (sieben gebaute Broschüren, Datenstand 260721):
+**21 Datumsachsen, keine einzige in Ordnung.** Ursache und Lösung stehen als
+Transferwissen **#49**; kurz: PowerPoint verankert die Ticks am
+Achsen-**Minimum**, und das lag auf dem Anfangsmonat der Reihe.
+
+| Broschüre | vorher | nachher |
+|---|---|---|
+| ETF (2 Achsen) | Ticks Nov/15 … **Nov/25** | Jul/15 … **Jul/26** |
+| ESG (4) | Sep/20 … **Sep/25** | Halbjahresticks Jul/20 … Jul/26 |
+| cVV klassisch (4) | Dez/08 … **Dez/25** | Jul/08 … Jul/26 |
+| cVV Dynamic | Okt/18 … **Okt/25** | Jul/18 … Jul/26 |
+| cVV Vergleich (F19) | **2 Beschriftungen** (Tick alle 12 Jahre) | 18, Jan/09 … Jan/26 |
+| Thema, dupliziert | **37 bzw. 23** Monatsticks | 13 bzw. 8 (Quartal) |
+| SCHWEIZ | **47** Monatsticks | 9 (Halbjahr) |
+| comdirect (3) | `majorTimeUnit` fehlt in der Vorlage → gar keine Anpassung | 11 (Quartal) |
+
+Die beiden fettesten Zeilen standen in **keinem** Backlog und hat auch niemand
+gemeldet — sie fielen erst auf, weil für den Prüfstein die Tickfolge
+nachgerechnet wurde statt der Achsengrenzen. Details zu beiden (`majorUnit`
+wird nicht mitgezogen; `if el is not None` bei einem Element, das eine von
+sechs Vorlagen gar nicht hat) in #49.
+
+**Entschieden (Philip):** Das Beschriftungsformat bleibt überall `mmm/yy` —
+die Vorlagen werden nicht angefasst, es ändert sich nur, *wo* die Ticks
+sitzen. Und: Ein kleiner Vorlauf vor dem Kurvenstart ist in Ordnung, ein
+Achsendatum in der Zukunft nicht.
+
+**Geändert:** `modules/chart_dynamik.py` — neuer Rechenkern `achsen_raster`
+(reine Datumsarithmetik, ohne XML und damit ohne PowerPoint testbar),
+`datumsachse_an_daten` setzt jetzt Grenzen, Schrittweite und Anker;
+`_ax_wert_setzen` legt fehlende Achsen-Elemente in Schema-Reihenfolge an.
+Schrittweite konfigurierbar über `DATUMSACHSE_STUFEN` (≤ 3 Jahre Quartal,
+≤ 7 Jahre Halbjahr, darüber Jahr) — Ziel sind 8–19 Beschriftungen. Der
+Parameter `auf_monat_runden` ist entfallen; der einzige Aufrufer hat ihn nie
+abgewählt.
+
+**Beweis, dass nichts anderes kippt:** alle sieben Broschüren vorher/nachher
+rekursiv verglichen — **2056 ZIP-Einträge, 55 Abweichungen**: 34 ×
+`docProps/core.xml` (Erzeugungs-Zeitstempel) und 21 × `ppt/charts/chartN.xml`,
+also exakt die 21 Datumsachsen. Innerhalb der Chart-XML sind es je ein bis
+drei Elemente (`c:min`, `c:majorUnit`, `c:majorTimeUnit`) — sonst nichts.
+`test_export_smoke`, `test_trennstriche`, `test_benchmark_charts` und
+`test_folien_config` grün, `pyflakes` über alle 33 Dateien bei 0.
+
+**Prüfstein:** `tests/test_datumsachse.py`. Schritt 1 rechnet den Kern gegen
+dreizehn von Hand nachgerechnete Fälle (die acht echten Reihen plus
+Grenzfälle: ein einziger Datenpunkt, Spanne unter einem Monat, Beginn im
+Januar, genau auf der Stufengrenze) und braucht **keine Installation**;
+Schritt 2 baut je Familie eine Broschüre plus die Themen-Duplikation und
+SCHWEIZ und rechnet **jede** Tickfolge nach. Auf dem Stand vom Vormittag ist
+er rot — alle 21 Achsen.
+
+**Offen:** Sichtprüfung in echtem PowerPoint (#16/#28) an drei Stichproben —
+ETF (Jahresschritt), SCHWEIZ (Halbjahr statt 47 Monatsticks) und cVV Folie 19
+(der `majorUnit=12`-Fund).
 
 ### 12.08.2026 (abends, 2) – Anlagekriterien auch für die Thema-Strategien
 

@@ -1,7 +1,7 @@
 ﻿# Arbeitsanweisung für Claude — FFPB Performancetool
 
 **Zuerst lesen:** `STATUS.md` (wo stehen wir), dann `PROJEKT_DOKUMENTATION.md`
-(48 Transferwissen-Einträge, Architektur, Compliance).
+(49 Transferwissen-Einträge, Architektur, Compliance).
 
 Streamlit-App der Fürst Fugger Privatbank, die aus Corporate-Vorlagen
 PowerPoint-Broschüren erzeugt. **Die Ergebnisse gehen an Kunden.**
@@ -84,6 +84,16 @@ prüfte statt gegen eine Schwelle (#47).
   Offensiv/Pro/Pro Dividende seit dem 12.08.2026 nur im **Tool**. Wer dieser
   Vorlage eine Tabelle gibt, druckt sie damit **automatisch** — Schritt 4b in
   `tests/test_anlagekriterien.py` schlägt in dem Fall an.
+- **Chart-Achsen: das Ende zählt mehr als der Anfang** (#49, 12.08.2026).
+  PowerPoint verankert die Ticks einer Datumsachse am **Achsen-Minimum**, nicht
+  am Kalender. Wer das Minimum auf den ersten Datenpunkt legt, verankert das
+  ganze Raster auf dessen Monat — und die letzte Beschriftung fällt vor das
+  aktuelle Jahr. `majorUnit` und `majorTimeUnit` sind ein **Paar**: eines
+  allein zu setzen verstellt den Abstand um den Faktor der Vorlage. Und ein
+  Achsen-Element, das eine von sechs Vorlagen nicht hat, macht aus
+  `if el is not None` einen stillen Aussetzer — Elemente müssen **angelegt**
+  werden können, in Schema-Reihenfolge. Prüfstein:
+  `tests/test_datumsachse.py`, Stellschrauben: `DATUMSACHSE_STUFEN`.
 - **Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen.** Wo eine
   Strategie keine Anleihen hält, steht dort die **Liquiditätsgrenze**: `cVV
   dynamic` „max. 10 %", Pro und Pro Dividende „max. 15 %". Die Bank-Webseite
@@ -137,6 +147,7 @@ python tests/test_benchmark_charts.py        # Schritt 1 pandas, 2+3 + pptx/stre
 python tests/test_honorarsatz.py             # pandas + streamlit
 python tests/test_historie_ab.py             # pandas + streamlit
 python tests/test_folien_config.py           # pandas + streamlit
+python tests/test_datumsachse.py [<ordner>]  # Schritt 1 ohne jedes Paket
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 ```

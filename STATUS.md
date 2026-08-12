@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 52 Commits vor `main`
+· 53 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -101,7 +101,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Toter Code** | ~1.900 Zeilen: `performance.py`, `macrobond_upload.py`, `generate_pf_pdf`, Platzhalter-Dateien. |
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
-| **Tests** | **16 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Tests** | **17 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
@@ -118,7 +118,58 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Prüfsteine für die Rechenmodule** | *(12.08.)* Backlog D erledigt: `analytics` und `formats` hatten keine eigenen Tests, obwohl jede Kennzahl jeder Kundenfolie durch sie läuft. **Drei Fehler dabei gefunden** — siehe unten. |
 | **Eine Funktion, ein Ort** | *(12.08.)* Backlog E, F und der Wrapper-Block in einem Zug. Wichtigster Fund: `shared.fmt_date_de` warf bei `pd.NaT` eine **ValueError** — die Oberfläche wäre abgestürzt, wo sie „–" hätte zeigen sollen. Dazu die rf-Umrechnung (vier Stellen) und zehn Durchreicher. |
 | **`pyflakes` sauber** | *(12.08.)* Backlog 7a: 16 Meldungen auf 0. Kein Laufzeitfehler darunter — aber die Prüfung wird jetzt wieder gelesen. Zwei Funde mit Substanz: die tote `holeSize`-Kette in beiden Ring-Funktionen und ein `is_bond`, das laut Historie einmal zwei Abfragen steuerte. |
+| **Datumsachse** | *(12.08.)* Hinweis eines Kollegen: Die ETF-Broschüre zeigt kein 2026, obwohl die Daten bis Juli 2026 laufen. Am Artefakt nachgemessen: **21 Datumsachsen, keine einzige in Ordnung.** Details unten. |
 | **Anlagekriterien für Thema** | *(12.08.)* Die Excel kannte nur 14 Strategien — weil sie aus den PPTX-Vorlagen abgeleitet wurde und die Thema-Vorlage keinen Kriterien-Kasten hat. Offensiv, Pro und Pro Dividende sind jetzt drin (Werte von der Bank-Webseite) und erscheinen **im Tool**; die Broschüren bleiben byte-identisch. **17 von 19** — SCHWEIZ fehlt noch. |
+
+### Die Datumsachse: gemeldet war eine Achse, betroffen waren alle
+
+Ein Kollege hat gesehen, dass in der **ETF**-Broschüre die Datumsachse kein
+2026 zeigt, obwohl die Kurve bis Juli 2026 läuft. Am Artefakt nachgesehen war
+es nicht eine Achse, sondern **jede**: sieben gebaute Broschüren, 21
+Datumsachsen, **keine in Ordnung**.
+
+Der Grund ist eine Eigenheit von PowerPoint: Die Ticks einer Datumsachse
+hängen am **Achsen-Minimum** und laufen von dort in festen Schritten weiter —
+Kalendergrenzen spielen keine Rolle. Der Code legte das Minimum auf den
+Anfangsmonat der Reihe (gegen den Leerraum vor der Kurve) und verankerte damit
+das ganze Raster dort. Die ETF-Reihe beginnt am 30.11.2015, also lagen die
+Jahresticks auf November — der letzte auf **Nov/25**.
+
+| Broschüre | vorher | jetzt |
+|---|---|---|
+| ETF | Nov/15 … **Nov/25** | Jul/15 … **Jul/26** |
+| ESG | Sep/20 … **Sep/25** | Jul/20 … Jul/26 (Halbjahr) |
+| cVV klassisch | Dez/08 … **Dez/25** | Jul/08 … Jul/26 |
+| cVV Dynamic | Okt/18 … **Okt/25** | Jul/18 … Jul/26 |
+| cVV Vergleich (F19) | **2 Beschriftungen** | 18, Jan/09 … Jan/26 |
+| Thema, dupliziert | **37 bzw. 23** Monatsticks | 13 bzw. 8 |
+| SCHWEIZ | **47** Monatsticks | 9 |
+| comdirect | keine Anpassung (Element fehlt in der Vorlage) | 11 |
+
+**Zwei Funde, die niemand gemeldet hatte** und die schwerer wogen als der
+gemeldete — beide fielen nur auf, weil für den Prüfstein die **Tickfolge**
+nachgerechnet wurde statt der Achsengrenzen:
+
+- Der Code zog `majorUnit` nie mit, nur `majorTimeUnit`. Die
+  cVV-Vergleichsfolie trägt in der Vorlage `majorUnit=12` mit
+  `majorTimeUnit="months"` — nach dem Umstellen auf „years" las PowerPoint
+  daraus **zwölf Jahre pro Tick**: zwei Beschriftungen auf siebzehneinhalb
+  Jahren Historie.
+- In `Vorlage_comdirect.pptx` fehlt `majorTimeUnit` ganz. Wegen
+  `if el is not None` lief die Anpassung dort **nie** — ohne Fehler, ohne
+  Meldung.
+
+Festgelegt (Philip): Das Format bleibt überall `mmm/yy`, die Vorlagen werden
+nicht angefasst — es ändert sich nur, *wo* die Ticks sitzen. Ein kleiner
+Vorlauf vor dem Kurvenstart ist in Ordnung (0 bis 5 Monate), ein Achsendatum
+in der **Zukunft** nicht.
+
+Die Lehre steht als Transferwissen **#49**: Wenn ein Renderer ein Raster aus
+einem Startwert ableitet, entscheidet der Startwert über *alle* Positionen —
+und das Ende ist wichtiger als der Anfang. Prüfstein
+`tests/test_datumsachse.py`; alle sieben Broschüren vorher/nachher verglichen:
+2056 ZIP-Einträge, 55 Abweichungen, ausschließlich die 21 Chart-XML und die
+Zeitstempel.
 
 ### Die drei Funde der Testrunde (Backlog D) — alle aus Grenzfällen
 
@@ -223,6 +274,11 @@ Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
   heikelste, weil dort eine **falsche Sachaussage** in einem Kundendokument
   stand (die Fußnote nannte die Benchmark einer fremden Strategie).
 
+**Neu offen seit dem 12.08.2026 (abends):** die Datumsachse — siehe Punkt 0
+unter „Offene Punkte". Der Fund kam übrigens genau aus dieser Richtung: Kein
+Test hat ihn gefunden, sondern ein Kollege, der die Achse mit den Daten
+verglichen hat. Das Auge bleibt unersetzlich.
+
 ### Nach dem Merge noch testen (in der App)
 
 1. **Muster SCHWEIZ Aktien** wählen → Kennzahlen zeigen „–" statt 0,00 %
@@ -251,6 +307,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 % — fängt das stille Zurückfallen auf 0 % ab; SCHWEIZ auf 1,55 % festgenagelt |
 | `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
 | `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
+| `test_datumsachse.py` | **nichts** (Schritt 1); Schritt 2 **+ python-pptx, streamlit** | Schritt 1 rechnet `achsen_raster` gegen 13 von Hand nachgerechnete Fälle nach (acht echte Reihen plus Grenzfälle); Schritt 2 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach** — der letzte Tick muss im Jahr des letzten Datenpunkts liegen, nichts abschneiden, nichts in die Zukunft reichen |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -269,18 +326,19 @@ python tests/test_benchmark_charts.py
 python tests/test_honorarsatz.py
 python tests/test_historie_ab.py
 python tests/test_folien_config.py
+python tests/test_datumsachse.py [C:\pfad\zur\ausgabe]
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
 
-**Nachgemessen am 12.08.2026** — nicht geschätzt: Alle 16 Suiten wurden mit
+**Nachgemessen am 12.08.2026** — nicht geschätzt: Alle 17 Suiten wurden mit
 dem System-Python gestartet (hat pandas und numpy, aber **kein** streamlit und
 **kein** python-pptx). Ergebnis:
 
 | Verhalten ohne streamlit/pptx | Suiten |
 |---|---|
 | laufen vollständig durch | `test_analytics`, `test_formats`, `test_kosten_mathematik`, `test_benchmark_erkennung`, `test_streamlit_api`, `test_keine_piktogramme` |
-| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts` |
+| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_datumsachse` |
 | überspringen sich ganz (Rückgabewert 0) | `test_bedienung`, `test_historie_ab`, `test_honorarsatz`, `test_export_smoke`, `test_trennstriche`, `test_folien_config` |
 | **brechen ab** | keine |
 
@@ -327,8 +385,13 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind nur noch drei — und alle drei liegen bei Philip:**
+**Es sind nur noch vier — und alle vier liegen bei Philip:**
 
+0. **Sichtprüfung der Datumsachse in echtem PowerPoint** (#16/#28), drei
+   Stichproben genügen und decken alle drei Mechanismen ab: **ETF**
+   (Jahresschritt, „Jul/26" muss dastehen), **SCHWEIZ** (Halbjahresschritt
+   statt 47 Monatsticks) und **cVV Folie 19** (der `majorUnit=12`-Fund, vorher
+   zwei Beschriftungen). Broschüren dafür einfach neu erzeugen.
 1. **PR mergen** — alles andere hängt daran.
 2. **Anlagekriterien SCHWEIZ liefern** (Backlog G, neu 12.08.2026). Seit dem
    12.08. sind 17 der 19 Strategien erfasst; `Schweiz_substanzorientiert` und
@@ -351,7 +414,7 @@ erst mit Philip zu klären sind.
 
 ### `pyflakes` ist ab jetzt ein echtes Signal
 
-Über alle **32 Dateien null Meldungen** (12.08.2026). Wer eine neue erzeugt,
+Über alle **33 Dateien null Meldungen** (12.08.2026). Wer eine neue erzeugt,
 sieht sie sofort — vorher ging sie in 16 bekannten unter. Aufruf:
 
 ```

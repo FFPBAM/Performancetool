@@ -86,6 +86,15 @@ PUNKT_DURCHMESSER   = 0.055      # Zoll
 # ── Label-Text ─────────────────────────────────────────────────────────────
 LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
 
+# ── Datumsachse der Linien-Charts (NEU 12.08.2026) ─────────────────────────
+# Schrittweite der Achsenbeschriftung, abhängig von der Länge der Historie.
+# (Obergrenze der Spanne in Monaten, Schritt in Monaten) — die erste passende
+# Zeile gewinnt, darunter greift DATUMSACHSE_SCHRITT_LANG.
+# Ziel sind 8–19 Beschriftungen: weniger sagt nichts, mehr ist bei 7 pt und um
+# 90 Grad gedrehtem Text nicht mehr lesbar. Vorher standen dort bis zu 37.
+DATUMSACHSE_STUFEN      = ((36, 3), (84, 6))   # <=3 Jahre: Quartal, <=7: Halbjahr
+DATUMSACHSE_SCHRITT_LANG = 12                  # darüber: Jahresschritt
+
 # ── Familien-spezifische Ring-Optik (NEU 27.07.2026) ────────────────────────
 # NUR die hier gelisteten Familien weichen von den globalen Defaults ab; alle
 # anderen nutzen die Defaults → deren Ringe bleiben UNVERÄNDERT. Steuerbar:
@@ -253,44 +262,162 @@ def _ring_typ(chart, shape):
 
 
 
-def datumsachse_an_daten(chart, auf_monat_runden=True):
+_EXCEL_EPOCHE = dt.date(1899, 12, 30)   # Seriennummer 0 in Excel/OOXML
+
+# Reihenfolge der Kind-Elemente einer <c:dateAx> laut OOXML-Schema (CT_DateAx).
+# Ein Element an der falschen Stelle macht die Datei für PowerPoint unlesbar.
+_DATEAX_ORDNUNG = (
+    "axId", "scaling", "delete", "axPos", "majorGridlines", "minorGridlines",
+    "title", "numFmt", "majorTickMark", "minorTickMark", "tickLblPos", "spPr",
+    "txPr", "crossAx", "crosses", "crossesAt", "auto", "lblOffset",
+    "baseTimeUnit", "majorUnit", "majorTimeUnit", "minorUnit", "minorTimeUnit",
+    "extLst",
+)
+
+
+def _monatsindex(d):
+    """Datum -> fortlaufende Monatsnummer. Rechnet Monatsarithmetik ohne
+    Jahresüberlauf-Sonderfälle."""
+    return d.year * 12 + (d.month - 1)
+
+
+def _monatsanfang(index):
+    """Umkehrung von _monatsindex."""
+    return dt.date(index // 12, index % 12 + 1, 1)
+
+
+def _ax_wert_setzen(ax, tag, wert):
+    """Setzt <c:TAG val="WERT"/> in einer Achse — und legt das Element an der
+    vom Schema verlangten Stelle an, falls es fehlt.
+
+    Nötig, weil `majorTimeUnit` in Vorlage_comdirect.pptx GAR NICHT vorkommt:
+    Ein `if el is not None` hätte dort still nichts getan (genau das war bis
+    zum 12.08.2026 der Fall), und ein schlichtes SubElement() hätte das
+    Element hinter minorTimeUnit gehängt.
+    """
+    from lxml import etree
+    el = ax.find(_q(tag))
+    if el is None:
+        el = etree.Element(_q(tag))
+        rang = _DATEAX_ORDNUNG.index(tag)
+        for kind in ax:
+            if not isinstance(kind.tag, str):
+                continue                       # Kommentare o. Ä. überspringen
+            name = etree.QName(kind).localname
+            if name in _DATEAX_ORDNUNG and _DATEAX_ORDNUNG.index(name) > rang:
+                kind.addprevious(el)
+                break
+        else:
+            ax.append(el)
+    el.set("val", str(wert))
+    return el
+
+
+def achsen_raster(erster_tag, letzter_tag):
+    """Achsengrenzen und Tick-Abstand einer Datumsachse aus der Datenspanne.
+
+    Gibt (min_datum, max_datum, major_unit, major_time_unit) zurück.
+
+    HINTERGRUND (12.08.2026, gemeldet aus der Praxis). PowerPoint setzt die
+    Ticks einer Datumsachse beim ACHSEN-MINIMUM an und zählt von dort in
+    Schritten von majorUnit x majorTimeUnit weiter — NICHT an Kalendergrenzen.
+    Wer das Minimum auf den ersten Datenpunkt legt (so war es bis heute),
+    verankert damit das ganze Raster auf dessen Monat: Die ETF-Reihe beginnt am
+    30.11.2015, also lagen die Jahresticks auf November und der letzte auf
+    Nov/25 — die Achse endete beschriftungsseitig im Vorjahr, obwohl die Kurve
+    bis Juli 2026 läuft. Von 21 Datumsachsen war keine einzige in Ordnung.
+
+    Deshalb wird der Anker HINTEN gesetzt, nicht vorn. Zwei Kandidaten:
+
+      (a) der Monat des LETZTEN Datenpunkts — dann trägt genau er die letzte
+          Beschriftung;
+      (b) die nächste Kalendergrenze davor (Januar beim Jahresschritt, Jan/Jul
+          beim Halbjahres-, Jan/Apr/Jul/Okt beim Quartalsschritt).
+
+    Es gewinnt der Kandidat mit dem kleineren VORLAUF — der Achsenstrecke, die
+    vor dem ersten Datenpunkt leer bleibt. Damit bekommt die cVV-Monatsreihe
+    (Beginn Ende Januar) glatte Januar-Ticks bei null Vorlauf, während die
+    ETF-Reihe mit fünf statt elf leeren Monaten davonkommt.
+
+    Ein Kandidat, dessen letzter Tick NACH dem letzten Datenpunkt läge, wird
+    verworfen: Ein Achsendatum in der Zukunft hat in einer Kundenbroschüre
+    nichts zu suchen. Kandidat (a) erfüllt das immer, es bleibt also stets
+    einer übrig.
+    """
+    lo_daten = _monatsindex(erster_tag)          # Monat des ersten Datenpunkts
+    letzter_monat = _monatsindex(letzter_tag)
+    hi = letzter_monat + 1                       # Monatsanfang NACH dem Ende
+
+    schritt = DATUMSACHSE_SCHRITT_LANG
+    for grenze, stufe in DATUMSACHSE_STUFEN:
+        if hi - lo_daten <= grenze:
+            schritt = stufe
+            break
+
+    # Monatsnummer % schritt == 0 trifft genau die Kalendergrenzen: bei 12 den
+    # Januar, bei 6 Januar/Juli, bei 3 Januar/April/Juli/Oktober.
+    kalender = letzter_monat - (letzter_monat % schritt)
+
+    kandidaten = []
+    for anker in (kalender, letzter_monat):
+        stufen = -(-(anker - lo_daten) // schritt)        # aufgerundet
+        start = anker - stufen * schritt
+        letzter_tick = start + ((hi - start) // schritt) * schritt
+        if letzter_tick > letzter_monat:
+            continue
+        kandidaten.append((lo_daten - start, start))
+    start = min(kandidaten)[1]          # kleinster Vorlauf gewinnt
+
+    if schritt % 12 == 0:
+        einheit, anzahl = "years", schritt // 12
+    else:
+        einheit, anzahl = "months", schritt
+    return _monatsanfang(start), _monatsanfang(hi), anzahl, einheit
+
+
+def datumsachse_an_daten(chart):
     """Setzt die Datums-Achse (dateAx) einer Linie auf die tatsächliche
-    Datenspanne, statt fixer Vorlagengrenzen. Behebt Leerraum vor/nach der
-    Kurve. auf_monat_runden = saubere Monatsticks (Monatsanfang/-anfang+1)."""
+    Datenspanne statt auf fixe Vorlagengrenzen — Grenzen, Schrittweite UND
+    Anker (das Warum steht in achsen_raster). Behebt den Leerraum vor/nach der
+    Kurve und sorgt dafür, dass der letzte Datenzeitraum beschriftet ist.
+
+    Der Parameter `auf_monat_runden` ist am 12.08.2026 entfallen: Das Runden
+    auf Monatsgrenzen steckt jetzt in achsen_raster und ist nicht mehr
+    abwählbar — der einzige Aufrufer hat es nie abgewählt.
+    """
     root = _root(chart)
-    cats = [float(v.text) for v in root.iter(_q("v"))
-            if v.getparent().getparent().tag == _q("cat") or
-               v.getparent().getparent().getparent().tag == _q("cat")]
-    # robuster: Kategorien gezielt aus dem cat-Block holen
+    # Kategorien gezielt aus dem cat-Block holen (erste Serie; bei den
+    # Vergleichs-Charts teilen sich alle Serien dieselbe Datumsachse).
     cat_block = root.find(".//" + _q("cat"))
     if cat_block is None:
         return None
     cats = [float(v.text) for v in cat_block.iter(_q("v")) if v.text]
     if not cats:
         return None
-    lo, hi = min(cats), max(cats)
-    if auf_monat_runden:
-        def to_d(n): return dt.date(1899, 12, 30) + dt.timedelta(days=int(n))
-        def to_s(d): return (d - dt.date(1899, 12, 30)).days
-        lo = to_s(to_d(lo).replace(day=1))
-        d_hi = to_d(hi).replace(day=1) + dt.timedelta(days=32)
-        hi = to_s(d_hi.replace(day=1))
     from lxml import etree
     ax = root.find(".//" + _q("dateAx"))
     if ax is None:
         return None
+
+    a_min, a_max, m_anzahl, m_einheit = achsen_raster(
+        _EXCEL_EPOCHE + dt.timedelta(days=int(min(cats))),
+        _EXCEL_EPOCHE + dt.timedelta(days=int(max(cats))))
+    lo = (a_min - _EXCEL_EPOCHE).days
+    hi = (a_max - _EXCEL_EPOCHE).days
+
     scaling = ax.find(_q("scaling"))
     for tag, val in (("max", hi), ("min", lo)):   # max VOR min (Schema-Reihenfolge)
         el = scaling.find(_q(tag))
         if el is None:
             el = etree.SubElement(scaling, _q(tag))
         el.set("val", str(int(val)))
-    # majorTimeUnit an die Zeitspanne anpassen: bei langen Historien Jahres-
-    # statt Monatsticks (sonst hunderte Gitterlinien).
-    spanne_jahre = (hi - lo) / 365.0
-    mtu = ax.find(_q("majorTimeUnit"))
-    if mtu is not None:
-        mtu.set("val", "years" if spanne_jahre > 5 else "months")
+    # majorUnit MUSS mitgezogen werden, nicht nur majorTimeUnit: Die
+    # cVV-Vergleichsfolie trägt in der Vorlage majorUnit=12 mit
+    # majorTimeUnit="months". Wurde nur die Zeiteinheit auf "years" gestellt,
+    # ergab das einen Tick alle ZWÖLF JAHRE — zwei Beschriftungen auf
+    # siebzehneinhalb Jahren Historie.
+    _ax_wert_setzen(ax, "majorUnit", m_anzahl)
+    _ax_wert_setzen(ax, "majorTimeUnit", m_einheit)
 
     # ── Y-ACHSE (valAx) datenbasiert skalieren ──────────────────────────────
     # Feste Vorlagen-Grenzen (z.B. 0.8-1.4) schneiden stark gestiegene
