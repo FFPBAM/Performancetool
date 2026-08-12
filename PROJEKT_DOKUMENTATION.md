@@ -2568,7 +2568,13 @@ mehr nötig.
 
 ---
 
-## 15. Backlog (Stand 07.08.2026, nach Priorität)
+## 15. Backlog (Stand 12.08.2026, nach Priorität)
+
+**Stand 12.08.2026 — was wirklich noch offen ist:** D (Testabdeckung), E
+(rf-Umrechnung dreifach), 8–10 (internes Hosting, Alt-Aufgaben aus Phase 2,
+Varianten) sowie der Wrapper-Block in `streamlit_app.py`. Die Punkte 1–7 und
+A, B, C sind abgeschlossen; sie bleiben durchgestrichen stehen, weil die
+Begründungen mehr wert sind als die Aufgaben.
 
 **Am 07.08.2026 erledigt:** Punkt 5 (`generate_pf_pdf` entfernt), Punkt 6
 (`enableStaticServing` + `medien_download_url` entfernt), Teile von Punkt 1
@@ -2627,18 +2633,22 @@ mehr nötig.
    (`duration_info_aus_bestand` → `get_bond_summary`). **Falls der Batch neu
    gebaut wird:** diese Berechnung vorher in ein streamlit-freies Modul ziehen,
    damit beide dieselbe nutzen — nicht wieder kopieren.
-3. **Spalte "Währung" in Daten_PF** — Philip liefert per Push nach;
-   `fill_einzeltitel_themen_slide` füllt dann automatisch.
-4. **Vorlagen-Familien ESG/CVV/ETF anlegen + kalibrieren:** je Familie
-   Vorlage bauen, Shape-Namen prüfen, `block_positionen`/`erwartete_folien`
-   in `VORLAGEN_FAMILIEN` eintragen, Erstlauf + PowerPoint-Sichtprüfung.
-   Mapping-Spalte "Powerpoint Familie" vollständig befüllen.
-5. **`generate_pf_pdf` toter Code** in portfolioanalyse.py entfernbar.
-6. **Download-Toten-Code aufräumen** (nach dem Gateway-Fix #25): in
-   `.streamlit/config.toml` die jetzt ungenutzte Zeile `enableStaticServing
-   = true` entfernen; in `download_helfer.py` den Legacy-Stub
-   `medien_download_url` entfernen, sobald der Import in portfolioanalyse.py
-   auf nur `download_bereich` reduziert ist.
+3. ~~**Spalte "Währung" in Daten_PF**~~ — **erledigt, bestätigt 12.08.2026.**
+   Philip hat sie nachgeliefert; **alle 38 CSVs** in `Daten_PF` führen die
+   Spalte, `pptx_slides.py:739` liest sie aus, und die Einzeltitel-Tabelle ist
+   gesichtet. Der Punkt stand nur noch aus Trägheit hier.
+4. ~~**Vorlagen-Familien ESG/CVV/ETF anlegen + kalibrieren**~~ — **erledigt,
+   bestätigt 12.08.2026.** Alle sechs Vorlagen liegen in `Vorlage/`, alle vier
+   Familien mit eigener Vorlage haben ihre Konfiguration in
+   `VORLAGEN_FAMILIEN`, und `Mapping_Namen.xlsx` ordnet **alle 19 Strategien**
+   einer Familie zu — keine Lücke (CVV 5, Thema 5, ESG 4, comdirect 3, ETF 2).
+   Die Sichtprüfung je Familie hat stattgefunden. `tests/test_export_smoke.py`
+   baut für jede Familie eine echte Broschüre und hält den Stand.
+5. ~~**`generate_pf_pdf` toter Code**~~ — erledigt 07.08.2026.
+6. ~~**Download-Toten-Code aufräumen**~~ — erledigt 07.08.2026, **nachgeprüft
+   12.08.2026:** weder `enableStaticServing` in `.streamlit/config.toml` noch
+   `medien_download_url` in den Modulen sind noch vorhanden. Der Punkt stand
+   fälschlich weiter unter den offenen.
 7. **`use_container_width` → `width` migrieren:** Streamlit 1.59 warnt bei
    JEDEM Aufruf (flutet das Deploy-Log) und entfernt den Parameter in einem
    künftigen Update → dann bricht die App (dieselbe Auto-Update-Falle wie

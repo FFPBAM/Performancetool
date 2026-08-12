@@ -114,6 +114,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Honorar SCHWEIZ** | *(11.08.)* Beide SCHWEIZ-Strategien **fehlten** im Honorar-Mapping und liefen deshalb still mit 0 % Kosten. Jetzt 1,55 % netto. **Ändert die ausgewiesenen Zahlen** — siehe unten. |
 | **Hinweis ohne Benchmark** | *(11.08.)* Kleiner Hinweis über den Kennzahlen, wenn eine Strategie keinen Vergleichsmaßstab hat. Ersetzt den alten Hinweis unter dem Chart, der nur bei eingeschaltetem Benchmark-Schalter erschien. |
 | **Zurücksetzen im Zeitraum** | *(11.08.)* Knopf neben den Kalenderfeldern, nur bei „Eigener Zeitraum". Vorher klebten die Felder an ihren Werten, sobald man sie einmal angefasst hatte. Dabei ist ein Fehler in der Doku zu #19 aufgeflogen — siehe unten. |
+| **Kosten-Mathematik zentral** | *(12.08.)* Backlog B erledigt: `pptx_export.py` rechnete den Honorarabzug mit eigenen Kopien. Formelgleich — und genau das war die Gefahr: Eine Korrektur in `analytics` hätte die **Broschüre nicht erreicht**. Broschüren vorher/nachher byte-identisch bewiesen. |
 
 ### Falle beim nächsten Button: `_KEEPALIVE_SPERRE`
 
@@ -201,6 +202,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_anlagekriterien.py` | pandas **+ streamlit** | 14 Strategien, Schreibweise, Banner-Bauweise, AppTest in beiden Ansichten; **mit Ordner-Argument** zusätzlich der Kasten in den erzeugten Broschüren |
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
 | `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
+| `test_kosten_mathematik.py` | **nichts** (Schritt 1) | Die Honorar-Formel steht nur in `analytics.py`; Schritt 2 prüft die Objekt-Identität in `pptx_export` (braucht pandas + python-pptx), Schritt 3 nagelt die Zahlen fest |
 | `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert (**Kennzahlen**) |
 | `test_benchmark_charts.py` | pandas; Schritte 2+3 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende, Fußnote und den Hinweis im Tool** — Schritt 2 baut zwei echte Broschüren und liest nach, Schritt 3 prüft den Hinweis an der gerenderten Oberfläche; „Pro" ist jeweils Kontrollfall |
 | `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 % — fängt das stille Zurückfallen auf 0 % ab; SCHWEIZ auf 1,55 % festgenagelt |
@@ -216,6 +218,7 @@ python tests/test_keine_piktogramme.py
 python tests/test_anlagekriterien.py [C:\pfad\zur\ausgabe]
 python tests/test_app_titel.py
 python tests/test_legende_musterdepot.py
+python tests/test_kosten_mathematik.py
 python tests/test_benchmark_erkennung.py
 python tests/test_benchmark_charts.py
 python tests/test_honorarsatz.py
@@ -266,19 +269,36 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
 1. **PR mergen** — alles andere hängt daran.
-2. **SCHWEIZ in echtem PowerPoint ansehen.** Der Fix ist im XML und per Test
-   belegt, aber noch nicht vom Auge geprüft — genau die Lücke, aus der beide
-   Fehler der Sitzung vom 07.08. kamen (#16/#28). Eine Broschüre *Muster
-   SCHWEIZ Substanz* reicht: Säulen-Chart, Legende, Fußnote.
+2. ~~**SCHWEIZ in echtem PowerPoint ansehen.**~~ — **erledigt 12.08.2026**,
+   Philip hat die Broschüre geöffnet: Säulen-Chart, Legende und Fußnote
+   sitzen. Damit ist auch der zweite Broschüren-Fix am Endprodukt bestätigt
+   und nicht nur im XML.
 3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
    wird. Fünf Minuten, die im Zweifel Stunden sparen (#20).
-4. **Wrapper-Block in `streamlit_app.py`** (Zeilen 62–88) — dasselbe Muster
-   wie das gerade entfernte in `pptx_export.py`, aber **nicht tot**: die UI
-   ruft ihn überall auf, und zwischen den Durchreichern stehen echte
-   UI-Helfer (Euro-Drawdown, Calmar, DD-Dauer). Eigenes Thema, mehr Risiko.
+4. **Wrapper-Block in `streamlit_app.py`** (Zeilen 62–113) — dasselbe Muster
+   wie das entfernte in `pptx_export.py`, aber **nicht tot**: die UI ruft ihn
+   überall auf, und zwischen den Durchreichern stehen echte UI-Helfer
+   (Euro-Drawdown, Calmar, DD-Dauer). Am 12.08.2026 nachgezählt: von sieben
+   reinen Durchreichern ist **einer** tot (`annual_fee_to_daily_drag`), die
+   übrigen sechs hängen an **21 Aufrufstellen**. Ertrag also ~20 Zeilen gegen
+   den Rendering-Pfad der Oberfläche — anders als bei `pptx_export.py`, wo 27
+   von 40 Wrappern schlicht niemand aufrief. Wenn, dann die kleine Variante:
+   den toten löschen, die sechs anderen durch direkte Importe ersetzen.
+5. **rf-Tagessatz-Umrechnung steht dreifach** (Backlog E, neu 12.08.2026):
+   `analytics.py:231`, `streamlit_app.py:144` und `:158`. Dieselbe Bauart wie
+   die gerade zusammengeführte Honorar-Mathematik, aber kleinere Wirkung —
+   der rf beeinflusst nur die Sharpe Ratio, nicht die ausgewiesene Rendite.
+
+**Erledigt am 12.08.2026:** Backlog **B** (Honorar-Mathematik nur noch in
+`analytics`, Broschüren byte-identisch bewiesen, neuer Prüfstein
+`test_kosten_mathematik.py`). Außerdem **abgehakt statt abgearbeitet**:
+Backlog 3 (Spalte „Währung" — alle 38 CSVs führen sie, gesichtet), Backlog 4
+(Familien ESG/CVV/ETF — alle Vorlagen da, alle 19 Strategien zugeordnet,
+gesichtet) und Backlog 6 (Download-Toter-Code — war schon am 07.08. entfernt,
+stand nur noch fälschlich in der Liste).
 
 **Erledigt am 11.08.2026, war vorher hier gelistet:** Backlog A (SCHWEIZ),
 Backlog C (Wrapper in `pptx_export.py`), Backlog 1 (requirements gedeckelt),
