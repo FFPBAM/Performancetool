@@ -2625,16 +2625,19 @@ mehr nötig.
 
 ## 15. Backlog (Stand 12.08.2026, nach Priorität)
 
-**Stand 12.08.2026 — was wirklich noch offen ist:** E (rf-Umrechnung
-dreifach), **F (`fmt_date_de` zweifach, mit unterschiedlichem Verhalten —
-der einzige Punkt mit Absturzrisiko)**, 8–10 (internes Hosting, Alt-Aufgaben
-aus Phase 2, Varianten) sowie der Wrapper-Block in `streamlit_app.py`. Die
-Punkte 1–7 und A–D sind abgeschlossen; sie bleiben durchgestrichen stehen,
-weil die Begründungen mehr wert sind als die Aufgaben.
+**Stand 12.08.2026 (abends) — was wirklich noch offen ist:** nur noch
+**8–10** (internes Hosting, Alt-Aufgaben aus Phase 2, Varianten). Alles
+andere ist abgeschlossen; die Punkte bleiben durchgestrichen stehen, weil die
+Begründungen mehr wert sind als die Aufgaben.
 
-Auffällig: E, F und der Wrapper-Block sind **dieselbe Krankheit** — eine
-Funktion, die zweimal existiert und deren Kopien auseinanderlaufen. Wer Zeit
-hat, arbeitet sie am besten in einem Zug ab.
+E, F und der Wrapper-Block in `streamlit_app.py` waren **dieselbe
+Krankheit** — eine Funktion, die zweimal existiert und deren Kopien
+auseinanderlaufen — und wurden deshalb in einem Zug erledigt. Der Befund
+daraus: Von den vier Fällen dieser Woche (B, E, F, Wrapper) war **keiner**
+durch unterschiedliche Formeln aufgefallen, sondern immer erst dadurch, dass
+jemand die Kopien nebeneinandergelegt hat. Zwei davon liefen bereits
+auseinander, ohne dass es jemand bemerkt hatte: die Honorarsätze der
+SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 **Am 07.08.2026 erledigt:** Punkt 5 (`generate_pf_pdf` entfernt), Punkt 6
 (`enableStaticServing` + `medien_download_url` entfernt), Teile von Punkt 1
@@ -2663,17 +2666,27 @@ hat, arbeitet sie am besten in einem Zug ab.
   schätzen. Beweis der Wirkungsgleichheit: alle sieben Broschüren vorher/
   nachher rekursiv verglichen — von 2056 ZIP-Einträgen unterschieden sich 34,
   ausnahmslos `docProps/core.xml` (Erzeugungs-Zeitstempel).
-  **Gleichartiger Block in `streamlit_app.py` (Zeilen 62–88) bleibt** — der
-  ist nicht tot, die UI ruft ihn überall auf, und zwischen den Durchreichern
-  stehen echte UI-Helfer.
-- **E. Die rf-Tagessatz-Umrechnung steht dreifach** *(neu 12.08.2026, beim
-  Umbau von B aufgefallen)*: `(1+rf)^(1/365)-1` in `analytics.py:231` sowie
-  `streamlit_app.py:144` und `:158`. Andere Größe als das Honorar, dieselbe
-  Bauart — und damit dasselbe Risiko, dass eine Korrektur nur die Hälfte
-  erreicht. Kleiner als B, weil der rf nur die Sharpe Ratio beeinflusst und
-  nicht die ausgewiesene Rendite. Vor dem Umbau prüfen, ob die beiden
-  UI-Stellen wirklich identisch rechnen oder ob eine davon absichtlich
-  abweicht.
+  ~~**Gleichartiger Block in `streamlit_app.py` bleibt**~~ — **auch erledigt,
+  12.08.2026.** Es waren **zehn** Durchreicher, nicht sieben: Drei standen
+  nicht im Block oben, sondern verstreut weiter unten (`calc_sharpe_excess`,
+  `calc_period_return`, `calc_period_return_after_fee`). Einer war tot
+  (`annual_fee_to_daily_drag`), die übrigen neun hingen an 25 Aufrufstellen.
+  Ertrag deshalb nur **−4 Zeilen netto** — an die Stelle der Attrappen ist
+  eine Erklärung getreten, warum dort jetzt nur noch UI-spezifische Helfer
+  stehen. Gemacht wurde es trotzdem, aus demselben Grund wie bei den 40:
+  Eine Attrappe mit dem Namen einer echten Funktion führt die Suche in die
+  Irre. Beweis siehe Changelog (AppTest-Dump, zeichengleich).
+- ~~**E. Die rf-Tagessatz-Umrechnung steht dreifach**~~ — **erledigt
+  12.08.2026.** Es waren sogar vier Stellen (`annual_fee_to_daily_drag`,
+  `calc_sharpe_excess`, `aggregate_rf_geometric`, `make_index_from_rf`).
+  Neu: `analytics.annual_to_daily_rate(annual_rate)`, nimmt Einzelwert oder
+  Reihe. **`annual_fee_to_daily_drag` behält seinen eigenen Namen** und ruft
+  die neue Funktion nur auf: Die Mathematik ist identisch, die Größen sind es
+  nicht — ein Honorar wird abgezogen, ein Zins gutgeschrieben, und wer
+  `annual_to_daily_rate(fee)` liest, sieht dem Aufruf das Vorzeichen nicht
+  mehr an. Vorab nachgemessen, dass der Weg über `np.asarray`
+  **bit-identisch** ist; Broschüren unverändert. Prüfstein:
+  `tests/test_analytics.py`, Schritt 6.
 - ~~**D. Testabdeckung ausbauen.**~~ — **erledigt 12.08.2026.**
   `tests/test_analytics.py` (Bausteine gegen von Hand nachrechenbare Werte,
   degenerierte Eingaben, `has_benchmark`, der Vertrag von
@@ -2682,9 +2695,14 @@ hat, arbeitet sie am besten in einem Zug ab.
   `test_formats` gar keine Installation. Die Runde hat **drei Fehler
   gefunden** — siehe Transferwissen **#47**; alle drei kamen aus
   degenerierten Eingaben, keiner aus den fachlich interessanten Fällen.
-- **F. `fmt_date_de` existiert zweimal — und die beiden verhalten sich
-  unterschiedlich** *(neu 12.08.2026)*. `modules/formats.py` (Broschüre) und
-  `modules/shared.py:133` (Oberfläche). Gemessen:
+- ~~**F. `fmt_date_de` existiert zweimal — und die beiden verhalten sich
+  unterschiedlich**~~ — **erledigt 12.08.2026.** `shared.py` reicht
+  `fmt_date_de` und `fmt_pct_de` jetzt aus `formats.py` durch (als Zuweisung,
+  damit das Weiterreichen sichtbar ist und pyflakes die Namen nicht für
+  unbenutzt hält — es kennt kein `noqa`). `fmt_eur_de` bleibt lokal, weil die
+  Broschüre keine Beträge ausweist, verhält sich bei Fehlwerten aber jetzt
+  genauso. Prüfstein: `tests/test_formats.py`, Schritt 7. Der Befund, der
+  dazu führte:
 
   | Eingabe | `formats` | `shared` |
   |---|---|---|
@@ -2736,6 +2754,14 @@ hat, arbeitet sie am besten in einem Zug ab.
    künftigen Update → dann bricht die App (dieselbe Auto-Update-Falle wie
    #20). Sweep über alle Dateien: `use_container_width=True` → `width="stretch"`,
    `False` → `width="content"`.
+7a. **`pyflakes` über das ganze Repo ist nicht sauber** *(neu 12.08.2026)*.
+   Die Dateien der letzten Sitzungen sind es, der Rest nicht: 16 Meldungen in
+   `chart_dynamik.py` (4), `portfolio_builder.py` (6), `pptx_slides.py` (3),
+   `portfolioanalyse.py` (1) und `test_bedienung.py` (2). Ausnahmslos harmlose
+   Sorten — unbenutzte Importe und Variablen, zwei f-Strings ohne Platzhalter.
+   Keine undefinierten Namen, also nichts, was zur Laufzeit knallt. Lohnt sich
+   als Aufräumrunde, wenn ohnehin jemand in diesen Dateien arbeitet;
+   `portfolio_builder.py` wird derzeit gar nicht importiert.
 8. **Internes Hosting evaluieren** (löst Cloud-Update-Fallen dauerhaft; für
    den Download seit #25 NICHT mehr nötig).
 9. **Alt-Aufgaben aus Phase 2 — Status prüfen:** PDF-Seitenzahlen
@@ -2748,6 +2774,68 @@ hat, arbeitet sie am besten in einem Zug ab.
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 (abends) – Dieselbe Funktion an zwei Orten: E, F und der Wrapper-Block
+
+Drei Backlog-Punkte, eine Krankheit. In einem Zug erledigt, weil sie
+zusammengehören — und weil beim Nebeneinanderlegen erst sichtbar wird, was
+eine einzelne Betrachtung verdeckt.
+
+**F — `fmt_date_de` gab es zweimal, und die Oberfläche stürzte ab.**
+`shared.py` (Oberfläche) und `formats.py` (Broschüre) formatierten gültige
+Werte gleich, Fehlwerte aber nicht:
+
+| Eingabe | `formats` | `shared` (vorher) |
+|---|---|---|
+| `None` | `–` | `'None'` |
+| `pd.NaT` | `–` | **ValueError** |
+| `float('nan')` | `–` | `'nan'` |
+
+`fmt_date_de` wird an 23 Stellen aufgerufen (Auflagedatum, Drawdown-Tiefpunkt,
+Erholungsdatum, Quelle-Zeile, Zeitraum-Beschriftungen), `fmt_pct_de` an 29.
+Ein `NaT` aus einer unvollständigen Zeitreihe hat dort also nicht „–"
+angezeigt, sondern **die Seite abgeräumt**. `shared` reicht beide Namen jetzt
+aus `formats` durch — bewusst als Zuweisung statt als `from`-Import, damit
+das Weiterreichen sichtbar bleibt und pyflakes die Namen nicht für unbenutzt
+hält (es kennt kein `noqa`). `fmt_eur_de` bleibt lokal, weil die Broschüre
+keine Beträge ausweist, wurde aber genauso gehärtet.
+
+**E — die 365-Umrechnung stand an vier Stellen**, nicht an drei:
+`annual_fee_to_daily_drag`, `calc_sharpe_excess`, `aggregate_rf_geometric`,
+`make_index_from_rf`. Neu ist `analytics.annual_to_daily_rate(annual_rate)`,
+die Einzelwert *und* Reihe nimmt. **Der Honorarsatz behält seinen eigenen
+Namen** und ruft die neue Funktion nur auf: Die Mathematik ist identisch, die
+Größen sind es nicht — ein Honorar wird abgezogen, ein Zins gutgeschrieben.
+Wer `annual_to_daily_rate(fee)` liest, sieht dem Aufruf das Vorzeichen nicht
+mehr an; der sprechende Name ist die Verständlichkeit wert.
+
+Weil es um Kundenzahlen geht, wurde **vor** dem Umbau nachgemessen, dass der
+Weg über `np.asarray` bit-identisch ist — an allen vorkommenden Sätzen (0 %,
+1,023 %, 1,2 %, 1,55 %, 3 %) und für Arrays. Wäre er es nicht gewesen, hätte
+sich die letzte Nachkommastelle jeder Broschüre verschoben.
+
+**Wrapper-Block — es waren zehn, nicht sieben.** Drei standen nicht im Block
+oben, sondern verstreut weiter unten (`calc_sharpe_excess`,
+`calc_period_return`, `calc_period_return_after_fee`). Einer war tot, die
+übrigen neun hingen an 25 Aufrufstellen. Ertrag: **−4 Zeilen netto** — an die
+Stelle der Attrappen ist eine Erklärung getreten. Gemacht wurde es trotzdem,
+aus demselben Grund wie bei den 40 in `pptx_export.py`: Eine Attrappe mit dem
+Namen einer echten Funktion führt die Suche in die Irre. Was blieb, sind die
+acht Funktionen, die es in `analytics` nicht gibt, weil die Broschüre sie
+nicht braucht (Euro-Drawdown, Calmar, DD-Dauer und -Erholung, Datums-
+Varianten des MDD, rf-Index).
+
+**Beweismittel für einen UI-Umbau — neu und nachnutzbar:** Für Broschüren gab
+es den rekursiven ZIP-Vergleich; für die Oberfläche gab es bisher nichts
+Vergleichbares. Jetzt schon: Die App per AppTest hochfahren und **alle**
+Kennzahlen, Captions, Markdown-Blöcke und Tabellen als JSON abziehen — vor
+und nach dem Umbau. Beide Dumps waren zeichengleich (3806 Zeichen), erfasst
+sind unter anderem Rendite p.a., Volatilität, Calmar, Sharpe und das
+Auflagedatum. Das deckt die Standard-Ansicht ab, nicht jeden
+Interaktionspfad — dafür stehen die drei AppTest-Suiten daneben. Das Skript
+ist keine zehn Zeilen und gehört beim nächsten UI-Umbau wieder eingesetzt.
+
+Alle 16 Suiten grün, `pyflakes` sauber, Broschüren unverändert.
 
 ### 12.08.2026 – Prüfsteine für analytics und formats; drei Fehler dabei gefunden
 

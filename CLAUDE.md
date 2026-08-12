@@ -21,7 +21,9 @@ beweist nichts.
 
 **3. Beweisen, dass nichts kaputtgeht.** Bei Umbauten die Ergebnisse
 vorher/nachher vergleichen. PPTX sind ZIPs mit eingebetteten ZIPs — rekursiv
-vergleichen, Zeitstempel ignorieren.
+vergleichen, Zeitstempel ignorieren. Für die **Oberfläche** gibt es dasselbe
+seit 12.08.2026: `python tests/ui_dump.py vorher.json`, umbauen,
+`nachher.json`, vergleichen.
 
 **Und beim Testen rechnender Funktionen:** immer auch leere Liste, ein
 Element, konstante Werte, NaN und Null durchschicken. Alle drei Fehler der
@@ -88,7 +90,8 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/chart_dynamik.py` | **wie** es aussieht (Optik, nie Werte) |
 | `modules/pptx_helpers.py` | generische PPTX-Mechanik |
 | `modules/pptx_charts.py` | Chart-XML + Bug-Workarounds |
-| `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) |
+| `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht** |
+| `modules/formats.py` | **alle** Zahlen-, Prozent- und Datumsformate + Fehlwert `–`; streamlit-frei, gilt für Tool *und* Broschüre |
 | `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.

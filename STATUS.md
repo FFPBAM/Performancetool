@@ -116,6 +116,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Zurücksetzen im Zeitraum** | *(11.08.)* Knopf neben den Kalenderfeldern, nur bei „Eigener Zeitraum". Vorher klebten die Felder an ihren Werten, sobald man sie einmal angefasst hatte. Dabei ist ein Fehler in der Doku zu #19 aufgeflogen — siehe unten. |
 | **Kosten-Mathematik zentral** | *(12.08.)* Backlog B erledigt: `pptx_export.py` rechnete den Honorarabzug mit eigenen Kopien. Formelgleich — und genau das war die Gefahr: Eine Korrektur in `analytics` hätte die **Broschüre nicht erreicht**. Broschüren vorher/nachher byte-identisch bewiesen. |
 | **Prüfsteine für die Rechenmodule** | *(12.08.)* Backlog D erledigt: `analytics` und `formats` hatten keine eigenen Tests, obwohl jede Kennzahl jeder Kundenfolie durch sie läuft. **Drei Fehler dabei gefunden** — siehe unten. |
+| **Eine Funktion, ein Ort** | *(12.08.)* Backlog E, F und der Wrapper-Block in einem Zug. Wichtigster Fund: `shared.fmt_date_de` warf bei `pd.NaT` eine **ValueError** — die Oberfläche wäre abgestürzt, wo sie „–" hätte zeigen sollen. Dazu die rf-Umrechnung (vier Stellen) und zehn Durchreicher. |
 
 ### Die drei Funde vom 12.08.2026 — alle aus Grenzfällen
 
@@ -304,34 +305,16 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
    wird. Fünf Minuten, die im Zweifel Stunden sparen (#20).
-4. **Wrapper-Block in `streamlit_app.py`** (Zeilen 62–113) — dasselbe Muster
-   wie das entfernte in `pptx_export.py`, aber **nicht tot**: die UI ruft ihn
-   überall auf, und zwischen den Durchreichern stehen echte UI-Helfer
-   (Euro-Drawdown, Calmar, DD-Dauer). Am 12.08.2026 nachgezählt: von sieben
-   reinen Durchreichern ist **einer** tot (`annual_fee_to_daily_drag`), die
-   übrigen sechs hängen an **21 Aufrufstellen**. Ertrag also ~20 Zeilen gegen
-   den Rendering-Pfad der Oberfläche — anders als bei `pptx_export.py`, wo 27
-   von 40 Wrappern schlicht niemand aufrief. Wenn, dann die kleine Variante:
-   den toten löschen, die sechs anderen durch direkte Importe ersetzen.
-5. **`fmt_date_de` existiert zweimal — und stürzt in einer der beiden
-   Fassungen ab** (Backlog F, neu 12.08.2026). `formats.py` (Broschüre)
-   liefert bei `None`/`NaT`/`nan` sauber „–"; `shared.py:133` (Oberfläche)
-   liefert „None" bzw. „nan" — und bei `pd.NaT` eine **ValueError**. Die UI
-   ruft die Funktion an rund 15 Stellen auf. Von den offenen Punkten der
-   einzige mit Absturzrisiko.
-6. **rf-Tagessatz-Umrechnung steht dreifach** (Backlog E, neu 12.08.2026):
-   `analytics.py:231`, `streamlit_app.py:144` und `:158`. Dieselbe Bauart wie
-   die zusammengeführte Honorar-Mathematik, aber kleinere Wirkung — der rf
-   beeinflusst nur die Sharpe Ratio, nicht die ausgewiesene Rendite.
-
-Die Punkte 4–6 sind **dieselbe Krankheit**: eine Funktion, die zweimal
-existiert und deren Kopien auseinanderlaufen. Am besten in einem Zug.
+**Das war es.** Der Backlog ist bis auf Nachrangiges (internes Hosting,
+Alt-Aufgaben aus Phase 2) leer.
 
 **Erledigt am 12.08.2026:** Backlog **B** (Honorar-Mathematik nur noch in
-`analytics`, Broschüren byte-identisch bewiesen, neuer Prüfstein
-`test_kosten_mathematik.py`) und Backlog **D** (Prüfsteine für `analytics`
-und `formats` — die Runde hat dabei **drei Fehler gefunden**, siehe oben).
-Außerdem **abgehakt statt abgearbeitet**:
+`analytics`), **D** (Prüfsteine für `analytics` und `formats` — die Runde hat
+dabei **drei Fehler gefunden**, siehe oben), **E** (rf-Umrechnung stand an
+vier statt drei Stellen → `annual_to_daily_rate`), **F** (`fmt_date_de`
+zweifach — die UI-Fassung **stürzte bei `NaT` ab**) und der **Wrapper-Block
+in `streamlit_app.py`** (zehn Durchreicher statt der vermuteten sieben, einer
+davon tot, 25 Aufrufstellen). Außerdem **abgehakt statt abgearbeitet**:
 Backlog 3 (Spalte „Währung" — alle 38 CSVs führen sie, gesichtet), Backlog 4
 (Familien ESG/CVV/ETF — alle Vorlagen da, alle 19 Strategien zugeordnet,
 gesichtet) und Backlog 6 (Download-Toter-Code — war schon am 07.08. entfernt,
@@ -396,6 +379,12 @@ Bewährt in der letzten Sitzung und bitte beibehalten:
 - **Beweisen, dass nichts kaputtgeht.** Bei der Konfigurations-Extraktion
   wurden alle sieben Broschüren vorher/nachher rekursiv verglichen (PPTX und
   eingebettete XLSX sind ZIPs); übrig blieb nur der Zeitstempel.
+- **Für die Oberfläche gibt es das jetzt auch** *(12.08.2026)*:
+  `python tests/ui_dump.py vorher.json` → umbauen →
+  `python tests/ui_dump.py nachher.json` → vergleichen. Zieht alle
+  Kennzahlen, Captions, Markdown-Blöcke und Tabellen ab. Erfasst die
+  Standard-Ansicht, nicht die Bedienpfade — dafür stehen die AppTest-Suiten
+  daneben.
 - **Ein Commit je Thema**, deutsche Commit-Nachricht mit Begründung.
 - **Was das Auge findet, findet kein Test.** Beide Fehler dieser Sitzung
   kamen aus Philips Sichtprüfung. Broschüren stichprobenartig in *echtem*
