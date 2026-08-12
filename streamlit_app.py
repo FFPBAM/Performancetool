@@ -208,6 +208,13 @@ def compute_bar_data(df, fee_dec, mode, label, custom_start=None, custom_end=Non
         rows.append({"label": pl, f"{label} (nach Kosten)": calc_period_return_after_fee(rp, fee_dec)*100,
             "ret_bm_raw": calc_period_return(rb)*100 if has_bm else None})
     if mode == "Kalenderjahre":
+        # BEWUSST anders als die Broschuere (Entscheidung Philip, 12.08.2026):
+        # Hier bleiben angebrochene Jahre stehen — das Auflagejahr genauso wie
+        # das laufende. Die Broschuere laesst sie weg (analytics._ist_volles_jahr),
+        # weil dort "PERFORMANCE P.A." darueber steht und der Kunde die Zahl
+        # nicht einordnen kann. Im Tool waehlt der Berater den Zeitraum selbst
+        # und sieht ihn neben dem Chart; ein Teiljahr ist dort erwartbar und
+        # traegt Information. Wer das angleicht, nimmt sie ihm weg.
         for y in sorted(df.index.year.unique()): _add(str(y), df[df.index.year==y])
     elif mode == "Quartale":
         tmp=df.copy(); tmp["_y"]=tmp.index.year; tmp["_q"]=tmp.index.quarter

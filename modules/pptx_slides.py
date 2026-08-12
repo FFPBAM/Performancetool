@@ -2176,7 +2176,14 @@ def fill_einzeltitel_themen_slide(prs, slide_idx: int, df, strategy_name: str,
 
 
 # Sammelt Kapazitäts-Warnungen der Einzeltitel-Themen-Folie (analog zum
-# LAST_BUILD_ERRORS-Muster in pptx_export). Wird von dort ausgelesen.
+# LAST_BUILD_ERRORS-Muster in pptx_export).
+#
+# ACHTUNG (nachgemessen 12.08.2026): Hier stand "Wird von dort ausgelesen" —
+# das stimmt nicht. Im ganzen Repo gibt es keine Leseposition; die Liste
+# wächst und niemand sieht sie. Der Kanal, der beim Berater ankommt, ist
+# pptx_export.LAST_BUILD_ERRORS (ausgelesen in portfolioanalyse.py). Wer eine
+# dieser Warnungen sichtbar machen will, hängt sie dort an — oder liest diese
+# Liste in generate_portfolioanalyse_pptx aus. Bis dahin: kein Signal.
 EINZELTITEL_WARNUNGEN = []
 
 
@@ -2514,7 +2521,9 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
         Row 4: "Wertentwicklung seit 01.01.{Jahr}**"             → Wert %
         Row 5: "Duration"                                        → Dezimal
     - "Diagramm links" (Säulen): Performance p.a. nach Kosten im
-      Benchmarkvergleich, volle Kalenderjahre (max. 5); Achsenformat "0%"
+      Benchmarkvergleich, volle Kalenderjahre (max. 5 — seit 12.08.2026 auch
+      wirklich nur volle, siehe analytics._ist_volles_jahr; die Zahl der
+      Balken kann deshalb kleiner sein); Achsenformat "0%"
       (02.07.2026, Punkt 1 — vereinheitlicht mit F9; Daten-Labels bleiben
       2-stellig "0.00%")
     - "Diagramm rechts" (Linie): Wertentwicklung als Index (Start = 1.0),
@@ -2584,6 +2593,14 @@ def fill_wertentwicklung_slide(prs, slide_idx: int, strategy_name: str,
     # ── Säulen-Chart: Performance p.a. im Benchmarkvergleich ──
     # Datenbasis identisch zur Performance-Folie: nur VOLLE Kalenderjahre
     # (Fußnote *: "nach Kosten bis zum 31.12. des Vorjahres").
+    #
+    # "Voll" hieß bis zum 12.08.2026 nur "es gibt Daten in dem Jahr" — das
+    # angebrochene Auflagejahr wurde als Jahresbalken gezeichnet (an "Pro"
+    # gemeldet: 122 Tage als "2023"). Jetzt filtert analytics es weg; die
+    # Kategorienliste ist damit bei jungen Strategien kürzer, im Grenzfall
+    # LEER. Der leere Fall wird in pptx_export._build_we_data gemeldet, damit
+    # hier nicht stillschweigend die Vorlagen-Beispieldaten stehen bleiben.
+    # Prüfstein: tests/test_kalenderjahre.py
     pa = we_data.get("performance_pa", {})
     # Standard TRUE, nicht False (11.08.2026): Nur ein AUSDRÜCKLICHES
     # has_benchmark=False laesst Serie, Legendeneintrag und Fußnotenzeile

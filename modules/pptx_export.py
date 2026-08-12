@@ -369,8 +369,10 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
 
     Chart-Daten (Balken + Linie) kommen 1:1 aus compute_performance_data
     (modules/analytics.py) — identische Datenbasis wie die Performance-Folie:
-    Balken = volle Kalenderjahre nach Kosten (max. 5), Linie = gesamte
-    Historie als Index (Start 1.0) nach Kosten.
+    Balken = volle Kalenderjahre nach Kosten (höchstens 5, seit 12.08.2026
+    auch wirklich nur vollständig abgedeckte — siehe dort
+    _ist_volles_jahr; bei jungen Strategien also weniger oder gar keine),
+    Linie = gesamte Historie als Index (Start 1.0) nach Kosten.
 
     Args:
         timeseries_df: DataFrame mit Spalten 'ret_port', 'ret_bm', 'rf'
@@ -466,7 +468,18 @@ Balken — damit unterscheiden sich F8 (nur volle Kalenderjahre, gemäß
 *-Fußnoten-Logik) und F9 (inkl. aktuellem Jahresverlauf) inhaltlich.
 Entspricht der Darstellung des Streamlit-Tools selbst (Balken-Chart
 "Kalenderjahre" zeigt dort ebenfalls das laufende Jahr mit an).
-False = altes Verhalten (beide Charts identisch)."""
+False = altes Verhalten (beide Charts identisch).
+
+NACHTRAG 12.08.2026 — vor dem Umlegen dieses Schalters lesen: Der Anhang
+ist ein UNVOLLSTÄNDIGES Jahr und widerspricht damit der Regel, die seit
+heute für die Broschüre gilt (nur volle Kalenderjahre, siehe
+analytics._ist_volles_jahr). Er ist trotzdem unangetastet geblieben, weil er
+GAR NICHT LÄUFT: Er hängt an der Folienrolle "performance", und die kommt in
+KEINER Familien-Konfiguration vor — nur in DEFAULT_TEMPLATE_CONFIG (siehe
+pptx_slides Zeile 160). Jede echte Broschüre füllt ihren Säulen-Chart über
+fill_wertentwicklung_slide. Wer die Rolle aktiviert, entscheidet neu, ob ein
+laufendes Jahr im Kundendokument stehen darf — die Entscheidung vom
+02.07.2026 ist damit nicht beantwortet, nur aufgeschoben."""
 
 
 def _append_current_year_bar(perf: dict, ts: pd.DataFrame, fee: float) -> dict:
@@ -541,7 +554,8 @@ def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
         return None
 
 
-def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
+def _build_we_data(performance_inputs, idx: int,
+                   bezeichnung: str = "") -> Optional[dict]:
     """
     Helfer (NEU Juli 2026): Berechnet das we_data-Dict für die
     Wertentwicklungs-Folie aus performance_inputs[idx].
@@ -551,6 +565,10 @@ def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
     Eintrag (siehe Snippet für portfolioanalyse.py). Fehlen die Keys, zeigt
     die Folie an den Stellen "–" bzw. behält die Vorlagen-Fußnote —
     vollständig rückwärtskompatibel zu Alt-Aufrufern.
+
+    Args:
+        bezeichnung: Anzeigename der Strategie, nur für die Warnung unten.
+            Fehlt er, steht dort die Portfolio-Nummer.
 
     Returns None wenn keine Daten — dann zeigt die Folie Vorlagen-Platzhalter
     (nur der Titel wird gesetzt).
@@ -565,7 +583,7 @@ def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
     if ts is None or len(ts) == 0:
         return None
     try:
-        return compute_wertentwicklung_data(
+        we = compute_wertentwicklung_data(
             ts, fee,
             duration=pi.get("duration"),
             benchmark_text=pi.get("benchmark_text"),
@@ -573,6 +591,26 @@ def _build_we_data(performance_inputs, idx: int) -> Optional[dict]:
     except Exception as exc:
         _record_build_error(f"Wertentwicklungs-Folie, Portfolio {idx + 1}", exc)
         return None
+
+    # ── Leerfall melden statt stillschweigend die Vorlage zeigen (12.08.2026) ──
+    # Seit die Broschüre nur noch VOLLE Kalenderjahre zeigt
+    # (analytics._ist_volles_jahr), kann die Jahresliste leer sein: bei einer
+    # Strategie, die noch kein Kalenderjahr hinter sich hat. fill_
+    # wertentwicklung_slide lässt den Säulen-Chart dann unangetastet — und
+    # dort stehen die BEISPIELDATEN DER VORLAGE (Vorlage_Thema.pptx: 2024/2025
+    # mit Fantasiewerten). In einer Kundenbroschüre wäre das schlimmer als ein
+    # leeres Chart, deshalb wird es gemeldet. Mit den 19 Strategien vom
+    # 12.08.2026 tritt der Fall nicht ein (tests/test_kalenderjahre.py);
+    # er trifft jede Strategie mit Auflage im laufenden Jahr.
+    if not (we.get("performance_pa") or {}).get("jahre"):
+        wer = bezeichnung or f"Portfolio {idx + 1}"
+        auflage = ts.index.min()
+        LAST_BUILD_ERRORS.append(
+            f"{wer}: kein abgeschlossenes Kalenderjahr seit Auflage "
+            f"({auflage:%d.%m.%Y}) — der Säulen-Chart der "
+            f"Wertentwicklungs-Folie zeigt weiter die Beispieldaten der "
+            f"Vorlage. Folie vor dem Versand prüfen.")
+    return we
 
 
 
@@ -869,7 +907,7 @@ def generate_portfolioanalyse_pptx(
     for k, (display_name, df, eval_date, _dur) in enumerate(portfolios):
         strategy_name = clean_strategy_name(display_name)
         perf_data = _build_perf_data(performance_inputs, k)
-        we_data = _build_we_data(performance_inputs, k)
+        we_data = _build_we_data(performance_inputs, k, display_name)
         roll_data = _build_rollierend_data(performance_inputs, k)
         stand = _stand_str(eval_date)
 

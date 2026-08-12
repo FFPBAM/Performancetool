@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 59 Commits vor `main`
+· 60 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -101,7 +101,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Toter Code** | ~1.900 Zeilen: `performance.py`, `macrobond_upload.py`, `generate_pf_pdf`, Platzhalter-Dateien. |
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
-| **Tests** | **18 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Tests** | **19 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
@@ -120,7 +120,89 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **`pyflakes` sauber** | *(12.08.)* Backlog 7a: 16 Meldungen auf 0. Kein Laufzeitfehler darunter — aber die Prüfung wird jetzt wieder gelesen. Zwei Funde mit Substanz: die tote `holeSize`-Kette in beiden Ring-Funktionen und ein `is_bond`, das laut Historie einmal zwei Abfragen steuerte. |
 | **Chart-Achsen** | *(12.08.)* Hinweis eines Kollegen: Die ETF-Broschüre zeigt kein 2026, obwohl die Daten bis Juli 2026 laufen. Am Artefakt nachgemessen: **21 Datumsachsen, keine einzige in Ordnung.** Bei der Sichtprüfung kam die Wertachse dazu — auf den cVV-Folien fehlte die **100-%-Linie**. Gleicher Mechanismus, Details unten. |
 | **Quelle im Disclaimer** | *(12.08.)* Hinweis von Philip an der Offensiv-Broschüre: Die Quellenangabe wird vom Disclaimer überdruckt. Am PowerPoint-Rendering nachgemessen: **16 von 16** Wertentwicklungs-Folien, alle sechs Vorlagen. Zwei Ursachen, beide behoben. Details unten. |
+| **Rumpfjahr im Säulen-Chart** | *(12.08.)* Hinweis von Philip an der Pro-Broschüre: Der Benchmarkvergleich zeigt ein Jahr **2023**, obwohl die Strategie erst seit 01.09.2023 läuft. Nachgemessen: **7 von 19** Strategien zeigten ihr angebrochenes Auflagejahr als vollen Jahresbalken. Details unten. |
 | **Anlagekriterien für Thema** | *(12.08.)* Die Excel kannte nur 14 Strategien — weil sie aus den PPTX-Vorlagen abgeleitet wurde und die Thema-Vorlage keinen Kriterien-Kasten hat. Offensiv, Pro und Pro Dividende sind jetzt drin (Werte von der Bank-Webseite) und erscheinen **im Tool**; die Broschüren bleiben byte-identisch. **17 von 19** — SCHWEIZ fehlt noch. |
+
+### Der Säulen-Chart zeigte vier Monate als Jahresbalken
+
+Philip hat an der **Pro**-Broschüre gesehen, dass im Chart „PERFORMANCE P.A.
+(NACH KOSTEN) IM BENCHMARKVERGLEICH" ein Balken **2023** steht. *Muster FFPB
+Pro* läuft aber erst seit dem **01.09.2023**: Der Balken zeigte 122 Tage
+(+3,23 % gegen +5,11 % Benchmark) und stand als Jahreswert neben 2024
+(+27,65 %) und 2025 (+7,58 %).
+
+Das Fenster war richtig — die letzten fünf **abgeschlossenen** Kalenderjahre,
+also 2021–2025. Der Fehler saß eine Ebene tiefer: Die Schleife übersprang ein
+Jahr nur, wenn es **gar keine** Daten hatte. Ob die Daten das Jahr
+**abdecken**, hat niemand geprüft. Betroffen ist damit jede Strategie, deren
+Auflage in das Fenster fällt — **7 von 19**:
+
+| Strategie | Auflage | Rumpfbalken | Länge | zeigte |
+|---|---|---|---|---|
+| Muster FFPB Pro | 01.09.2023 | **2023** | 122 Tage | +3,23 % / +5,11 % |
+| Muster FFPB Pro Dividende | 22.10.2024 | 2024 | 71 Tage | −0,97 % / −1,30 % |
+| Comdirect 30 / 70 / 100 | 12.03.2024 | 2024 | 295 Tage | z. B. +6,05 % / +4,47 % |
+| Muster SCHWEIZ Substanz | 22.09.2022 | 2022 | 101 Tage | −2,19 % (ohne BM) |
+| Muster SCHWEIZ Aktien | 12.09.2022 | 2022 | 111 Tage | −4,68 % (ohne BM) |
+
+Die anderen zwölf waren sauber — nicht weil der Code sie richtig behandelte,
+sondern weil ihr Rumpfjahr längst aus dem Fenster gerutscht ist. Der Fehler
+wäre also von selbst verschwunden und mit jeder neuen Strategie
+wiedergekommen.
+
+**Festgelegt (Philip, 12.08.2026), drei Entscheidungen:**
+
+1. Der Rumpfbalken fällt **ganz weg** — nicht umbenannt in „2023 (ab 01.09.)".
+   Dass Comdirect und Pro Dividende damit auf **einen** Balken fallen, ist in
+   Kauf genommen: ein ehrlicher Balken ist besser als zwei, von denen einer
+   eine Jahresrendite behauptet, die es nicht gibt.
+2. Das **Tool bleibt unverändert.** Dort wählt der Berater den Zeitraum selbst
+   und sieht ihn neben dem Chart; ein Teiljahr trägt Information. In der
+   Broschüre steht der Balken allein unter der Überschrift „p.a.". Ein
+   Kommentar in `compute_bar_data` hält fest, dass das entschieden ist.
+3. Bleibt **kein** volles Jahr übrig (Strategie jünger als ein Kalenderjahr),
+   gibt es eine sichtbare Warnung. Bisher wäre dort stillschweigend das
+   **Beispiel-Chart der Vorlage** stehengeblieben (2024/2025 mit
+   Fantasiewerten). Mit den heutigen 19 Strategien tritt der Fall nicht ein.
+
+**Nachher:**
+
+```
+Pro             2024  2025
+SCHWEIZ ×2      2023  2024  2025
+Comdirect ×3    2025
+Pro Dividende   2025
+cVV/ESG/ETF     2021 2022 2023 2024 2025   (unverändert)
+```
+
+Die Toleranz ist **spiegelbildlich**: Am Jahresende galt „mindestens bis
+28.12." schon immer, am Jahresanfang gilt jetzt „spätestens ab 04.01." —
+Feiertage verschieben den ersten Kurs genauso wie den letzten.
+
+**Beweis.** Sieben Broschüren vorher/nachher rekursiv verglichen: **2056
+ZIP-Einträge, 17 inhaltliche Abweichungen**, ausschließlich Säulen-Chart-XML
+und deren eingebettete Arbeitsmappen. cVV, ESG, ETF und Thema (nur Offensiv)
+sind **byte-identisch**; in `Thema_x3` sind es genau die Charts von Pro und
+Pro Dividende — der Offensiv-Chart daneben ist unverändert, also ein
+Kontrollfall in derselben Datei. Der XML-Diff zeigt je Serie **eine Kategorie
+und einen Datenpunkt weniger**, sonst nichts: keine Achse, kein Format, keine
+Legende, keine Fußnote.
+
+Die Lehre steht als Transferwissen **#51**: *Ein Filter auf „leer" ist kein
+Filter auf „vollständig".* Prüfstein `tests/test_kalenderjahre.py` — auf dem
+alten Stand rot (9 Abweichungen), danach grün.
+
+**Zwei Nebenbefunde:**
+
+- `pptx_slides.EINZELTITEL_WARNUNGEN` behauptete im Kommentar, von
+  `pptx_export` ausgelesen zu werden. Im ganzen Repo gibt es **keine
+  Leseposition** — die Liste wächst, und niemand sieht sie. Kommentar
+  richtiggestellt; der Kanal, der beim Berater ankommt, ist
+  `LAST_BUILD_ERRORS`, und dort steht jetzt auch die neue Meldung.
+- `F9_BAR_INCLUDE_CURRENT_YEAR` hängt das **laufende** Jahr an und
+  widerspricht der neuen Regel — läuft aber in **keiner** echten Broschüre
+  (die Folienrolle `performance` kommt in keiner Familie vor). Bewusst nicht
+  geändert, nur an der Konstanten vermerkt.
 
 ### Die Datumsachse: gemeldet war eine Achse, betroffen waren alle
 
@@ -310,9 +392,9 @@ an, sobald eine Strategie ohne Satz dasteht.
 
 | | Zeilen |
 |---|---:|
-| Produktivcode (14 Dateien) | +2.537 / −3.627 → **netto −1.090** |
-| Tests (19 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+4.474** |
-| Dokumentation (8 Dateien) | +2.426 / −87 |
+| Produktivcode (14 Dateien) | +2.663 / −3.637 → **netto −974** |
+| Tests (20 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+4.798** |
+| Dokumentation (8 Dateien) | +2.926 / −87 |
 
 Weniger Produktivcode bei mehr Funktion, und zum ersten Mal ein Netz darunter.
 *(Die frühere Angabe „netto etwa −1.800 Zeilen" stammte vom 11.08. und stimmt
@@ -363,6 +445,17 @@ Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
   ist die Kette dieses Abends geschlossen: Datumsachse → Wertachse →
   Quelle, jede Korrektur am Endprodukt bestätigt.
 
+- **OFFEN (12.08.2026, abends, 3)** — **Rumpfjahr im Säulen-Chart.** Wieder
+  ein Fund aus Philips Auge, wieder am Endprodukt zu prüfen. Vier Punkte:
+  1. **Pro**-Broschüre: nur noch **2024** und **2025**. Sehen Balkenbreite
+     und Achse mit zwei Balken vernünftig aus?
+  2. **Comdirect** und **Pro Dividende**: nur **2025** — hält das Layout mit
+     einem einzigen Balkenpaar? Das ist die Stelle, an der eine Änderung
+     nötig würde, und sie lässt sich nur am Bildschirm entscheiden.
+  3. **SCHWEIZ Substanz**: 2023–2025, weiterhin **ohne** Benchmark-Balken
+     (der Fix vom 11.08. darf nicht gekippt sein).
+  4. **Eine cVV-Broschüre** als Kontrolle: unverändert 2021–2025.
+
 Alle Funde dieses Abends kamen aus dem **Auge**, nicht aus einem Test: erst
 ein Kollege, der die Datumsachse mit den Daten verglich, dann Philip an der
 frisch korrigierten Broschüre — zweimal hintereinander, denn die Wertachse
@@ -402,6 +495,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
+| `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -422,18 +516,19 @@ python tests/test_historie_ab.py
 python tests/test_folien_config.py
 python tests/test_chartachsen.py [C:\pfad\zur\ausgabe]
 python tests/test_quelle_position.py [C:\pfad\zur\ausgabe]
+python tests/test_kalenderjahre.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
 
-**Nachgemessen am 12.08.2026** — nicht geschätzt: Alle **18** Suiten wurden mit
+**Nachgemessen am 12.08.2026** — nicht geschätzt: Alle **19** Suiten wurden mit
 dem System-Python gestartet (hat pandas und numpy, aber **kein** streamlit und
 **kein** python-pptx). Ergebnis:
 
 | Verhalten ohne streamlit/pptx | Suiten |
 |---|---|
 | laufen vollständig durch | `test_analytics`, `test_formats`, `test_kosten_mathematik`, `test_benchmark_erkennung`, `test_streamlit_api`, `test_keine_piktogramme` |
-| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_chartachsen` |
+| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_chartachsen`, `test_kalenderjahre` |
 | überspringen sich ganz (Rückgabewert 0) | `test_bedienung`, `test_historie_ab`, `test_honorarsatz`, `test_export_smoke`, `test_trennstriche`, `test_folien_config`, `test_quelle_position` |
 | **brechen ab** | keine |
 
@@ -480,12 +575,16 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind nur noch zwei — beide liegen bei Philip.** Alle Sichtprüfungen
-sind erledigt (siehe oben); zwei weitere Punkte sind **bewusst
-zurückgestellt** und stehen darunter.
+**Es sind drei — alle liegen bei Philip.** Zwei weitere Punkte sind
+**bewusst zurückgestellt** und stehen darunter.
 
-1. **PR mergen** — alles andere hängt daran.
-2. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
+1. **Sichtprüfung Säulen-Chart** (Rumpfjahr, 12.08. abends) — die vier
+   Punkte stehen oben unter „Sichtprüfung in echtem PowerPoint". Der
+   kritische ist Comdirect/Pro Dividende mit nur **einem** Balkenpaar: ob
+   das Layout das trägt, lässt sich nur am Bildschirm entscheiden. Alle
+   übrigen Sichtprüfungen sind erledigt.
+2. **PR mergen** — alles andere hängt daran.
+3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
@@ -536,6 +635,11 @@ sieht sie sofort — vorher ging sie in 16 bekannten unter. Aufruf:
 In PowerShell expandiert `modules\*.py` **nicht** von selbst; entweder die
 Dateiliste vorher aufbauen (`Get-ChildItem`) oder den Aufruf über die Bash
 absetzen.
+
+**Erledigt am 12.08.2026 (abends, 3):** Der **Rumpfjahr-Balken** im
+Säulen-Chart — gemeldet an Pro, gefunden bei 7 von 19 Strategien. Kam aus
+keinem Backlog, sondern aus Philips Auge. Neuer Prüfstein
+`tests/test_kalenderjahre.py`, Transferwissen **#51**.
 
 **Erledigt am 12.08.2026:** Backlog **B** (Honorar-Mathematik nur noch in
 `analytics`), **D** (Prüfsteine für `analytics` und `formats` — die Runde hat

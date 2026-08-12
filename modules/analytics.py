@@ -300,6 +300,47 @@ def calc_sharpe_excess(daily_returns_after_fee: Sequence[float],
 # High-Level: Performance-Daten für die Broschüre
 # ─────────────────────────────────────────────────────────────────────────────
 
+JAHR_RAND_TOLERANZ_TAGE = 3
+"""Wieviele Tage an JEDEM Rand eines Kalenderjahres fehlen dürfen, damit es
+noch als vollständig gilt (12.08.2026).
+
+Am Jahresende gab es diese Toleranz schon immer — `last_full_year` unten
+verlangt Daten "mindestens bis 28.12.", lässt also den 29./30./31. offen.
+Die Regel gilt jetzt spiegelbildlich am Jahresanfang: die Reihe muss
+spätestens am 4. Januar beginnen. Grund ist derselbe wie am Jahresende —
+Feiertage. Eine Strategie, deren erster Kurs am 02.01. steht, hat das Jahr
+vollständig durchlaufen; ihr Jahr deshalb zu verwerfen wäre falsch.
+
+Drei Tage und nicht mehr: Der 06.01. ist in Teilen Deutschlands Feiertag,
+liegt aber schon jenseits dessen, was man "Jahresanfang" nennen kann."""
+
+
+def _ist_volles_jahr(sub: pd.DataFrame, jahr: int) -> bool:
+    """Deckt `sub` (die Zeilen EINES Kalenderjahres) das Jahr wirklich ab?
+
+    Der Säulen-Chart der Broschüre trägt die Überschrift "PERFORMANCE P.A.
+    (NACH KOSTEN) IM BENCHMARKVERGLEICH". Ein Balken darunter behauptet also
+    eine JAHRESrendite. Bis zum 12.08.2026 prüfte die Schleife nur
+    `sub.empty` — ein angebrochenes Auflagejahr wurde damit als voller
+    Jahresbalken gezeichnet. An "Muster FFPB Pro" (Auflage 01.09.2023) stand
+    so ein 122-Tage-Wert von +3,23 % als "2023" neben den echten Jahren 2024
+    und 2025; betroffen waren 7 der 19 Strategien. Das ist keine Kosmetik,
+    sondern eine falsche Sachaussage in einem Kundendokument.
+
+    Geprüft werden BEIDE Ränder, und zwar aus `sub` selbst statt aus dem
+    Anfang der Gesamtreihe: So greift die Regel auch bei einem Loch mitten in
+    der Historie und nicht nur beim Auflagejahr.
+
+    Prüfstein: tests/test_kalenderjahre.py
+    """
+    if sub.empty:
+        return False
+    tol = pd.Timedelta(days=JAHR_RAND_TOLERANZ_TAGE)
+    beginnt_rechtzeitig = sub.index.min() <= pd.Timestamp(jahr, 1, 1) + tol
+    endet_rechtzeitig = sub.index.max() >= pd.Timestamp(jahr, 12, 31) - tol
+    return bool(beginnt_rechtzeitig and endet_rechtzeitig)
+
+
 def compute_performance_data(timeseries_df: pd.DataFrame,
                              fee_dec: float,
                              n_years_bar_chart: int = 5) -> dict:
@@ -311,7 +352,9 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
             - 'ret_bm'   (Tagesrendite Benchmark, dezimal) — optional
             - 'rf'       (Annualisierter risikofreier Zins, dezimal) — optional
         fee_dec: Honorarsatz p.a. als Dezimal (z.B. 0.01023 für 1,023% inkl MwSt)
-        n_years_bar_chart: Anzahl Jahre für den Säulen-Chart (Default: 5)
+        n_years_bar_chart: GRÖSSE DES FENSTERS für den Säulen-Chart (Default: 5)
+            — betrachtet werden die letzten 5 abgeschlossenen Kalenderjahre,
+            nicht die letzten 5 gelieferten Balken. Siehe "jahre" unten.
 
     Returns:
         Dict im Format das die Performance-Folie erwartet:
@@ -331,6 +374,14 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
         UND die beiden "benchmark"-Listen LEER — es gibt dann nichts zu
         zeichnen. Wer daraus Chart-Serien baut, darf die Benchmark-Serie in
         diesem Fall nicht anlegen (siehe pptx_slides).
+
+        ZUSAGE für "performance_pa.jahre" (12.08.2026): Die Liste enthält
+        AUSSCHLIESSLICH Kalenderjahre, die die Zeitreihe vollständig abdeckt
+        (siehe _ist_volles_jahr). Sie ist damit oft KÜRZER als
+        n_years_bar_chart und im Grenzfall LEER — nämlich dann, wenn die
+        Strategie noch kein volles Kalenderjahr hinter sich hat. Wer sie
+        weiterverarbeitet, muss den leeren Fall behandeln; in der Broschüre
+        tut das pptx_export._build_we_data mit einer sichtbaren Warnung.
 
         Bei leerem DataFrame: Dict mit leeren Sub-Dicts.
     """
@@ -388,7 +439,10 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
     pa_bench = []
     for year in target_years:
         sub = df[df.index.year == year]
-        if sub.empty:
+        # Nicht `sub.empty`, sondern "deckt das Jahr ab" (12.08.2026): ein
+        # angebrochenes Auflagejahr ist kein Kalenderjahr und darf nicht als
+        # Jahresbalken erscheinen. Begründung und Messwerte: _ist_volles_jahr.
+        if not _ist_volles_jahr(sub, year):
             continue
         rp_y = sub["ret_port"].fillna(0.0).to_numpy(float)
         ref_year = calc_period_return_after_fee(rp_y, fee_dec)

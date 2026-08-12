@@ -1,6 +1,12 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
 ## Stand: 11.08.2026 (Phase 4: Code-Review — Benchmark-Bugfix, Deploy-Konfiguration repariert, ~2.200 Zeilen toter Code entfernt)
 
+> **Neu am 12.08.2026:** Transferwissen **#47**–**#51**. Der letzte kam aus
+> Philips Sichtprüfung an der Pro-Broschüre: „Es gibt Daten" ist nicht „der
+> Zeitraum ist abgedeckt" — der Säulen-Chart zeigte ein 122-Tage-Rumpfjahr
+> als Jahresbalken, auf 7 der 19 Strategien. Prüfstein
+> `tests/test_kalenderjahre.py`.
+
 > **Neu am 11.08.2026:** Transferwissen **#46** (ein Platzhalterwert pflanzt
 > sich fort — bis in den Fließtext) sowie ein vierter Punkt in **#20**
 > (Obergrenzen statt `==`-Pins). Backlog **A**, **C** und **1** sind damit
@@ -1975,6 +1981,80 @@ kann ein Test selbst erzeugen.
 Prüfstein: `tests/test_quelle_position.py`. Stellschrauben:
 `WE_QUELLE_TOP_CM` und `WE_FUSSNOTE_ZEILE_MAX` in `modules/pptx_slides.py`.
 
+### 51. „Es gibt Daten" ist nicht „der Zeitraum ist abgedeckt" (BUG, NEU 12.08.2026) ⭐
+
+Gemeldet hat Philip einen Balken: Im Säulen-Chart der **Pro**-Broschüre
+(„PERFORMANCE P.A. (NACH KOSTEN) IM BENCHMARKVERGLEICH") steht ein Jahr
+**2023**. Die Strategie läuft seit dem **01.09.2023**. Der Balken zeigte
+122 Tage — **+3,23 %** gegen **+5,11 %** Benchmark — und stand als
+Jahreswert neben 2024 (+27,65 %) und 2025 (+7,58 %).
+
+Der Code sah so aus:
+
+```python
+for year in target_years:
+    sub = df[df.index.year == year]
+    if sub.empty:            # ← die einzige Prüfung
+        continue
+```
+
+Das Fenster war richtig gewählt (die letzten fünf **abgeschlossenen**
+Kalenderjahre, 2021–2025); geprüft wurde danach nur noch, ob im Jahr
+**irgendwelche** Daten liegen. Ob sie das Jahr **abdecken**, hat niemand
+gefragt. Vier Monate genügten für einen vollwertigen Jahresbalken.
+
+**Übertragbar — drei Sätze:**
+
+1. **Ein Filter auf „leer" ist kein Filter auf „vollständig".** `empty`,
+   `len() > 0`, `notna().any()` beantworten die Frage „habe ich etwas?" —
+   nicht „habe ich genug?". Wo ein Aggregat für einen Zeitraum steht
+   (Jahresrendite, Monatsmittel, Quartalsumsatz), gehört die Abdeckung des
+   Zeitraums geprüft, nicht seine Nichtleere. Verwandt mit #43: dort waren
+   die ersten Datenpunkte nur Indexbasis, hier ist das erste Jahr nur ein
+   Rumpf — beide Male trägt der **Rand** der Zeitreihe die Falle.
+2. **Prüfe beide Ränder, und prüfe sie am Ausschnitt.** Am Jahresende gab es
+   die Regel längst („mindestens bis 28.12."), am Jahresanfang fehlte sie.
+   Wer sie ergänzt, misst sie an den Zeilen **dieses Jahres**
+   (`sub.index.min()`), nicht am Beginn der Gesamtreihe — dann greift
+   dieselbe Prüfung auch bei einem Loch mitten in der Historie. Und sie
+   braucht an beiden Rändern **dieselbe Toleranz**: Feiertage verschieben
+   den ersten Kurs genauso wie den letzten (hier 3 Tage, `JAHR_RAND_TOLERANZ_TAGE`).
+3. **Eine Regel, die eine Beschriftung verspricht, ist eine Sachaussage.**
+   Über dem Chart steht „p.a.". Damit ist jeder Balken darunter eine
+   Jahresangabe — auch der, der keine ist. Das ist kein Schönheitsfehler,
+   sondern §10.9.
+
+**Und wieder: gemeldet war einer, betroffen waren alle, die es sein
+konnten.** Nachgemessen an den 19 Strategien waren es **7** — jede, deren
+Auflage in das rollierende Fenster fällt (Pro, Pro Dividende, Comdirect ×3,
+SCHWEIZ ×2). Die zwölf älteren waren sauber, nicht weil der Code sie
+richtig behandelte, sondern weil ihr Rumpfjahr längst aus dem Fenster
+gerutscht ist. Ein Fehler, der von selbst verschwindet, ist trotzdem einer —
+er kommt mit jeder neuen Strategie zurück.
+
+**Was der Fix aufdeckt: den Fall, den es vorher nicht geben konnte.** Fällt
+das Rumpfjahr weg, kann die Jahresliste **leer** sein — bei einer Strategie,
+die noch kein Kalenderjahr hinter sich hat. Die Folie ließ das Chart dann
+unangetastet, und darin stehen die **Beispieldaten der Vorlage** (2024/2025
+mit Fantasiewerten). Das wäre schlimmer als der Rumpfbalken. Deshalb gilt:
+**Wer einen Filter verschärft, prüft, was der leere Rest auslöst.** Hier
+eine Meldung über `LAST_BUILD_ERRORS` — den einzigen Warnkanal, der beim
+Berater ankommt. (Nebenbefund derselben Runde: `EINZELTITEL_WARNUNGEN` in
+`pptx_slides` behauptete im Kommentar, ausgelesen zu werden — im ganzen Repo
+gibt es keine Leseposition. Wieder #50: eine Zusage im Kommentar.)
+
+**Bewusst NICHT angeglichen: das Tool.** Im Streamlit-Tool bleiben
+angebrochene Jahre im Balken-Chart stehen — Auflagejahr wie laufendes Jahr.
+Das ist keine Inkonsistenz aus Versehen, sondern eine Entscheidung (Philip,
+12.08.2026): Dort wählt der Berater den Zeitraum selbst und sieht ihn neben
+dem Chart; in der Broschüre steht der Balken allein und ohne Kontext. Die
+Konsistenz-Doktrin gilt für die **Mathematik** (eine Formel, ein Ort), nicht
+zwingend für den **Ausschnitt**. Wo sie bewusst gebrochen wird, gehört ein
+Kommentar an die Stelle — sonst gleicht sie jemand in sechs Monaten an.
+
+Prüfstein: `tests/test_kalenderjahre.py`. Stellschrauben:
+`_ist_volles_jahr` und `JAHR_RAND_TOLERANZ_TAGE` in `modules/analytics.py`.
+
 ---
 
 ## 1. Projektübersicht
@@ -3045,6 +3125,67 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 (abends, 6) – Der Säulen-Chart zeigte ein Rumpfjahr als Jahresbalken
+
+**Auslöser:** Philip an der Pro-Broschüre — im Chart „PERFORMANCE P.A. (NACH
+KOSTEN) IM BENCHMARKVERGLEICH" steht ein Balken **2023**, obwohl die
+Strategie erst seit dem 01.09.2023 läuft.
+
+**Befund:** Bestätigt und wieder breiter als gemeldet. Das Fenster („letzte
+fünf abgeschlossene Kalenderjahre", 2021–2025) war richtig; die Schleife in
+`compute_performance_data` übersprang ein Jahr aber nur bei `sub.empty`.
+Betroffen ist damit jede Strategie, deren Auflage in das Fenster fällt —
+**7 von 19**:
+
+| Strategie | Auflage | Rumpfbalken | Länge | zeigte |
+|---|---|---|---|---|
+| Muster FFPB Pro | 01.09.2023 | 2023 | 122 Tage | +3,23 % / +5,11 % |
+| Muster FFPB Pro Dividende | 22.10.2024 | 2024 | 71 Tage | −0,97 % / −1,30 % |
+| Comdirect 30 / 70 / 100 | 12.03.2024 | 2024 | 295 Tage | z. B. +6,05 % / +4,47 % |
+| Muster SCHWEIZ Substanz | 22.09.2022 | 2022 | 101 Tage | −2,19 % (ohne BM) |
+| Muster SCHWEIZ Aktien | 12.09.2022 | 2022 | 111 Tage | −4,68 % (ohne BM) |
+
+Die übrigen zwölf zeigen 2021–2025 und bleiben unverändert.
+
+**Entscheidungen (Philip):** Der Rumpfbalken fällt **ganz weg** (nicht:
+umbenennen in „2023 ab 01.09."), auch wenn Comdirect und Pro Dividende damit
+auf **einen** Balken fallen — ein ehrlicher Balken ist besser als zwei, von
+denen einer eine Jahresrendite behauptet, die es nicht gibt. Das **Tool
+bleibt unverändert**. Bleibt kein volles Jahr übrig, gibt es eine **sichtbare
+Warnung**; das Chart behält die Vorlagendaten.
+
+**Korrektur:** `_ist_volles_jahr` in `modules/analytics.py` — beide Ränder
+aus dem Jahresausschnitt, Toleranz `JAHR_RAND_TOLERANZ_TAGE = 3`
+(spiegelbildlich zur schon vorhandenen 28.12.-Regel; Feiertagsstarts sollen
+kein Jahr entwerten). Dazu die Leerfall-Meldung in
+`pptx_export._build_we_data`.
+
+**Nachher:** Pro `2024 · 2025`; SCHWEIZ `2023 · 2024 · 2025`; Comdirect und
+Pro Dividende `2025`; cVV/ESG/ETF unverändert `2021 … 2025`.
+
+**Beweis:** Sieben Broschüren vorher/nachher rekursiv verglichen — **2056
+ZIP-Einträge, 17 inhaltliche Abweichungen**, ausschließlich in den
+Säulen-Chart-XML und ihren eingebetteten Arbeitsmappen. CVV, ESG, ETF und
+Thema (nur Offensiv) sind **byte-identisch**; in `Thema_x3` sind es genau
+die Charts von Pro und Pro Dividende, der Offensiv-Chart daneben ist
+unverändert. Der XML-Diff enthält nur je eine Kategorie und einen Datenpunkt
+weniger pro Serie — keine Achse, kein Format, keine Legende, keine Fußnote.
+Alle 19 Suiten grün, `pyflakes` 0.
+
+**Zwei Nebenbefunde:**
+
+- `pptx_slides.EINZELTITEL_WARNUNGEN` behauptete im Kommentar, von
+  `pptx_export` ausgelesen zu werden. Im ganzen Repo gibt es keine
+  Leseposition — die Liste wächst, und niemand sieht sie. Kommentar
+  richtiggestellt, die Liste selbst unangetastet.
+- `F9_BAR_INCLUDE_CURRENT_YEAR` hängt das **laufende, unvollständige** Jahr
+  an und widerspricht damit der neuen Regel. Bewusst nicht geändert: Der
+  Schalter hängt an der Folienrolle `performance`, die in **keiner**
+  Familien-Konfiguration vorkommt — er läuft in keiner echten Broschüre. Als
+  Hinweis an der Konstanten vermerkt.
+
+Transferwissen **#51**. Prüfstein `tests/test_kalenderjahre.py`.
 
 ### 12.08.2026 (abends, 5) – Die Quellenangabe lag im Disclaimer (16 von 16 Folien)
 

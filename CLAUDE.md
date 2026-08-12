@@ -118,6 +118,24 @@ prüfte statt gegen eine Schwelle (#47).
   werden können, in Schema-Reihenfolge. Prüfstein:
   `tests/test_chartachsen.py`, Stellschrauben: `DATUMSACHSE_STUFEN` und
   `WERTACHSE_STUFEN`.
+- **„Es gibt Daten" ist nicht „der Zeitraum ist abgedeckt"** (#51,
+  12.08.2026). Der Säulen-Chart der Wertentwicklungs-Folie zeigte das
+  angebrochene **Auflagejahr** als vollen Jahresbalken — bei „Pro" 122 Tage
+  als „2023", unter einer Überschrift, die „p.a." sagt. Geprüft wurde nur
+  `sub.empty`. Wo ein Aggregat für einen Zeitraum steht, gehört die
+  **Abdeckung** geprüft, und zwar an **beiden** Rändern mit **gleicher**
+  Toleranz (`_ist_volles_jahr`, `JAHR_RAND_TOLERANZ_TAGE` in `analytics.py`;
+  Prüfstein `tests/test_kalenderjahre.py`). Zwei Folgeregeln: Wer einen
+  Filter verschärft, prüft, **was der leere Rest auslöst** — hier blieben
+  sonst die Beispieldaten der Vorlage im Chart stehen. Und: das **Tool zeigt
+  bewusst weiter Teiljahre** (Philip, 12.08.2026); die Konsistenz-Doktrin
+  gilt für die Mathematik, nicht zwingend für den Ausschnitt.
+- **Warnlisten sind nur dann Warnungen, wenn jemand sie liest.**
+  `pptx_slides.EINZELTITEL_WARNUNGEN` behauptete im Kommentar, ausgelesen zu
+  werden — im ganzen Repo gibt es keine Leseposition. Der einzige Kanal, der
+  beim Berater ankommt, ist `pptx_export.LAST_BUILD_ERRORS`
+  (`portfolioanalyse.py` zeigt ihn nach dem Export an). Dort anhängen, nicht
+  woanders.
 - **Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen.** Wo eine
   Strategie keine Anleihen hält, steht dort die **Liquiditätsgrenze**: `cVV
   dynamic` „max. 10 %", Pro und Pro Dividende „max. 15 %". Die Bank-Webseite
@@ -172,6 +190,7 @@ python tests/test_honorarsatz.py             # pandas + streamlit
 python tests/test_historie_ab.py             # pandas + streamlit
 python tests/test_folien_config.py           # pandas + streamlit
 python tests/test_chartachsen.py [<ordner>]  # Schritte 1+2 ohne jedes Paket
+python tests/test_kalenderjahre.py           # Schritte 1+2 nur pandas, 3 + pptx
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
