@@ -445,22 +445,21 @@ Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
   ist die Kette dieses Abends geschlossen: Datumsachse → Wertachse →
   Quelle, jede Korrektur am Endprodukt bestätigt.
 
-- **12.08.2026 (abends, 3)** — **Rumpfjahr im Säulen-Chart, Pro bestätigt.**
-  Philip hat die Broschüre **selbst aus Streamlit exportiert** und die
-  Pro-Folie gesichtet: zwei Jahresbalken (2024, 2025), Darstellung in
-  Ordnung. Damit ist nicht nur die Korrektur bestätigt, sondern der ganze
-  Weg — Tool → Export → Folie, nicht nur die Testdateien.
+- **12.08.2026 (abends, 3)** — **Rumpfjahr im Säulen-Chart: gesichtet und in
+  Ordnung.** Philip hat die Broschüren **selbst aus Streamlit exportiert**
+  und angesehen: **Pro** zwei Jahresbalken (2024, 2025), **Pro Dividende**
+  und die **comdirect-Familie** je ein Jahresbalken (2025). Damit ist nicht
+  nur die Korrektur bestätigt, sondern der ganze Weg — Tool → Export →
+  Folie, nicht nur die im Test gebauten Dateien.
 
-  **Noch offen sind die drei übrigen Punkte** (Dateien liegen in
-  `C:\Entwicklung\Sichtpruefung_Saeulen_20260812`):
-  1. **Comdirect** (Folie 7/9/11) und **Pro Dividende** (`Thema_x3.pptx`,
-     Folie 20): nur **2025**, also ein einziges Balkenpaar. Hält das Layout
-     das? Das ist der Punkt, der sich nur am Bildschirm entscheiden lässt —
-     falls nicht, sind die Wege die Balkenlücke in der Vorlage oder doch die
-     beschriftete Variante („2024 ab 12.03.").
-  2. **SCHWEIZ Substanz** (`SCHWEIZ.pptx`, Folie 12): 2023–2025, weiterhin
-     **ohne** Benchmark-Balken (der Fix vom 11.08. darf nicht gekippt sein).
-  3. **Eine cVV-Broschüre** als Kontrolle: unverändert 2021–2025.
+  **Der Ein-Balken-Fall ist damit entschieden.** Er war die einzige offene
+  Frage dieser Runde, weil sie sich nur am Bildschirm beantworten ließ:
+  Trägt das Chart ein einziges Balkenpaar? Es trägt. Es braucht also
+  **keine** Vorlagenänderung an der Balkenlücke und **keine** beschriftete
+  Variante („2024 ab 12.03.") — beide Wege sind hiermit vom Tisch, nicht
+  vergessen. Wer den Chart später doch voller haben will, ändert die
+  **Vorlage**, nicht die Regel: Ein Balken, der ein Rumpfjahr als
+  Jahresrendite ausgibt, bleibt eine falsche Sachaussage (§10.9).
 
 Alle Funde dieses Abends kamen aus dem **Auge**, nicht aus einem Test: erst
 ein Kollege, der die Datumsachse mit den Daten verglich, dann Philip an der
@@ -581,17 +580,12 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind drei — alle liegen bei Philip.** Zwei weitere Punkte sind
-**bewusst zurückgestellt** und stehen darunter.
+**Es sind nur noch zwei — beide liegen bei Philip.** Alle Sichtprüfungen
+sind erledigt (siehe oben, zuletzt der Säulen-Chart am 12.08. abends); zwei
+weitere Punkte sind **bewusst zurückgestellt** und stehen darunter.
 
-1. **Sichtprüfung Säulen-Chart, Rest** (Rumpfjahr, 12.08. abends) — **Pro ist
-   gesichtet und in Ordnung** (Philip, aus Streamlit exportiert). Offen
-   bleibt der kritische Fall: Comdirect und Pro Dividende mit nur **einem**
-   Balkenpaar. Ob das Layout das trägt, lässt sich nur am Bildschirm
-   entscheiden; Dateien und Foliennummern stehen oben. Alle übrigen
-   Sichtprüfungen des Branches sind erledigt.
-2. **PR mergen** — alles andere hängt daran.
-3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
+1. **PR mergen** — alles andere hängt daran.
+2. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
