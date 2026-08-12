@@ -2754,14 +2754,14 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
    künftigen Update → dann bricht die App (dieselbe Auto-Update-Falle wie
    #20). Sweep über alle Dateien: `use_container_width=True` → `width="stretch"`,
    `False` → `width="content"`.
-7a. **`pyflakes` über das ganze Repo ist nicht sauber** *(neu 12.08.2026)*.
-   Die Dateien der letzten Sitzungen sind es, der Rest nicht: 16 Meldungen in
-   `chart_dynamik.py` (4), `portfolio_builder.py` (6), `pptx_slides.py` (3),
-   `portfolioanalyse.py` (1) und `test_bedienung.py` (2). Ausnahmslos harmlose
-   Sorten — unbenutzte Importe und Variablen, zwei f-Strings ohne Platzhalter.
-   Keine undefinierten Namen, also nichts, was zur Laufzeit knallt. Lohnt sich
-   als Aufräumrunde, wenn ohnehin jemand in diesen Dateien arbeitet;
-   `portfolio_builder.py` wird derzeit gar nicht importiert.
+7a. ~~**`pyflakes` über das ganze Repo ist nicht sauber**~~ — **erledigt
+   12.08.2026, 16 Meldungen auf 0.** Keine war ein Laufzeitfehler, aber zwei
+   verwiesen auf echte Geschichte (siehe Changelog): die tote
+   `holeSize`-Kette in beiden Ring-Funktionen und ein `is_bond`, das einmal
+   zwei Abfragen steuerte. Broschüren byte-identisch, `ui_dump` zeichengleich,
+   alle 16 Suiten grün. **Der Wert liegt nicht im Aufgeräumten, sondern
+   darin, dass `pyflakes` ab jetzt wieder gelesen wird** — eine Prüfung mit
+   16 bekannten Meldungen sieht sich niemand an.
 8. **Internes Hosting evaluieren** (löst Cloud-Update-Fallen dauerhaft; für
    den Download seit #25 NICHT mehr nötig).
 9. **Alt-Aufgaben aus Phase 2 — Status prüfen:** PDF-Seitenzahlen
@@ -2774,6 +2774,52 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 (spät) – pyflakes über das ganze Repo sauber
+
+**Backlog 7a erledigt: 16 Meldungen auf 0.** Der Anlass war nicht der
+Aufräumzustand, sondern die Prüfung selbst: `CLAUDE.md` schreibt `pyflakes`
+nach jedem Umbau vor, und eine Prüfung mit 16 bekannten Meldungen liest
+niemand — die nächste echte fällt darin nicht auf.
+
+Keine der 16 war ein Laufzeitfehler. Zwei verwiesen aber auf echte
+Geschichte, und die ist der eigentliche Ertrag:
+
+**Die tote `holeSize`-Kette in `chart_dynamik.py`.** In **beiden**
+Ring-Funktionen wurde die `holeSize` aus dem Chart-XML gelesen und daraus die
+Band-Mitte berechnet — `R_out * (1 + holeSize) / 2`, der Radius, auf den
+PowerPoint ein Datenlabel **ohne** `manualLayout` von sich aus setzt.
+Gebraucht wurde der Wert nie: `manualLayout`-x/y sind **absolute** Bruchteile
+des Rahmens, keine Abstände vom Default. Die Kette (`holeSize` →
+`band_mitte` → `dfx`/`dfy` bzw. `band_center`) ist entfernt, die Erkenntnis
+steht als Kommentar an beiden Stellen. Wer künftig Label-Positionen anfasst,
+muss nicht noch einmal herleiten, warum der PP-Default hier keine Rolle
+spielt.
+
+**Das `is_bond` in `portfolio_builder.py` war kein unfertiger Gedanke.**
+`git log -S` zeigt: Es steuerte einmal `if is_bond and has_kupon` und
+`if is_bond and has_faelligkeit`. Beide Abfragen sind bei einem späteren
+Umbau entfallen, die Berechnung blieb liegen. Statt sie wortlos zu löschen,
+steht dort jetzt der Hinweis, beim Reaktivieren des Moduls zu prüfen, ob
+Kupon und Fälligkeit heute richtigerweise für **alle** Titel gefüllt werden.
+
+**Übertragbar:** Eine unbenutzte Variable ist zweierlei — Schlamperei oder
+die Spur einer entfernten Funktion. `git log -S <name>` unterscheidet das in
+zehn Sekunden. Wer nur löscht, wirft im zweiten Fall den Hinweis weg.
+
+Der Rest war Formalie: unbenutzte Importe (`clear_table`,
+`set_value_axis_min_auto`, `lxml.etree`, drei Farben), eine No-Op-Zuweisung
+vor einem `return`, zwei f-Strings ohne Platzhalter. Dazu zwei Kleinigkeiten
+mit Substanz: `portfolioanalyse.py` reicht den **privaten** `_folien_config`
+nicht mehr durch (der Test holt ihn jetzt aus `vorlagen_config.py`, seiner
+Heimat), und die Verfügbarkeitsprobe in `test_bedienung.py` läuft über
+`importlib.util.find_spec` statt über `import … # noqa` — **pyflakes kennt
+kein `noqa`**, ein Kommentar beruhigt es also nie.
+
+Beweis, nötig vor allem wegen `chart_dynamik.py`: Broschüren gegen den
+Ausgangsstand des Tages **byte-identisch** (2056 Einträge, 34× nur
+`docProps/core.xml`), `tests/ui_dump.py` vorher/nachher **zeichengleich**,
+alle 16 Suiten grün.
 
 ### 12.08.2026 (abends) – Dieselbe Funktion an zwei Orten: E, F und der Wrapper-Block
 

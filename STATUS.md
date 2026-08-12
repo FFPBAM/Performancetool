@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 45 Commits vor `main`
+· 47 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -117,6 +117,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Kosten-Mathematik zentral** | *(12.08.)* Backlog B erledigt: `pptx_export.py` rechnete den Honorarabzug mit eigenen Kopien. Formelgleich — und genau das war die Gefahr: Eine Korrektur in `analytics` hätte die **Broschüre nicht erreicht**. Broschüren vorher/nachher byte-identisch bewiesen. |
 | **Prüfsteine für die Rechenmodule** | *(12.08.)* Backlog D erledigt: `analytics` und `formats` hatten keine eigenen Tests, obwohl jede Kennzahl jeder Kundenfolie durch sie läuft. **Drei Fehler dabei gefunden** — siehe unten. |
 | **Eine Funktion, ein Ort** | *(12.08.)* Backlog E, F und der Wrapper-Block in einem Zug. Wichtigster Fund: `shared.fmt_date_de` warf bei `pd.NaT` eine **ValueError** — die Oberfläche wäre abgestürzt, wo sie „–" hätte zeigen sollen. Dazu die rf-Umrechnung (vier Stellen) und zehn Durchreicher. |
+| **`pyflakes` sauber** | *(12.08.)* Backlog 7a: 16 Meldungen auf 0. Kein Laufzeitfehler darunter — aber die Prüfung wird jetzt wieder gelesen. Zwei Funde mit Substanz: die tote `holeSize`-Kette in beiden Ring-Funktionen und ein `is_bond`, das laut Historie einmal zwei Abfragen steuerte. |
 
 ### Die drei Funde vom 12.08.2026 — alle aus Grenzfällen
 
@@ -307,6 +308,18 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
    wird. Fünf Minuten, die im Zweifel Stunden sparen (#20).
 **Das war es.** Der Backlog ist bis auf Nachrangiges (internes Hosting,
 Alt-Aufgaben aus Phase 2) leer.
+
+**`pyflakes` ist ab jetzt ein echtes Signal.** Über alle 32 Dateien null
+Meldungen (12.08.2026). Wer eine neue erzeugt, sieht sie sofort — vorher ging
+sie in 16 bekannten unter. Aufruf:
+
+```
+.venv\Scripts\python.exe -m pyflakes streamlit_app.py modules\*.py tests\*.py
+```
+
+In PowerShell expandiert `modules\*.py` **nicht** von selbst; entweder die
+Dateiliste vorher aufbauen (`Get-ChildItem`) oder den Aufruf über die Bash
+absetzen.
 
 **Erledigt am 12.08.2026:** Backlog **B** (Honorar-Mathematik nur noch in
 `analytics`), **D** (Prüfsteine für `analytics` und `formats` — die Runde hat

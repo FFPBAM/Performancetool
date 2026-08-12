@@ -141,7 +141,13 @@ python -m venv .venv
 
 **Statische Prüfung nicht vergessen:** `py_compile` findet keine
 undefinierten Namen. Nach dem Entfernen von Importen oder Funktionen immer
-`pyflakes` laufen lassen.
+`pyflakes` laufen lassen. **Der Lauf über das ganze Repo ist seit 12.08.2026
+bei null Meldungen — bitte so lassen.** Jede neue Meldung ist damit ein
+echtes Signal. Zwei Fallstricke: `pyflakes` kennt **kein `noqa`** (ein
+Kommentar beruhigt es nie — Namen stattdessen per Zuweisung weiterreichen,
+siehe `shared.py`), und eine unbenutzte Variable kann die **Spur einer
+entfernten Funktion** sein: `git log -S <name>` klärt das in zehn Sekunden,
+bevor man sie löscht (#47).
 
 ---
 
