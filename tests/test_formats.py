@@ -163,12 +163,44 @@ def schritt6_streamlitfrei():
     return 0
 
 
+def schritt7_shared_reicht_durch():
+    print("Schritt 7 — die Oberflaeche nutzt DIESELBEN Funktionen")
+    # Backlog F (12.08.2026): shared.py hatte eigene Fassungen. Die waren
+    # formatgleich, aber ungehaertet — shared.fmt_date_de(pd.NaT) warf eine
+    # ValueError und riss damit die ganze Ansicht ab. Seither reicht shared
+    # nur noch durch. Dieser Schritt haelt das fest: Sobald jemand dort
+    # wieder eine eigene Fassung schreibt, wird er rot.
+    try:
+        from modules import formats, shared
+    except ImportError as ex:
+        print(f"    UEBERSPRUNGEN — Abhaengigkeit fehlt: {ex}")
+        return 0
+
+    f = 0
+    for name, aus_formats in (("fmt_date_de", formats.fmt_date_de),
+                              ("fmt_pct_de", formats.fmt_pct)):
+        if getattr(shared, name) is aus_formats:
+            print(f"    OK — shared.{name} ist die formats-Funktion")
+        else:
+            print(f"    FEHLER — shared.{name} ist eine EIGENE Funktion")
+            f += 1
+
+    # fmt_eur_de hat kein Gegenstueck in formats (die Broschuere weist keine
+    # Betraege aus), muss sich bei Fehlwerten aber genauso verhalten.
+    for eingabe in (None, float("nan"), "kein Betrag"):
+        ist = shared.fmt_eur_de(eingabe)
+        f += _pruefe(f"shared.fmt_eur_de({eingabe!r})", ist, EMPTY_VALUE)
+    f += _pruefe("shared.fmt_eur_de(1234.5)", shared.fmt_eur_de(1234.5),
+                 "1.234,50 €")
+    return f
+
+
 def main():
     print("Pruefstein: modules/formats.py\n")
     fehler = 0
     for schritt in (schritt1_prozent_und_ratio, schritt2_fehlwerte,
                     schritt3_datum, schritt4_texte, schritt5_pandas_fehlwerte,
-                    schritt6_streamlitfrei):
+                    schritt6_streamlitfrei, schritt7_shared_reicht_durch):
         fehler += schritt()
         print()
     if fehler:

@@ -4,8 +4,8 @@
 import os
 import re
 import glob
-import io
 import hmac
+import math
 import datetime as dt
 
 import numpy as np
@@ -14,6 +14,7 @@ import streamlit as st
 from PIL import Image as PILImage
 
 from modules import anlagekriterien as _kriterien
+from modules import formats as _formats
 
 
 # ---------------------------------------------------------------------------
@@ -129,18 +130,48 @@ def check_login() -> bool:
 
 # ---------------------------------------------------------------------------
 # Formatting Helpers
+#
+# ZUSAMMENGEFUEHRT 12.08.2026 (Backlog F): Hier standen eigene Fassungen von
+# fmt_date_de und fmt_pct_de — formatgleich zu modules/formats.py, aber
+# ungehaertet. Gemessen wurde:
+#
+#     Eingabe        formats        shared (vorher)
+#     None           '–'            'None'
+#     pd.NaT         '–'            ValueError   ← Absturz der Ansicht
+#     float('nan')   '–'            'nan'
+#
+# fmt_date_de wird an 23 Stellen aufgerufen (Auflagedatum, Drawdown-Daten,
+# Quelle-Zeile), fmt_pct_de an 29. Ein NaT aus einer unvollstaendigen
+# Zeitreihe hat also nicht "–" angezeigt, sondern die Seite abgeraeumt.
+#
+# Die Namen bleiben (sie stehen an 60 Aufrufstellen), die Herkunft ist jetzt
+# modules/formats.py — dieselbe Quelle, aus der auch die Broschuere liest.
+# Damit koennen Tool und Kundendokument dieselbe Zahl nicht mehr
+# unterschiedlich schreiben.
 # ---------------------------------------------------------------------------
-def fmt_date_de(d) -> str:
-    if isinstance(d, pd.Timestamp):
-        return d.strftime("%d.%m.%Y")
-    if isinstance(d, dt.date):
-        return d.strftime("%d.%m.%Y")
-    return str(d)
+# Bewusst als Zuweisung und nicht als "from … import fmt_date_de": So ist
+# sichtbar, dass shared diese Namen nur WEITERREICHT, und pyflakes haelt sie
+# nicht faelschlich fuer unbenutzt (es kennt kein noqa).
+EMPTY_VALUE = _formats.EMPTY_VALUE
+fmt_date_de = _formats.fmt_date_de
+fmt_pct_de = _formats.fmt_pct
 
-def fmt_pct_de(v: float, decimals: int = 2) -> str:
-    return f"{v * 100:.{decimals}f}%".replace(".", ",")
 
-def fmt_eur_de(v: float) -> str:
+def fmt_eur_de(v) -> str:
+    """Euro-Betrag in deutscher Notation: 1.234,56 €
+
+    Kein Gegenstueck in formats.py — die Broschuere weist keine Betraege aus,
+    nur Prozente. Die Fehlwert-Behandlung ist trotzdem dieselbe (#46/#47):
+    ein fehlender Betrag darf nicht als "nan €" in der Oberflaeche stehen.
+    """
+    if v is None:
+        return EMPTY_VALUE
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return EMPTY_VALUE
+    if math.isnan(v):
+        return EMPTY_VALUE
     formatted = f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"{formatted} €"
 
