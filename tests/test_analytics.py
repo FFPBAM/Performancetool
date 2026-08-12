@@ -325,7 +325,13 @@ def schritt4_vertrag():
         print(f"    FEHLER — F mit Honorar {mit:.4%} >= ohne {ohne:.4%}")
         f += 1
     else:
-        print(f"    OK — F Honorar kostet Rendite: {ohne:.4%} → {mit:.4%}")
+        # "->" statt "→": U+2192 gibt es in cp1252 nicht, und die Windows-
+        # Konsole schreibt in cp1252. Die Suite ist daran mit
+        # UnicodeEncodeError ABGEBROCHEN, statt ihr Ergebnis zu melden —
+        # ausgerechnet in der letzten Zeile des letzten bestandenen Schritts
+        # (12.08.2026). Andere Sonderzeichen (—, ≤) sind in cp1252 enthalten
+        # und deshalb unauffaellig; Pfeile sind es nicht.
+        print(f"    OK — F Honorar kostet Rendite: {ohne:.4%} -> {mit:.4%}")
     return f
 
 
