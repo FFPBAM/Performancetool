@@ -68,26 +68,26 @@ try:
     from modules.pptx_helpers import (
         find_shape_by_name, replace_text_in_shape,
         set_cell_text, set_cell_text_preserve_format,
-        clear_table, safe_float,
+        safe_float,
     )
 except ImportError:
     from pptx_helpers import (
         find_shape_by_name, replace_text_in_shape,
         set_cell_text, set_cell_text_preserve_format,
-        clear_table, safe_float,
+        safe_float,
     )
 
 # Chart-Manipulation (XML-basiert, mit Bug-Workaround)
 try:
     from modules.pptx_charts import (
         replace_chart_data, replace_chart_data_safe,
-        set_value_axis_min_auto, set_value_axis_min,
+        set_value_axis_min,
         set_date_axis_base_unit, set_series_line_width,
     )
 except ImportError:
     from pptx_charts import (
         replace_chart_data, replace_chart_data_safe,
-        set_value_axis_min_auto, set_value_axis_min,
+        set_value_axis_min,
         set_date_axis_base_unit, set_series_line_width,
     )
 
@@ -2277,8 +2277,7 @@ def fill_rollierend_slide(prs, slide_idx: int, strategy_name: str,
     # Kopf-Spaltentitel "Strategie {Name}" aktualisieren (Zeile 0, Spalte 4)
     tabelle = find_shape_by_name(slide, "Tabelle") or find_shape_by_name(slide, "Tabelle 2")
     if tabelle is None or not getattr(tabelle, "has_table", False):
-        _record = None  # kein Table-Shape → nichts zu tun
-        return
+        return  # kein Table-Shape → nichts zu tun
     t = tabelle.table
     WERT_SPALTE = 4
     if len(t.rows) > 0 and len(t.columns) > WERT_SPALTE:

@@ -24,9 +24,13 @@ import sys
 WURZEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, WURZEL)
 
-from modules.portfolioanalyse import (  # noqa: E402
-    VORLAGEN_FAMILIEN, _folien_config,
-)
+# _folien_config kommt aus seiner Heimat und nicht ueber den Re-Export in
+# portfolioanalyse (12.08.2026): Es ist ein privater Helfer der Konfiguration,
+# und ein privater Name gehoert nicht durch ein UI-Modul weitergereicht.
+# VORLAGEN_FAMILIEN bleibt bewusst ueber portfolioanalyse — so prueft der Test
+# genau den Weg, den auch der Export nimmt.
+from modules.portfolioanalyse import VORLAGEN_FAMILIEN  # noqa: E402
+from modules.vorlagen_config import _folien_config  # noqa: E402
 
 # ── Referenz: die handgeschriebene Fassung vor der Umstellung ────────────
 THEMA_ORIGINAL = {

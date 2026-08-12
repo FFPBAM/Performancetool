@@ -412,7 +412,6 @@ from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Import
     EXPORT_NAME_DEFAULT,
     EXPORT_NAME_FAMILIE,
     EXPORT_NAME_STRATEGIE,
-    _folien_config,
 )
 
 

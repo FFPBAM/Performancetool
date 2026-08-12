@@ -375,9 +375,13 @@ def ring_labels_kompakt(chart, frame_w_in, frame_h_in,
     cx, cy = (left + right) / 2, (top + bot) / 2
     R_out = min(right - left, bot - top) / 2
 
-    hs_el = root.find(".//" + _q("holeSize"))
-    hs = float(hs_el.get("val")) / 100.0 if hs_el is not None else 0.5
-    band_mitte = R_out * (1 + hs) / 2       # PP-Default-Radius (für Offset)
+    # ANMERKUNG 12.08.2026: Hier wurde bis heute die holeSize gelesen und daraus
+    # die Band-Mitte berechnet (R_out * (1 + holeSize) / 2) — der Radius, auf den
+    # PowerPoint ein Label OHNE manualLayout von sich aus setzt. Verwendet wurde
+    # das nie: manualLayout-x/y sind ABSOLUTE Bruchteile des Rahmens, keine
+    # Abstände vom Default. Die ganze Kette (holeSize → band_mitte → dfx/dfy)
+    # war tot und ist entfernt; die Erkenntnis steht hier, damit sie niemand
+    # ein zweites Mal herleiten muss.
 
     fsa_el = root.find(".//" + _q("firstSliceAng"))
     fsa = float(fsa_el.get("val")) if fsa_el is not None else 0.0
@@ -484,9 +488,6 @@ def ring_labels_kompakt(chart, frame_w_in, frame_h_in,
 
     gesetzt = 0
     for i, (lx, ly, m) in enumerate(pos):
-        mr = math.radians(m)
-        dfx = cx + band_mitte * math.sin(mr)      # PP-Default (Band-Mitte)
-        dfy = cy - band_mitte * math.cos(mr)
         # Ziel = Box-Mitte; manualLayout-x/y = linke obere Ecke als Bruchteil
         off_x = (lx - HW) / frame_w_in
         off_y = (ly - HH) / frame_h_in
@@ -589,9 +590,9 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         cx, cy = (left + right) / 2.0, (top + bot) / 2.0
         R_out = min(right - left, bot - top) / 2.0
 
-    hs_el = root.find(".//" + _q("holeSize"))
-    hole = float(hs_el.get("val")) / 100.0 if hs_el is not None else 0.5
-    band_center = R_out * (1 + hole) / 2.0     # PP-Default-Radius der Labels
+    # (Auch hier wurde bis 12.08.2026 die holeSize gelesen und als `band_center`
+    # der PP-Default-Radius berechnet — unbenutzt, siehe die Erklärung weiter
+    # oben. R_target unten ersetzt ihn vollständig.)
     # gap_in = gewünschte SICHTBARE Freiheit zwischen Text-Innenkante und Ring.
     # Die nötige radiale Distanz der Label-MITTE hängt vom Winkel ab, weil der
     # Text waagerecht ist: seitlich ragt die halbe Breite zum Ring, oben/unten
@@ -1328,7 +1329,6 @@ def ring_labels_stub_fix(chart, frame_w_in, frame_h_in,
     FALLSTRICK: Die x-Position im manualLayout ist die LINKE Boxkante als
     Bruchteil → stored_x = (mx − HALB_W) / frame_w. Nicht die Box-Mitte.
     """
-    from lxml import etree
     root = _root(chart)
     pa = root.find(".//" + _q("plotArea") + "/" + _q("layout")
                    + "/" + _q("manualLayout"))

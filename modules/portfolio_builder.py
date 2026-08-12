@@ -13,7 +13,7 @@ import streamlit as st
 import plotly.graph_objects as go
 
 from modules.shared import (
-    FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2,
+    FFPB_GOLD,
     ZIELDATEN_FOLDER, DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag,
@@ -443,7 +443,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
         )
     with eq_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button(f"Gewichte gleichverteilen", key="equalize", width="stretch"):
+        if st.button("Gewichte gleichverteilen", key="equalize", width="stretch"):
             cash_dec = cash_pct_input / 100.0
             w = (1.0 - cash_dec) / n_titel
             for wkn in portfolio:
@@ -466,7 +466,12 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
             continue
         row = match.iloc[0]
         assetklasse = str(row["Assetklasse"]) if "Assetklasse" in row.index and pd.notna(row["Assetklasse"]) else ""
-        is_bond = "rente" in assetklasse.lower() or "anleihe" in assetklasse.lower()
+        # HINWEIS 12.08.2026: Hier stand ein `is_bond`, das niemand mehr las.
+        # Die Historie zeigt, dass es einmal zwei Abfragen steuerte
+        # (`if is_bond and has_kupon` / `... and has_faelligkeit`) — die sind
+        # bei einem spaeteren Umbau entfallen, die Berechnung blieb liegen.
+        # Wer dieses Modul reaktiviert, prueft dabei, ob Kupon und
+        # Faelligkeit heute richtigerweise fuer ALLE Titel gefuellt werden.
 
         entry = {
             "Name": str(row["Name"]) if "Name" in row.index and pd.notna(row["Name"]) else "",
@@ -537,7 +542,7 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
                   delta_color="off" if ok else "inverse")
 
     if total_weight > 1.0:
-        st.error(f"⛔ Die Summe der Gewichte übersteigt 100%. Bitte einzelne Positionen reduzieren.")
+        st.error("⛔ Die Summe der Gewichte übersteigt 100%. Bitte einzelne Positionen reduzieren.")
 
     # Excel Export
     st.markdown("---")

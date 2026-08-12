@@ -202,8 +202,8 @@ def pruefe_kein_pdf():
             fehler += 1
 
     if not fehler:
-        print(f"   OK — keine PDF-Schaltflaeche, keine Reste, "
-              f"requirements bereinigt")
+        print("   OK — keine PDF-Schaltflaeche, keine Reste, "
+              "requirements bereinigt")
     return fehler
 
 
@@ -275,10 +275,17 @@ def pruefe_auftritt():
 
 
 def main():
+    # Verfuegbarkeitsprobe ohne Import: Der Test braucht streamlit.testing,
+    # laedt es aber erst in _app(). find_spec statt "import ... # noqa",
+    # weil pyflakes kein noqa kennt und den Namen sonst zu Recht als
+    # unbenutzt meldet (12.08.2026).
+    from importlib import util as _util
     try:
-        import streamlit.testing.v1  # noqa: F401
-    except ImportError as ex:
-        print(f"UEBERSPRUNGEN — {ex}")
+        vorhanden = _util.find_spec("streamlit.testing.v1") is not None
+    except (ImportError, ValueError):
+        vorhanden = False
+    if not vorhanden:
+        print("UEBERSPRUNGEN — streamlit.testing.v1 nicht verfuegbar")
         return 0
 
     fehler = (pruefe_zeitraum() + pruefe_kein_pdf()
