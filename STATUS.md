@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 58 Commits vor `main`
+· 59 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -357,13 +357,20 @@ Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
 
 - **12.08.2026 (abends)** — Datumsachse: Philip hat den Fix am Endprodukt
   gesichtet, die Achsen sitzen. **Dabei kam die Wertachse als neuer Befund
-  heraus** (fehlende 100-%-Linie) — die steht noch aus, siehe Punkt 0 unter
-  „Offene Punkte".
+  heraus** (fehlende 100-%-Linie).
+- **12.08.2026 (abends, 2)** — **Wertachse und Quellenangabe: beide
+  gesichtet, beide in Ordnung** (Philip, an der Offensiv-Broschüre). Damit
+  ist die Kette dieses Abends geschlossen: Datumsachse → Wertachse →
+  Quelle, jede Korrektur am Endprodukt bestätigt.
 
-Beide Funde dieses Abends kamen aus dem **Auge**, nicht aus einem Test: erst
+Alle Funde dieses Abends kamen aus dem **Auge**, nicht aus einem Test: erst
 ein Kollege, der die Datumsachse mit den Daten verglich, dann Philip an der
-frisch korrigierten Broschüre. Die Methode hat sie danach vervierfacht — aber
-gesehen hat sie niemand am Bildschirm des Testlaufs.
+frisch korrigierten Broschüre — zweimal hintereinander, denn die Wertachse
+und die überdruckte Quellenangabe fielen erst an der jeweils *korrigierten*
+Folie auf. Die Methode hat die Fälle danach jedes Mal vervielfacht (21 von
+21 Achsen, 16 von 16 Quellenangaben) — aber **gesehen** hat sie niemand am
+Bildschirm des Testlaufs. Beides wird gebraucht, und zwar in dieser
+Reihenfolge.
 
 ### Nach dem Merge noch testen (in der App)
 
@@ -473,50 +480,49 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind nur noch sechs — und alle liegen bei Philip:**
+**Es sind nur noch zwei — beide liegen bei Philip.** Alle Sichtprüfungen
+sind erledigt (siehe oben); zwei weitere Punkte sind **bewusst
+zurückgestellt** und stehen darunter.
 
-0b. **Der comdirect-Disclaimer sagt noch die alte Kostenregel** (Backlog H,
-   neu 12.08.2026). Nebenbefund aus dem Vorher/Nachher-Vergleich: In
-   `Vorlage_comdirect.pptx` steht „Der unterjährige Performance**-**Ausweis
-   erfolgt vor Kosten (ab 30.06. abzüglich des halbjährigen Honorarsatzes)"
-   — der Code ersetzt diesen Satz überall, nur dort nicht, weil der Anker
-   „Performance Ausweis" heißt und die Vorlage einen **Bindestrich** hat.
-   Dieselbe Fußnote sagt oben „nach Kosten (taggenauer Honorarabzug)" und
-   unten „vor Kosten": Sie widerspricht sich selbst, und die untere Aussage
-   ist falsch. **Nicht kosmetisch** (§10.9), aber eine Wortlaut-Entscheidung
-   — sauberster Weg ist, den Satz in der Vorlage anzugleichen, dann greifen
-   die vorhandenen Anker. Details in `PROJEKT_DOKUMENTATION.md` §15 H.
-
-0a. **Sichtprüfung der Quellenangabe in echtem PowerPoint.** Die Korrektur
-   ist am PowerPoint-Rendering gemessen (PNG-Export, 0,59 cm Luft) und
-   sieht sauber aus — aber gesehen hat sie noch niemand am Bildschirm.
-   Eine Stichprobe genügt: **Offensiv**, die gemeldete Folie.
-
-0. **Sichtprüfung der Wertachse in echtem PowerPoint** (#16/#28). Die
-   Datumsachse ist am 12.08.2026 gesichtet und in Ordnung; die Wertachse kam
-   danach dazu und steht noch aus. Drei Stichproben genügen: **cVV
-   konservativ** (Achse 95–155 %, die 100 % muss dastehen), **cVV ausgewogen**
-   (80–225 %, Ticks 80/100/120/…) und **ETF ausgewogen** (weniger Leerraum
-   über der Kurve). Broschüren dafür einfach neu erzeugen.
 1. **PR mergen** — alles andere hängt daran.
-2. **Anlagekriterien SCHWEIZ liefern** (Backlog G, neu 12.08.2026). Seit dem
-   12.08. sind 17 der 19 Strategien erfasst; `Schweiz_substanzorientiert` und
-   `Schweiz_aktienorientiert` fehlen, weil sie **bewusst nicht auf der
-   Webseite stehen**. Gebraucht werden vier Werte je Strategie: Anlageregion,
-   Aktienanteil, Anleihenanteil/Liquidität, Fremdwährungen. Bis dahin zeigt
-   das Tool dort korrekt keinen Banner.
-3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
+2. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
    wird. Fünf Minuten, die im Zweifel Stunden sparen (#20).
 
-Im Code ist nichts mehr offen außer Nachrangigem: internes Hosting (§15
-Punkt 8) und die Alt-Aufgaben aus Phase 2, die vor einer Umsetzung ohnehin
-erst mit Philip zu klären sind.
+### Zurückgestellt — nicht vergessen, sondern entschieden (Philip, 12.08.2026)
 
-*(Die Sichtprüfung SCHWEIZ in echtem PowerPoint stand hier bis zum
-12.08.2026 als Punkt 2 — sie ist erledigt, siehe oben.)*
+Beides ist **fachlich offen und technisch beschrieben**; die Umsetzung wartet
+auf eine Entscheidung, nicht auf Arbeit. Wer hier weitermacht, fängt bei den
+genannten Stellen an und nicht bei null.
+
+- **Anlagekriterien SCHWEIZ** (Backlog G). 17 der 19 Strategien sind in
+  `Mapping_Anlagekriterien.xlsx` erfasst; `Schweiz_substanzorientiert` und
+  `Schweiz_aktienorientiert` fehlen, weil sie **bewusst nicht auf der
+  Webseite stehen** — die Werte müssen aus dem Haus kommen. Gebraucht werden
+  vier je Strategie: Anlageregion, Aktienanteil, Anleihenanteil/Liquidität,
+  Fremdwährungen. Bis dahin zeigt das Tool dort korrekt keinen Banner; das
+  ist **kein Fehlzustand**. Zum Eintragen: Werte in die Excel, dann in
+  `tests/test_anlagekriterien.py` die Liste `NOCH_OFFEN` leeren.
+- **comdirect-Disclaimer** (Backlog H). Dort steht weiter die alte
+  Kostenregel („erfolgt vor Kosten (ab 30.06. …)"), weil der Ersetzungs-Anker
+  „Performance Ausweis" heißt und `Vorlage_comdirect.pptx`
+  „Performance**-**Ausweis" schreibt — ein Bindestrich. Dieselbe Fußnote sagt
+  oben „nach Kosten (taggenauer Honorarabzug)": Sie widerspricht sich selbst,
+  und die untere Aussage ist seit Juli 2026 falsch. **Das ist eine
+  Sachaussage in einem Kundendokument** (§10.9), keine Kosmetik — deshalb
+  steht es hier und nicht unter „nachrangig". Sauberster Weg: den Satz in der
+  Vorlage angleichen, dann greifen die vorhandenen Anker. Details in
+  `PROJEKT_DOKUMENTATION.md` §15 H.
+
+Im Code ist darüber hinaus nichts offen außer Nachrangigem: internes Hosting
+(§15 Punkt 8) und die Alt-Aufgaben aus Phase 2, die vor einer Umsetzung
+ohnehin erst mit Philip zu klären sind.
+
+*(Die Sichtprüfungen SCHWEIZ, Datumsachse, Wertachse und Quellenangabe
+standen hier bis zum 12.08.2026 als offene Punkte — alle vier sind erledigt,
+siehe „Sichtprüfung in echtem PowerPoint".)*
 
 ### `pyflakes` ist ab jetzt ein echtes Signal
 

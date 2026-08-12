@@ -2836,10 +2836,17 @@ mehr nötig.
 ## 15. Backlog (Stand 12.08.2026, nach Priorität)
 
 **Stand 12.08.2026 (abends) — was wirklich noch offen ist:** **G**
-(Anlagekriterien SCHWEIZ), **H** (comdirect-Disclaimer) sowie **8–10**
-(internes Hosting, Alt-Aufgaben aus Phase 2, Varianten). Alles andere ist
+(Anlagekriterien SCHWEIZ) und **H** (comdirect-Disclaimer), beide von Philip
+am 12.08.2026 ausdrücklich **zurückgestellt** — sie warten auf eine
+fachliche Entscheidung, nicht auf Arbeit; die technische Analyse steht
+jeweils unten und muss nicht wiederholt werden. Dazu **8–10** (internes
+Hosting, Alt-Aufgaben aus Phase 2, Varianten). Alles andere ist
 abgeschlossen; die Punkte bleiben durchgestrichen stehen, weil die
 Begründungen mehr wert sind als die Aufgaben.
+
+Sämtliche **Sichtprüfungen in echtem PowerPoint sind erledigt** (Philip,
+12.08.2026): SCHWEIZ, Datumsachse, Wertachse und Quellenangabe — jede
+Korrektur am Endprodukt bestätigt.
 
 - **H. Der comdirect-Disclaimer beschreibt noch die alte Kostenregel**
   *(neu 12.08.2026, FACHLICH — Entscheidung Philip)*. Aufgefallen beim
