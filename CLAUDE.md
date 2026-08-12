@@ -91,6 +91,11 @@ vergleichen, Zeitstempel ignorieren.
 **Loader oder Mathematik nie duplizieren.** Genau daran krankte die Codebasis
 (zwei Kopien der CSV-Loader, elf Kopien der analytics-Funktionen). Wer etwas
 ohne Streamlit braucht, zieht es in ein UI-freies Modul — er kopiert es nicht.
+`analytics.py` importiert bewusst nur numpy und pandas; von dort darf jedes
+Modul importieren, ohne Streamlit hereinzuziehen. Die **Kosten-Mathematik**
+ist seit 12.08.2026 per Test darauf festgenagelt, dass sie nur dort steht
+(`tests/test_kosten_mathematik.py`) — eine zweite Kopie fällt nicht auf,
+solange die Formeln gleich sind, und genau das ist die Gefahr.
 
 ---
 
@@ -103,6 +108,7 @@ python tests/test_keine_piktogramme.py       # ohne jedes Paket
 python tests/test_anlagekriterien.py         # pandas + streamlit
 python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
+python tests/test_kosten_mathematik.py       # Schritt 1 ohne jedes Paket
 python tests/test_benchmark_erkennung.py     # nur pandas
 python tests/test_benchmark_charts.py        # Schritt 1 pandas, 2+3 + pptx/streamlit
 python tests/test_honorarsatz.py             # pandas + streamlit

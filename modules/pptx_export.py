@@ -86,6 +86,16 @@ try:
 except ImportError:
     import anlagekriterien as _anlagekriterien
 
+# Kosten-Mathematik. Sie gehoert nach modules/analytics.py und NUR dorthin:
+# derselbe Honorarabzug bestimmt die Zahlen im Tool und in der Broschuere.
+# Bis 12.08.2026 lag hier eine eigene Kopie (_annual_fee_to_daily_drag,
+# _make_index_after_fee) — formelgleich, aber eben zweimal gepflegt. analytics
+# importiert nur numpy/pandas, der Export bleibt also streamlit-frei.
+try:
+    from modules.analytics import annual_fee_to_daily_drag, make_index_after_fee
+except ImportError:
+    from analytics import annual_fee_to_daily_drag, make_index_after_fee
+
 
 # ---------------------------------------------------------------------------
 # Konstanten
@@ -225,27 +235,15 @@ def _load_template(template_path: Optional[str] = None,
 # _make_index_from_returns) — sie luden nur dazu ein, versehentlich
 # weiterverwendet zu werden statt modules/analytics.py.
 #
-# Geblieben sind die zwei tatsächlich genutzten Helfer. Sie sind identisch
-# zu ihren analytics-Gegenstücken; perspektivisch sollten auch sie von dort
-# kommen, das berührt aber compute_wertentwicklung_data und wird deshalb
-# getrennt gemacht.
+# NACHGEZOGEN 12.08.2026: Die letzten zwei Kopien sind ebenfalls weg. Sie
+# waren formelgleich zu analytics.annual_fee_to_daily_drag /
+# analytics.make_index_after_fee — genau das war das Risiko: Wer den
+# Honorarabzug in analytics korrigiert hätte, hätte die BROSCHÜRE nicht
+# mitkorrigiert, und die geht zum Kunden. Beide kommen jetzt aus dem
+# Import-Block oben. Wer die alte `_name`-Schreibweise sucht: Unterstrich
+# weglassen. numpy bleibt hier, es wird weiter direkt gebraucht.
 # ─────────────────────────────────────────────────────────────────────────
 import numpy as _np
-
-
-def _annual_fee_to_daily_drag(fee_pa_decimal):
-    """Jährlicher Honorarsatz → äquivalente tägliche Belastung."""
-    return (1.0 + fee_pa_decimal) ** (1 / 365) - 1
-
-
-def _make_index_after_fee(d_returns_decimal, fee_pa_decimal, startwert=100.0):
-    """Index aus Tagesrenditen nach taggenauem Honorarabzug."""
-    e = _annual_fee_to_daily_drag(fee_pa_decimal)
-    idx = _np.empty(len(d_returns_decimal) + 1, dtype=float)
-    idx[0] = startwert
-    for i, d in enumerate(d_returns_decimal, start=1):
-        idx[i] = idx[i-1] * (1.0 + (d - e))
-    return idx
 
 
 def compute_performance_data(timeseries_df: pd.DataFrame, fee_dec: float,
@@ -293,9 +291,9 @@ def compute_rollierend_data(timeseries_df: pd.DataFrame, fee_dec: float) -> dict
 
     # Index nach Kosten mit synthetischem Startpunkt am Vortag (wie Tool:
     # xd = [erstes_datum - 1 Tag] + dates), damit asof(Startdatum) den
-    # Schlussstand VOR der ersten Rendite trifft. _make_index_after_fee
+    # Schlussstand VOR der ersten Rendite trifft. make_index_after_fee
     # liefert bereits len(r)+1 Werte inkl. Startwert 100 an Position 0.
-    idx_vals = _make_index_after_fee(r, fee_dec, startwert=100.0)
+    idx_vals = make_index_after_fee(r, fee_dec, startwert=100.0)
     start_stamp = dates[0] - pd.Timedelta(days=1)
     full_index = pd.DatetimeIndex([start_stamp]).append(pd.DatetimeIndex(dates))
     index_ser = pd.Series(list(idx_vals), index=full_index).sort_index()
@@ -397,7 +395,7 @@ def compute_wertentwicklung_data(timeseries_df: pd.DataFrame, fee_dec: float,
     auflage_jahr = int(first_date.year)
     laufendes_jahr = int(last_date.year)
 
-    drag = _annual_fee_to_daily_drag(fee_dec)
+    drag = annual_fee_to_daily_drag(fee_dec)
 
     # ── Chart-Daten: identische Basis wie Performance-Folie ──
     charts = compute_performance_data(timeseries_df, fee_dec)
@@ -493,7 +491,7 @@ def _append_current_year_bar(perf: dict, ts: pd.DataFrame, fee: float) -> dict:
     if not mask.any():
         return perf
     r = pd.to_numeric(ts_sorted["ret_port"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
-    drag = _annual_fee_to_daily_drag(fee)
+    drag = annual_fee_to_daily_drag(fee)
     ref_ytd = float(_np.prod(1.0 + (r[mask] - drag)) - 1.0)
     # Ohne Benchmark bleibt die Benchmark-Liste leer (11.08.2026) — sonst
     # bekäme eine ansonsten leere Liste hier doch noch einen (Null-)Wert und
@@ -615,7 +613,7 @@ def _monats_index_nach_kosten(timeseries_df, fee_dec: float):
     r = pd.to_numeric(ts["ret_port"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
     if len(r) == 0:
         return {}
-    idx_werte = _make_index_after_fee(r, fee_dec, startwert=1.0)   # len = n+1
+    idx_werte = make_index_after_fee(r, fee_dec, startwert=1.0)   # len = n+1
     daten = pd.to_datetime(ts.index)
     reihe = pd.Series(idx_werte[1:], index=daten)
     # letzter Wert je Monat = Monatsende

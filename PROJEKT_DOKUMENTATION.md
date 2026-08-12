@@ -2581,10 +2581,15 @@ mehr nötig.
   beschrieben: Die flache Linie gab es auf der Themen-Folie gar nicht, dafür
   standen Legendeneintrag und ***-Fußnote noch da — letztere mit dem
   unveränderten Vorlagentext, also der Benchmark einer FREMDEN Strategie.
-- **B. Die zwei verbliebenen Mathe-Helfer in `pptx_export.py`**
-  (`_annual_fee_to_daily_drag`, `_make_index_after_fee`) sind Duplikate von
-  `analytics`. Umziehen, sobald `compute_wertentwicklung_data` angefasst wird
-  (steht als Hinweis auch im dortigen Docstring).
+- ~~**B. Die zwei verbliebenen Mathe-Helfer in `pptx_export.py`**~~ —
+  **erledigt 12.08.2026.** `_annual_fee_to_daily_drag` und
+  `_make_index_after_fee` sind entfallen, beide kommen jetzt aus `analytics`.
+  Die Sorge „das berührt `compute_wertentwicklung_data`" war unbegründet: die
+  analytics-Fassungen sind formelgleich und durch `np.asarray` sogar
+  toleranter bei der Eingabe. Beweis der Wirkungsgleichheit: alle sieben
+  Broschüren vorher/nachher rekursiv verglichen — 2056 ZIP-Einträge, 34
+  Abweichungen, ausnahmslos `docProps/core.xml`. Prüfstein
+  `tests/test_kosten_mathematik.py`.
 - ~~**C. Der Wrapper-Block in `pptx_export.py`**~~ — **erledigt 11.08.2026**
   (−292 Zeilen, 1303 → 1010). Die Warnung „viele Aufrufstellen" war falsch:
   27 der 40 Wrapper wurden NIRGENDS aufgerufen, die übrigen 13 an je einer
@@ -2595,6 +2600,14 @@ mehr nötig.
   **Gleichartiger Block in `streamlit_app.py` (Zeilen 62–88) bleibt** — der
   ist nicht tot, die UI ruft ihn überall auf, und zwischen den Durchreichern
   stehen echte UI-Helfer.
+- **E. Die rf-Tagessatz-Umrechnung steht dreifach** *(neu 12.08.2026, beim
+  Umbau von B aufgefallen)*: `(1+rf)^(1/365)-1` in `analytics.py:231` sowie
+  `streamlit_app.py:144` und `:158`. Andere Größe als das Honorar, dieselbe
+  Bauart — und damit dasselbe Risiko, dass eine Korrektur nur die Hälfte
+  erreicht. Kleiner als B, weil der rf nur die Sharpe Ratio beeinflusst und
+  nicht die ausgewiesene Rendite. Vor dem Umbau prüfen, ob die beiden
+  UI-Stellen wirklich identisch rechnen oder ob eine davon absichtlich
+  abweicht.
 - **D. Testabdeckung ausbauen.** `tests/` enthält bisher einen Test. Die
   streamlit-freien Module (`analytics`, `formats`) sind auch ohne Firmen-IT
   testbar — dort lohnt sich mehr.
@@ -2643,6 +2656,53 @@ mehr nötig.
 ---
 
 ## 16. Changelog
+
+### 12.08.2026 – Die Honorar-Mathematik steht nur noch an einer Stelle
+
+**Backlog B erledigt.** `modules/pptx_export.py` hatte eigene Kopien der
+Kosten-Rechnung: `_annual_fee_to_daily_drag` (drei Aufrufstellen) und
+`_make_index_after_fee` (zwei). Beide sind entfernt; die Funktionen kommen
+jetzt per Import aus `modules/analytics.py`.
+
+**Warum das kein Schönheitsumbau war.** Die Formeln waren identisch — genau
+deshalb sah niemand ein Problem. Das Problem war die Zukunft: Wer den
+Honorarabzug in `analytics` korrigiert hätte, hätte die **Broschüre nicht
+mitkorrigiert**, denn die rechnete mit ihrer eigenen Kopie. Und die Broschüre
+geht zum Kunden. Es ist derselbe Mechanismus wie beim SCHWEIZ-Honorarfehler
+vom 11.08.: eine Kostengröße, die an einer Stelle stimmte und an der anderen
+nicht, ohne dass es jemandem auffiel.
+
+**Warum es gefahrlos ging.** Die alte Begründung für das Vertagen lautete, der
+Umbau berühre `compute_wertentwicklung_data`. Das stimmt, ist aber
+unproblematisch: die analytics-Fassung ist formelgleich und durch das
+vorgeschaltete `np.asarray` sogar toleranter bei der Eingabe. `analytics.py`
+importiert nur numpy und pandas — der Export bleibt streamlit-frei und damit
+batchfähig (Abschnitt 13). Der Import steht deshalb auf Modulebene, nicht
+lazy.
+
+**Beweis.** Alle sieben Broschüren vor und nach dem Umbau erzeugt und
+rekursiv verglichen (PPTX sind ZIPs mit eingebetteten ZIPs): **2056
+ZIP-Einträge, 34 Abweichungen, ausnahmslos `docProps/core.xml`** — der
+Erzeugungs-Zeitstempel. Dieselbe Signatur wie beim Wrapper-Umbau am 11.08.
+`pyflakes` sauber, alle 15 Testsuiten grün.
+
+**Prüfstein: `tests/test_kosten_mathematik.py`** (neu). Drei Schritte —
+(1) Quelltextscan: keine Zeile außerhalb von `analytics.py` darf die
+365-Tage-Basis mit einem Honorar-Begriff verbinden; (2) Identität: die Namen
+in `pptx_export` sind *dasselbe Funktionsobjekt* wie in `analytics`, und die
+alten `_`-Kopien sind weg; (3) Zahlen: 1,55 % p.a. ergeben 0,4214 Basispunkte
+pro Tag, 365 Nulltage kosten 1,5264 von 100, Startwert 1.0 und 100.0
+skalieren identisch. Auf dem alten Stand ist der Test **rot** (Schritte 1+2),
+danach grün — nachgewiesen, nicht behauptet.
+
+Schritt 1 unterscheidet bewusst nach Honorar-Begriffen (`fee|honorar|drag`):
+Der risikofreie Zins nutzt dieselbe 365-Tage-Basis, ist aber eine andere
+Größe und darf weiterhin an mehreren Stellen stehen.
+
+**Nebenbefund, nicht angefasst:** Die *rf*-Tagessatz-Umrechnung
+`(1+rf)^(1/365)-1` steht dreifach — `analytics.py:231` sowie
+`streamlit_app.py:144` und `:158`. Andere Größe, dieselbe Bauart. Eigenes
+Thema, siehe Backlog.
 
 ### 11.08.2026 – Zurücksetzen im eigenen Zeitraum; Korrektur an Transferwissen #19
 
