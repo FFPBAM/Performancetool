@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 47 Commits vor `main`
+· 49 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -101,7 +101,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Toter Code** | ~1.900 Zeilen: `performance.py`, `macrobond_upload.py`, `generate_pf_pdf`, Platzhalter-Dateien. |
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
-| **Tests** | Vier Suiten unter `tests/` — vorher gab es keine. |
+| **Tests** | **16 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
@@ -119,10 +119,12 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Eine Funktion, ein Ort** | *(12.08.)* Backlog E, F und der Wrapper-Block in einem Zug. Wichtigster Fund: `shared.fmt_date_de` warf bei `pd.NaT` eine **ValueError** — die Oberfläche wäre abgestürzt, wo sie „–" hätte zeigen sollen. Dazu die rf-Umrechnung (vier Stellen) und zehn Durchreicher. |
 | **`pyflakes` sauber** | *(12.08.)* Backlog 7a: 16 Meldungen auf 0. Kein Laufzeitfehler darunter — aber die Prüfung wird jetzt wieder gelesen. Zwei Funde mit Substanz: die tote `holeSize`-Kette in beiden Ring-Funktionen und ein `is_bond`, das laut Historie einmal zwei Abfragen steuerte. |
 
-### Die drei Funde vom 12.08.2026 — alle aus Grenzfällen
+### Die drei Funde der Testrunde (Backlog D) — alle aus Grenzfällen
 
 Die neuen Prüfsteine für `analytics` und `formats` haben drei Fehler
-aufgedeckt. Bemerkenswert ist, **wo** sie saßen: ausnahmslos in
+aufgedeckt. (Der 12.08. brachte noch zwei weitere, die aus anderen Runden
+stammen: der `NaT`-Absturz in `shared.fmt_date_de` und die tote
+`holeSize`-Kette — siehe die Tabelle oben.) Bemerkenswert ist, **wo** sie saßen: ausnahmslos in
 degenerierten Eingaben, kein einziger in den fachlich interessanten Fällen.
 
 | Fund | Wirkung | Status |
@@ -171,7 +173,17 @@ fehlte. **Wer eine SCHWEIZ-Broschüre vor dem 11.08.2026 verschickt hat, hat zu
 gute Zahlen verschickt.** Prüfstein `tests/test_honorarsatz.py` schlägt künftig
 an, sobald eine Strategie ohne Satz dasteht.
 
-Netto etwa −1.800 Zeilen bei mehr Funktion.
+### Die Bilanz des Branches (gemessen 12.08.2026, gegen `main`)
+
+| | Zeilen |
+|---|---:|
+| Produktivcode (14 Dateien) | +2.251 / −3.585 → **netto −1.334** |
+| Tests (17 Dateien, vorher gab es keine) | **+3.393** |
+| Dokumentation | +1.920 / −87 |
+
+Weniger Produktivcode bei mehr Funktion, und zum ersten Mal ein Netz darunter.
+*(Die frühere Angabe „netto etwa −1.800 Zeilen" stammte vom 11.08. und stimmt
+seit den Umbauten von heute nicht mehr — hier steht der gemessene Stand.)*
 
 ### SCHWEIZ: der Vergleichsmaßstab war an drei Stellen noch da
 
@@ -201,10 +213,14 @@ nicht still Text aus einer Broschüre löschen.
 
 ### Sichtprüfung in echtem PowerPoint — ERLEDIGT
 
-Philip hat am 07.08.2026 **CVV „Defensiv"** und **Thema „Offensiv"** in
-echtem PowerPoint geöffnet: Trennstriche und „seit 2009" sitzen korrekt.
-Damit sind die beiden Broschüren-Korrekturen dieser Sitzung am Endprodukt
-bestätigt, nicht nur im XML.
+Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
+
+- **07.08.2026** — CVV „Defensiv" und Thema „Offensiv": Trennstriche und
+  „seit 2009" sitzen korrekt.
+- **12.08.2026** — SCHWEIZ: Säulen-Chart, Legende und Fußnote sitzen. Damit
+  ist auch der Benchmark-Fix vom 11.08. am Endprodukt bestätigt — er war der
+  heikelste, weil dort eine **falsche Sachaussage** in einem Kundendokument
+  stand (die Fußnote nannte die Benchmark einer fremden Strategie).
 
 ### Nach dem Merge noch testen (in der App)
 
@@ -227,7 +243,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
 | `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
 | `test_kosten_mathematik.py` | **nichts** (Schritt 1) | Die Honorar-Formel steht nur in `analytics.py`; Schritt 2 prüft die Objekt-Identität in `pptx_export` (braucht pandas + python-pptx), Schritt 3 nagelt die Zahlen fest |
-| `test_formats.py` | **nichts** (Schritt 5 nutzt pandas, wenn da) | Deutsche Notation, Datum, Disclaimer-Anker — vor allem: ein Fehlwert wird „–" und niemals „nan"/„None"/„NaT" |
+| `test_formats.py` | **nichts** (Schritt 5 nutzt pandas, Schritt 7 streamlit — beide überspringen sauber) | Deutsche Notation, Datum, Disclaimer-Anker — vor allem: ein Fehlwert wird „–" und niemals „nan"/„None"/„NaT"; Schritt 7 hält fest, dass `shared` dieselben Funktionen nutzt |
 | `test_analytics.py` | numpy + pandas | Bausteine gegen von Hand nachrechenbare Werte, degenerierte Eingaben liefern `None` statt Absturz, `has_benchmark`, der Vertrag von `compute_performance_data` (Längen, leere Listen) |
 | `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert (**Kennzahlen**) |
 | `test_benchmark_charts.py` | pandas; Schritte 2+3 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende, Fußnote und den Hinweis im Tool** — Schritt 2 baut zwei echte Broschüren und liest nach, Schritt 3 prüft den Hinweis an der gerenderten Oberfläche; „Pro" ist jeweils Kontrollfall |
@@ -256,12 +272,26 @@ python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
 
-**Korrektur 10.08.2026:** Die Tabelle führte `test_historie_ab` und
-`test_folien_config` als „nur pandas". Das stimmt nicht — beide ziehen über
-`modules.portfolioanalyse` streamlit herein. `test_historie_ab` überspringt
-dann sauber, `test_folien_config` bricht mit `ModuleNotFoundError` ab. Ohne
-venv laufen tatsächlich nur `test_benchmark_erkennung` und Schritt 1 von
-`test_legende_musterdepot`.
+**Nachgemessen am 12.08.2026** — nicht geschätzt: Alle 16 Suiten wurden mit
+dem System-Python gestartet (hat pandas und numpy, aber **kein** streamlit und
+**kein** python-pptx). Ergebnis:
+
+| Verhalten ohne streamlit/pptx | Suiten |
+|---|---|
+| laufen vollständig durch | `test_analytics`, `test_formats`, `test_kosten_mathematik`, `test_benchmark_erkennung`, `test_streamlit_api`, `test_keine_piktogramme` |
+| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts` |
+| überspringen sich ganz (Rückgabewert 0) | `test_bedienung`, `test_historie_ab`, `test_honorarsatz`, `test_export_smoke`, `test_trennstriche`, `test_folien_config` |
+| **brechen ab** | keine |
+
+Die „Braucht"-Spalte oben nennt also, was ein Test für seinen **vollen**
+Umfang braucht — nicht, woran er scheitert. Keine Suite meldet ohne Pakete
+einen Fehlschlag.
+
+*(Vorgeschichte: Die Tabelle führte `test_historie_ab` und
+`test_folien_config` bis 10.08.2026 als „nur pandas" — falsch, beide ziehen
+über `modules.portfolioanalyse` streamlit herein. `test_folien_config` war
+bis zum 12.08.2026 zudem der einzige Test, der dann mit
+`ModuleNotFoundError` **abbrach** statt zu überspringen; das ist behoben.)*
 
 ### Testumgebung — steht (10.08.2026)
 
@@ -296,22 +326,26 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
+**Es sind nur noch zwei — und beide liegen bei Philip:**
+
 1. **PR mergen** — alles andere hängt daran.
-2. ~~**SCHWEIZ in echtem PowerPoint ansehen.**~~ — **erledigt 12.08.2026**,
-   Philip hat die Broschüre geöffnet: Säulen-Chart, Legende und Fußnote
-   sitzen. Damit ist auch der zweite Broschüren-Fix am Endprodukt bestätigt
-   und nicht nur im XML.
-3. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
+2. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
    wird. Fünf Minuten, die im Zweifel Stunden sparen (#20).
-**Das war es.** Der Backlog ist bis auf Nachrangiges (internes Hosting,
-Alt-Aufgaben aus Phase 2) leer.
 
-**`pyflakes` ist ab jetzt ein echtes Signal.** Über alle 32 Dateien null
-Meldungen (12.08.2026). Wer eine neue erzeugt, sieht sie sofort — vorher ging
-sie in 16 bekannten unter. Aufruf:
+Im Code ist nichts mehr offen außer Nachrangigem: internes Hosting (§15
+Punkt 8) und die Alt-Aufgaben aus Phase 2, die vor einer Umsetzung ohnehin
+erst mit Philip zu klären sind.
+
+*(Die Sichtprüfung SCHWEIZ in echtem PowerPoint stand hier bis zum
+12.08.2026 als Punkt 2 — sie ist erledigt, siehe oben.)*
+
+### `pyflakes` ist ab jetzt ein echtes Signal
+
+Über alle **32 Dateien null Meldungen** (12.08.2026). Wer eine neue erzeugt,
+sieht sie sofort — vorher ging sie in 16 bekannten unter. Aufruf:
 
 ```
 .venv\Scripts\python.exe -m pyflakes streamlit_app.py modules\*.py tests\*.py
@@ -325,9 +359,10 @@ absetzen.
 `analytics`), **D** (Prüfsteine für `analytics` und `formats` — die Runde hat
 dabei **drei Fehler gefunden**, siehe oben), **E** (rf-Umrechnung stand an
 vier statt drei Stellen → `annual_to_daily_rate`), **F** (`fmt_date_de`
-zweifach — die UI-Fassung **stürzte bei `NaT` ab**) und der **Wrapper-Block
+zweifach — die UI-Fassung **stürzte bei `NaT` ab**), der **Wrapper-Block
 in `streamlit_app.py`** (zehn Durchreicher statt der vermuteten sieben, einer
-davon tot, 25 Aufrufstellen). Außerdem **abgehakt statt abgearbeitet**:
+davon tot, 25 Aufrufstellen) und **7a** (`pyflakes` von 16 Meldungen auf 0).
+Außerdem **abgehakt statt abgearbeitet**:
 Backlog 3 (Spalte „Währung" — alle 38 CSVs führen sie, gesichtet), Backlog 4
 (Familien ESG/CVV/ETF — alle Vorlagen da, alle 19 Strategien zugeordnet,
 gesichtet) und Backlog 6 (Download-Toter-Code — war schon am 07.08. entfernt,
@@ -399,6 +434,10 @@ Bewährt in der letzten Sitzung und bitte beibehalten:
   Standard-Ansicht, nicht die Bedienpfade — dafür stehen die AppTest-Suiten
   daneben.
 - **Ein Commit je Thema**, deutsche Commit-Nachricht mit Begründung.
-- **Was das Auge findet, findet kein Test.** Beide Fehler dieser Sitzung
-  kamen aus Philips Sichtprüfung. Broschüren stichprobenartig in *echtem*
-  PowerPoint öffnen — LibreOffice reicht nicht (#16/#28).
+- **Was das Auge findet, findet kein Test.** Beide Fehler der Sitzung vom
+  07.08.2026 kamen aus Philips Sichtprüfung. Broschüren stichprobenartig in
+  *echtem* PowerPoint öffnen — LibreOffice reicht nicht (#16/#28).
+- **Umgekehrt gilt es aber auch** *(12.08.2026)*: Die fünf Fehler dieses Tages
+  hat **kein Auge** gefunden, sondern durchweg die Methode — Grenzfälle
+  durchtesten, Kopien nebeneinanderlegen, `pyflakes` lesen. Beides wird
+  gebraucht.

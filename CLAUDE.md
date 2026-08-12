@@ -118,7 +118,7 @@ python tests/test_anlagekriterien.py         # pandas + streamlit
 python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
 python tests/test_kosten_mathematik.py       # Schritt 1 ohne jedes Paket
-python tests/test_formats.py                 # ohne jedes Paket
+python tests/test_formats.py                 # Schritte 1-4+6 ohne jedes Paket
 python tests/test_analytics.py               # nur numpy + pandas
 python tests/test_benchmark_erkennung.py     # nur pandas
 python tests/test_benchmark_charts.py        # Schritt 1 pandas, 2+3 + pptx/streamlit
@@ -129,8 +129,15 @@ python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 ```
 
+Dazu ein Werkzeug, kein Test — für den Beweis nach einem UI-Umbau:
+
+```
+python tests/ui_dump.py vorher.json     # umbauen, dann nachher.json, vergleichen
+```
+
 Tests bewusst **ohne pytest** — sie sollen in der eingeschränkten
-Firmenumgebung laufen. Neue Tests genauso schreiben.
+Firmenumgebung laufen. Neue Tests genauso schreiben: Schritte einzeln
+ausgeben, fehlende Pakete **überspringen statt scheitern**, Rückgabewert 0/1.
 
 `pip` funktioniert (entgegen älterer Doku-Aussagen). Für den vollen Export:
 
