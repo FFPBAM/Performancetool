@@ -38,9 +38,10 @@ import streamlit as st
 import plotly.graph_objects as go
 
 from modules.analytics import (
-    RISIKO_PERIODEN, ROLL_FENSTER_TAGE, calc_daily_returns_after_fee,
-    has_benchmark, heatmap_kennzahlen, monats_durchschnitt, monatsrenditen,
-    monatsrenditen_differenz, risiko_perioden, rollierende_vola,
+    BAND_MIN_JAHRE, RISIKO_PERIODEN, ROLL_FENSTER_TAGE, bandbreite,
+    calc_daily_returns_after_fee, has_benchmark, heatmap_kennzahlen,
+    monats_durchschnitt, monatsrenditen, monatsrenditen_differenz,
+    risiko_perioden, rollierende_vola,
 )
 from modules.formats import (
     EMPTY_VALUE, MONATSNAMEN_KURZ, fmt_pct, fmt_ratio, monat_kurz, monat_lang,
@@ -63,6 +64,16 @@ DURCHSCHNITT_ZEILE = "Ø"
 # Oberfläche ist frei davon, und ein Sternchen mit Fußnote ist ohnehin die
 # Schreibweise, die ein Berater aus jedem Factsheet kennt.
 UNVOLLSTAENDIG = "*"
+
+# Die beiden Ansichten derselben Daten. "Jahr für Jahr" beantwortet „wie lief
+# jeder Monat?", "Bandbreite" beantwortet „ist dieser März ungewöhnlich?".
+ANSICHT_JAHRE = "Jahr für Jahr"
+ANSICHT_BAND = "Bandbreite"
+ANSICHTEN = (ANSICHT_JAHRE, ANSICHT_BAND)
+
+# Kachelhöhe in Pixeln, je weniger Zeilen desto größer (siehe _zeilenhoehe).
+ZEILE_HOEHE_MIN = 30.0
+ZEILE_HOEHE_MAX = 80.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,54 +114,166 @@ def _colorbar(grenze: float) -> dict:
     )
 
 
-def _heatmap_figur(daten: dict, grenze: float, titel_hover: str) -> go.Figure:
-    """Baut die Heatmap-Figur aus einer Monatsmatrix."""
+def _zeilenhoehe(anzahl: int) -> float:
+    """Höhe einer Kachelzeile in Pixeln — je weniger Zeilen, desto höher.
+
+    Bei zwei Zeilen (Zeitraum „1 Jahr") war die Matrix vorher ein flacher
+    Streifen aus sehr breiten, sehr niedrigen Kacheln. Die Höhe wächst
+    deshalb umgekehrt zur Zeilenzahl, gedeckelt bei ZEILE_HOEHE_MAX.
+
+    Der Deckel ist nicht willkürlich: Bei dreizehn Spalten auf voller
+    Streamlit-Breite ist eine Spalte rund 75 px breit. Bei 80 px Höhe wird
+    die Kachel also annähernd quadratisch — darüber kippte sie ins Stehende
+    und die Matrix läge quer.
+    """
+    if anzahl <= 0:
+        return ZEILE_HOEHE_MAX
+    return min(ZEILE_HOEHE_MAX, max(ZEILE_HOEHE_MIN, 600.0 / anzahl))
+
+
+def _zeile(beschriftung, werte, voll_je_monat, hover_je_monat,
+           jahr_wert=None, jahr_voll=True):
+    """Eine Zeile der Heatmap, unabhängig davon, was sie bedeutet.
+
+    Getrennt von `_heatmap_figur` (14.08.2026), damit die zweite Ansicht
+    keine zweite Zeichenmaschine braucht: Eine Zeile ist einfach ein Satz
+    Monatswerte plus die Frage, was im Hover steht.
+
+    Args:
+        beschriftung: y-Achsen-Beschriftung ("2026", "5J-Hoch", "Ø")
+        werte: Series index 1..12, Dezimal
+        voll_je_monat: callable(monat) -> bool, steuert das Sternchen
+        hover_je_monat: callable(monat, wert) -> str
+        jahr_wert: Wert der Jahresspalte oder None
+        jahr_voll: ob der Jahreswert vollständig ist
+    """
+    return {
+        "label": beschriftung, "werte": werte, "voll": voll_je_monat,
+        "hover": hover_je_monat, "jahr_wert": jahr_wert, "jahr_voll": jahr_voll,
+    }
+
+
+def _zeilen_jahr_fuer_jahr(daten: dict, titel_hover: str) -> list:
+    """Ein Jahr je Zeile, jüngstes oben, darunter die Ø-Zeile."""
     renditen, vollst = daten["renditen"], daten["vollstaendig"]
-    # Jüngstes Jahr oben — die Leserichtung jedes Factsheets.
-    jahre = sorted(renditen.index, reverse=True)
+    zeilen = []
+
+    def _hover(kopf):
+        def _machen(monat, wert):
+            if pd.isna(wert):
+                return f"{monat_lang(monat)} {kopf}<br>keine Daten"
+            return (f"{monat_lang(monat)} {kopf}<br>"
+                    f"{titel_hover}: {fmt_pct(wert)}")
+        return _machen
+
+    for jahr in sorted(renditen.index, reverse=True):
+        zeilen.append(_zeile(
+            str(jahr), renditen.loc[jahr],
+            lambda m, j=jahr: bool(vollst.loc[j, m]),
+            _hover(str(jahr)),
+            jahr_wert=daten["jahr"].loc[jahr],
+            jahr_voll=bool(daten["jahr_vollstaendig"].loc[jahr]),
+        ))
+
     schnitt = monats_durchschnitt(daten)
-    hat_schnitt = not schnitt["monate"].empty
+    if not schnitt["monate"].empty:
+        # Die Ø-Zeile besteht nur aus vollen Jahren — jeder ihrer Werte ist
+        # damit vollstaendig und traegt kein Sternchen.
+        spanne = f"{schnitt['jahre'][0]}–{schnitt['jahre'][-1]}"
+        zeilen.append(_zeile(
+            DURCHSCHNITT_ZEILE, schnitt["monate"], lambda m: True,
+            _hover(f"Ø {spanne}"), jahr_wert=schnitt["jahr"], jahr_voll=True,
+        ))
+    return zeilen
 
-    z, texte, hover, zeilen = [], [], [], []
 
-    def _zeile(beschriftung, werte, vollmaske, hover_kopf):
+def _zeilen_bandbreite(daten: dict, band: dict, titel_hover: str) -> list:
+    """Hoch / Mittel / Tief des Fensters, darunter das laufende Jahr.
+
+    Reihenfolge wie bei Bloomberg: erst das Band, dann die Zeile, die man
+    dagegen liest.
+    """
+    n = len(band["jahre"])
+    praefix = f"{n}J"
+    aktuell = band["aktuelles_jahr"]
+    renditen, vollst = daten["renditen"], daten["vollstaendig"]
+
+    def _hover_extrem(art, werte, wann):
+        def _machen(monat, wert):
+            if pd.isna(wert):
+                return f"{monat_lang(monat)}<br>keine Daten"
+            jahr = wann.loc[monat]
+            zusatz = f" ({jahr})" if jahr is not None else ""
+            return (f"{monat_lang(monat)}<br>{art} der {n} Jahre: "
+                    f"{fmt_pct(wert)}{zusatz}")
+        return _machen
+
+    def _hover_mittel(monat, wert):
+        if pd.isna(wert):
+            return f"{monat_lang(monat)}<br>keine Daten"
+        quote = band["trefferquote"].loc[monat]
+        anteil = ("" if pd.isna(quote) else
+                  f"<br>in {round(quote * n)} von {n} Jahren positiv")
+        return f"{monat_lang(monat)}<br>Mittel: {fmt_pct(wert)}{anteil}"
+
+    def _hover_aktuell(monat, wert):
+        if pd.isna(wert):
+            return f"{monat_lang(monat)} {aktuell}<br>noch kein Wert"
+        lage = ""
+        hoch, tief = band["hoch"].loc[monat], band["tief"].loc[monat]
+        if pd.notna(hoch) and wert > hoch:
+            lage = f"<br>über dem {n}-Jahres-Hoch"
+        elif pd.notna(tief) and wert < tief:
+            lage = f"<br>unter dem {n}-Jahres-Tief"
+        return (f"{monat_lang(monat)} {aktuell}<br>"
+                f"{titel_hover}: {fmt_pct(wert)}{lage}")
+
+    return [
+        _zeile(f"{praefix}-Hoch", band["hoch"], lambda m: True,
+               _hover_extrem("Höchster", band["hoch"], band["hoch_wann"]),
+               jahr_wert=band["hoch_jahr"]),
+        _zeile(f"{praefix}-Mittel", band["mittel"], lambda m: True,
+               _hover_mittel, jahr_wert=band["mittel_jahr"]),
+        _zeile(f"{praefix}-Tief", band["tief"], lambda m: True,
+               _hover_extrem("Niedrigster", band["tief"], band["tief_wann"]),
+               jahr_wert=band["tief_jahr"]),
+        _zeile(str(aktuell), renditen.loc[aktuell],
+               lambda m: bool(vollst.loc[aktuell, m]), _hover_aktuell,
+               jahr_wert=daten["jahr"].loc[aktuell],
+               jahr_voll=bool(daten["jahr_vollstaendig"].loc[aktuell])),
+    ]
+
+
+def _heatmap_figur(zeilen: list, grenze: float) -> go.Figure:
+    """Zeichnet, was sie bekommt — ohne zu wissen, was die Zeilen bedeuten."""
+    z, texte, hover, beschriftungen = [], [], [], []
+
+    for zl in zeilen:
         z_zeile, t_zeile, h_zeile = [], [], []
         for monat in range(1, 13):
-            wert = werte.loc[monat]
-            voll = bool(vollmaske(monat))
+            wert = zl["werte"].loc[monat]
+            voll = bool(zl["voll"](monat))
             z_zeile.append(None if pd.isna(wert) else float(wert) * 100.0)
             t_zeile.append(_zellentext(wert, voll))
-            if pd.isna(wert):
-                h_zeile.append(f"{monat_lang(monat)} {hover_kopf}<br>keine Daten")
-            else:
-                zusatz = "" if voll else "<br>angebrochener Monat"
-                h_zeile.append(f"{monat_lang(monat)} {hover_kopf}<br>"
-                               f"{titel_hover}: {fmt_pct(wert)}{zusatz}")
+            h_zeile.append(zl["hover"](monat, wert))
         # Die Jahresspalte bleibt ohne Füllung (z = None) und ohne Text;
         # ihr Wert kommt als Annotation. Grund: Eine Zelle mit fehlendem
         # z-Wert rendert je nach Plotly-Fassung ihren Text nicht mit.
         z.append(z_zeile + [None])
         texte.append(t_zeile + [""])
         hover.append(h_zeile + [""])
-        zeilen.append(beschriftung)
+        beschriftungen.append(zl["label"])
 
-    for jahr in jahre:
-        _zeile(str(jahr), renditen.loc[jahr],
-               lambda m, j=jahr: vollst.loc[j, m], str(jahr))
-
-    if hat_schnitt:
-        # Die Ø-Zeile besteht nur aus vollen Jahren — jeder ihrer Werte ist
-        # damit vollstaendig und traegt kein Sternchen.
-        _zeile(DURCHSCHNITT_ZEILE, schnitt["monate"], lambda m: True,
-               f"Ø {schnitt['jahre'][0]}–{schnitt['jahre'][-1]}")
+    hoehe_zeile = _zeilenhoehe(len(zeilen))
+    schrift = min(16.0, max(11.0, hoehe_zeile / 5.0))
 
     fig = go.Figure(go.Heatmap(
         z=z,
         x=list(MONATSNAMEN_KURZ) + [JAHR_SPALTE],
-        y=zeilen,
+        y=beschriftungen,
         text=texte,
         texttemplate="%{text}",
-        textfont=dict(size=11, color=HEATMAP_TEXT),
+        textfont=dict(size=schrift, color=HEATMAP_TEXT),
         customdata=hover,
         hovertemplate="%{customdata}<extra></extra>",
         colorscale=HEATMAP_SKALA,
@@ -164,25 +287,18 @@ def _heatmap_figur(daten: dict, grenze: float, titel_hover: str) -> go.Figure:
 
     # Jahreswerte als Annotationen — garantiert farblos und damit ohne
     # Einfluss auf die Skala der Monate.
-    for jahr in jahre:
-        wert = daten["jahr"].loc[jahr]
-        if pd.isna(wert):
+    for zl in zeilen:
+        wert = zl["jahr_wert"]
+        if wert is None or pd.isna(wert):
             continue
-        voll = bool(daten["jahr_vollstaendig"].loc[jahr])
         fig.add_annotation(
-            x=JAHR_SPALTE, y=str(jahr),
-            text=f"<b>{_zellentext(wert, voll)}</b>",
-            showarrow=False, font=dict(size=11), xanchor="center",
-        )
-    if hat_schnitt and schnitt["jahr"] is not None:
-        fig.add_annotation(
-            x=JAHR_SPALTE, y=DURCHSCHNITT_ZEILE,
-            text=f"<b>{_zellentext(schnitt['jahr'], True)}</b>",
-            showarrow=False, font=dict(size=11), xanchor="center",
+            x=JAHR_SPALTE, y=zl["label"],
+            text=f"<b>{_zellentext(wert, zl['jahr_voll'])}</b>",
+            showarrow=False, font=dict(size=schrift), xanchor="center",
         )
 
     fig.update_layout(
-        height=max(240, 30 * len(zeilen) + 150),
+        height=round(len(zeilen) * hoehe_zeile + 150),
         margin=dict(l=10, r=10, t=10, b=60),
         xaxis=dict(side="top", fixedrange=True, showgrid=False, ticks=""),
         yaxis=dict(fixedrange=True, showgrid=False, ticks=""),
@@ -263,14 +379,76 @@ def _hat_unvollstaendige(daten: dict) -> bool:
     return False
 
 
-def _zeichne_matrix(daten, grenze, hover_titel, ist_differenz, schluessel):
+def _kennzeile_band(daten: dict, band: dict) -> str:
+    """Die Zeile unter der Bandbreite — beantwortet, wofür sie gebaut ist.
+
+    Genannt werden die Monate in Worten statt durch Symbole: „über dem Hoch"
+    ist eine Aussage, kein Dreieck.
+    """
+    n = len(band["jahre"])
+    aktuell = band["aktuelles_jahr"]
+    zeile = daten["renditen"].loc[aktuell]
+    voll = daten["vollstaendig"].loc[aktuell]
+
+    ueber, unter, ueber_mittel, gezaehlt = [], [], 0, 0
+    for monat in range(1, 13):
+        wert = zeile.loc[monat]
+        if pd.isna(wert) or not bool(voll.loc[monat]):
+            continue
+        gezaehlt += 1
+        hoch, tief = band["hoch"].loc[monat], band["tief"].loc[monat]
+        mittel = band["mittel"].loc[monat]
+        if pd.notna(hoch) and wert > hoch:
+            ueber.append(monat_lang(monat))
+        elif pd.notna(tief) and wert < tief:
+            unter.append(monat_lang(monat))
+        if pd.notna(mittel) and wert > mittel:
+            ueber_mittel += 1
+
+    if not gezaehlt:
+        return f"Für {aktuell} liegt noch kein vollständiger Monat vor."
+
+    teile = [f"{aktuell} gegen {n} Jahre"]
+    if ueber:
+        teile.append("über dem Hoch: " + ", ".join(ueber))
+    if unter:
+        teile.append("unter dem Tief: " + ", ".join(unter))
+    if not ueber and not unter:
+        teile.append("kein Monat außerhalb der Bandbreite")
+    teile.append(f"{ueber_mittel} von {gezaehlt} Monaten über dem Mittel")
+    return " · ".join(teile)
+
+
+def _zeichne_matrix(daten, grenze, hover_titel, ist_differenz, schluessel,
+                    ansicht=ANSICHT_JAHRE, band_jahre=None):
     """Chart, Kennzeile, Fußnoten und der Haken für die Tabelle."""
     if daten["renditen"].empty or not daten["renditen"].notna().any().any():
         st.caption("Für diese Auswahl gibt es keine Monatsrenditen.")
         return
-    st.plotly_chart(_heatmap_figur(daten, grenze, hover_titel),
+
+    band = bandbreite(daten, band_jahre) if ansicht == ANSICHT_BAND else None
+    if ansicht == ANSICHT_BAND and not band["jahre"]:
+        volle = int(daten["jahr_vollstaendig"].sum())
+        st.caption(
+            f"Die Bandbreite braucht mindestens {BAND_MIN_JAHRE} "
+            f"abgeschlossene Kalenderjahre vor dem laufenden — hier "
+            f"{'ist es nur eines' if volle == 1 else f'sind es {volle}'}. "
+            "Bei einem einzigen Jahr wären Hoch, Mittel und Tief dieselbe "
+            f"Zahl. Die Ansicht „{ANSICHT_JAHRE}“ zeigt die Daten trotzdem.")
+        return
+
+    if band is not None:
+        zeilen = _zeilen_bandbreite(daten, band, hover_titel)
+    else:
+        zeilen = _zeilen_jahr_fuer_jahr(daten, hover_titel)
+
+    st.plotly_chart(_heatmap_figur(zeilen, grenze),
                     config={"displayModeBar": False}, key=schluessel)
-    st.caption(_kennzeile(daten, ist_differenz))
+
+    if band is not None:
+        st.caption(_kennzeile_band(daten, band))
+    else:
+        st.caption(_kennzeile(daten, ist_differenz))
 
     if _hat_unvollstaendige(daten):
         # Seit der Zeitraum-Kopplung (14.08.2026) kann ein angebrochener
@@ -281,16 +459,28 @@ def _zeichne_matrix(daten, grenze, hover_titel, ist_differenz, schluessel):
             "Zeitraums oder laufender Monat). Zählt in den Kennzahlen nicht "
             "mit.")
 
-    schnitt = monats_durchschnitt(daten)
-    if not schnitt["monate"].empty:
-        jahre = schnitt["jahre"]
-        spanne = (f"{jahre[0]}" if len(jahre) == 1
-                  else f"{jahre[0]}–{jahre[-1]}")
+    if band is not None:
+        jahre = band["jahre"]
         st.caption(
-            f"{DURCHSCHNITT_ZEILE} = geometrisches Mittel über die "
-            f"{len(jahre)} vollständigen Kalenderjahre ({spanne}). "
-            "Angebrochene Jahre bleiben außen vor, damit für jeden Monat "
-            "dieselben Jahre zugrunde liegen.")
+            f"Bandbreite über die {len(jahre)} abgeschlossenen Kalenderjahre "
+            f"{jahre[0]}–{jahre[-1]}; {band['aktuelles_jahr']} ist bewusst "
+            "nicht darin enthalten, sonst verglichen sich die Zahlen mit sich "
+            "selbst. In den Zeilen Hoch und Tief steht je Monat das Extrem "
+            "**dieses Monats**, in der Jahresspalte das Extrem **des "
+            "Jahres** — beides sind Extreme, sie stammen aber nicht "
+            "zwangsläufig aus demselben Jahr. Nur die Mittel-Zeile ergibt "
+            "verkettet ihren Jahreswert.")
+    else:
+        schnitt = monats_durchschnitt(daten)
+        if not schnitt["monate"].empty:
+            jahre = schnitt["jahre"]
+            spanne = (f"{jahre[0]}" if len(jahre) == 1
+                      else f"{jahre[0]}–{jahre[-1]}")
+            st.caption(
+                f"{DURCHSCHNITT_ZEILE} = geometrisches Mittel über die "
+                f"{len(jahre)} vollständigen Kalenderjahre ({spanne}). "
+                "Angebrochene Jahre bleiben außen vor, damit für jeden Monat "
+                "dieselben Jahre zugrunde liegen.")
 
     if st.checkbox("Tabelle anzeigen", value=False, key=f"tbl_{schluessel}",
                    help="Blendet dieselben Zahlen als Tabelle ein — zum "
@@ -312,7 +502,8 @@ def _zuschnitt(ts_df, von, bis):
 def zeige_monatsheatmap(label, ts_df, fee_dec,
                         gegen_benchmark=False, benchmark_name="Benchmark",
                         vergleich=None, mwst_suffix="", schluessel="p1",
-                        von=None, bis=None):
+                        von=None, bis=None,
+                        band_von=None, band_bis=None, band_jahre=None):
     """Monatsrenditen-Heatmap einer Strategie, wahlweise mit Differenzen.
 
     Args:
@@ -325,7 +516,9 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
         vergleich: (label, ts_df, fee_dec) der Vergleichsstrategie oder None
         mwst_suffix: Textbaustein " (exkl. MwSt.)" für die Beschriftung
         schluessel: Suffix für die Plotly-Keys (mehrere Charts je Seite)
-        von, bis: Zeitraum-Grenzen; None heißt „Rand der jeweiligen Reihe"
+        von, bis: Zeitraum-Grenzen für „Jahr für Jahr"; None heißt „Rand der
+            jeweiligen Reihe"
+        band_von, band_bis, band_jahre: eigenes Fenster für die Bandbreite
 
     DER ZUSCHNITT PASSIERT HIER UND NICHT VORHER (14.08.2026). Die Heatmap
     folgt seit der Sichtprüfung dem oben gewählten Zeitraum — aber sie
@@ -337,7 +530,15 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
     fünfzehn Jahre, ohne dass die Auswahl das nahelegt.
 
     Mit `von=None` beginnt deshalb JEDE Reihe an ihrem eigenen ersten Monat.
+
+    WARUM DIE BANDBREITE EIN EIGENES FENSTER BRAUCHT: Sie denkt in ganzen
+    KALENDERJAHREN, der Zuschnitt oben in Tagen. Bei „5 Jahre" schneidet der
+    tagbasierte Zuschnitt am 21.07.2021 — 2021 ist damit unvollständig und
+    fiele aus dem Band, das dann nur vier Jahre hätte, obwohl „5J" darüber
+    stünde. Deshalb bekommt sie `band_jahre` und schneidet allenfalls nach
+    `band_von`/`band_bis` (nur beim eigenen Zeitraum gesetzt).
     """
+    voll_df = ts_df
     ts_df = _zuschnitt(ts_df, von, bis)
     if ts_df is None or len(ts_df) == 0:
         st.markdown("---")
@@ -347,21 +548,41 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
 
     st.markdown("---")
     st.subheader("Monatsrenditen")
-    st.caption(f"{ts_df.index.min():%m/%Y} – {ts_df.index.max():%m/%Y}, "
+
+    if "p_heat_ansicht" not in st.session_state:
+        st.session_state["p_heat_ansicht"] = ANSICHT_JAHRE
+    # required=True: Ein Klick auf das aktive Segment darf nicht abwaehlen,
+    # sonst gaebe es den Zustand "keine Ansicht gewaehlt" (wie bei p_zeitraum).
+    ansicht = st.segmented_control(
+        "Ansicht", list(ANSICHTEN), key="p_heat_ansicht", required=True,
+        label_visibility="collapsed",
+        help=(f"„{ANSICHT_JAHRE}“ zeigt jedes Jahr als eigene Zeile. "
+              f"„{ANSICHT_BAND}“ stellt dem laufenden Jahr Hoch, Mittel und "
+              "Tief der Vorjahre gegenüber — je Kalendermonat."))
+
+    # Die beiden Ansichten rechnen auf verschieden geschnittenen Reihen: „Jahr
+    # für Jahr" auf dem tagbasierten Zuschnitt, die Bandbreite auf dem eigenen
+    # Fenster (siehe Docstring). Ab hier arbeitet alles auf `basis`.
+    band = ansicht == ANSICHT_BAND
+    basis = _zuschnitt(voll_df, band_von, band_bis) if band else ts_df
+    v_von, v_bis = (band_von, band_bis) if band else (von, bis)
+
+    st.caption(f"{basis.index.min():%m/%Y} – {basis.index.max():%m/%Y}, "
                f"nach Kosten{mwst_suffix}.")
 
-    absolut = monatsrenditen(ts_df, fee_dec)
+    absolut = monatsrenditen(basis, fee_dec)
     _zeichne_matrix(absolut, HEATMAP_GRENZE_ABSOLUT, label,
-                    False, f"heat_abs_{schluessel}")
+                    False, f"heat_abs_{schluessel}",
+                    ansicht=ansicht, band_jahre=band_jahre)
 
     if gegen_benchmark:
         st.markdown(f"**Differenz zur Benchmark ({benchmark_name})**")
-        if not ("ret_bm" in ts_df.columns and has_benchmark(ts_df["ret_bm"])):
+        if not ("ret_bm" in basis.columns and has_benchmark(basis["ret_bm"])):
             st.caption(
                 f"Für {label} ist kein Vergleichsmaßstab (Benchmark) "
                 "hinterlegt — es gibt deshalb keine Differenz zu zeigen.")
         else:
-            bm = monatsrenditen(ts_df, 0.0, spalte="ret_bm", nach_kosten=False)
+            bm = monatsrenditen(basis, 0.0, spalte="ret_bm", nach_kosten=False)
             diff = monatsrenditen_differenz(absolut, bm)
             st.caption(
                 "Geometrisch gerechnet, damit die Monate einer Zeile genau "
@@ -370,11 +591,12 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
                 "steckt also in der Differenz.")
             _zeichne_matrix(diff, HEATMAP_GRENZE_DIFFERENZ,
                             f"{label} gegen {benchmark_name}",
-                            True, f"heat_bm_{schluessel}")
+                            True, f"heat_bm_{schluessel}",
+                            ansicht=ansicht, band_jahre=band_jahre)
 
     if vergleich is not None:
         v_label, v_df, v_fee = vergleich
-        v_df = _zuschnitt(v_df, von, bis)
+        v_df = _zuschnitt(v_df, v_von, v_bis)
         st.markdown(f"**Differenz zu {v_label}**")
         if v_df is None or len(v_df) == 0:
             st.caption(f"Für {v_label} liegen im gewählten Zeitraum keine "
@@ -389,7 +611,8 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
             "der Unterschied mit in der Differenz.")
         _zeichne_matrix(diff, HEATMAP_GRENZE_DIFFERENZ,
                         f"{label} gegen {v_label}", True,
-                        f"heat_cmp_{schluessel}")
+                        f"heat_cmp_{schluessel}",
+                        ansicht=ansicht, band_jahre=band_jahre)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

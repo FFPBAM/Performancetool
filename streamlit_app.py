@@ -761,13 +761,24 @@ if ansicht == _VIEW_PERF:
     # None heißt „Rand der jeweiligen Reihe" — jede Strategie beginnt dann an
     # ihrem eigenen ersten Monat. Der Zuschnitt selbst passiert in
     # `zeige_monatsheatmap`, damit beide Reihen ihn unabhängig bekommen.
+    #
+    # Die BANDBREITEN-Ansicht braucht ein eigenes Fenster (14.08.2026): Sie
+    # denkt in ganzen Kalenderjahren, der Zuschnitt oben in Tagen. Bei
+    # „5 Jahre" schnitte der tagbasierte Weg am 21.07.2021 — 2021 wäre damit
+    # unvollständig und fiele aus dem Band, das dann vier Jahre hätte,
+    # obwohl „5J" darüber stünde. Sie bekommt deshalb die Zahl der Jahre und
+    # schneidet nur beim eigenen Zeitraum nach Datum.
     if eigener:
         _heat_von, _heat_bis = sd, ed
+        _band_von, _band_bis, _band_jahre = sd, ed, None
     elif jahre is None:
         _heat_von = _heat_bis = None
+        _band_von = _band_bis = _band_jahre = None
     else:
         _heat_von = (pd.Timestamp(maxd) - pd.DateOffset(years=jahre)).date()
         _heat_bis = None
+        _band_von = _band_bis = None
+        _band_jahre = jahre
 
     def _analyse_reihen(kurz=False):
         """(label, reihe, honorar[, benchmark_name, hat_benchmark]) je Strategie.
@@ -972,7 +983,9 @@ if ansicht == _VIEW_PERF:
         zeige_monatsheatmap(l1,_voll1,fdec1,gegen_benchmark=sheat_bm,
                             benchmark_name=bn1,vergleich=_vgl,
                             mwst_suffix=mwst_suffix,
-                            von=_heat_von,bis=_heat_bis)
+                            von=_heat_von,bis=_heat_bis,
+                            band_von=_band_von,band_bis=_band_bis,
+                            band_jahre=_band_jahre)
 
     if srisk:
         zeige_risiko_ueberblick(_analyse_reihen(),mwst_suffix=mwst_suffix)
