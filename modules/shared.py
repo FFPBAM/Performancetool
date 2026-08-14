@@ -53,19 +53,26 @@ FFPB_PALETTE = [
 # Divergierende Skala um die Null: negativ rot, positiv grün, dazwischen ein
 # warmes Neutral aus der Sand-Familie.
 #
-# GEDÄMPFT und nicht in Signalfarben — das ist eine Privatbank, kein
-# Warnleitsystem. Wichtiger noch: `go.Heatmap` kann die Schriftfarbe NICHT je
-# Zelle setzen, es gibt also genau eine Textfarbe für die ganze Skala. Deshalb
-# sind beide Enden bewusst hell genug gewählt, dass dunkler Text überall liest.
-# Nachgerechnet am 14.08.2026 über elf Stützstellen: der schlechteste Kontrast
-# gegen HEATMAP_TEXT liegt bei 5,37:1 und damit durchgehend über den 4,5:1,
-# die WCAG AA für normalen Text verlangt.
+# Keine Signalfarben — das ist eine Privatbank, kein Warnleitsystem.
+# Wichtiger noch: `go.Heatmap` kann die Schriftfarbe NICHT je Zelle setzen, es
+# gibt also genau EINE Textfarbe für die ganze Skala. Die Enden gehen deshalb
+# nur so weit, wie der Kontrast es zulässt.
+#
+# Nachgerechnet am 14.08.2026 über 21 Stützstellen (nicht nur an den Enden):
+# schlechtester Kontrast gegen HEATMAP_TEXT **4,55:1**, knapp über den 4,5:1,
+# die WCAG AA für normalen Text verlangt. Das Minimum liegt an den Enden, weil
+# die Luminanz zur hellen Mitte hin monoton steigt.
+#
+# Nachgeschärft am 14.08.2026 (Sichtprüfung Philip: „wirkt zu blass") von
+# #C77B6B/#7A9B68, die bei 5,37:1 lagen. Weiter geht es nicht: Signalfarben
+# (#C0392B/#27AE60) kämen auf 3,20:1 — die Zahl in der Zelle wäre auf
+# gesättigten Feldern kaum noch zu lesen, und sie ist die eigentliche Aussage.
 #
 # Die Farbe trägt die Aussage NIE allein — in jeder Zelle steht die Zahl.
 # Dieselbe Regel, wegen der die Ampel-Symbole aus st.metric geflogen sind.
-HEATMAP_ROT     = "#C77B6B"   # gedämpftes Terrakotta (negativ)
+HEATMAP_ROT     = "#C06B58"   # Terrakotta (negativ)
 HEATMAP_NEUTRAL = "#EAE4D9"   # warmes Neutral, verwandt mit FFPB_SAND (null)
-HEATMAP_GRUEN   = "#7A9B68"   # gedämpftes Salbeigrün (positiv)
+HEATMAP_GRUEN   = "#6B9153"   # Salbeigrün (positiv)
 HEATMAP_TEXT    = "#1A1A1A"   # eine Textfarbe für die ganze Skala
 
 HEATMAP_SKALA = [
@@ -78,15 +85,25 @@ HEATMAP_SKALA = [
 # abgeleitet: Eine Skala, die sich je Strategie neu kalibriert, färbt zwei
 # Strategien unterschiedlich ein und lügt beim Nebeneinanderlegen.
 #
-# Hergeleitet aus einer Messung über alle 19 Strategien (14.08.2026,
-# Datenstand 260721, nur vollständige Monate):
+# ENGER GEFASST am 14.08.2026 (Sichtprüfung Philip: „wirkt zu blass"), von
+# 0.05 / 0.025. Der Grund ist eine Lehre über die Herleitung, nicht über die
+# Optik: Die alten Grenzen kamen aus dem 95. Perzentil der Beträge — gemessen
+# über alle 19 Strategien (Datenstand 260721, nur vollständige Monate):
 #   absolut    1.897 Monate, |Wert| P95 = 5,28 %, P99 = 7,45 %, Maximum 10,65 %
 #   Differenz  1.807 Monate, |Wert| P95 = 2,41 %, P99 = 3,74 %, Maximum  7,83 %
-# Die Grenzen liegen also knapp unter dem 95. Perzentil: 95 % der Monate
-# nutzen die Skala aus, die Extreme sättigen aus. Eine Grenze beim Maximum
-# hätte den Großteil der Monate in ein blasses Mittelfeld gedrückt.
-HEATMAP_GRENZE_ABSOLUT   = 0.05    # ±5 %
-HEATMAP_GRENZE_DIFFERENZ = 0.025   # ±2,5 %
+#
+# Ein Perzentil am Rand beantwortet aber nur, was NICHT abgeschnitten wird.
+# Über die Wirkung entscheidet die MITTE, und die liegt tief: Der typische
+# Monat bringt rund 1,2 %. Bei einer Grenze von 5 % saß er damit bei 24 %
+# Sättigung — das ist das gemeldete Blass. Bei 3 % sind es 40 %, ein
+# 2-%-Monat springt von 40 % auf 67 %.
+#
+# Rund 15 % der Monate liegen über ±3 % und sättigen aus. Das ist vertretbar,
+# weil die Zahl in der Zelle steht UND weil die Farblegende die Enden mit
+# „≤" und „≥" beschriftet — die Sättigung ist damit sichtbar, nicht
+# verschwiegen.
+HEATMAP_GRENZE_ABSOLUT   = 0.03    # ±3 %
+HEATMAP_GRENZE_DIFFERENZ = 0.015   # ±1,5 %
 
 MAPPING_PATH      = "Mapping_Honorarsatz.xlsx"
 NAME_MAPPING_PATH = "Mapping_Namen.xlsx"

@@ -37,25 +37,47 @@ DATE_FORMAT_DE = "%d.%m.%Y"
 """Deutsches Datum: 19.06.2026"""
 
 
-MONATSNAMEN_KURZ = ("Jan", "Feb", "Mrz", "Apr", "Mai", "Jun",
+MONATSNAMEN_KURZ = ("Jan", "Feb", "März", "Apr", "Mai", "Jun",
                     "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
 """Monatskuerzel fuer die Spaltenkoepfe der Monatsrenditen-Heatmap.
 
 Fest verdrahtet und NICHT ueber strftime("%b") erzeugt: Das Ergebnis von
 %b haengt an der Locale des Rechners und liefert auf einem englisch
-eingestellten System "Mar" statt "Mrz". Eine Broschuerenbank zeigt deutsche
+eingestellten System "Mar" statt "März". Eine Broschuerenbank zeigt deutsche
 Monatsnamen, unabhaengig davon, wie der Server konfiguriert ist.
 
-"Mrz" statt "Mär": drei Buchstaben ohne Umlaut halten die Spalten gleich
-breit und ueberstehen jede Zeichensatz-Umstellung."""
+"März" ausgeschrieben statt "Mrz" (Philip, 14.08.2026). Die Spalte wird
+dadurch einen Schritt breiter als die uebrigen elf — das ist in Kauf
+genommen, weil "Mrz" wie ein Tippfehler aussieht."""
+
+
+MONATSNAMEN_LANG = ("Januar", "Februar", "März", "April", "Mai", "Juni",
+                    "Juli", "August", "September", "Oktober", "November",
+                    "Dezember")
+"""Ausgeschriebene Monatsnamen fuer FLIESSTEXTE.
+
+Getrennt von den Kuerzeln, weil beide unterschiedliche Aufgaben haben: In
+einer Spaltenueberschrift zaehlt die Breite, in einem Satz die Lesbarkeit.
+"bester Monat: April 2020" liest sich, "bester Monat: Apr 2020" stolpert."""
 
 
 def monat_kurz(monat: int) -> str:
     """Monatsnummer 1-12 zum deutschen Kuerzel; ausserhalb: Fehlwert."""
+    return _monat_name(monat, MONATSNAMEN_KURZ)
+
+
+def monat_lang(monat: int) -> str:
+    """Monatsnummer 1-12 zum ausgeschriebenen Namen; ausserhalb: Fehlwert."""
+    return _monat_name(monat, MONATSNAMEN_LANG)
+
+
+def _monat_name(monat, namen):
+    # bool ZUERST abfangen: In Python ist isinstance(True, int) wahr, True
+    # waere sonst der Januar und False ein Fehlwert statt beides ein Fehlwert.
     if isinstance(monat, bool) or not isinstance(monat, int):
         return EMPTY_VALUE
     if 1 <= monat <= 12:
-        return MONATSNAMEN_KURZ[monat - 1]
+        return namen[monat - 1]
     return EMPTY_VALUE
 
 
