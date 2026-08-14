@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 14.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 71 Commits vor `main`
+· 75 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -278,6 +278,78 @@ String und konnte nie zutreffen; und die Prüfung „kommen die Monatsnamen aus
 `strftime`?" fand per Textsuche die **Warnung im Docstring**, die genau davor
 warnt. Sie läuft jetzt über den Syntaxbaum.)*
 
+### Zweite Ansicht: die Bandbreite (14.08. abends)
+
+Aus Bloomberg mitgebracht (dort „SEAG"). Dieselben Daten, andere Frage:
+
+- **Jahr für Jahr** — *wie lief jeder einzelne Monat der Historie?*
+- **Bandbreite** — *ist der laufende März ungewöhnlich, gemessen an allen
+  bisherigen Märzen?*
+
+Vier Zeilen statt neunzehn: Hoch, Mittel und Tief je Kalendermonat über die
+Vorjahre, darunter das laufende Jahr. Umschalter unter der Überschrift.
+
+```
+              Jan   Feb  März   Apr   Mai   Jun   Jul  ...  |  Jahr
+  5J-Hoch    +3,4  +0,7  +2,8  +2,2  +2,0  +4,3  +6,7       | +19,5
+  5J-Mittel  +0,0  -0,9  +0,8  -0,7  +1,0  +0,9  +2,3       |  +6,1
+  5J-Tief    -5,9  -2,3  -4,0  -4,5  -0,7  -3,1  +0,1       | -13,2
+  2026       +1,9  +0,7  -5,0  +6,0  +2,7  -0,7  -0,8*      |  +4,5*
+
+  2026 gegen 5 Jahre · über dem Hoch: April, Mai · unter dem
+  Tief: März · 4 von 6 Monaten über dem Mittel
+```
+
+**Das laufende Jahr steht nicht in seinem eigenen Band.** Bei Datenstand
+07/2026 ist das Band 2021–2025 und die untere Zeile 2026. Nähme man
+2022–2026, zöge der laufende Wert sein eigenes Extrem mit — ein Rekordmonat
+läge dann **per Definition nie „über dem Hoch"**, er wäre das Hoch. Genau die
+Aussage, für die die Ansicht gebaut ist, ginge verloren. Steht als
+Transferwissen **#53**.
+
+**Das Band rechnet in Kalenderjahren, der Zuschnitt in Tagen.** Bei „5 Jahre"
+schnitte der tagbasierte Weg am 21.07.2021 — 2021 wäre unvollständig und das
+Band hätte **vier** Jahre, obwohl „5J" darüber stünde. Es bekommt deshalb ein
+eigenes Fenster, und die Beschriftung nennt immer die tatsächliche Zahl: Bei
+*Muster FFPB Pro* steht `2J-Hoch`, nicht `5J-Hoch`.
+
+**Unter zwei vollen Jahren gibt es keine Bandbreite.** Bei einem einzigen
+Jahr wären Hoch, Mittel und Tief dieselbe Zahl. Betroffen: die drei
+comdirect-Strategien und *Pro Dividende*. Dort erscheint eine Erklärung statt
+einer Matrix; „Jahr für Jahr" zeigt die Daten unverändert.
+
+**Nur die Mittel-Zeile verkettet sich** zu ihrer Jahresspalte. Bei Hoch und
+Tief steht je Monat das Extrem *dieses Monats*, in der Jahresspalte das
+Extrem *des Jahres* — die stammen nicht zwangsläufig aus demselben Jahr. Die
+Caption sagt das, sonst rechnet jemand nach und hält es für einen Fehler.
+
+**Kacheln wachsen bei kurzem Zeitraum**, gedeckelt bei 80 px: Bei dreizehn
+Spalten auf voller Breite ist eine Spalte rund 75 px breit, die Kachel wird
+also annähernd quadratisch statt zum liegenden Balken. Bei zwei Zeilen war
+die Matrix vorher ein flacher Streifen. Die Schrift wächst mit (11–16 pt).
+
+| Zeilen | px/Zeile | gesamt | Fall |
+|---:|---:|---:|---|
+| 2 | 80 | 310 | Zeitraum „1 Jahr" |
+| 4 | 80 | 470 | Bandbreite |
+| 11 | 55 | 750 | Zeitraum „10 Jahre" |
+| 19 | 32 | 750 | „Seit Auflage" |
+
+**Ein eigener Fehler, zwei Runden alt.** Die AppTest-Fälle setzten
+`p_sel1="Comdirect 100"` — den CSV-Namen. Das Auswahlfeld führt aber
+**Anzeigenamen** (`Comdirect_100`), und Streamlit ignoriert einen ungültigen
+Wert stillschweigend. **Sechs Testfälle liefen gegen *cVV konservativ*** und
+bewiesen nichts über SCHWEIZ, comdirect oder Pro Dividende — grün, aber
+blind. Dieselbe Klasse wie das fehlende `majorTimeUnit` (#49). Korrigiert;
+der AppTest-Helfer prüft seitdem, ob ein gesetzter Wert **angekommen** ist.
+Die Prüfsteine testen damit erstmals wirklich, was sie behaupten — und
+bleiben grün.
+
+**Beweise.** `ui_dump` vorher/nachher zeichengleich, alle 21 Suiten grün,
+`pyflakes` bei null, Broschüren-Pfad belegbar unberührt. Die Invariante
+`Tief ≤ Mittel ≤ Hoch` über alle 19 Strategien und drei Fenster geprüft:
+**null Verletzungen**.
+
 ### Der Säulen-Chart zeigte vier Monate als Jahresbalken
 
 Philip hat an der **Pro**-Broschüre gesehen, dass im Chart „PERFORMANCE P.A.
@@ -543,19 +615,18 @@ fehlte. **Wer eine SCHWEIZ-Broschüre vor dem 11.08.2026 verschickt hat, hat zu
 gute Zahlen verschickt.** Prüfstein `tests/test_honorarsatz.py` schlägt künftig
 an, sobald eine Strategie ohne Satz dasteht.
 
-### Die Bilanz des Branches (gemessen 14.08.2026 nachmittags, gegen `main`)
+### Die Bilanz des Branches (gemessen 14.08.2026 abends, gegen `main`)
 
 | | Zeilen |
 |---|---:|
-| Produktivcode (15 Dateien inkl. `risiko_ansicht.py`) | +3.904 / −3.640 → **netto +264** |
-| Tests (22 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+5.959** |
-| Dokumentation (8 Dateien) | +3.430 / −87 |
+| Produktivcode (15 Dateien inkl. `risiko_ansicht.py`) | +4.291 / −3.640 → **netto +651** |
+| Tests (22 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+6.250** |
+| Dokumentation (8 Dateien) | +3.635 / −87 |
 
-Der Produktivcode liegt damit gut 260 Zeilen über `main` — bei erheblich mehr
-Funktion, und mit einem Netz darunter, das es vorher gar nicht gab.
-*(Verlauf: am 12.08. „netto −974", am 14.08. vormittags −10, jetzt +264. Die
-Heatmap und der Risiko-Block haben rund 1.240 Zeilen gebracht. Jedes Mal
-gemessen, nicht geschätzt.)*
+*(Verlauf: 12.08. netto −974, 14.08. vormittags −10, nachmittags +264, jetzt
++651. Heatmap, Risiko-Block und Bandbreite haben zusammen rund 1.630 Zeilen
+gebracht — dem stehen die rund 2.600 gegenüber, die in den Runden davor
+weggefallen sind. Jedes Mal gemessen, nicht geschätzt.)*
 
 ### SCHWEIZ: der Vergleichsmaßstab war an drei Stellen noch da
 
@@ -658,7 +729,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
 | `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |
-| `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–7 **+ streamlit** | Die Heatmap. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach (beide Toleranzränder, Schaltjahr-Februar, Loch im Monat, Ein-Tages-Monat), Schritt 2 nagelt fest, dass sich die Zeile zur Jahresspalte verkettet, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile (verkettet sich zum Ø-Jahr, nimmt nur volle Jahre), Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten, nennt die sieben Auflagemonate namentlich und prüft den Zeitraum-Zuschnitt an beiden Rändern, Schritt 7 fährt die Oberfläche hoch — inkl. „Seit Auflage" mit jungem Vergleichsportfolio, dem Fall, in dem die Schnittmenge fünfzehn Jahre fräße |
+| `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–9 **+ streamlit** | Die Heatmap, neun Schritte. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach, Schritt 2 die Verkettung Zeile → Jahresspalte, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile, Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und prüft den Zeitraum-Zuschnitt an beiden Rändern, **Schritt 7 die Bandbreite** (Invariante `Tief ≤ Mittel ≤ Hoch` über alle Strategien und drei Fenster, laufendes Jahr außerhalb des Bandes, Extreme kommen wirklich vor), **Schritt 8 die Kachelhöhe** (monoton fallend, nie außerhalb der Grenzen), Schritt 9 fährt die Oberfläche hoch — beide Ansichten, alle Zeiträume, und der Fall „Seit Auflage mit jungem Vergleichsportfolio", in dem die Schnittmenge fünfzehn Jahre fräße |
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16 |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
@@ -744,24 +815,27 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 **Es sind drei — alle liegen bei Philip.** Zwei weitere Punkte sind
 **bewusst zurückgestellt** und stehen darunter.
 
-1. **Die Nachschärfung am Bildschirm gegensehen** *(14.08. nachmittags)*.
-   Die erste Sichtprüfung ist erfolgt und hat fünf Befunde geliefert (oben);
-   alle sind umgesetzt. **Gesehen hat das Ergebnis aber noch niemand.**
-   Besonders:
-   - Wirkt die Skala jetzt kräftig genug? ±3 % und ±1,5 % sind je **eine**
-     Konstante in `shared.py` (`HEATMAP_GRENZE_*`) — eine Zeile, kein Umbau.
-   - **Light- und Dark-Mode**, vor allem die Zellzahlen auf den nun
-     gesättigten Feldern (gerechnet 4,55:1, gesehen nicht).
-   - Zeitraum-Schnellwahl durchklicken, jeweils mit und ohne
-     Vergleichsportfolio. Bei „Seit Auflage" + Vergleich muss *cVV
-     ausgewogen* weiterhin **ab 2009** stehen (per Test belegt, aber die
-     Caption sollte es auch zeigen).
-   - Sitzt die Farblegende sauber unter der Matrix — auch bei nur zwei
-     Jahreszeilen (Zeitraum „1 Jahr")?
-   - *Muster ausgewogen cVV*: 19 Zeilen inklusive Ø, 720 px hoch. Noch
-     lesbar oder zu hoch?
-   - Jahresspalte und Ø-Zeile: Beide sind Plotly-Annotationen bzw. eine
-     eigene y-Kategorie, nicht gewöhnliche Zellen.
+1. **Beides am Bildschirm gegensehen** — die Nachschärfung vom Nachmittag
+   und die Bandbreiten-Ansicht vom Abend. Alle Zahlen sind per Test belegt
+   und die Figuren strukturell nachgemessen, **gesehen hat es aber noch
+   niemand.**
+   - **Wirken Hoch- und Tief-Zeile bei ±3 % zu satt?** Sie sättigen
+     weitgehend aus — das war der bewusst eingegangene Kompromiss dafür, dass
+     die Farbe in beiden Ansichten dasselbe bedeutet. Rahmen sie die
+     laufende Zeile schön ein oder erschlagen sie sie?
+   - Wirkt die Skala insgesamt jetzt kräftig genug? ±3 % und ±1,5 % sind je
+     **eine** Konstante in `shared.py` (`HEATMAP_GRENZE_*`).
+   - Sind die Kacheln bei vier Zeilen richtig proportioniert oder zu hoch?
+     `ZEILE_HOEHE_MAX` in `risiko_ansicht.py` ist **eine** Konstante.
+   - **Light- und Dark-Mode**, vor allem die Zellzahlen auf den gesättigten
+     Feldern (gerechnet 4,55:1, gesehen nicht).
+   - Umschalten zwischen beiden Ansichten, mit und ohne Differenz-Matrizen.
+   - *cVV ausgewogen* mit „5 Jahre": Band **2021–2025**, unterste Zeile
+     **2026** mit leeren Monaten ab August.
+   - *Comdirect_100*: Erklärung statt Matrix — in „Jahr für Jahr" trotzdem
+     eine normale Matrix.
+   - Zeitraum „1 Jahr": zwei Zeilen, große Kacheln — sitzt die Farblegende
+     noch sauber darunter?
    - „Tabelle anzeigen" bei allen drei Matrizen gleichzeitig.
 
    ```
@@ -845,6 +919,12 @@ Kam aus keinem Backlog, sondern aus Philips Wunsch. Zwei neue Prüfsteine
 ±5 % auf ±3 %, Zeitraum-Kopplung, Farblegende, „März" statt „Mrz",
 Ø-Zeile je Kalendermonat, Haken „Tabelle anzeigen", Vergleichs-Haken immer
 sichtbar. Der vierte Satz von Transferwissen #52 kam daraus.
+
+**Abends die Bandbreiten-Ansicht** nach Bloomberg-Vorbild (Hoch/Mittel/Tief
+je Kalendermonat gegen das laufende Jahr), Umschalter zwischen beiden
+Ansichten und mitwachsende Kacheln. Transferwissen **#53** — und dabei fiel
+auf, dass sechs AppTest-Fälle aus zwei Runden mit CSV-Namen statt
+Anzeigenamen liefen und deshalb nichts bewiesen.
 
 **Erledigt am 12.08.2026 (abends, 3):** Der **Rumpfjahr-Balken** im
 Säulen-Chart — gemeldet an Pro, gefunden bei 7 von 19 Strategien. Kam aus

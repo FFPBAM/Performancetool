@@ -2151,6 +2151,61 @@ Stellschrauben: `_ist_voller_monat`, `MONAT_RAND_TOLERANZ_TAGE`,
 
 ---
 
+### 53. Ein Vergleichsfenster darf den Vergleichswert nicht enthalten (NEU 14.08.2026) ⭐
+
+Die Bandbreiten-Ansicht (Bloomberg-Vorbild „SEAG") stellt dem laufenden Jahr
+das Hoch, das Mittel und das Tief der Vorjahre gegenüber — je Kalendermonat.
+Der Fehler, der dabei fast entstanden wäre, ist keiner der Mathematik, sondern
+der Mengendefinition: **Das laufende Jahr gehört nicht in sein eigenes Band.**
+
+Nimmt man bei Datenstand 07/2026 die „letzten fünf Jahre" als 2022–2026 statt
+2021–2025, dann zieht der laufende Wert sein eigenes Extrem mit. Ein
+Rekordmonat läge dann **per Definition nie über dem Hoch** — er *wäre* das
+Hoch. Die Ansicht könnte genau die Aussage nicht mehr treffen, für die sie
+gebaut wurde.
+
+**Übertragbar:** Wo ein Wert gegen eine Referenzmenge gelesen wird, muss er
+außerhalb dieser Menge liegen. Das klingt selbstverständlich und ist es
+solange, bis „die letzten fünf Jahre" als naheliegender Ausdruck in den Code
+wandert. Verwandte Fälle: ein gleitender Durchschnitt, der den aktuellen Punkt
+enthält; eine Perzentil-Einordnung gegen eine Verteilung, in der der
+einzuordnende Wert selbst steckt; ein Ausreißertest gegen eine
+Standardabweichung, die der Ausreißer mitgeprägt hat.
+
+**Zweiter Satz, aus derselben Runde: Eine zweite Ansicht ist billig, wenn die
+erste ihre Zeilen von ihrer Zeichenmaschine trennt.**
+
+Die Jahr-für-Jahr-Matrix hatte in Runde 2 einen generischen Zeilen-Helfer
+bekommen — nicht aus Weitsicht, sondern weil die Ø-Zeile sonst dieselbe
+Schleife ein zweites Mal gebraucht hätte. Genau diese Trennung machte die
+Bloomberg-Ansicht zu **anderen Zeilen an derselben Maschine**: dieselbe
+Colorbar, dieselbe Jahresspalte, dieselbe Tabelle, dieselbe Kachelgröße. Ein
+zweites Chart-Gerüst hätte all das dupliziert — und wäre beim nächsten Umbau
+auseinandergelaufen, wie die Honorar-Mathematik in Backlog B.
+
+**Dritter Satz, teuer bezahlt: Ein Auswahlfeld ignoriert einen ungültigen Wert
+stillschweigend.**
+
+Die AppTest-Fälle setzten `p_sel1="Comdirect 100"` — das ist der
+**CSV-Portfolioname**. Das Auswahlfeld führt aber **Anzeigenamen**
+(`Comdirect_100`). Streamlit wirft dabei nichts: Es bleibt einfach beim
+Standard. Sechs Testfälle aus zwei Runden liefen deshalb gegen
+*cVV konservativ* und bewiesen nichts über SCHWEIZ, comdirect oder Pro
+Dividende — grün, aber blind.
+
+Der Fund ist dieselbe Klasse wie das fehlende `majorTimeUnit` (#49) und der
+nicht greifende Disclaimer-Anker (§15 H): **eine Zuweisung, die ins Leere
+läuft, ohne Fehler und ohne Meldung.** Die Lehre ist nicht „Namen sorgfältiger
+abschreiben", sondern: *Wer einen Zustand setzt, prüft, dass er angekommen
+ist.* Der AppTest-Helfer vergleicht seitdem nach jedem Lauf den Wert des
+Auswahlfelds mit dem, was er setzen wollte.
+
+Prüfstein: `tests/test_monatsrenditen.py`, Schritte 7–9. Stellschrauben:
+`BAND_MIN_JAHRE` in `modules/analytics.py`, `ZEILE_HOEHE_MIN`/`MAX` in
+`modules/risiko_ansicht.py`.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -3219,6 +3274,75 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 14.08.2026 (abends) – Bandbreiten-Ansicht nach Bloomberg-Vorbild
+
+Philip bringt aus Bloomberg eine zweite Darstellung derselben Daten mit (dort
+„SEAG"): Statt jedes Jahr als eigene Zeile zeigt sie **vier** Zeilen — Hoch,
+Mittel und Tief je Kalendermonat über die Vorjahre, darunter das laufende
+Jahr. Umschaltbar über ein `segmented_control` unter der Überschrift, Werte
+**„Jahr für Jahr"** und **„Bandbreite"**.
+
+**Recherche vorab** (Bloomberg SEAG, TradingView, StockCharts, Barchart):
+TradingView steuert die Farbe über einen *Color Intensity Cutoff* — Werte
+jenseits der Grenze bekommen volle Sättigung. Das ist exakt der Mechanismus,
+den Runde 2 eingebaut hat; die ±3 % sind also konventionskonform. Mehrere
+Werkzeuge nennen beim Hoch/Tief zusätzlich **das Jahr des Extrems** — das ist
+in den Hover gewandert.
+
+**Der Fund, der die Runde geprägt hat:** Das laufende Jahr darf **nicht** in
+seinem eigenen Band stehen. Bei Datenstand 07/2026 ist das Band 2021–2025 und
+die untere Zeile 2026. Nähme man 2022–2026, zöge der laufende Wert sein eigenes
+Extrem mit — ein Rekordmonat läge per Definition nie „über dem Hoch", er wäre
+das Hoch. Steht als Transferwissen **#53**.
+
+**Das Band braucht ein eigenes Fenster.** Es denkt in ganzen Kalenderjahren,
+der Zuschnitt aus Runde 2 in Tagen: Bei „5 Jahre" schnitte der tagbasierte Weg
+am 21.07.2021, 2021 wäre unvollständig und das Band hätte **vier** Jahre,
+obwohl „5J" darüber stünde. Die Beschriftung nennt darum immer die tatsächliche
+Zahl — bei *Muster FFPB Pro* steht `2J-Hoch`, nicht `5J-Hoch`.
+
+**Unter zwei vollständigen Jahren gibt es keine Bandbreite** (`BAND_MIN_JAHRE`):
+Bei einem einzigen Jahr wären Hoch, Mittel und Tief dieselbe Zahl — eine
+Bandbreite ohne Breite. Betroffen sind die drei comdirect-Strategien und
+*Pro Dividende*; dort erscheint eine Erklärung statt einer Matrix, und die
+Ansicht „Jahr für Jahr" zeigt die Daten unverändert.
+
+**Nur die Mittel-Zeile verkettet sich** zu ihrer Jahresspalte (sie kommt aus
+`monats_durchschnitt` mit Jahresfenster — dieselbe Funktion, keine zweite
+Fassung). Bei Hoch und Tief steht je Monat das Extrem *dieses Monats*, in der
+Jahresspalte das Extrem *des Jahres*; beide stammen nicht zwangsläufig aus
+demselben Jahr. Das steht ausdrücklich in der Caption, sonst rechnet jemand
+nach und hält es für einen Fehler.
+
+**Kachelgröße** (zweiter Wunsch): Die Zeilenhöhe wächst umgekehrt zur
+Zeilenzahl, gedeckelt bei 80 px — bei dreizehn Spalten auf voller Breite ist
+eine Spalte rund 75 px breit, die Kachel wird also annähernd quadratisch statt
+zum liegenden Balken. Bei zwei Zeilen (Zeitraum „1 Jahr") war die Matrix
+vorher ein flacher Streifen. Die Schrift wächst mit (11 bis 16 pt).
+
+**Umbau statt Anbau:** `_heatmap_figur` bekam in Runde 2 einen generischen
+Zeilen-Helfer. Die neue Ansicht ist deshalb **andere Zeilen an derselben
+Maschine** — `_zeilen_jahr_fuer_jahr` und `_zeilen_bandbreite` liefern, die
+Figur zeichnet nur noch. Colorbar, Jahresspalte, Tabelle und Kachelgröße
+gelten für beide.
+
+**Ein eigener Fehler, der zwei Runden alt war.** Die AppTest-Fälle setzten
+`p_sel1="Comdirect 100"` — den CSV-Portfolionamen. Das Auswahlfeld führt
+aber **Anzeigenamen** (`Comdirect_100`), und Streamlit ignoriert einen
+ungültigen Wert stillschweigend. **Sechs Testfälle aus zwei Runden liefen
+gegen *cVV konservativ*** und bewiesen nichts über SCHWEIZ, comdirect oder
+Pro Dividende — grün, aber blind. Dieselbe Klasse wie das fehlende
+`majorTimeUnit` (#49): eine Zuweisung, die ins Leere läuft, ohne Fehler und
+ohne Meldung. Korrigiert, und der AppTest-Helfer prüft seitdem nach jedem
+Lauf, ob der gesetzte Wert **angekommen** ist. Die Prüfsteine testen damit
+zum ersten Mal wirklich, was sie behaupten — und sind weiter grün.
+
+**Beweise:** `ui_dump` vorher/nachher **zeichengleich**; alle 21 Suiten grün;
+`pyflakes` bei null; der Broschüren-Pfad belegbar unberührt (die neuen
+Symbole `bandbreite`, `BAND_*`, `ZEILE_HOEHE_*`, `ANSICHT_*` erreichen
+ausschließlich `risiko_ansicht.py`). Die Invariante `Tief ≤ Mittel ≤ Hoch`
+wurde über alle 19 Strategien und drei Fenster geprüft: null Verletzungen.
 
 ### 14.08.2026 (nachmittags) – Heatmap-Feinschliff aus der Sichtprüfung
 
