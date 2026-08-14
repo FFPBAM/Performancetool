@@ -735,11 +735,20 @@ def monatsrenditen_differenz(a: dict, b: dict) -> dict:
     }
 
 
-def monats_durchschnitt(daten: dict) -> dict:
+def monats_durchschnitt(daten: dict, nur_jahre=None) -> dict:
     """Geometrisches Mittel je Kalendermonat über die VOLLSTÄNDIGEN Jahre.
 
     Beantwortet die Frage, die eine Monats-Heatmap unweigerlich auslöst:
     „Ist der September historisch schwach?"
+
+    Args:
+        daten: Rückgabe von `monatsrenditen` oder `monatsrenditen_differenz`
+        nur_jahre: optionale Einschränkung auf bestimmte Jahre — für die
+            Mittel-Zeile der Bandbreiten-Ansicht, die nur ihr Fenster
+            mitteln darf. Die Liste kann die Auswahl nur VERKLEINERN, nie
+            erweitern: Unvollständige Jahre bleiben auch dann draußen, wenn
+            sie hier aufgeführt sind. Sonst ließe sich die Zusage unten
+            (Zeile verkettet sich zur Jahresspalte) von außen aushebeln.
 
     Returns:
         dict mit
@@ -783,6 +792,9 @@ def monats_durchschnitt(daten: dict) -> dict:
     volle = [j for j in volle
              if bool(vollstaendig.loc[j].all())
              and bool(renditen.loc[j].notna().all())]
+    if nur_jahre is not None:
+        erlaubt = {int(j) for j in nur_jahre}
+        volle = [j for j in volle if j in erlaubt]
     if not volle:
         return leer
 
@@ -800,6 +812,145 @@ def monats_durchschnitt(daten: dict) -> dict:
     jahr = wachstum_jahr ** (1.0 / n) - 1.0 if wachstum_jahr > 0 else None
 
     return {"monate": monate, "jahr": jahr, "jahre": volle}
+
+
+BAND_MIN_JAHRE = 2
+"""Wieviele vollständige Kalenderjahre die Bandbreiten-Ansicht mindestens
+braucht (14.08.2026).
+
+Bei einem einzigen Jahr wären Hoch, Mittel und Tief **identisch** — eine
+Bandbreite ohne Breite, die drei Zeilen mit derselben Zahl füllt und so tut,
+als sei das eine Spanne. Zwei ist das absolute Minimum, bei dem der Begriff
+überhaupt trägt.
+
+Betroffen sind heute "Comdirect 100/70/30" (Auflage 03/2024, nur 2025 ist ein
+vollständiges Jahr) und jede Auswahl „1 Jahr". Dort zeigt die Ansicht eine
+Erklärung statt einer Matrix."""
+
+
+def _leere_bandbreite() -> dict:
+    return {
+        "hoch":          pd.Series(dtype=float),
+        "mittel":        pd.Series(dtype=float),
+        "tief":          pd.Series(dtype=float),
+        "hoch_wann":     pd.Series(dtype=object),
+        "tief_wann":     pd.Series(dtype=object),
+        "trefferquote":  pd.Series(dtype=float),
+        "hoch_jahr":     None,
+        "mittel_jahr":   None,
+        "tief_jahr":     None,
+        "hoch_jahr_wann": None,
+        "tief_jahr_wann": None,
+        "jahre":         [],
+        "aktuelles_jahr": None,
+    }
+
+
+def bandbreite(daten: dict, band_jahre=None) -> dict:
+    """Hoch, Mittel und Tief je Kalendermonat über ein Jahresfenster.
+
+    Die Saisonalitäts-Ansicht nach Bloomberg-Vorbild (dort „SEAG"): Statt
+    jedes Jahr als eigene Zeile zeigt sie das historische Band je Monat und
+    darunter das laufende Jahr. Sie beantwortet eine andere Frage als die
+    Jahr-für-Jahr-Matrix — nicht „wie lief jeder Monat?", sondern „ist der
+    laufende März ungewöhnlich, gemessen an allen bisherigen Märzen?".
+
+    Args:
+        daten: Rückgabe von `monatsrenditen` oder `monatsrenditen_differenz`
+        band_jahre: Länge des Fensters in Jahren; None nimmt alle
+            vollständigen Jahre
+
+    Returns:
+        dict mit "hoch"/"mittel"/"tief" (Series 1..12), "hoch_wann"/
+        "tief_wann" (das Jahr des Extrems), "trefferquote" (Anteil positiver
+        Jahre je Monat), den drei Jahresspalten-Werten samt zugehörigem Jahr,
+        "jahre" und "aktuelles_jahr". Bei zu wenig Historie durchgehend leer.
+
+    DAS LAUFENDE JAHR GEHÖRT NICHT IN SEIN EIGENES BAND. Bloombergs „5 Yr"
+    meint die fünf Jahre DAVOR. Die unterste Zeile der Darstellung ist das
+    jüngste Jahr der Matrix; das Band bildet sich aus den letzten
+    `band_jahre` vollständigen Kalenderjahren STRIKT davor. Bei Datenstand
+    07/2026 also Band 2021–2025 und Zeile 2026 — nicht 2022–2026. Sonst
+    vergliche sich das Jahr mit sich selbst und zöge sein eigenes Hoch oder
+    Tief mit: Ein Rekordmonat läge per Definition nie „über dem Hoch", weil
+    er das Hoch selbst wäre.
+
+    NUR VOLLSTÄNDIGE KALENDERJAHRE, aus demselben Grund wie bei
+    `monats_durchschnitt`: Sonst käme das Januar-Hoch aus einer anderen
+    Stichprobe als das Dezember-Hoch.
+
+    Die Mittel-Zeile kommt aus `monats_durchschnitt` mit Jahresfenster —
+    dieselbe Funktion, nicht eine zweite Fassung. Damit gilt auch hier die
+    Zusage: Sie verkettet sich exakt zu ihrer Jahresspalte. Für Hoch und
+    Tief gilt das ausdrücklich NICHT (siehe unten), und die Oberfläche sagt
+    das auch.
+
+    Prüfstein: tests/test_monatsrenditen.py
+    """
+    renditen = daten["renditen"]
+    if renditen.empty:
+        return _leere_bandbreite()
+
+    alle = sorted(int(j) for j in renditen.index)
+    aktuell = alle[-1]
+
+    volle = [j for j in alle
+             if j < aktuell
+             and bool(daten["jahr_vollstaendig"].loc[j])
+             and bool(daten["vollstaendig"].loc[j].all())
+             and bool(renditen.loc[j].notna().all())]
+    if band_jahre is not None:
+        volle = volle[-int(band_jahre):]
+    if len(volle) < BAND_MIN_JAHRE:
+        return _leere_bandbreite()
+
+    spalten = list(range(1, 13))
+    hoch = pd.Series(np.nan, index=spalten, dtype=float)
+    tief = pd.Series(np.nan, index=spalten, dtype=float)
+    hoch_wann = pd.Series([None] * 12, index=spalten, dtype=object)
+    tief_wann = pd.Series([None] * 12, index=spalten, dtype=object)
+    treffer = pd.Series(np.nan, index=spalten, dtype=float)
+
+    for monat in spalten:
+        werte = renditen.loc[volle, monat].dropna()
+        if werte.empty:
+            continue
+        hoch.loc[monat] = float(werte.max())
+        tief.loc[monat] = float(werte.min())
+        hoch_wann.loc[monat] = int(werte.idxmax())
+        tief_wann.loc[monat] = int(werte.idxmin())
+        treffer.loc[monat] = float((werte > 0).sum()) / float(len(werte))
+
+    schnitt = monats_durchschnitt(daten, nur_jahre=volle)
+
+    # Die Jahresspalte: BESTES bzw. SCHLECHTESTES Jahr des Fensters — nicht
+    # die Verkettung der Monatsextreme. Beides sind Extreme, sie stammen aber
+    # nicht notwendigerweise aus demselben Jahr; deshalb wird das zugehoerige
+    # Jahr mitgeliefert und die Oberflaeche benennt den Unterschied.
+    jahres_werte = daten["jahr"].loc[volle].dropna()
+    hoch_jahr = tief_jahr = None
+    hoch_jahr_wann = tief_jahr_wann = None
+    if not jahres_werte.empty:
+        hoch_jahr = float(jahres_werte.max())
+        tief_jahr = float(jahres_werte.min())
+        hoch_jahr_wann = int(jahres_werte.idxmax())
+        tief_jahr_wann = int(jahres_werte.idxmin())
+
+    return {
+        "hoch":           hoch,
+        "mittel":         schnitt["monate"],
+        "tief":           tief,
+        "hoch_wann":      hoch_wann,
+        "tief_wann":      tief_wann,
+        "trefferquote":   treffer,
+        "hoch_jahr":      hoch_jahr,
+        "mittel_jahr":    schnitt["jahr"],
+        "tief_jahr":      tief_jahr,
+        "hoch_jahr_wann": hoch_jahr_wann,
+        "tief_jahr_wann": tief_jahr_wann,
+        "jahre":          volle,
+        "aktuelles_jahr": aktuell,
+    }
 
 
 def heatmap_kennzahlen(daten: dict) -> dict:
