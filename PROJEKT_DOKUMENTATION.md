@@ -2318,6 +2318,103 @@ wären wieder eine Zahl, die der Zahl daneben widerspricht (vgl. #52).
 
 ---
 
+### #56 — Die Begründung kann falsch sein, während das Ergebnis stimmt
+
+**Gefunden im Audit vom 14.08.2026.** Bei `ROLL_FENSTER_TAGE` stand als
+Begründung für √365: *„Wochenenden und Feiertage stehen mit Rendite 0 darin
+(rund 29 % aller Zeilen)."* Nachgemessen an den echten Daten trifft das auf
+**eine von 19** Strategien zu. Der Anteil exakter Nullen in `ret_port` hat
+den Median **0,00 %**.
+
+Was an den Wochenenden wirklich steht, ließ sich messen:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Comdirect 30 / 70 / 100, gleiche Historie | 1,925 % / 0,543 % / 0,000 % p.a. |
+| Anleihenquote ihrer Benchmark | 85 % / 50 % / 15 % |
+| Korrelation Wochenendanteil gegen Volatilität | **−0,66** |
+| Wochenendsatz jemals negativ? | **nie** — auch 2015–2022 nicht, als `rf` < 0 war |
+
+Es ist die **Kuponabgrenzung des Anleihenteils**. Deshalb bleibt sie positiv,
+wenn der Leitzins es nicht ist, und deshalb ordnet sie sich nach der
+Anleihenquote.
+
+**Und jetzt der Punkt:** Die Reihe ist damit eine *echte* Kalendertagreihe —
+also ist √365 **richtig**, nicht bloß eine hingenommene Ungenauigkeit, als
+die der Text sie auswies. Die Konvention war die ganze Zeit korrekt. Nur der
+Grund war es nicht. Von den fünf Fundstellen der „29 %"-Behauptung im Repo
+waren drei **richtig**: Sie reden von `ret_bm`, und der Index steht am
+Wochenende tatsächlich still (28,6–30,6 % Nullen, an 100 % der Wochenenden).
+Ein pauschales „Suchen und Ersetzen" hätte drei korrekte Aussagen kaputt
+gemacht.
+
+**Übertragbar:** *Prüfe die Voraussetzung getrennt vom Ergebnis.* Ein
+richtiges Ergebnis beweist die Begründung nicht — und eine falsche Begründung
+widerlegt das Ergebnis nicht. Beim Audit heißt das: erst messen, was
+tatsächlich in den Daten steht, dann entscheiden, ob die Rechnung dazu passt.
+
+**Daraus folgt der Prüfstein.** Ein Test auf den *Text* eines Docstrings wäre
+sinnlos. Schritt 6 in `test_risiko.py` prüft stattdessen die **Eigenschaft**,
+von der die Konvention abhängt: kalendertäglich und lückenlos. Käme eine
+Lieferung mit nur noch Handelstagen, wären 365 Zeilen rund **1,40 Jahre**
+und √365 deutlich zu hoch — dann schlägt er an. Nachgewiesen an einer
+simulierten Handelstag-Lieferung (Werktaganteil 1,000 statt 0,714).
+
+---
+
+### #57 — Ein stiller Rückfall ist dort am gefährlichsten, wo er plausibel aussieht
+
+**Gefunden im Audit vom 14.08.2026, Befund B6.** In `shared.py` stand:
+
+```python
+try:
+    fd = float(mapping.loc[mapping["Inhaber"] == pn,
+                           "Honorarsatz Standard"].values[0])
+except Exception:
+    fd = 0.0
+```
+
+Fehlt die Mapping-Zeile, rechnet die Strategie mit **0 % Honorar**. Die
+Zahlen sind dann brutto — und überall als „nach Kosten" beschriftet.
+
+**Warum das niemandem auffiel:** Der Satz steht in einem *Eingabefeld* der
+Seitenleiste. Dort sieht „0,00" aus wie eine Angabe, nicht wie ein Ausfall.
+Ein Fehlwert, der sich als Messwert tarnt — dieselbe Klasse wie #46, nur eine
+Ebene tiefer: Hier tarnt sich der Ausfall nicht als Null, sondern als
+*Eingabe*.
+
+**Die Größenordnung war der eigentliche Schreck.** Gemessen an „Muster
+ausgewogen cVV":
+
+| | ausgewiesene Rendite p.a. |
+|---|---|
+| ohne Honorar (der stille Ausfall) | **6,90 %** |
+| mit 1,55 % Honorar (richtig) | **5,27 %** |
+| zu hoch um | **1,63 Prozentpunkte** |
+
+Nicht Basispunkte — Prozentpunkte, und in der schmeichelnden Richtung.
+
+**Behoben, ohne die Schutzwirkung aufzugeben:** Der Rückfall auf 0,0 bleibt,
+damit die App weiterläuft und der Berater den Satz überschreiben kann. Aber
+die Zeitreihe merkt sich in `attrs["honorar_gefunden"]`, dass er geraten ist,
+und die Oberfläche macht daraus eine Fehlermeldung mit Strategienamen. Ein
+**gefundener** Satz von 0,0 löst bewusst keine Meldung aus — das ist etwas
+anderes als ein fehlender.
+
+**Übertragbar:** *Ein Vorgabewert nach einem Fehlschlag muss sich vom selben
+Wert als echte Angabe unterscheiden lassen.* Sonst ist der Schutz vor dem
+Absturz zugleich die Tarnung des Fehlers. Wo ein Rückfall unvermeidlich ist,
+gehört neben den Wert ein Vermerk, dass er geraten wurde.
+
+**Und die Ironie:** `test_honorarsatz.py` kannte das Problem seit dem
+11.08.2026 — der Docstring zitierte das `except` wörtlich. Der Test prüfte
+aber nur, dass *heute* nichts fehlt, nicht dass ein Fehlen *auffällt*.
+Schritt 4 ist jetzt die Gegenprobe dazu. Verwandt mit **#55**: Die Prüfung
+lag auch hier nicht am Ort der Entscheidung, deshalb liegt
+`strategien_ohne_honorarsatz` ausdrücklich **nicht** inline im Renderpfad.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026

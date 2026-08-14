@@ -89,6 +89,60 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 
 **https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen**
 
+### Audit vom 14.08.2026 — Ergebnis
+
+Philip hat einen Vollaudit über Mathematik, Fachlichkeit und Technik
+angefordert; ausdrücklich mit dem Auftrag, die bestehende Umsetzung zu
+**widerlegen**, und ohne Codeänderung während der Prüfung.
+
+**Kein Rechenfehler gefunden.** Von sechzehn Widerlegungsversuchen sind
+dreizehn an den echten Daten gescheitert:
+
+| Geprüft | Größte Abweichung |
+|---|---|
+| Monatswert gegen direkte Rechnung (**alle** Monate, **alle** 19 Strategien) | **0,000e+00** |
+| Jahresspalte der Differenz gegen ihre Zeile | **0,000e+00** |
+| Risikotabelle „Seit Auflage" gegen Kennzahlen-Kachel | **0,000e+00** |
+| Ø-Zeile verkettet sich zur Jahresspalte | 1,6e−15 |
+| Monatszeile verkettet sich zur Jahresspalte | 4,2e−15 |
+| Rollierende Vola gegen Punktschätzung | 3,3e−16 |
+
+Ebenfalls sauber: Bandbreiten-Invarianten und Fenster, Plausibilität aller
+19 Strategien (die cVV-Familie ordnet sich monoton in Vola **und** Drawdown),
+keine Lücken oder NaN in den Reihen, `secrets.toml` nie committet,
+zeitkonstanter Passwortvergleich, 21 von 21 Suiten grün.
+
+**Behoben (2 von 6 Befunden):**
+
+| Befund | Kern | Größenordnung |
+|---|---|---|
+| **B6** | Fehlender Honorarsatz fiel still auf 0 % — Bruttozahlen als „nach Kosten" beschriftet. Jetzt Vermerk + Fehlermeldung mit Strategienamen. | **1,63 Prozentpunkte** zu hoch |
+| **B1** | Begründung für √365 war sachlich falsch (Wochenenden tragen Kuponabgrenzung, keine Nullen). Konvention bleibt — sie ist richtig, nur anders begründet. | reine Doku |
+
+**Von Philip entschieden (14.08.2026):** **B2** — dass Broschüre (ab 2009)
+und Oberfläche (ab 31.12.2008) bei den fünf cVV-Reihen um bis zu 1,7 bp
+auseinanderliegen, ist **beabsichtigt**. Hintergrund: Die Strategien liefen
+schon vor 2008, 2009 ist der Wechsel des Portfoliomanagement-Systems. Das
+Tooltip der Kachel sagt es bereits („Erster verfügbarer Datenpunkt der
+Strategie im Portfoliomanagement-System"), die Broschüre trägt die Fußnote
+zur vollständigen Historie auf Anfrage.
+
+**Noch offen, braucht eine Entscheidung — keine Fehler:**
+
+- **B3** Der Honorarabzug ist minimal zu niedrig: `d = (1+f)^(1/365)−1` wird
+  subtrahiert, effektiv also `1−(1−d)^365`. Bei 1,55 % sind das 1,5264 %
+  — **−2,36 bp p.a.**, über 17 Jahre −31 bp, zugunsten des Hauses.
+- **B4** „3 Jahre" bedeutet an drei Stellen drei Spannen (Kennzahlen
+  21.07.2023, Heatmap 01.01.2023 mit Hinweis, Risikotabelle 22.07.2023 und
+  unabhängig von der Schnellwahl).
+- **B5** Tracking Error und Information Ratio vergleichen Netto-Strategie
+  gegen Brutto-Benchmark. IR −0,464 statt −0,118. Vertretbar und konsistent,
+  steht aber nirgends auf dem Bildschirm.
+
+**Nicht verifiziert:** Verhalten unter Python 3.14 in der Cloud, die
+erzeugte Broschüre selbst (nur Smoke-Test), das optische Erscheinungsbild im
+Browser, die Richtigkeit der Quelldaten aus dem Vorsystem.
+
 ### Was im Branch steckt
 
 | Thema | Kern |
