@@ -23,6 +23,9 @@ from modules.shared import (
     load_anlagekriterien, zeige_anlagekriterien,
 )
 from modules.download_helfer import download_bereich
+# historie_beschneiden liegt seit 14.08.2026 in analytics.py (Berechnungsregel,
+# von Broschuere UND Heatmap gebraucht). Der Re-Export haelt Alt-Importe heil.
+from modules.analytics import historie_beschneiden   # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Ring-Chart Farben (Corporate: Fuggerblau #003460, Fuggergold #C3A069)
@@ -407,7 +410,12 @@ from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Import
     SPALTE_PP_FAMILIE,
     VORLAGEN_FAMILIEN,
     FAMILIE_ALLE_STRATEGIEN,
-    HISTORIE_AB,
+    # HISTORIE_AB stand hier bis 14.08.2026. Es wurde nur von
+    # historie_beschneiden gebraucht, und die liegt jetzt in analytics.py —
+    # dort wird es auch importiert. Ein Re-Export waere hier sinnlos: Kein
+    # Modul und kein Test holt es ueber portfolioanalyse (nachgeprueft),
+    # und pyflakes kennt kein noqa, haette den ungenutzten Namen also
+    # dauerhaft gemeldet.
     EXPORT_DATUM_FORMAT,
     EXPORT_NAME_DEFAULT,
     EXPORT_NAME_FAMILIE,
@@ -417,40 +425,13 @@ from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Import
 
 
 
-def historie_beschneiden(ts_df, csv_name):
-    """Beschneidet eine Performance-Zeitreihe auf ihren Historien-Beginn
-    (NEU 07.08.2026, Konfiguration in HISTORIE_AB).
-
-    Hintergrund: Die klassischen cVV-Datenreihen liefern als erste
-    Datenpunkte den 30.12. und 31.12.2008 — zwei Tage. Ungefiltert schrieb
-    die Broschüre daraus "Wertentwicklung seit 2008 kumuliert" und
-    suggerierte einen Track Record über 2008, den es nicht gibt. Fachlich
-    beginnt er am 01.01.2009; der 31.12.2008 ist nur der Schlussstand, auf
-    den indexiert wird.
-
-    Der Schlüssel ist der CSV-PORTFOLIONAME, nicht die Familie: "Offensiv"
-    liegt in der Familie Thema, nutzt aber die Reihe "Muster offensiv cVV"
-    (früher eine cVV-Strategie) und ist deshalb genauso betroffen — während
-    Pro und Pro Dividende derselben Familie es nicht sind.
-
-    Bewusst EINE Stelle vor allen Berechnungen: Beschriftung, kumulierte
-    Wertentwicklung, Rendite p.a. und Linien-Chart leiten sich alle aus der
-    Zeitreihe ab und bleiben dadurch automatisch konsistent.
-
-    Args:
-        ts_df: Zeitreihe mit Datums-Index (oder None)
-        csv_name: CSV-Portfolioname, z.B. "Muster offensiv cVV"
-
-    Returns:
-        Die beschnittene Zeitreihe — oder das Original, wenn die Reihe
-        keinen Eintrag hat, kein Index vorliegt oder nach dem Beschneiden
-        nichts übrig bliebe.
-    """
-    ab = HISTORIE_AB.get(csv_name or "")
-    if not ab or ts_df is None or len(ts_df) == 0:
-        return ts_df
-    gekuerzt = ts_df.loc[ts_df.index >= pd.Timestamp(ab)]
-    return gekuerzt if len(gekuerzt) else ts_df
+# `historie_beschneiden` stand bis zum 14.08.2026 HIER. Sie ist nach
+# modules/analytics.py gewandert, weil sie eine Berechnungsregel ist und
+# nicht Darstellung: Die Monatsrenditen-Heatmap der Performance-Ansicht
+# braucht sie ebenso wie der Broschueren-Export. Solange sie in diesem
+# Streamlit-Modul lag, griff sie nur an einem der beiden Orte.
+# Der Import oben (modules.analytics) reicht sie weiter, damit bestehende
+# Aufrufstellen und Alt-Importe unveraendert funktionieren.
 
 
 def _familien_portfolios(strategien, display_names_pf, display_to_csv_pf,

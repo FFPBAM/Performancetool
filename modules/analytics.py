@@ -26,6 +26,8 @@ from typing import Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from modules.vorlagen_config import HISTORIE_AB
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sätze: annualisiert → täglich (365-Kalendertage-Basis)
@@ -490,3 +492,470 @@ def compute_performance_data(timeseries_df: pd.DataFrame,
         "performance_pa":  performance_pa,
         "wertentwicklung": wertentwicklung,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Historien-Beginn
+# ─────────────────────────────────────────────────────────────────────────────
+
+def historie_beschneiden(ts_df, csv_name):
+    """Beschneidet eine Performance-Zeitreihe auf ihren Historien-Beginn
+    (Konfiguration in HISTORIE_AB).
+
+    Hintergrund: Die klassischen cVV-Datenreihen liefern als erste
+    Datenpunkte den 30.12. und 31.12.2008 — zwei Tage. Ungefiltert schrieb
+    die Broschüre daraus "Wertentwicklung seit 2008 kumuliert" und
+    suggerierte einen Track Record über 2008, den es nicht gibt. Fachlich
+    beginnt er am 01.01.2009; der 31.12.2008 ist nur der Schlussstand, auf
+    den indexiert wird.
+
+    Der Schlüssel ist der CSV-PORTFOLIONAME, nicht die Familie: "Offensiv"
+    liegt in der Familie Thema, nutzt aber die Reihe "Muster offensiv cVV"
+    (früher eine cVV-Strategie) und ist deshalb genauso betroffen — während
+    Pro und Pro Dividende derselben Familie es nicht sind.
+
+    HIERHER VERSCHOBEN 14.08.2026 (vorher `portfolioanalyse.py`): Die Regel
+    griff nur im Broschüren-Export, weil sie in einem Streamlit-Modul lag.
+    Die Monatsrenditen-Heatmap braucht sie ebenfalls — ohne sie stünde bei
+    den fünf cVV-Strategien eine Zelle "Dez 2008" mit genau EINEM Tag
+    (gemessen 14.08.2026: +0,13 / +0,16 / +0,27 / +0,30 / −0,01 %). Eine
+    Regel, die nur an einem von zwei Orten greift, ist dieselbe Krankheit
+    wie eine Formel, die zweimal existiert.
+
+    Args:
+        ts_df: Zeitreihe mit Datums-Index (oder None)
+        csv_name: CSV-Portfolioname, z.B. "Muster offensiv cVV"
+
+    Returns:
+        Die beschnittene Zeitreihe — oder das Original, wenn die Reihe
+        keinen Eintrag hat, kein Index vorliegt oder nach dem Beschneiden
+        nichts übrig bliebe.
+    """
+    ab = HISTORIE_AB.get(csv_name or "")
+    if not ab or ts_df is None or len(ts_df) == 0:
+        return ts_df
+    gekuerzt = ts_df.loc[ts_df.index >= pd.Timestamp(ab)]
+    return gekuerzt if len(gekuerzt) else ts_df
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Monatsrenditen (Heatmap)
+# ─────────────────────────────────────────────────────────────────────────────
+
+MONAT_RAND_TOLERANZ_TAGE = 3
+"""Wieviele Tage an JEDEM Rand eines Kalendermonats fehlen dürfen, damit er
+noch als vollständig gilt (14.08.2026).
+
+Dasselbe Maß und derselbe Grund wie bei `JAHR_RAND_TOLERANZ_TAGE`: Feiertage
+verschieben den ersten und letzten Kurs eines Monats. Die Performance-CSVs
+sind zwar kalendertäglich und lückenlos (Wochenenden tragen Rendite 0), aber
+die Toleranz kostet nichts und fängt eine künftige Lieferung ab, die nur
+Handelstage führt.
+
+Drei Tage sind bei einem Monat verhältnismäßig mehr als bei einem Jahr. Das
+ist beabsichtigt: Ein Monat, dem mehr als drei Tage an einem Rand fehlen,
+ist kein Monat mehr — gemessen am 14.08.2026 liegen die echten Auflagemonate
+allesamt deutlich darüber (9 bis 26 fehlende Tage)."""
+
+
+def _ist_voller_monat(sub: pd.DataFrame, jahr: int, monat: int) -> bool:
+    """Deckt `sub` (die Zeilen EINES Kalendermonats) den Monat wirklich ab?
+
+    Der Zwilling zu `_ist_volles_jahr`, eine Ebene feiner — und aus demselben
+    Anlass. Eine Zelle der Monatsrenditen-Heatmap behauptet eine
+    MONATSrendite. Ohne diese Prüfung stünde dort der Auflagemonat als
+    vollwertiger Monat: "Muster FFPB Pro Dividende" hätte für 10/2024 zehn
+    Tage (−2,25 %) neben echten Monaten gezeigt, die comdirect-Familie
+    zwanzig Tage für 03/2024. Und der LAUFENDE Monat ist immer angebrochen —
+    bei "Muster FFPB Pro" stand am Datenstand 21.07.2026 ein 21-Tage-Wert von
+    −7,54 %, der ungekennzeichnet wie ein voller Monat ausgesehen hätte.
+
+    Das ist Transferwissen #51 ("Es gibt Daten" ist nicht "der Zeitraum ist
+    abgedeckt"), angewandt auf Monate statt auf Jahre.
+
+    Geprüft werden BEIDE Ränder und zwar aus `sub` selbst — so greift die
+    Regel auch bei einem Loch mitten in der Historie, nicht nur am Anfang
+    und Ende der Reihe.
+
+    Prüfstein: tests/test_monatsrenditen.py
+    """
+    if sub.empty:
+        return False
+    tol = pd.Timedelta(days=MONAT_RAND_TOLERANZ_TAGE)
+    anfang = pd.Timestamp(jahr, monat, 1)
+    ende = anfang + pd.offsets.MonthEnd(0)
+    beginnt_rechtzeitig = sub.index.min() <= anfang + tol
+    endet_rechtzeitig = sub.index.max() >= ende - tol
+    return bool(beginnt_rechtzeitig and endet_rechtzeitig)
+
+
+def _leere_monatsmatrix() -> dict:
+    """Die Rückgabeform von `monatsrenditen` ohne einen einzigen Datenpunkt."""
+    spalten = list(range(1, 13))
+    return {
+        "renditen":          pd.DataFrame(columns=spalten, dtype=float),
+        "vollstaendig":      pd.DataFrame(columns=spalten, dtype=bool),
+        "jahr":              pd.Series(dtype=float),
+        "jahr_vollstaendig": pd.Series(dtype=bool),
+    }
+
+
+def monatsrenditen(timeseries_df: pd.DataFrame,
+                   fee_dec: float = 0.0,
+                   spalte: str = "ret_port",
+                   nach_kosten: bool = True) -> dict:
+    """Monatsrenditen einer Zeitreihe als Jahre-×-Monate-Matrix.
+
+    Args:
+        timeseries_df: Zeitreihe mit Datums-Index (Spalten ret_port/ret_bm)
+        fee_dec: Honorarsatz p.a. als Dezimal — nur wirksam bei nach_kosten
+        spalte: "ret_port" (Strategie) oder "ret_bm" (Benchmark)
+        nach_kosten: True für die Strategie, False für die Benchmark.
+            Die Benchmark läuft IMMER brutto — sie trägt kein Honorar.
+
+    Returns:
+        dict mit
+          "renditen":          DataFrame, index=Jahre, columns=1..12, Dezimal
+          "vollstaendig":      DataFrame gleicher Form, bool
+          "jahr":              Series je Jahr, Dezimal
+          "jahr_vollstaendig": Series je Jahr, bool
+
+    Ein Monat ohne Daten bleibt `NaN` und wird NIEMALS zu `0.0` — sonst
+    sähe eine Lücke wie ein Nullmonat aus (Transferwissen #46). Aus
+    demselben Grund liefert ein Monat, dessen Werte allesamt fehlen (etwa
+    `ret_bm` ohne Benchmark), `NaN` statt der 0,0, die `np.prod` über lauter
+    Nullen ergäbe.
+
+    Der JAHRESWERT wird direkt über alle Tage des Kalenderjahrs gerechnet,
+    nicht aus den Monatswerten verkettet. Beides ist geometrisch identisch,
+    solange alle vorhandenen Monate gezeigt werden — und genau das tut die
+    Heatmap (angebrochene eingeschlossen, gekennzeichnet). Die Zeile stimmt
+    damit rechnerisch mit ihrer Jahresspalte überein.
+    """
+    if (timeseries_df is None or len(timeseries_df) == 0
+            or spalte not in timeseries_df.columns):
+        return _leere_monatsmatrix()
+
+    df = timeseries_df.sort_index()
+    jahre = sorted({int(j) for j in df.index.year})
+    spalten = list(range(1, 13))
+    renditen = pd.DataFrame(np.nan, index=jahre, columns=spalten, dtype=float)
+    vollstaendig = pd.DataFrame(False, index=jahre, columns=spalten, dtype=bool)
+
+    def _wert(reihe: pd.Series) -> Optional[float]:
+        if reihe.isna().all():
+            return None
+        arr = reihe.fillna(0.0).to_numpy(dtype=float)
+        return (calc_period_return_after_fee(arr, fee_dec) if nach_kosten
+                else calc_period_return(arr))
+
+    for (jahr, monat), sub in df.groupby([df.index.year, df.index.month]):
+        jahr, monat = int(jahr), int(monat)
+        wert = _wert(sub[spalte])
+        if wert is not None:
+            renditen.loc[jahr, monat] = wert
+        vollstaendig.loc[jahr, monat] = _ist_voller_monat(sub, jahr, monat)
+
+    jahr_wert = pd.Series(np.nan, index=jahre, dtype=float)
+    jahr_voll = pd.Series(False, index=jahre, dtype=bool)
+    for jahr, sub in df.groupby(df.index.year):
+        jahr = int(jahr)
+        wert = _wert(sub[spalte])
+        if wert is not None:
+            jahr_wert.loc[jahr] = wert
+        jahr_voll.loc[jahr] = _ist_volles_jahr(sub, jahr)
+
+    return {
+        "renditen":          renditen,
+        "vollstaendig":      vollstaendig,
+        "jahr":              jahr_wert,
+        "jahr_vollstaendig": jahr_voll,
+    }
+
+
+def monatsrenditen_differenz(a: dict, b: dict) -> dict:
+    """Geometrische Monatsdifferenz zweier Matrizen: (1+a)/(1+b) − 1.
+
+    GEOMETRISCH und nicht arithmetisch (Festlegung Philip, 14.08.2026):
+    Nur so verketten sich die zwölf Monatswerte einer Zeile EXAKT zur
+    Jahres-Überrendite in der Jahresspalte. Beispiel — zwei Monate,
+    Strategie je +10 %, Benchmark je +5 %:
+
+        geometrisch   1,10/1,05 − 1 = +4,76 % je Monat
+                      1,0476² − 1   = +9,75 %   = 1,21/1,1025 − 1   stimmt
+        arithmetisch  10,00 − 5,00  = +5,00 PP je Monat
+                      Summe         = +10,00 PP ≠ +9,75 %           passt nicht
+
+    Gerechnet wird NUR, wo beide Monate vollständig sind. Das ist der
+    Unterschied zur absoluten Heatmap, und er ist Absicht: Ein angebrochener
+    Monat ist für sich eine wahre Aussage über seine Tage — die Differenz
+    eines vollen gegen einen angebrochenen Monat ist eine falsche. Damit
+    entfällt beim Vergleich zweier Strategien automatisch der Bereich, in
+    dem die jüngere noch nicht lief.
+
+    Der JAHRESWERT ist hier die Verkettung der gültigen Monatsdifferenzen
+    und wird NICHT direkt gerechnet — sonst widerspräche die Jahresspalte
+    ihrer eigenen Zeile, sobald ein Monat entfallen ist.
+    """
+    ra, rb = a["renditen"], b["renditen"]
+    if ra.empty or rb.empty:
+        return _leere_monatsmatrix()
+
+    jahre = sorted(set(ra.index) & set(rb.index))
+    if not jahre:
+        return _leere_monatsmatrix()
+
+    spalten = list(range(1, 13))
+    ra = ra.loc[jahre, spalten]
+    rb = rb.loc[jahre, spalten]
+    gueltig = (a["vollstaendig"].loc[jahre, spalten]
+               & b["vollstaendig"].loc[jahre, spalten]
+               & ra.notna() & rb.notna())
+
+    nenner = 1.0 + rb
+    # Eine Benchmark-Monatsrendite von exakt −100 % kommt nicht vor, wuerde
+    # hier aber durch null teilen. Lieber ein Fehlwert als eine Unendlichkeit.
+    gueltig = gueltig & (nenner.abs() > 1e-12)
+    diff = ((1.0 + ra) / nenner - 1.0).where(gueltig)
+
+    jahr_wert = pd.Series(np.nan, index=jahre, dtype=float)
+    jahr_voll = pd.Series(False, index=jahre, dtype=bool)
+    for jahr in jahre:
+        zeile = diff.loc[jahr].dropna()
+        if zeile.empty:
+            continue
+        jahr_wert.loc[jahr] = float(np.prod(1.0 + zeile.to_numpy(dtype=float)) - 1.0)
+        jahr_voll.loc[jahr] = bool(len(zeile) == 12)
+
+    return {
+        "renditen":          diff,
+        "vollstaendig":      gueltig,
+        "jahr":              jahr_wert,
+        "jahr_vollstaendig": jahr_voll,
+    }
+
+
+def heatmap_kennzahlen(daten: dict) -> dict:
+    """Kennzahlen über die VOLLSTÄNDIGEN Monate einer Matrix.
+
+    Bewusst nur über vollständige Monate: Ein Zehn-Tage-Monat als
+    "schlechtester Monat" wäre irreführend, und er verzerrte den Anteil
+    positiver Monate.
+
+    Returns:
+        dict mit "anzahl", "positiv", "anteil_positiv", "bester",
+        "schlechtester" — die letzten beiden als ((jahr, monat), wert).
+        Bei keinem einzigen vollständigen Monat: "anzahl" 0, Rest None.
+    """
+    r, v = daten["renditen"], daten["vollstaendig"]
+    paare = []
+    for jahr in r.index:
+        for monat in r.columns:
+            wert = r.loc[jahr, monat]
+            if bool(v.loc[jahr, monat]) and pd.notna(wert):
+                paare.append(((int(jahr), int(monat)), float(wert)))
+
+    if not paare:
+        return {"anzahl": 0, "positiv": 0, "anteil_positiv": None,
+                "bester": None, "schlechtester": None}
+
+    positiv = sum(1 for _, w in paare if w > 0)
+    return {
+        "anzahl":         len(paare),
+        "positiv":        positiv,
+        "anteil_positiv": positiv / len(paare),
+        "bester":         max(paare, key=lambda p: p[1]),
+        "schlechtester":  min(paare, key=lambda p: p[1]),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Risiko: rollierende Volatilität, Kennzahlen je Zeitraum, Tracking Error
+# ─────────────────────────────────────────────────────────────────────────────
+
+ROLL_FENSTER_TAGE = 365
+"""Fensterbreite der rollierenden Kennzahlen in ZEILEN (14.08.2026).
+
+Die Performance-CSVs sind kalendertäglich und lückenlos — Wochenenden und
+Feiertage stehen mit Rendite 0 darin (rund 29 % aller Zeilen). 365 Zeilen
+sind deshalb exakt ein Kalenderjahr; es braucht keine Schätzung über
+Handelstage, wie sie ein 252-Tage-Fenster erforderte.
+
+Dass die Wochenend-Nullen die Streuung dämpfen, ist bekannt und wird bewusst
+mitgetragen: Es ist dieselbe Basis, auf der `calc_vola` und damit die
+Kennzahlen-Kachel der Oberfläche rechnen (√365, nicht √252). Zwei
+verschiedene Volatilitäten auf einem Bildschirm wären schlimmer als jede
+Lehrbuch-Ungenauigkeit."""
+
+
+def rollierende_vola(daily_returns_after_fee: Sequence[float],
+                     fenster: int = ROLL_FENSTER_TAGE) -> np.ndarray:
+    """Rollierende annualisierte Volatilität, Fenster in Zeilen.
+
+    Formelgleich zu `calc_vola`: std(ddof=1) × √365. Der letzte Wert ist
+    damit die Volatilität der letzten `fenster` Tage, und ein Fenster über
+    die gesamte Reihe trifft exakt die Kennzahlen-Kachel. Prüfstein:
+    tests/test_risiko.py, Schritt 1.
+
+    Returns:
+        Array in der Länge der Eingabe. Die ersten `fenster - 1` Werte sind
+        NaN (das Fenster ist noch nicht voll) — ist die Reihe kürzer als das
+        Fenster, sind es alle. Das ist der ehrliche Zustand und kein Fehler:
+        Eine Strategie, die noch kein Jahr läuft, HAT keine Ein-Jahres-Vola.
+    """
+    arr = np.asarray(daily_returns_after_fee, dtype=float)
+    if arr.size == 0:
+        return np.array([], dtype=float)
+    fenster = max(2, int(fenster))
+    reihe = pd.Series(arr).rolling(fenster).std(ddof=1) * np.sqrt(365.0)
+    return reihe.to_numpy(dtype=float)
+
+
+RISIKO_PERIODEN = ("YTD", "1 Jahr", "3 Jahre", "5 Jahre", "10 Jahre", "Seit Auflage")
+
+
+def _perioden_start(end_ts: pd.Timestamp, bezeichnung: str):
+    """Startzeitpunkt einer Periode; None steht für "seit Auflage".
+
+    YTD beginnt am 31.12. des VORJAHRS und nicht am 01.01. — sonst ginge der
+    erste Handelstag des Jahres verloren. Dieselbe Konvention wie in
+    `build_rolling_table` und `compute_rollierend_data`.
+    """
+    if bezeichnung == "Seit Auflage":
+        return None
+    if bezeichnung == "YTD":
+        return pd.Timestamp(end_ts.year - 1, 12, 31)
+    return end_ts - pd.DateOffset(years=int(bezeichnung.split()[0]))
+
+
+def risiko_perioden(timeseries_df: pd.DataFrame, fee_dec: float = 0.0) -> pd.DataFrame:
+    """Volatilität, Max Drawdown und Sharpe Ratio je Zeitraum.
+
+    EINE Funktion für beide Tabellen der Oberfläche (Risiko-Block und
+    Drawdown-Block). Die Aufteilung dort ist reine Darstellung — die
+    Rechnung darf nicht zweimal existieren.
+
+    Returns:
+        DataFrame, index=RISIKO_PERIODEN, Spalten "vola", "max_dd",
+        "sharpe", "te" (Tracking Error) und "ir" (Information Ratio).
+        Die letzten beiden bleiben leer, wenn keine echte Benchmark
+        vorliegt — `has_benchmark` entscheidet, nicht `notna` (#41).
+        Fehlwert ist durchgehend `np.nan`, nie 0.0 und nie None — die
+        Bausteine liefern teils None, teils NaN, und ein Mischmasch aus
+        beidem zwingt jede Aufrufstelle zu zwei Abfragen. `pd.isna()` und
+        `formats.fmt_pct` behandeln NaN korrekt als Fehlwert.
+
+    Reicht eine Periode weiter zurück als die Historie, bleibt sie
+    durchgehend leer — es steht dort NICHT ein still gekürzter Wert. Ein
+    "10 Jahre"-Feld, das in Wahrheit zwei Jahre zeigt, ist derselbe Fehler
+    wie ein Rumpfjahr als Jahresbalken. Die Grenze ist dieselbe wie in
+    `build_rolling_table`: Der Startzeitpunkt muss vom synthetischen
+    Indexbeginn (erster Tag minus einen Tag) gedeckt sein.
+    """
+    spalten = ["vola", "max_dd", "sharpe", "te", "ir"]
+    ergebnis = pd.DataFrame(np.nan, index=list(RISIKO_PERIODEN),
+                            columns=spalten, dtype=float)
+    if timeseries_df is None or len(timeseries_df) == 0:
+        return ergebnis
+
+    df = timeseries_df.sort_index()
+    end_ts = df.index.max()
+    indexbeginn = df.index.min() - pd.Timedelta(days=1)
+    # EINMAL ueber die ganze Reihe entschieden und nicht je Periode: Eine
+    # Strategie hat eine Benchmark oder sie hat keine. Waere die Frage je
+    # Periode gestellt, koennte ein Zeitraum ohne Kursbewegung der Benchmark
+    # sie fuer diesen Zeitraum "verschwinden" lassen.
+    hat_bm = "ret_bm" in df.columns and has_benchmark(df["ret_bm"])
+
+    for bez in RISIKO_PERIODEN:
+        start = _perioden_start(end_ts, bez)
+        if start is None:
+            sub = df
+        else:
+            if start < indexbeginn:
+                continue          # Historie deckt die Periode nicht ab
+            sub = df.loc[df.index > start]
+        if len(sub) < 2:
+            continue
+
+        rp = sub["ret_port"].fillna(0.0).to_numpy(dtype=float)
+        netto = calc_daily_returns_after_fee(rp, fee_dec)
+        rbm = (sub["ret_bm"].fillna(0.0).to_numpy(dtype=float)
+               if hat_bm else None)
+        werte = {
+            "vola":   calc_vola(netto),
+            "max_dd": calc_max_drawdown(make_index_after_fee(rp, fee_dec, 100.0)),
+            "sharpe": (calc_sharpe_excess(netto, sub["rf"])
+                       if "rf" in sub.columns and sub["rf"].notna().any() else None),
+            "te":     tracking_error(netto, rbm) if hat_bm else None,
+            "ir":     information_ratio(netto, rbm) if hat_bm else None,
+        }
+        for name, wert in werte.items():
+            # None der Bausteine auf NaN vereinheitlichen (siehe Docstring)
+            if wert is not None:
+                ergebnis.loc[bez, name] = float(wert)
+
+    return ergebnis
+
+
+def _aktivrendite_taeglich(r_port_after_fee: Sequence[float],
+                           r_bm: Sequence[float]) -> np.ndarray:
+    """Tägliche Aktivrendite, geometrisch: (1+r_p)/(1+r_b) − 1.
+
+    Geometrisch und nicht arithmetisch — dieselbe Definition wie in der
+    Differenz-Heatmap, damit Tracking Error und Matrix dieselbe Größe
+    beschreiben.
+    """
+    rp = np.asarray(r_port_after_fee, dtype=float)
+    rb = np.asarray(r_bm, dtype=float)
+    n = min(rp.size, rb.size)
+    if n == 0:
+        return np.array([], dtype=float)
+    rp, rb = rp[:n], rb[:n]
+    nenner = 1.0 + rb
+    with np.errstate(divide="ignore", invalid="ignore"):
+        aktiv = (1.0 + rp) / nenner - 1.0
+    aktiv[np.abs(nenner) < 1e-12] = np.nan
+    return aktiv
+
+
+def tracking_error(r_port_after_fee: Sequence[float],
+                   r_bm: Sequence[float]) -> Optional[float]:
+    """Annualisierter Tracking Error: std(Aktivrendite, ddof=1) × √365.
+
+    Null ist ein gültiges Ergebnis (die Strategie bildet die Benchmark
+    exakt nach) und wird deshalb als 0.0 zurückgegeben, nicht als None.
+    Erst die Information Ratio muss damit umgehen.
+    """
+    aktiv = _aktivrendite_taeglich(r_port_after_fee, r_bm)
+    aktiv = aktiv[~np.isnan(aktiv)]
+    if aktiv.size < 2:
+        return None
+    sd = float(np.std(aktiv, ddof=1))
+    if not np.isfinite(sd):
+        return None
+    return sd * np.sqrt(365.0)
+
+
+def information_ratio(r_port_after_fee: Sequence[float],
+                      r_bm: Sequence[float]) -> Optional[float]:
+    """Annualisierte Aktivrendite geteilt durch den Tracking Error.
+
+    Der Guard prüft `te < 1e-12` und NICHT `te == 0` — Transferwissen #47.
+    Bei zwei praktisch gleichen Reihen lässt numpy eine Reststreuung um
+    1e-19 stehen; ein Test auf exakte Null griffe dort nicht und die
+    Information Ratio käme als Zahl der Größenordnung 1e16 heraus. Genau
+    dieser Fehler stand als Sharpe Ratio schon einmal in einer Broschüre.
+    """
+    te = tracking_error(r_port_after_fee, r_bm)
+    if te is None or te < 1e-12:
+        return None
+    aktiv = _aktivrendite_taeglich(r_port_after_fee, r_bm)
+    aktiv = aktiv[~np.isnan(aktiv)]
+    if aktiv.size < 2:
+        return None
+    wachstum = float(np.prod(1.0 + aktiv))
+    if wachstum <= 0:
+        return None
+    aktiv_pa = wachstum ** (365.0 / aktiv.size) - 1.0
+    return aktiv_pa / te

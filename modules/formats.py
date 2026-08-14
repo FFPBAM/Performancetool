@@ -37,6 +37,28 @@ DATE_FORMAT_DE = "%d.%m.%Y"
 """Deutsches Datum: 19.06.2026"""
 
 
+MONATSNAMEN_KURZ = ("Jan", "Feb", "Mrz", "Apr", "Mai", "Jun",
+                    "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
+"""Monatskuerzel fuer die Spaltenkoepfe der Monatsrenditen-Heatmap.
+
+Fest verdrahtet und NICHT ueber strftime("%b") erzeugt: Das Ergebnis von
+%b haengt an der Locale des Rechners und liefert auf einem englisch
+eingestellten System "Mar" statt "Mrz". Eine Broschuerenbank zeigt deutsche
+Monatsnamen, unabhaengig davon, wie der Server konfiguriert ist.
+
+"Mrz" statt "Mär": drei Buchstaben ohne Umlaut halten die Spalten gleich
+breit und ueberstehen jede Zeichensatz-Umstellung."""
+
+
+def monat_kurz(monat: int) -> str:
+    """Monatsnummer 1-12 zum deutschen Kuerzel; ausserhalb: Fehlwert."""
+    if isinstance(monat, bool) or not isinstance(monat, int):
+        return EMPTY_VALUE
+    if 1 <= monat <= 12:
+        return MONATSNAMEN_KURZ[monat - 1]
+    return EMPTY_VALUE
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Quelle-Text (auf jeder dynamischen Folie unten rechts)
 # ─────────────────────────────────────────────────────────────────────────────

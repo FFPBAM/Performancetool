@@ -49,6 +49,45 @@ FFPB_PALETTE = [
     "#C4C4C4", "#3A7CA5", "#F0C070", "#6A9BC3", "#2A4A6C",
 ]
 
+# ── Monatsrenditen-Heatmap (NEU 14.08.2026) ──────────────────────────────────
+# Divergierende Skala um die Null: negativ rot, positiv grün, dazwischen ein
+# warmes Neutral aus der Sand-Familie.
+#
+# GEDÄMPFT und nicht in Signalfarben — das ist eine Privatbank, kein
+# Warnleitsystem. Wichtiger noch: `go.Heatmap` kann die Schriftfarbe NICHT je
+# Zelle setzen, es gibt also genau eine Textfarbe für die ganze Skala. Deshalb
+# sind beide Enden bewusst hell genug gewählt, dass dunkler Text überall liest.
+# Nachgerechnet am 14.08.2026 über elf Stützstellen: der schlechteste Kontrast
+# gegen HEATMAP_TEXT liegt bei 5,37:1 und damit durchgehend über den 4,5:1,
+# die WCAG AA für normalen Text verlangt.
+#
+# Die Farbe trägt die Aussage NIE allein — in jeder Zelle steht die Zahl.
+# Dieselbe Regel, wegen der die Ampel-Symbole aus st.metric geflogen sind.
+HEATMAP_ROT     = "#C77B6B"   # gedämpftes Terrakotta (negativ)
+HEATMAP_NEUTRAL = "#EAE4D9"   # warmes Neutral, verwandt mit FFPB_SAND (null)
+HEATMAP_GRUEN   = "#7A9B68"   # gedämpftes Salbeigrün (positiv)
+HEATMAP_TEXT    = "#1A1A1A"   # eine Textfarbe für die ganze Skala
+
+HEATMAP_SKALA = [
+    (0.0, HEATMAP_ROT),
+    (0.5, HEATMAP_NEUTRAL),
+    (1.0, HEATMAP_GRUEN),
+]
+
+# Feste Skalengrenzen (Dezimal). BEWUSST fest und nicht aus den Daten
+# abgeleitet: Eine Skala, die sich je Strategie neu kalibriert, färbt zwei
+# Strategien unterschiedlich ein und lügt beim Nebeneinanderlegen.
+#
+# Hergeleitet aus einer Messung über alle 19 Strategien (14.08.2026,
+# Datenstand 260721, nur vollständige Monate):
+#   absolut    1.897 Monate, |Wert| P95 = 5,28 %, P99 = 7,45 %, Maximum 10,65 %
+#   Differenz  1.807 Monate, |Wert| P95 = 2,41 %, P99 = 3,74 %, Maximum  7,83 %
+# Die Grenzen liegen also knapp unter dem 95. Perzentil: 95 % der Monate
+# nutzen die Skala aus, die Extreme sättigen aus. Eine Grenze beim Maximum
+# hätte den Großteil der Monate in ein blasses Mittelfeld gedrückt.
+HEATMAP_GRENZE_ABSOLUT   = 0.05    # ±5 %
+HEATMAP_GRENZE_DIFFERENZ = 0.025   # ±2,5 %
+
 MAPPING_PATH      = "Mapping_Honorarsatz.xlsx"
 NAME_MAPPING_PATH = "Mapping_Namen.xlsx"
 # Anlagekriterien: Pfad und Spalten kommen aus dem UI-freien Modul, damit
