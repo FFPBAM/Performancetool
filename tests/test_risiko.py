@@ -371,10 +371,10 @@ def schritt5_apptest():
     _lauf("Risiko + Drawdown + Vergleich", p_risk=True, p_dd=True, p_cmp=True)
     # Eine junge Strategie: kein volles Jahr rollierende Vola moeglich
     _lauf("junge Strategie ohne volles Vola-Fenster",
-          p_sel1="Muster FFPB Pro Dividende", p_risk=True)
+          p_sel1="Pro Dividende", p_risk=True)
     # Ohne Benchmark duerfen TE/IR nicht in eine Ausnahme laufen
     _lauf("Strategie ohne Benchmark",
-          p_sel1="Muster SCHWEIZ Aktien", p_risk=True)
+          p_sel1="Schweiz_aktienorientiert", p_risk=True)
     return f
 
 
