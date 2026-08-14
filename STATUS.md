@@ -1,11 +1,19 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 14.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 81 Commits vor `main`
+· 87 Commits vor `main` · Stand `065190f`, vollständig auf GitHub
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
-`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#50) — hier nur der Zustand.
+`PROJEKT_DOKUMENTATION.md` (Transferwissen #1–#58) — hier nur der Zustand.
+
+> **Das Wichtigste in drei Sätzen.** Am 14.08.2026 lief ein Vollaudit über
+> Mathematik, Fachlichkeit und Technik; **kein Rechenfehler** — 13 von 16
+> Widerlegungsversuchen scheiterten an den echten Daten, drei Gegenproben
+> exakt auf 0,000e+00. Sechs Befunde blieben übrig, **fünf davon sind
+> behoben**, einer wurde von Philip als beabsichtigt entschieden.
+> **Achtung:** Befund B3 (Honorarformel) verändert die Broschürenzahlen um
+> bis zu 120 Basispunkte — alles Weitere unter „Audit vom 14.08.2026".
 
 ---
 
@@ -156,6 +164,24 @@ sagte bereits, dass die Auswahl oben nicht wirkt, nannte aber nicht ihren
 eigenen Bezug; die Drawdown-Tabelle sagte gar nichts. Beide tragen jetzt
 `zeitraum_hinweis()`: „Gezählt wird taggenau ab dem Datenstand 21.07.2026 —
 ‚3 Jahre' meint hier 22.07.2023 bis 21.07.2026."
+
+### Was der Audit im Code hinterlassen hat — die Landkarte
+
+| Datei | Stelle | Was |
+|---|---|---|
+| `modules/analytics.py` | `annual_fee_to_daily_drag` | **Die Formel.** `d = 1 − (1−f)^(1/365)`. Delegiert **nicht** mehr an `annual_to_daily_rate`. Wirft `ValueError` ab 100 % p.a. |
+| | `calc_vola` | Trägt jetzt die Begründung für √365 (stand vorher nirgends). Einzige Stelle, an der √365 gerechnet wird |
+| | `ROLL_FENSTER_TAGE` | Docstring korrigiert — die alte Begründung war für 18 von 19 Reihen falsch |
+| `modules/shared.py` | `build_portfolio_timeseries` | Kein blankes `except` mehr beim Honorarsatz; setzt `attrs["honorar_gefunden"]` |
+| | `strategien_ohne_honorarsatz` | **neu** — bewusst nicht inline im Renderpfad (#55) |
+| `modules/risiko_ansicht.py` | `zeitraum_hinweis` | **neu** — verortet „3 Jahre" unter beiden Tabellen |
+| | Caption Risikotabelle | Kostenbasis von TE/IR benannt |
+| | Caption Drawdown-Tabelle | Sagte vorher **gar nichts** über ihre festen Zeiträume |
+| `streamlit_app.py` | vor dem Kennzahlen-Block | `st.error`, wenn ein Honorarsatz fehlt — nennt die Strategie |
+
+**Drei Verbraucher der Formel blieben unverändert** (`calc_daily_returns_after_fee`,
+`calc_period_return_after_fee`, `make_index_after_fee`) — der Satz betritt das
+System an genau einer Stelle, deshalb war B3 eine Ein-Zeilen-Korrektur.
 
 **B5 — die Kostenbasis von TE und IR steht jetzt dabei.** Beide vergleichen
 die Strategie nach Kosten mit der Benchmark ohne Kosten (IR −0,464 statt
@@ -881,19 +907,19 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_anlagekriterien.py` | pandas **+ streamlit** | 17 Strategien, Schreibweise, Banner-Bauweise, AppTest in beiden Ansichten **und für eine Thema-Strategie** (9b); Schritt 4b tastet die Vorlagen ab, damit ein Excel-Eintrag nicht unbemerkt in einer Broschüre landet; **mit Ordner-Argument** zusätzlich der Kasten in den erzeugten Broschüren |
 | `test_app_titel.py` | **nichts** (Schritt 1+2) | Tool heißt überall gleich; Schritt 3 fährt die App per AppTest hoch und braucht streamlit |
 | `test_legende_musterdepot.py` | **nichts** (Schritt 1) | Legende sagt „Musterdepot"; Schritt 2+3 brauchen python-pptx und überspringen sonst |
-| `test_kosten_mathematik.py` | **nichts** (Schritt 1) | Die Honorar-Formel steht nur in `analytics.py`; Schritt 2 prüft die Objekt-Identität in `pptx_export` (braucht pandas + python-pptx), Schritt 3 nagelt die Zahlen fest |
+| `test_kosten_mathematik.py` | **nichts** (Schritt 1) | Die Honorar-Formel steht nur in `analytics.py`; Schritt 2 prüft die Objekt-Identität in `pptx_export` (braucht pandas + python-pptx), Schritt 3 nagelt die Zahlen fest. **Verschärft am 14.08.2026:** Schritt 3 verlangt jetzt für **alle sechs** Sätze im Bestand, dass 365 Nulltage **exakt** den Satz kosten (1e−12). Vorher stand dort ein Band von 1,50 bis 1,56 — breit genug, um Befund B3 zu verbergen (#58). Dazu: ein Satz ab 100 % p.a. muss `ValueError` werfen |
 | `test_formats.py` | **nichts** (Schritt 5 nutzt pandas, Schritt 7 streamlit — beide überspringen sauber) | Deutsche Notation, Datum, Disclaimer-Anker — vor allem: ein Fehlwert wird „–" und niemals „nan"/„None"/„NaT"; Schritt 7 hält fest, dass `shared` dieselben Funktionen nutzt |
-| `test_analytics.py` | numpy + pandas | Bausteine gegen von Hand nachrechenbare Werte, degenerierte Eingaben liefern `None` statt Absturz, `has_benchmark`, der Vertrag von `compute_performance_data` (Längen, leere Listen) |
+| `test_analytics.py` | numpy + pandas | Bausteine gegen von Hand nachrechenbare Werte, degenerierte Eingaben liefern `None` statt Absturz, `has_benchmark`, der Vertrag von `compute_performance_data` (Längen, leere Listen). **Umgestellt am 14.08.2026:** Der Schritt verlangte bis dahin ausdrücklich `annual_fee_to_daily_drag == annual_to_daily_rate` („die Mathematik ist identisch, **nur** die Größe ist eine andere") — in diesem „nur" saß Befund B3. Jetzt wird das Gegenteil verlangt und jede der beiden Zusagen einzeln geprüft; Schritt 6 lässt die 365-Umrechnung in `analytics.py` folglich **zweimal** zu (Gutschrift und Belastung), aber weiterhin nirgends sonst |
 | `test_benchmark_erkennung.py` | pandas | 19 Strategien: 2 ohne Benchmark, 17 unverändert (**Kennzahlen**) |
 | `test_benchmark_charts.py` | pandas; Schritte 2+3 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende, Fußnote und den Hinweis im Tool** — Schritt 2 baut zwei echte Broschüren und liest nach, Schritt 3 prüft den Hinweis an der gerenderten Oberfläche; „Pro" ist jeweils Kontrollfall |
-| `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 % — fängt das stille Zurückfallen auf 0 % ab; SCHWEIZ auf 1,55 % festgenagelt |
+| `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 %; SCHWEIZ auf 1,55 % festgenagelt. **Schritt 4 (14.08.2026)** ist die Gegenprobe dazu: Er entfernt eine Mapping-Zeile absichtlich und verlangt, dass die Zeitreihe den Ausfall in `attrs["honorar_gefunden"]` vermerkt — Schritt 1 prüft, dass heute nichts fehlt, Schritt 4, dass ein Fehlen *auffällt*. Dazu fünf Fälle von `strategien_ohne_honorarsatz` |
 | `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
 | `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
 | `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |
 | `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–11 **+ streamlit** | Die Heatmap, elf Schritte. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach, Schritt 2 die Verkettung Zeile → Jahresspalte, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile, Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und prüft den Zeitraum-Zuschnitt an beiden Rändern, **Schritt 7 die Bandbreite** (arithmetisches Mittel gegen von Hand gerechnete Werte, Je-Monat-Toleranz, festes Fenster, Invariante `Tief ≤ Mittel ≤ Hoch` über alle Strategien), **Schritt 8 die FIGUR statt der Daten** — Achsentyp, Kategorienreihenfolge, Spaltenzahl, Koordinatentypen der Annotationen; das ist die Prüfung, durch deren Fehlen der Renderfehler schlüpfte —, **Schritt 9 die Zeitraum-Ableitung** (sieben gerechnete Fälle plus die Zusage, dass die älteste Jahreszeile keine Lücke hat), Schritt 10 die Kachelhöhe, Schritt 11 fährt die Oberfläche hoch (beide Ansichten, alle Zeiträume, „Seit Auflage mit jungem Vergleichsportfolio") |
-| `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16 |
+| `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16. **Neu am 14.08.2026: Schritt 6** prüft die *Voraussetzung* der 365-Konvention an den echten Daten (kalendertäglich, lückenlos, Werktaganteil rund 5/7) — eine Handelstag-Lieferung würde 365 Zeilen zu 1,40 Jahren machen und √365 falsch. **Schritt 7** prüft den Zeitraum-Hinweis der beiden Tabellen gegen beide Aufrufformen, drei leere Eingaben und einen Schaltjahr-Rand |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -975,8 +1001,28 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind drei — alle liegen bei Philip.** Zwei weitere Punkte sind
+**Es sind vier — alle liegen bei Philip.** Zwei weitere Punkte sind
 **bewusst zurückgestellt** und stehen darunter.
+
+0. **NEU 14.08.2026 — die geänderten Zahlen freigeben.** Befund B3 hat die
+   Honorarformel korrigiert; jede Nachkosten-Zahl im Werkzeug **und in der
+   Broschüre** ist dadurch etwas niedriger. Das ist kein Anzeigefehler,
+   sondern die Korrektur — bitte einmal bewusst zur Kenntnis nehmen:
+
+   | | vorher | nachher |
+   |---|---|---|
+   | CAGR, je Strategie | | −0,74 bis −2,80 bp (Median −2,52) |
+   | Muster offensiv cVV, kumuliert seit 2009 | 184,92 % | **183,72 %** |
+   | Muster ausgewogen cVV, kumuliert | 145,85 % | **144,82 %** |
+   | cVV konservativ, „nach Kosten" 10 Jahre | 10,349 % | **10,270 %** |
+
+   Philip hat am 14.08.2026 entschieden: *„die neuen werden jetzt richtig
+   gerechnet"* — ältere Broschüren werden **nicht** nachgezogen. Wer die
+   Zahlen vergleicht, braucht also den Stichtag.
+
+   Die Spalte **„vor Kosten" ändert sich nicht** — das ist die Gegenprobe,
+   dass wirklich nur die Kostenseite betroffen ist (`ui_dump` zeigt genau
+   eine geänderte Zeile).
 
 1. **Beide Ansichten am Bildschirm gegensehen.** Der Renderfehler ist behoben
    und per Layout-Prüfstein festgenagelt, die Zahlen sind belegt.
@@ -1000,6 +1046,15 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
      Absicht.
    - *Comdirect_100* in der Bandbreite: `2J`-Zeilen plus Vorbehalt-Hinweis.
    - „Tabelle anzeigen" bei allen drei Matrizen gleichzeitig.
+   - **NEU aus dem Audit:** Unter der Risiko- **und** der Drawdown-Tabelle
+     steht jetzt je ein Satz, der die festen Zeiträume verortet
+     („Gezählt wird taggenau ab dem Datenstand 21.07.2026 — ‚3 Jahre' meint
+     hier 22.07.2023 bis 21.07.2026"). Liest er sich neben der Schnellwahl
+     oben verständlich, oder verwirrt er mehr, als er klärt?
+   - **NEU aus dem Audit:** Unter der Risikotabelle steht der Hinweis, dass
+     Tracking Error und Information Ratio die Strategie *nach* Kosten mit
+     der Benchmark *ohne* Kosten vergleichen. Ist das so für einen Berater
+     brauchbar formuliert?
 
    ```
    .venv\Scripts\python.exe -m streamlit run streamlit_app.py

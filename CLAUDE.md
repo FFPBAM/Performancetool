@@ -1,7 +1,7 @@
 ﻿# Arbeitsanweisung für Claude — FFPB Performancetool
 
 **Zuerst lesen:** `STATUS.md` (wo stehen wir), dann `PROJEKT_DOKUMENTATION.md`
-(50 Transferwissen-Einträge, Architektur, Compliance).
+(58 Transferwissen-Einträge, Architektur, Compliance).
 
 Streamlit-App der Fürst Fugger Privatbank, die aus Corporate-Vorlagen
 PowerPoint-Broschüren erzeugt. **Die Ergebnisse gehen an Kunden.**
@@ -136,6 +136,45 @@ prüfte statt gegen eine Schwelle (#47).
   beim Berater ankommt, ist `pptx_export.LAST_BUILD_ERRORS`
   (`portfolioanalyse.py` zeigt ihn nach dem Export an). Dort anhängen, nicht
   woanders.
+- **Eine Umrechnung muss zu der Rechenart passen, in der sie benutzt wird**
+  (#56/#58, 14.08.2026, Audit-Befund B3). Der Honorar-Tagessatz kam aus
+  `annual_to_daily_rate`, also aus der Aufzins-Formel für eine **Gutschrift**
+  — abgezogen wurde er trotzdem. Aufzinsen und Abziehen sind nicht
+  symmetrisch:
+
+  ```
+  Gutschrift (rf)       (1 + d)^365 = 1 + r    d = (1+r)^(1/365) - 1
+  Belastung (Honorar)   (1 - d)^365 = 1 - f    d = 1 - (1-f)^(1/365)
+  ```
+
+  Bei 1,55 % wurden dadurch 1,5264 % abgezogen — 2,36 bp pro Jahr zu wenig,
+  immer zugunsten des Hauses. **Der Honorarsatz betritt das System an genau
+  einer Stelle** (`annual_fee_to_daily_drag`), deshalb war die Korrektur eine
+  Zeile; die drei Verbraucher blieben unberührt. Prüfstein:
+  `tests/test_kosten_mathematik.py`, Schritt 3.
+- **Der Sollwert einer Prüfung kommt aus der Zusage, nicht aus dem Ergebnis**
+  (#58). Genau dieser Fehler hielt B3 jahrelang verborgen: Der Kommentar
+  sagte „muss **exakt** das Honorar kosten", geprüft wurde ein Band von 1,50
+  bis 1,56, und die Fehlermeldung nannte als Soll „~1,53" — abgeschrieben vom
+  gemessenen Wert. Die Toleranz umschloss den Fehler, den sie finden sollte.
+  Wer eine Toleranz setzt, muss sagen können, **welchen Fehler sie noch
+  fangen soll**; „so kam es halt heraus" ist keine Begründung.
+- **Ein stiller Rückfall ist dort am gefährlichsten, wo er plausibel
+  aussieht** (#57, Audit-Befund B6). `except Exception: fd = 0.0` beim
+  Honorarsatz ließ eine Strategie brutto rechnen — auf dem Bildschirm nicht
+  von einer Angabe zu unterscheiden, weil der Satz in einem **Eingabefeld**
+  steht. Wirkung gemessen: 6,90 % statt 5,27 % p.a., **1,63 Prozentpunkte**
+  zu hoch. Ein Vorgabewert nach einem Fehlschlag muss sich vom selben Wert
+  als echte Angabe unterscheiden lassen — sonst ist der Schutz vor dem
+  Absturz zugleich die Tarnung des Fehlers (`attrs["honorar_gefunden"]`).
+- **Prüfe die Voraussetzung getrennt vom Ergebnis** (#56). Die Begründung für
+  √365 war sachlich falsch (die Wochenenden tragen **Kuponabgrenzung** des
+  Anleihenteils, keine Nullen — bei 18 von 19 Reihen), die Konvention aber
+  richtig: Die Reihen sind echte Kalendertagreihen. Ein richtiges Ergebnis
+  beweist die Begründung nicht, und eine falsche Begründung widerlegt das
+  Ergebnis nicht. **Für `ret_bm` gilt die Nullen-Aussage weiter und zu Recht**
+  (`has_benchmark`) — ein pauschales Ersetzen hätte drei korrekte Stellen
+  zerstört.
 - **Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen.** Wo eine
   Strategie keine Anleihen hält, steht dort die **Liquiditätsgrenze**: `cVV
   dynamic` „max. 10 %", Pro und Pro Dividende „max. 15 %". Die Bank-Webseite
