@@ -21,14 +21,22 @@ Summe im Widerspruch.
   5. Die Durchschnittszeile verkettet sich zum Durchschnittsjahr
   6. Die 19 echten Strategien — jeder angebrochene Monat nachgemessen,
      dazu der Zeitraum-Zuschnitt an beiden Raendern
-  7. Die Bandbreite: Tief <= Mittel <= Hoch, laufendes Jahr ausserhalb
-  8. Die Kachelhoehe waechst, wenn es wenige Zeilen gibt
-  9. Die Oberflaeche rendert beide Ansichten ohne Fehler (AppTest)
+  7. Die Bandbreite: arithmetisch, je Monat tolerant, festes Fenster
+  8. Die FIGUR statt der Daten: Achsentyp, Reihenfolge, Annotationen
+  9. Die Kachelhoehe waechst, wenn es wenige Zeilen gibt
+ 10. Die Oberflaeche rendert beide Ansichten ohne Fehler (AppTest)
+
+SCHRITT 8 GIBT ES WEGEN EINES FEHLERS, DEN DIE UEBRIGEN NICHT FANDEN
+(14.08.2026): Die Bandbreiten-Ansicht war unbrauchbar - vier Zeilen zu einem
+Strich zusammengefallen, Werte uebereinander - und alle Pruefsteine waren
+gruen. Sie lasen z, text und y aus dem Figur-Objekt, also die DATEN. Die
+Geometrie entsteht aber erst beim Rendern, aus Voreinstellungen, die niemand
+gesetzt hatte. Schritt 8 prueft deshalb das LAYOUT.
 
 Schritte 1-4 brauchen nur numpy und pandas. Schritt 5 und 7 nutzen die
 echten CSVs fuer die Gegenprobe, Schritt 6 braucht sie ganz (streamlit fuer
-die Loader), Schritt 8 braucht streamlit fuer das Darstellungsmodul,
-Schritt 9 die AppTest-Umgebung; alle ueberspringen sich sauber.
+die Loader), Schritt 8 und 9 brauchen streamlit fuer das Darstellungsmodul,
+Schritt 10 die AppTest-Umgebung; alle ueberspringen sich sauber.
 
     python tests/test_monatsrenditen.py
 """
@@ -48,16 +56,19 @@ except ImportError as ex:
     sys.exit(0)
 
 from modules.analytics import (  # noqa: E402
-    BAND_MIN_JAHRE, MONAT_RAND_TOLERANZ_TAGE, _ist_voller_monat, bandbreite,
+    BAND_JAHRE, MONAT_RAND_TOLERANZ_TAGE, _ist_voller_monat, bandbreite,
     heatmap_kennzahlen, historie_beschneiden, monats_durchschnitt,
     monatsrenditen, monatsrenditen_differenz,
 )
 
-# Die Kachelhoehe liegt in der Darstellung, nicht in der Mathematik. Sie
-# braucht streamlit — deshalb erst hier und mit sauberem Ueberspringen.
+# Kachelhoehe und Figur-Geometrie liegen in der Darstellung, nicht in der
+# Mathematik. Sie brauchen streamlit — deshalb erst hier und mit sauberem
+# Ueberspringen.
 try:
     from modules.risiko_ansicht import (  # noqa: E402
-        ZEILE_HOEHE_MAX, ZEILE_HOEHE_MIN, _zeilenhoehe,
+        BAND_GRENZE_MIN, ZEILE_HOEHE_MAX, ZEILE_HOEHE_MIN, _grenze_aus_daten,
+        _heatmap_figur, _zeilen_bandbreite, _zeilen_jahr_fuer_jahr,
+        _zeilenhoehe, _zellentext_band,
     )
     HAT_ANSICHT = True
 except ImportError:
@@ -585,77 +596,107 @@ def schritt6_echte_daten():
 
 
 def schritt7_bandbreite():
-    print("Schritt 7 — die Bandbreite: Invariante, Fenster, laufendes Jahr")
+    print("Schritt 7 — die Bandbreite: arithmetisch, je Monat tolerant, "
+          "festes Fenster")
     f = 0
+    f += _ist("BAND_JAHRE steht auf 5", BAND_JAHRE, 5)
 
-    f += _ist("BAND_MIN_JAHRE steht auf 2", BAND_MIN_JAHRE, 2)
-
-    # Drei volle Jahre plus ein angebrochenes. Januar bekommt in jedem Jahr
-    # einen anderen Wert, damit Hoch/Tief eindeutig sind.
-    idx = pd.date_range("2022-01-01", "2025-07-20", freq="D")
+    # Sieben Jahre plus ein angebrochenes. Januar bekommt in jedem Jahr einen
+    # eigenen Wert, damit Hoch, Tief und Mittel von Hand nachrechenbar sind.
+    idx = pd.date_range("2019-01-01", "2026-07-21", freq="D")
     rp = np.zeros(len(idx))
-    januar = {2022: 0.05, 2023: -0.03, 2024: 0.01, 2025: 0.09}
+    januar = {2019: 0.20, 2020: 0.05, 2021: -0.03, 2022: 0.01,
+              2023: 0.09, 2024: -0.07, 2025: 0.02, 2026: 0.04}
     for jahr, wert in januar.items():
         rp[idx.get_loc(pd.Timestamp(jahr, 1, 15))] = wert
-    # Die uebrigen Monate mit einem Wert, damit die Jahre vollstaendig sind
-    for jahr in (2022, 2023, 2024):
+    for jahr in range(2019, 2026):
         for monat in range(2, 13):
             rp[idx.get_loc(pd.Timestamp(jahr, monat, 15))] = 0.002
     for monat in range(2, 8):
-        rp[idx.get_loc(pd.Timestamp(2025, monat, 15))] = 0.002
+        rp[idx.get_loc(pd.Timestamp(2026, monat, 15))] = 0.002
     df = pd.DataFrame({"ret_port": rp}, index=idx)
     m = monatsrenditen(df, 0.0)
 
     b = bandbreite(m)
-    f += _ist("laufendes Jahr ist das juengste", b["aktuelles_jahr"], 2025)
-    f += _ist("Band = die vollen Jahre DAVOR", b["jahre"], [2022, 2023, 2024])
-    f += _ist("laufendes Jahr NICHT im Band",
-              2025 in b["jahre"], False)
-    f += _nah("Januar-Hoch = 2022", b["hoch"].loc[1], 0.05)
-    f += _nah("Januar-Tief = 2023", b["tief"].loc[1], -0.03)
-    f += _ist("Januar-Hoch stammt aus 2022", b["hoch_wann"].loc[1], 2022)
-    f += _ist("Januar-Tief stammt aus 2023", b["tief_wann"].loc[1], 2023)
-    f += _nah("Januar-Trefferquote: 2 von 3 positiv",
-              b["trefferquote"].loc[1], 2.0 / 3.0)
-    # Geometrisches Mittel der drei Januare
-    f += _nah("Januar-Mittel", b["mittel"].loc[1],
-              (1.05 * 0.97 * 1.01) ** (1 / 3) - 1.0)
+    f += _ist("laufendes Jahr ist das juengste", b["aktuelles_jahr"], 2026)
+    f += _ist("Fenster sind genau die 5 Jahre DAVOR",
+              b["jahre"], [2021, 2022, 2023, 2024, 2025])
+    f += _ist("laufendes Jahr NICHT im Band", 2026 in b["jahre"], False)
+    f += _ist("2019 und 2020 fallen aus dem Fenster",
+              [j for j in (2019, 2020) if j in b["jahre"]], [])
 
-    # Fenster begrenzt
-    b2 = bandbreite(m, 2)
-    f += _ist("Fenster 2 nimmt die juengsten zwei", b2["jahre"], [2023, 2024])
-    f += _nah("Januar-Hoch im 2er-Fenster = 2024", b2["hoch"].loc[1], 0.01)
+    # Januar 2021..2025: -0,03 / 0,01 / 0,09 / -0,07 / 0,02
+    f += _nah("Januar-Hoch", b["hoch"].loc[1], 0.09)
+    f += _nah("Januar-Tief", b["tief"].loc[1], -0.07)
+    f += _ist("Januar-Hoch stammt aus 2023", b["hoch_wann"].loc[1], 2023)
+    f += _ist("Januar-Tief stammt aus 2024", b["tief_wann"].loc[1], 2024)
+    f += _ist("Januar: 5 Beobachtungen", int(b["anzahl"].loc[1]), 5)
+    # ARITHMETISCH: (-0.03 + 0.01 + 0.09 - 0.07 + 0.02) / 5 = 0.004
+    f += _nah("Januar-Mittel ist ARITHMETISCH", b["mittel"].loc[1], 0.004)
+    # Zur Gegenprobe das geometrische, das frueher hier stand
+    geo = (0.97 * 1.01 * 1.09 * 0.93 * 1.02) ** (1 / 5) - 1.0
+    f += _nah("mittel_geo ist das geometrische", b["mittel_geo"].loc[1], geo)
+    if abs(b["mittel"].loc[1] - geo) < 1e-6:
+        print("    FEHLER — arithmetisch und geometrisch sind gleich; "
+              "die Testdaten taugen nicht als Unterscheidung")
+        f += 1
+    else:
+        print(f"    OK — arithmetisch {b['mittel'].loc[1]:.6f} gegen "
+              f"geometrisch {geo:.6f}")
+    f += _nah("Januar-Trefferquote: 3 von 5", b["trefferquote"].loc[1], 0.6)
 
-    # Unter dem Minimum
-    b1 = bandbreite(m, 1)
-    f += _ist("Fenster 1 liegt unter BAND_MIN_JAHRE -> leer",
-              bool(b1["hoch"].empty), True)
-    f += _ist("Fenster 1: keine Jahre", b1["jahre"], [])
+    # ── Je Monat tolerant ────────────────────────────────────────────────
+    # Ein Loch in EINEM Maerz darf nur den Maerz betreffen.
+    mit_loch = df.drop(df.loc["2023-03-01":"2023-03-31"].index)
+    bl = bandbreite(monatsrenditen(mit_loch, 0.0))
+    f += _ist("Maerz rechnet mit 4 statt 5 Werten",
+              int(bl["anzahl"].loc[3]), 4)
+    f += _ist("Januar bleibt bei 5", int(bl["anzahl"].loc[1]), 5)
+    f += _ist("Maerz hat trotzdem einen Wert",
+              bool(pd.notna(bl["mittel"].loc[3])), True)
+    f += _nah("Januar-Mittel unveraendert", bl["mittel"].loc[1], 0.004)
 
-    # Endet die Reihe auf einem VOLLEN Jahr, ist dieses die unterste Zeile
-    # und das Band beginnt eins davor.
-    ganz = df.loc[:"2024-12-31"]
-    bg = bandbreite(monatsrenditen(ganz, 0.0))
-    f += _ist("Reihe endet 2024: laufendes Jahr ist 2024",
-              bg["aktuelles_jahr"], 2024)
-    f += _ist("Band dann 2022-2023", bg["jahre"], [2022, 2023])
+    # ── Weniger als BAND_JAHRE Jahre: rechnen statt verweigern ───────────
+    kurz = df.loc["2024-01-01":]
+    bk = bandbreite(monatsrenditen(kurz, 0.0))
+    f += _ist("nur zwei Vergleichsjahre", bk["jahre"], [2024, 2025])
+    f += _nah("Januar-Mittel aus zwei Werten", bk["mittel"].loc[1],
+              (-0.07 + 0.02) / 2)
 
-    # Degeneriert
+    einjahr = df.loc["2025-01-01":]
+    b1 = bandbreite(monatsrenditen(einjahr, 0.0))
+    f += _ist("ein Vergleichsjahr wird gerechnet", b1["jahre"], [2025])
+    f += _nah("Hoch = Mittel bei einem Jahr",
+              b1["hoch"].loc[1], b1["mittel"].loc[1])
+    f += _nah("Mittel = Tief bei einem Jahr",
+              b1["mittel"].loc[1], b1["tief"].loc[1])
+
+    # Kein abgeschlossenes Vergleichsjahr -> leer
+    nur_lauf = df.loc["2026-01-01":]
+    f += _ist("ohne Vorjahr: leere Bandbreite",
+              bandbreite(monatsrenditen(nur_lauf, 0.0))["jahre"], [])
     f += _ist("leere Matrix -> leere Bandbreite",
-              bool(bandbreite(monatsrenditen(None))["hoch"].empty), True)
+              bandbreite(monatsrenditen(None))["jahre"], [])
 
-    # ── Die Invariante, synthetisch und an allen echten Strategien ─────────
+    # ── Angebrochene Monate gehen NICHT ein ──────────────────────────────
+    # Der Maerz 2023 wird auf zehn Tage gestutzt: Er darf dann weder Hoch
+    # noch Tief stellen, auch wenn sein Wert extrem waere.
+    ohne_anfang = df.drop(df.loc["2023-03-01":"2023-03-20"].index)
+    ba = bandbreite(monatsrenditen(ohne_anfang, 0.0))
+    f += _ist("angebrochener Maerz zaehlt nicht mit",
+              int(ba["anzahl"].loc[3]), 4)
+
+    # ── Die Invariante, an allen echten Strategien ───────────────────────
     def _invariante(bez, band):
         fehler = 0
         for monat in range(1, 13):
-            h = band["hoch"].loc[monat]
-            mi = band["mittel"].loc[monat]
-            t = band["tief"].loc[monat]
+            h, mi, t = (band["hoch"].loc[monat], band["mittel"].loc[monat],
+                        band["tief"].loc[monat])
             if pd.isna(h) or pd.isna(mi) or pd.isna(t):
                 continue
             if not (t <= mi + 1e-12 and mi <= h + 1e-12):
-                print(f"    FEHLER — {bez} Monat {monat}: "
-                      f"Tief {t:.8f} / Mittel {mi:.8f} / Hoch {h:.8f}")
+                print(f"    FEHLER — {bez} Monat {monat}: Tief {t:.8f} / "
+                      f"Mittel {mi:.8f} / Hoch {h:.8f}")
                 fehler += 1
         return fehler
 
@@ -681,69 +722,150 @@ def schritt7_bandbreite():
     for name in sorted(ts):
         d = historie_beschneiden(ts[name], name)
         mm = monatsrenditen(d, float(d["fee_default"].iloc[0]) if len(d) else 0.0)
-        for fenster in (3, 5, None):
-            band = bandbreite(mm, fenster)
-            if not band["jahre"]:
-                continue
-            geprueft += 1
-            f += _invariante(f"{name}/{fenster}", band)
-
-            # Das laufende Jahr darf nie im eigenen Band stehen
-            if band["aktuelles_jahr"] in band["jahre"]:
-                print(f"    FEHLER — {name}: {band['aktuelles_jahr']} steht "
-                      f"im eigenen Band")
-                f += 1
-            # Das Band endet vor dem laufenden Jahr
-            if band["jahre"][-1] >= band["aktuelles_jahr"]:
-                print(f"    FEHLER — {name}: Band reicht bis "
-                      f"{band['jahre'][-1]}, laufend ist "
-                      f"{band['aktuelles_jahr']}")
-                f += 1
-            # Genau so viele Jahre wie angefordert, wenn genug da sind
-            if fenster is not None and len(band["jahre"]) > fenster:
-                print(f"    FEHLER — {name}: {len(band['jahre'])} Jahre bei "
-                      f"Fenster {fenster}")
-                f += 1
-            # Hoch und Tief sind tatsaechlich vorkommende Werte
-            for monat in range(1, 13):
-                h = band["hoch"].loc[monat]
-                if pd.isna(h):
-                    continue
-                spalte = mm["renditen"].loc[band["jahre"], monat]
-                if not bool(np.isclose(spalte, h).any()):
-                    print(f"    FEHLER — {name} Monat {monat}: Hoch {h} "
-                          f"kommt in den Daten nicht vor")
-                    f += 1
-                jahr = band["hoch_wann"].loc[monat]
-                if not bool(np.isclose(mm["renditen"].loc[jahr, monat], h)):
-                    print(f"    FEHLER — {name} Monat {monat}: hoch_wann "
-                          f"zeigt auf {jahr}, dort steht ein anderer Wert")
-                    f += 1
-
-            # Die Mittel-Zeile verkettet sich zu ihrer Jahresspalte
-            verkettet = float(np.prod(1.0 + band["mittel"].to_numpy(float)) - 1.0)
-            if abs(verkettet - float(band["mittel_jahr"])) > 1e-10:
-                print(f"    FEHLER — {name}/{fenster}: Mittel verkettet "
-                      f"{verkettet:.10f} gegen {float(band['mittel_jahr']):.10f}")
-                f += 1
-
-    print(f"    OK — {geprueft} Faelle: Tief <= Mittel <= Hoch, laufendes Jahr "
-          f"ausserhalb, Extreme kommen vor, Mittel verkettet sich")
-
-    # Namentlich: wer zu wenig Historie hat, bekommt keine Bandbreite
-    for name in ("Comdirect 100", "Comdirect 70", "Comdirect 30",
-                 "Muster FFPB Pro Dividende"):
-        if name not in ts:
+        band = bandbreite(mm)
+        if not band["jahre"]:
             continue
-        d = historie_beschneiden(ts[name], name)
-        mm = monatsrenditen(d, 0.0)
-        f += _ist(f"{name}: keine Bandbreite (zu wenig volle Jahre)",
-                  bool(bandbreite(mm, 5)["hoch"].empty), True)
+        geprueft += 1
+        f += _invariante(name, band)
+
+        if band["aktuelles_jahr"] in band["jahre"]:
+            print(f"    FEHLER — {name}: {band['aktuelles_jahr']} steht im "
+                  f"eigenen Band")
+            f += 1
+        if band["jahre"][-1] >= band["aktuelles_jahr"]:
+            print(f"    FEHLER — {name}: Band reicht bis {band['jahre'][-1]}")
+            f += 1
+        if len(band["jahre"]) > BAND_JAHRE:
+            print(f"    FEHLER — {name}: {len(band['jahre'])} Jahre bei "
+                  f"Fenster {BAND_JAHRE}")
+            f += 1
+
+        for monat in range(1, 13):
+            h = band["hoch"].loc[monat]
+            if pd.isna(h):
+                continue
+            # Das Extrem muss ein tatsaechlich vorkommender Wert sein, und
+            # hoch_wann muss auf genau diese Zelle zeigen.
+            jahr = band["hoch_wann"].loc[monat]
+            if not bool(np.isclose(mm["renditen"].loc[jahr, monat], h)):
+                print(f"    FEHLER — {name} Monat {monat}: hoch_wann zeigt "
+                      f"auf {jahr}, dort steht ein anderer Wert")
+                f += 1
+            # Und das Mittel muss der Schnitt der gueltigen Werte sein
+            gueltig = [j for j in band["jahre"]
+                       if bool(mm["vollstaendig"].loc[j, monat])
+                       and pd.notna(mm["renditen"].loc[j, monat])]
+            soll = float(mm["renditen"].loc[gueltig, monat].mean())
+            if abs(float(band["mittel"].loc[monat]) - soll) > 1e-12:
+                print(f"    FEHLER — {name} Monat {monat}: Mittel "
+                      f"{band['mittel'].loc[monat]} statt {soll}")
+                f += 1
+
+    print(f"    OK — {geprueft} echte Strategien: Tief <= Mittel <= Hoch, "
+          f"laufendes Jahr ausserhalb, Mittel ist der arithmetische Schnitt")
     return f
 
 
-def schritt8_kachelgroesse():
-    print("Schritt 8 — die Kachelhoehe waechst, wenn es wenige Zeilen gibt")
+def schritt8_geometrie():
+    print("Schritt 8 — die FIGUR, nicht die Daten: Achsen, Reihenfolge, "
+          "Annotationen")
+    if not HAT_ANSICHT:
+        print("    UEBERSPRUNGEN — modules.risiko_ansicht braucht streamlit")
+        return 0
+
+    # WARUM ES DIESEN SCHRITT GIBT (14.08.2026): Die Bandbreiten-Ansicht war
+    # unbrauchbar - vier Zeilen zu einem Strich zusammengefallen, Werte
+    # uebereinander - und ALLE Pruefsteine waren gruen. Sie lasen z, text und
+    # y aus dem Figur-Objekt, also die DATEN. Die Geometrie entsteht aber
+    # erst beim Rendern, aus Voreinstellungen, die niemand gesetzt hatte:
+    # `yaxis.type` war None, Plotly riet, und ein zahlartiges Zeilenlabel
+    # ("2026") sprengte den Achsenbereich.
+    #
+    # Dieser Schritt prueft deshalb das LAYOUT.
+    f = 0
+    idx = pd.date_range("2020-01-01", "2026-07-21", freq="D")
+    rp = np.zeros(len(idx))
+    for jahr in range(2020, 2027):
+        for monat in range(1, 13):
+            try:
+                rp[idx.get_loc(pd.Timestamp(jahr, monat, 15))] = 0.003 * monat
+            except KeyError:
+                pass
+    m = monatsrenditen(pd.DataFrame({"ret_port": rp}, index=idx), 0.0)
+
+    band = bandbreite(m)
+    zeilen_b = _zeilen_bandbreite(m, band, "Test")
+    fig_b = _heatmap_figur(zeilen_b, _grenze_aus_daten(zeilen_b),
+                           mit_jahresspalte=False,
+                           zellentext=_zellentext_band, gesaettigt=False)
+    zeilen_j = _zeilen_jahr_fuer_jahr(m, "Test")
+    fig_j = _heatmap_figur(zeilen_j, 0.03)
+
+    for bez, fig, zeilen, spalten_soll in (
+            ("Bandbreite", fig_b, zeilen_b, 12),
+            ("Jahr fuer Jahr", fig_j, zeilen_j, 13)):
+        lay = fig.layout
+        f += _ist(f"{bez}: xaxis.type ist gesetzt", lay.xaxis.type, "category")
+        f += _ist(f"{bez}: yaxis.type ist gesetzt", lay.yaxis.type, "category")
+        f += _ist(f"{bez}: categoryorder x", lay.xaxis.categoryorder, "array")
+        f += _ist(f"{bez}: categoryorder y", lay.yaxis.categoryorder, "array")
+        f += _ist(f"{bez}: Spaltenzahl", len(lay.xaxis.categoryarray),
+                  spalten_soll)
+        f += _ist(f"{bez}: Zeilenzahl", len(lay.yaxis.categoryarray),
+                  len(zeilen))
+        f += _ist(f"{bez}: z hat so viele Zeilen", len(fig.data[0].z),
+                  len(zeilen))
+        f += _ist(f"{bez}: z hat so viele Spalten", len(fig.data[0].z[0]),
+                  spalten_soll)
+
+        # Plotly zeichnet y[0] UNTEN. Die erste Zeile in Leserichtung muss
+        # deshalb die LETZTE Kategorie sein.
+        f += _ist(f"{bez}: oberste Zeile", lay.yaxis.categoryarray[-1],
+                  zeilen[0]["label"])
+        f += _ist(f"{bez}: unterste Zeile", lay.yaxis.categoryarray[0],
+                  zeilen[-1]["label"])
+
+        # Annotationen ueber Koordinaten, nicht ueber Beschriftungen: Ein
+        # y="2026" verlangt eine zweite Namensaufloesung, die scheitern kann.
+        nicht_zahl = [a.y for a in lay.annotations
+                      if not isinstance(a.y, (int, float))]
+        f += _ist(f"{bez}: keine Annotation mit Text-y", nicht_zahl, [])
+        ausserhalb = [a.y for a in lay.annotations
+                      if not (0 <= float(a.y) <= len(zeilen) - 1)]
+        f += _ist(f"{bez}: alle Annotationen im Zeilenbereich", ausserhalb, [])
+
+    # Die Bandbreite hat KEINE Jahresspalte und damit keine Annotationen
+    f += _ist("Bandbreite ohne Jahresspalte: keine Annotation",
+              len(fig_b.layout.annotations), 0)
+    f += _ist("Jahr fuer Jahr hat Annotationen",
+              bool(len(fig_j.layout.annotations) > 0), True)
+    f += _ist("Bandbreite: Spaltenkopf 'Jahr' fehlt",
+              "Jahr" in list(fig_b.layout.xaxis.categoryarray), False)
+    f += _ist("Jahr fuer Jahr: Spaltenkopf 'Jahr' da",
+              list(fig_j.layout.xaxis.categoryarray)[-1], "Jahr")
+
+    # Die datengetriebene Grenze
+    grenze = _grenze_aus_daten(zeilen_b)
+    groesster = max(abs(float(zl["werte"].loc[k]))
+                    for zl in zeilen_b for k in range(1, 13)
+                    if pd.notna(zl["werte"].loc[k]))
+    f += _ist("Grenze deckt den groessten Betrag", bool(grenze >= groesster),
+              True)
+    f += _ist("Grenze nicht unter der Untergrenze",
+              bool(grenze >= BAND_GRENZE_MIN), True)
+    f += _ist("leere Zeilen -> Untergrenze", _grenze_aus_daten([]),
+              BAND_GRENZE_MIN)
+
+    # Zellformat der Bandbreite: zwei Stellen, kein Plus
+    f += _ist("Zellformat positiv", _zellentext_band(0.0341, True), "3,41")
+    f += _ist("Zellformat negativ", _zellentext_band(-0.059, True), "-5,90")
+    f += _ist("Zellformat angebrochen", _zellentext_band(0.008, False), "0,80*")
+    f += _ist("Zellformat Fehlwert", _zellentext_band(None, True), "")
+    return f
+
+
+def schritt9_kachelgroesse():
+    print("Schritt 9 — die Kachelhoehe waechst, wenn es wenige Zeilen gibt")
     if not HAT_ANSICHT:
         print("    UEBERSPRUNGEN — modules.risiko_ansicht braucht streamlit")
         return 0
@@ -775,8 +897,8 @@ def schritt8_kachelgroesse():
     return f
 
 
-def schritt9_apptest():
-    print("Schritt 9 — die Oberflaeche rendert die Heatmap ohne Fehler")
+def schritt10_apptest():
+    print("Schritt 10 — die Oberflaeche rendert die Heatmap ohne Fehler")
     import importlib.util
     if importlib.util.find_spec("streamlit.testing.v1") is None:
         print("    UEBERSPRUNGEN — streamlit.testing nicht verfuegbar")
@@ -909,19 +1031,23 @@ def schritt9_apptest():
             print("    OK — ohne Vergleichsportfolio keine Vergleichs-Matrix")
 
     # ── Die zweite Ansicht (NEU 14.08.2026) ────────────────────────────────
-    # Mit ausdruecklich "5 Jahre": Das prueft zugleich, dass das Fenster
-    # wirklich fuenf KALENDERJAHRE umfasst. Der tagbasierte Zuschnitt haette
-    # hier nur vier volle Jahre uebriggelassen (Schnitt am 21.07.2021).
-    at = _lauf("Bandbreiten-Ansicht, Fenster 5 Jahre", p_heat=True,
-               p_heat_ansicht="Bandbreite", p_zeitraum="5 Jahre")
+    # Das Fenster ist FEST fuenf Kalenderjahre — die Zeitraum-Auswahl darf
+    # daran nichts aendern. Deshalb wird hier ausdruecklich ein anderer
+    # Zeitraum gesetzt und trotzdem 2021-2025 erwartet.
+    at = _lauf("Bandbreiten-Ansicht (Zeitraum '3 Jahre' gesetzt)",
+               p_heat=True, p_heat_ansicht="Bandbreite", p_zeitraum="3 Jahre")
     if at is not None:
         captions = " ".join(c.value for c in at.caption)
-        for stueck, bez in (("Bandbreite über die 5 abgeschlossenen",
-                             "Erklaerung mit genau 5 Jahren"),
-                            ("2021–2025", "das richtige Fenster"),
+        for stueck, bez in (("die letzten 5 Kalenderjahre",
+                             "Erklaerung des festen Fensters"),
+                            ("2021–2025",
+                             "das Fenster trotz Zeitraum '3 Jahre'"),
                             ("gegen 5 Jahre", "Kennzeile"),
-                            ("nicht darin enthalten", "Hinweis laufendes Jahr"),
-                            ("Nur die Mittel-Zeile", "Verkettungs-Hinweis")):
+                            ("nicht enthalten", "Hinweis laufendes Jahr"),
+                            ("arithmetischer Durchschnitt",
+                             "Hinweis auf das arithmetische Mittel"),
+                            ("wirkt in dieser Ansicht nicht",
+                             "Hinweis zur Zeitraum-Auswahl")):
             if stueck not in captions:
                 print(f"    FEHLER — {bez} fehlt (suchte '{stueck}')")
                 f += 1
@@ -935,7 +1061,7 @@ def schritt9_apptest():
                      p_heat_ansicht="Jahr für Jahr")
     if at_jahre is not None:
         captions = " ".join(c.value for c in at_jahre.caption)
-        if "Bandbreite über die" in captions:
+        if "Vergleichsfenster" in captions:
             print("    FEHLER — Bandbreiten-Erklaerung in 'Jahr fuer Jahr'")
             f += 1
         elif "geometrisches Mittel über die" not in captions:
@@ -944,28 +1070,34 @@ def schritt9_apptest():
         else:
             print("    OK — die beiden Ansichten zeigen verschiedene Texte")
 
-    # Zu wenig Historie: Erklaerung statt Matrix - und in der anderen
-    # Ansicht trotzdem eine normale Matrix.
-    at = _lauf("Bandbreite mit zu kurzer Historie",
+    # Wenig Historie: Es wird trotzdem gerechnet, ehrlich beschriftet und
+    # mit einem Vorbehalt versehen. Comdirect_100 (Auflage 03/2024) hat 2024
+    # und 2025 als Vergleichsjahre - unter BAND_DUENN_UNTER.
+    at = _lauf("Bandbreite mit kurzer Historie",
                p_sel1="Comdirect_100", p_heat=True,
                p_heat_ansicht="Bandbreite")
     if at is not None:
         captions = " ".join(c.value for c in at.caption)
-        if "abgeschlossene Kalenderjahre" not in captions:
-            print("    FEHLER — Erklaerung bei zu kurzer Historie fehlt")
+        if "Vergleichsjahr" not in captions:
+            print("    FEHLER — Vorbehalt bei duenner Bandbreite fehlt")
             f += 1
         else:
-            print("    OK — Erklaerung statt Matrix")
+            print("    OK — Vorbehalt steht")
+        if "Vergleichsfenster" not in captions:
+            print("    FEHLER — es wird gar keine Bandbreite gezeigt")
+            f += 1
+        else:
+            print("    OK — es wird trotzdem gerechnet")
     at = _lauf("dieselbe Strategie in 'Jahr fuer Jahr'",
                p_sel1="Comdirect_100", p_heat=True,
                p_heat_ansicht="Jahr für Jahr")
     if at is not None:
         captions = " ".join(c.value for c in at.caption)
-        if "abgeschlossene Kalenderjahre" in captions:
-            print("    FEHLER — 'Jahr fuer Jahr' verweigert die Matrix auch")
+        if "Vergleichsfenster" in captions:
+            print("    FEHLER — 'Jahr fuer Jahr' zeigt Bandbreiten-Texte")
             f += 1
         else:
-            print("    OK — 'Jahr fuer Jahr' zeigt sie trotzdem")
+            print("    OK — 'Jahr fuer Jahr' bleibt unberuehrt")
 
     # Der Umschalter wirkt auch auf die Differenz-Matrizen
     _lauf("Bandbreite mit beiden Differenzen",
@@ -986,8 +1118,8 @@ def main():
     for schritt in (schritt1_voller_monat, schritt2_verkettung,
                     schritt3_differenz, schritt4_degeneriert,
                     schritt5_durchschnitt, schritt6_echte_daten,
-                    schritt7_bandbreite, schritt8_kachelgroesse,
-                    schritt9_apptest):
+                    schritt7_bandbreite, schritt8_geometrie,
+                    schritt9_kachelgroesse, schritt10_apptest):
         fehler += schritt()
         print()
     if fehler:
