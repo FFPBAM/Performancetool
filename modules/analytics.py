@@ -194,6 +194,13 @@ def calc_vola(daily_returns_after_fee: Sequence[float]) -> Optional[float]:
     """Annualisierte Volatilität: std(tagesrenditen) × √365.
 
     Stichproben-Standardabweichung (ddof=1).
+
+    √365 und nicht √252, weil die Reihen KALENDERTÄGLICH und lückenlos sind:
+    Am Wochenende läuft die Kuponabgrenzung des Anleihenteils weiter, die
+    Zeilen sind also keine leeren Platzhalter. Die Herleitung samt Messung
+    steht bei `ROLL_FENSTER_TAGE`. Dies hier ist die EINZIGE Stelle im
+    Projekt, an der √365 überhaupt gerechnet wird — wer die Konvention
+    ändern will, ändert sie hier und nirgends sonst.
     """
     arr = np.asarray(daily_returns_after_fee, dtype=float)
     if len(arr) < 2:
@@ -1006,16 +1013,40 @@ def heatmap_kennzahlen(daten: dict) -> dict:
 ROLL_FENSTER_TAGE = 365
 """Fensterbreite der rollierenden Kennzahlen in ZEILEN (14.08.2026).
 
-Die Performance-CSVs sind kalendertäglich und lückenlos — Wochenenden und
-Feiertage stehen mit Rendite 0 darin (rund 29 % aller Zeilen). 365 Zeilen
-sind deshalb exakt ein Kalenderjahr; es braucht keine Schätzung über
-Handelstage, wie sie ein 252-Tage-Fenster erforderte.
+Die Performance-CSVs sind kalendertäglich und lückenlos — nachgemessen über
+alle 19 Strategien: kein fehlender Tag, kein NaN. 365 Zeilen sind deshalb
+exakt ein Kalenderjahr; es braucht keine Schätzung über Handelstage, wie sie
+ein 252-Tage-Fenster erforderte. Prüfstein: tests/test_risiko.py, Schritt 6
+— er hält genau diese Voraussetzung fest.
 
-Dass die Wochenend-Nullen die Streuung dämpfen, ist bekannt und wird bewusst
-mitgetragen: Es ist dieselbe Basis, auf der `calc_vola` und damit die
-Kennzahlen-Kachel der Oberfläche rechnen (√365, nicht √252). Zwei
-verschiedene Volatilitäten auf einem Bildschirm wären schlimmer als jede
-Lehrbuch-Ungenauigkeit."""
+HIER STAND BIS ZUM AUDIT (14.08.2026) EINE FALSCHE BEGRÜNDUNG: die
+Wochenenden trügen Rendite 0, "rund 29 % aller Zeilen", und √365 sei deshalb
+eine hingenommene Ungenauigkeit. Gemessen an den echten Daten:
+
+    Anteil exakter Nullen in ret_port  Median 0,00 %, nur 1 von 19 über 25 %
+    Wochenendsatz Comdirect 30/70/100  1,925 % / 0,543 % / 0,000 % p.a.
+    Anleihenquote ihrer Benchmark        85 %  /   50 %  /   15 %
+    Korrelation Wochenendanteil/Vola   -0,66 (je defensiver, desto mehr)
+    Wochenendsatz je negativ?          nie, auch 2015-2022 nicht (rf < 0)
+
+Die Wochenendwerte sind die KUPONABGRENZUNG des Anleihenteils. Deshalb
+bleiben sie positiv, wenn der Leitzins es nicht ist, und deshalb ordnen sie
+sich nach der Anleihenquote. Nur die 29 % stimmten — das ist der Anteil der
+Wochenend-ZEILEN (2/7 = 28,6 %), nicht der Anteil der Nullen.
+
+Damit ist die Reihe eine ECHTE Kalendertagreihe und √365 die dazu passende
+Konvention, keine Ungenauigkeit. √252 gehört zu einer Handelstagreihe, die
+hier nicht vorliegt. Nebenbei bleibt es dieselbe Basis, auf der `calc_vola`
+und die Kennzahlen-Kachel rechnen — zwei verschiedene Volatilitäten auf
+einem Bildschirm wären ohnehin nicht vertretbar.
+
+ACHTUNG BEI EINER KÜNFTIGEN LIEFERUNG: Kämen die Daten nur noch für
+Handelstage, wäre diese Begründung hinfällig — 365 Zeilen wären dann rund
+1,4 Jahre und √365 deutlich zu hoch. Schritt 6 schlägt in dem Fall an.
+
+Für ret_bm gilt die alte Aussage weiter und zu Recht: Der Index steht am
+Wochenende still (28,6 bis 30,6 % Nullen, an 100 % der Wochenenden). Siehe
+`has_benchmark` — dort ist sie richtig und muss stehen bleiben."""
 
 
 def rollierende_vola(daily_returns_after_fee: Sequence[float],

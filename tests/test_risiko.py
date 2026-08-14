@@ -16,10 +16,24 @@ derselbe Fehler wie ein Rumpfjahr als Jahresbalken (#51).
   3. risiko_perioden: nicht abgedeckte Perioden bleiben leer
   4. Tracking Error und Information Ratio, inkl. des 1e-12-Guards (#47)
   5. Die Oberflaeche rendert den Risiko-Block ohne Fehler (AppTest)
+  6. Die VORAUSSETZUNG der 365-Konvention: kalendertaeglich und lueckenlos
+
+SCHRITT 6 GIBT ES WEGEN DES AUDITS VOM 14.08.2026. Die Begruendung fuer
+sqrt(365) im Docstring von ROLL_FENSTER_TAGE war sachlich falsch: Sie
+behauptete, die Wochenenden traegen Rendite 0 ("rund 29 % aller Zeilen").
+Gemessen trifft das auf EINE von 19 Strategien zu — bei den uebrigen laeuft
+am Wochenende die Kuponabgrenzung des Anleihenteils.
+
+Die SCHLUSSFOLGERUNG war trotzdem richtig, aber aus einem anderen Grund:
+Die Reihen sind kalendertaeglich und lueckenlos, deshalb sind 365 Zeilen
+exakt ein Jahr. Genau DAS haelt dieser Schritt fest — nicht den Text des
+Docstrings, sondern die Eigenschaft der Daten, von der die Konvention
+abhaengt. Kaeme eine Lieferung mit nur noch Handelstagen, waeren 365 Zeilen
+rund 1,4 Jahre und sqrt(365) deutlich zu hoch; dann schlaegt er an.
 
 Schritte 1-4 brauchen nur numpy und pandas. Schritt 3 nutzt zusaetzlich die
 echten CSVs (streamlit) und ueberspringt diesen Teil sonst; Schritt 5
-braucht die AppTest-Umgebung.
+braucht die AppTest-Umgebung, Schritt 6 die echten CSVs.
 
     python tests/test_risiko.py
 """
@@ -378,12 +392,94 @@ def schritt5_apptest():
     return f
 
 
+def schritt6_kalendertaeglich():
+    """Die Voraussetzung der 365-Konvention, an den echten Daten.
+
+    Geprueft wird NICHT, was im Docstring steht, sondern woran er haengt:
+    Sind die Reihen kalendertaeglich und lueckenlos? Nur dann sind 365
+    Zeilen ein Jahr und sqrt(365) die richtige Annualisierung.
+    """
+    print("SCHRITT 6 — kalendertaeglich und lueckenlos (Basis fuer sqrt(365))")
+    try:
+        from modules.shared import (
+            DATA_FOLDER, EXCLUDE_SUBSTRINGS, build_portfolio_timeseries,
+            detect_newest_date_tag, load_all_csvs, load_mapping,
+        )
+    except ImportError as ex:
+        print(f"    UEBERSPRUNGEN — {ex}")
+        return 0
+
+    tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+    if tag is None:
+        print("    UEBERSPRUNGEN — keine CSVs vorhanden")
+        return 0
+    ts = build_portfolio_timeseries(
+        load_all_csvs(DATA_FOLDER, tag, EXCLUDE_SUBSTRINGS), load_mapping())
+
+    f = 0
+    luecken = []
+    nans = []
+    werktaganteil = []
+    for name in sorted(ts):
+        d = ts[name]
+        spanne = (d.index.max() - d.index.min()).days + 1
+        if spanne != len(d):
+            luecken.append((name, spanne - len(d)))
+        if int(d["ret_port"].isna().sum()):
+            nans.append((name, int(d["ret_port"].isna().sum())))
+        if d.index.has_duplicates:
+            print(f"    FEHLER — {name}: doppelte Datumszeilen")
+            f += 1
+        werktaganteil.append(float((d.index.dayofweek < 5).mean()))
+
+    if luecken:
+        f += 1
+        print(f"    FEHLER — {len(luecken)} Reihe(n) mit fehlenden Kalendertagen: "
+              f"{luecken[:3]}")
+        print("             365 Zeilen sind dann KEIN Jahr mehr; die "
+              "Begruendung fuer sqrt(365) bei ROLL_FENSTER_TAGE traegt nicht.")
+    else:
+        print(f"    OK — alle {len(ts)} Reihen lueckenlos "
+              "(Zeilenzahl = Kalendertage der Spanne)")
+
+    if nans:
+        f += 1
+        print(f"    FEHLER — NaN in ret_port: {nans[:3]}")
+    else:
+        print("    OK — kein NaN in ret_port")
+
+    # Eine Kalendertagreihe hat rund 5/7 = 0,714 Werktage. Eine Lieferung mit
+    # NUR Handelstagen laege bei rund 1,0 — dann waeren 365 Zeilen rund 1,4
+    # Jahre. Schwelle 0,80: deutlich ueber 5/7, sicher unter jeder
+    # denkbaren Handelstagreihe.
+    schlimmster = max(werktaganteil)
+    if schlimmster > 0.80:
+        f += 1
+        print(f"    FEHLER — Werktaganteil bis {schlimmster:.3f} — die Reihen "
+              "sehen nach Handelstagen aus, nicht nach Kalendertagen.")
+        print("             365 Zeilen waeren dann rund 1,4 Jahre und "
+              "sqrt(365) deutlich zu hoch.")
+    else:
+        print(f"    OK — Werktaganteil hoechstens {schlimmster:.3f} "
+              f"(erwartet rund {5/7:.3f} = Kalendertage)")
+
+    # Gegenprobe zur Konvention selbst: ROLL_FENSTER_TAGE muss zu einem
+    # Kalenderjahr passen, nicht zu einem Handelsjahr.
+    if ROLL_FENSTER_TAGE != 365:
+        f += 1
+        print(f"    FEHLER — ROLL_FENSTER_TAGE ist {ROLL_FENSTER_TAGE}, "
+              "passt nicht zu einer Kalendertagreihe")
+    else:
+        print("    OK — ROLL_FENSTER_TAGE = 365 passt zur Kalendertagreihe")
+    return f
+
+
 def main():
     print("Pruefstein: Risiko-Kennzahlen\n")
     fehler = 0
     for schritt in (schritt1_konsistenz, schritt2_degeneriert,
                     schritt3_perioden, schritt4_tracking_error,
-                    schritt5_apptest):
+                    schritt5_apptest, schritt6_kalendertaeglich):
         fehler += schritt()
         print()
     if fehler:
