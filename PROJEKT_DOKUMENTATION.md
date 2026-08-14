@@ -2206,6 +2206,62 @@ Prüfstein: `tests/test_monatsrenditen.py`, Schritte 7–9. Stellschrauben:
 
 ---
 
+### 54. Ein Test auf das Diagramm-Objekt ist kein Test auf das Diagramm (BUG, NEU 14.08.2026) ⭐
+
+Die Bandbreiten-Ansicht war am Bildschirm unbrauchbar: Vier Zeilen zu einem
+Strich am unteren Rand zusammengefallen, die Zahlen übereinander gedruckt
+(`+0,5+0,7`), darüber eine Bildschirmhöhe Leerraum. **Alle Prüfsteine waren
+grün.**
+
+Sie lasen `z`, `text` und `y` aus dem Plotly-Figur-Objekt — also die **Daten**
+und behaupteten damit, die Grafik sei in Ordnung. Die **Geometrie** entsteht
+aber erst beim Rendern, und zwar aus Voreinstellungen, die niemand gesetzt
+hatte.
+
+**Zwei Ursachen, beide dieselbe Art Fahrlässigkeit:**
+
+1. **Der Achsentyp war nicht gesetzt.** `fig.layout.yaxis.type` war `None`,
+   Plotly entscheidet dann anhand der Werte. Die y-Beschriftungen waren
+   `["17J-Hoch", "17J-Mittel", "17J-Tief", "2026"]` — drei echte Strings und
+   ein **zahlartiger**. Sobald `"2026"` als Zahl gelesen wird, spannt die
+   Achse bis 2026, und vier Kategorien schrumpfen auf einen Streifen.
+
+2. **Annotationen wurden über Beschriftungstexte platziert** (`y="2026"`)
+   statt über Koordinaten (`y=3`). Das verlangt vom Renderer eine **zweite
+   Namensauflösung** gegen die Kategorienliste — und die kann scheitern, ohne
+   dass jemand es merkt. Dieselbe Klasse wie das nicht greifende
+   `majorTimeUnit` (#49), der ins Leere laufende Disclaimer-Anker (§15 H) und
+   der stillschweigend ignorierte Auswahlfeld-Wert (#53).
+
+**Nebenbefund, den erst die Reparatur zutage brachte:** Bei `go.Heatmap`
+gehört `z[0]` zu `y[0]` und wird **unten** gezeichnet. Die Zeilenlisten waren
+in Leserichtung gebaut (jüngstes Jahr zuerst) und wurden ungedreht übergeben —
+die Jahr-für-Jahr-Matrix zeigte also **2026 unten und die Ø-Zeile oben**,
+genau verkehrt herum. Das lief seit dem ersten Tag mit und ist niemandem
+aufgefallen, weil 2009–2026 gleichmäßig gestaffelt sind und eine umgedrehte
+Leiter aus der Ferne wie eine richtige aussieht.
+
+**Übertragbar — drei Sätze:**
+
+1. **Wer eine Achse nicht typisiert, überlässt die Darstellung einer
+   Heuristik.** Die rät meistens richtig — und genau deshalb fällt der Fall,
+   in dem sie falsch rät, erst spät auf. `type="category"` kostet eine Zeile.
+2. **Wer ein Element über einen Beschriftungstext positioniert, hat eine
+   Namensauflösung eingebaut, die scheitern kann.** Koordinaten können das
+   nicht.
+3. **Ein Test, der die Eingabe einer Bibliothek prüft, prüft nicht ihr
+   Ergebnis.** Für Diagramme heißt das: Nicht nur `data` lesen, sondern
+   `layout` — Achsentyp, Kategorienreihenfolge, Koordinatentypen der
+   Annotationen. Und wo möglich das Ergebnis **ansehen**: `fig.write_html()`
+   braucht kein Kaleido und liefert in einer Sekunde eine Datei, die man im
+   Browser öffnen kann, bevor die Anwendung überhaupt startet.
+
+Prüfstein: `tests/test_monatsrenditen.py`, **Schritt 8** — er prüft
+ausschließlich das Layout. Nachgestellt gegen den alten Stand meldet er
+sofort vier Abweichungen.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -3274,6 +3330,75 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 14.08.2026 (spät) – Renderfehler behoben, Bandbreite nach Spezifikation
+
+Philip hat die Bandbreiten-Ansicht am Bildschirm gesehen. Zwei Befunde: Sie
+**rendert kaputt**, und sie **entspricht nicht der Bloomberg-Vorlage**, die er
+kennt.
+
+**DER RENDERFEHLER.** Vier Zeilen zu einem Strich zusammengefallen, Zahlen
+übereinander, die Jahresspalten-Annotation allein am oberen Rand. Ursache:
+`fig.layout.yaxis.type` war `None` — Plotly riet den Achsentyp, und die
+Mischung aus echten Strings (`17J-Hoch`) und einem zahlartigen (`2026`)
+sprengte den Achsenbereich. Dazu wurden Annotationen über
+Beschriftungs**texte** platziert statt über Koordinaten.
+
+**Alle Prüfsteine waren dabei grün** — sie lasen `z`, `text` und `y` aus dem
+Figur-Objekt, also die Daten. Die Geometrie entsteht erst beim Rendern. Das
+ist Transferwissen **#54**, und der neue **Schritt 8** prüft jetzt
+ausschließlich das `layout`: Achsentyp, Kategorienreihenfolge, Spaltenzahl,
+Koordinatentypen der Annotationen. Gegen den alten Stand nachgestellt meldet
+er sofort vier Abweichungen.
+
+**Nebenbefund aus der Reparatur:** Bei `go.Heatmap` wird `z[0]` **unten**
+gezeichnet. Die Zeilenlisten kamen in Leserichtung und wurden ungedreht
+übergeben — die Jahr-für-Jahr-Matrix zeigte also **2026 unten und Ø oben**,
+verkehrt herum, seit dem ersten Tag. Jetzt wird an genau einer Stelle bewusst
+umgedreht.
+
+**DIE SPEZIFIKATION.** Philips Vorgabe wich an acht Stellen ab. Entscheidend
+war eine: Meine Fassung war um die **Jahresspalte** herum gebaut — geometrisches
+Mittel und „nur vollständige Jahre" waren die Bedingung dafür, dass sich die
+Zeile zu dieser Spalte verkettet. Seine Vorlage hat zwölf Spalten und keine
+Jahresspalte. Fällt sie weg, fällt der Grund weg, und sein Paket ist zugleich
+das konventionelle (Bloomberg, TradingView):
+
+| | neu | vorher |
+|---|---|---|
+| Mittelwert | **arithmetisch** (Summe / Anzahl) | geometrisch |
+| Spalten | **12** | 13 (mit „Jahr") |
+| fehlende Werte | **je Monat tolerant** | nur vollständige Kalenderjahre |
+| Fenster | **fest 5 Jahre** | folgte der Zeitraum-Schnellwahl |
+| Farbskala | **datengetrieben**, symmetrisch | fest ±3 % |
+| Format | **2 Nachkommastellen, kein Plus** | 1 Stelle, mit Plus |
+
+Die Ø-Zeile der Ansicht „Jahr für Jahr" rechnet **weiterhin geometrisch** —
+dort gibt es die Jahresspalte, und die Verkettungs-Zusage aus Runde 2 gilt
+unverändert. Damit stehen zwei verschiedene Mittelwerte im selben Werkzeug;
+der Hover der Mittel-Zeile nennt deshalb **beide** (arithmetisch 0,85 %,
+geometrisch 0,82 %). Ein unerklärter Unterschied wäre schlimmer als eine Zahl
+mehr im Hover.
+
+**Untergrenze weg, Vorbehalt hin.** Statt bei zu wenig Historie zu
+verweigern, wird gerechnet und ehrlich beschriftet: `2J Hoch` statt `5J Hoch`.
+Unter drei Vergleichsjahren erscheint ein Hinweis. Betroffen: die drei
+comdirect-Strategien und *Pro Dividende*.
+
+**Hover nach Vorlage:** „März — Hoch von 2021–2025 · Rendite: 2,83 % · Jahr:
+2021 · Zeitraum: 28.02.2021 – 31.03.2021". Der Zeitraum beginnt am **Schluss
+des Vormonats** — so misst eine Monatsrendite, und so steht es auch in
+Philips Vorlage.
+
+**Plumbing vereinfacht:** Weil das Fenster fest ist, fallen `band_von`,
+`band_bis` und `band_jahre` aus der Vorrunde **ersatzlos** weg. Und
+`_zeilen_tabelle` baut die Tabelle jetzt aus **denselben Zeilen** wie die
+Figur — vorher gab es zwei Wege zu denselben Zahlen.
+
+**Beweise:** `ui_dump` vorher/nachher zeichengleich; alle 21 Suiten grün;
+`pyflakes` bei null; der Broschüren-Pfad unberührt. Die Figur wurde
+zusätzlich als HTML ausgegeben und **angesehen** — der Schritt, der in der
+Vorrunde gefehlt hat.
 
 ### 14.08.2026 (abends) – Bandbreiten-Ansicht nach Bloomberg-Vorbild
 
