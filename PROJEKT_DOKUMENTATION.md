@@ -2114,6 +2114,36 @@ nie allein tragen darf —, muss die Skala so wählen, dass **eine** Textfarbe
 Stützstellen, schlechtester Kontrast 5,37:1, WCAG AA verlangt 4,5:1. Eine
 Skala mit kräftigen dunklen Enden hätte das nicht geschafft.
 
+**Vierter Satz, nachgetragen am 14.08.2026 nach der Sichtprüfung: Eine
+Farbskala ist erst fertig, wenn man weiß, wo die Daten LIEGEN — nicht, wo
+sie enden.**
+
+Die Grenzen kamen aus dem 95. Perzentil der Beträge (5,28 % absolut). Das
+ist eine saubere Zahl und beantwortet eine sinnvolle Frage: *Was schneide
+ich ab?* Nur war es die falsche Frage. Philips Rückmeldung lautete „wirkt zu
+blass", und die Ursache saß in der Mitte der Verteilung: Der typische Monat
+bringt rund **1,2 %**. Bei einer Grenze von 5 % sitzt er damit bei 24 %
+Sättigung — die ganze Matrix ist blass, obwohl kein einziger Wert
+abgeschnitten wird.
+
+| | Grenze aus P95 (±5 %) | Grenze aus dem Median (±3 %) |
+|---|---:|---:|
+| typischer Monat (1,2 %) | 24 % Sättigung | 40 % |
+| guter Monat (2,0 %) | 40 % | 67 % |
+| starker Monat (3,0 %) | 60 % | 100 % |
+
+**Ein Perzentil am Rand sagt, was nicht verloren geht; über die Wirkung
+entscheidet die Mitte.** Wer eine Skala kalibriert, braucht beide Enden der
+Frage: Wo liegt die Masse (bestimmt die Grenze), und was darf aussättigen
+(bestimmt, ob man damit leben kann). Aussättigen ist erlaubt, solange der
+Betrachter es SIEHT — deshalb tragen die Enden der Farblegende „≤" und „≥".
+Ohne diese beiden Zeichen sähe der dunkelste Ton wie der Höchstwert aus.
+
+Und die Gegenrechnung gehört dazu: Kräftigere Farben allein hätten das
+Problem nicht gelöst (die vielen kleinen Monate blieben blass) und hätten
+den Kontrast gekostet — Signalfarben liegen bei 3,20:1 statt der
+geforderten 4,5:1.
+
 Prüfsteine: `tests/test_monatsrenditen.py`, `tests/test_risiko.py`.
 Stellschrauben: `_ist_voller_monat`, `MONAT_RAND_TOLERANZ_TAGE`,
 `ROLL_FENSTER_TAGE` in `modules/analytics.py`; `HEATMAP_*` in
@@ -3189,6 +3219,82 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 14.08.2026 (nachmittags) – Heatmap-Feinschliff aus der Sichtprüfung
+
+Philip hat die Heatmap am Bildschirm gesichtet. Fünf Befunde, **keiner davon
+durch einen Test auffindbar** — genau dafür ist die Sichtprüfung da.
+
+**1. „Die Skala wirkt zu blass."** Grenzen von ±5 % auf **±3 %** (absolut)
+und von ±2,5 % auf **±1,5 %** (Differenz), dazu etwas sattere Endfarben
+(`#C06B58` / `#6B9153` statt `#C77B6B` / `#7A9B68`). Der Hebel lag bei den
+Grenzen, nicht bei den Farben — die Herleitung steht als vierter Satz bei
+Transferwissen **#52**. Der Kontrast wurde erneut über 21 Stützstellen
+nachgerechnet: **4,55:1**, knapp über den 4,5:1 der WCAG AA. Weiter geht es
+nicht; Signalfarben lägen bei 3,20:1.
+
+**2. Der Zeitraum greift jetzt.** Die Heatmap folgt der Schnellwahl oben —
+eine Umkehr der Entscheidung vom Vormittag, und sie ist erst jetzt
+gefahrlos: Die Sternchen-Kennzeichnung, die es damals noch nicht gab, macht
+die entstehenden Rumpfmonate am Zeitraum-Rand sichtbar.
+
+Die Umsetzung darf **nicht** über `sd`/`sd_vor` laufen. Die sind auf `mind`
+geklemmt, und `mind` ist bei aktivem Vergleichsportfolio die **Schnittmenge**
+beider Historien — *Muster ausgewogen cVV* verlöre bei „Seit Auflage"
+fünfzehn Jahre, sobald jemand eine junge Strategie danebenstellt. Der
+Zeitraum wird deshalb eigens abgeleitet, und `None` heißt „Rand der
+jeweiligen Reihe". Der Zuschnitt selbst passiert in `zeige_monatsheatmap`,
+damit beide Reihen ihn unabhängig bekommen. Ein AppTest-Schritt nagelt genau
+diesen Fall fest.
+
+**Bewusst nicht gekoppelt:** Risiko-Block und Vola-Chart. Die Zeilen der
+Risiko-Tabelle **sind** die Zeiträume — eine „10 Jahre"-Zeile in einer
+Drei-Jahres-Auswahl wäre in sich widersprüchlich, und der Vola-Chart bräuchte
+ein Jahr Vorlauf, das es bei „1 Jahr" nicht gäbe. Steht als Kommentar und als
+Caption dort.
+
+**3. Farblegende.** Waagerecht unter der Matrix, die Enden mit **„≤" und
+„≥"** beschriftet. Rund 15 % der Monate sättigen bei ±3 % aus; ohne diese
+beiden Zeichen sähe der dunkelste Ton wie der Höchstwert aus.
+
+**4. Texte.** `„Mrz"` → `„März"`, dazu `MONATSNAMEN_LANG`/`monat_lang` für
+Fließtexte („bester: April 2020" statt „bester Monat Apr 2020"). Captions
+gestrafft, Quote mit einer statt zwei Nachkommastellen. Die
+Sternchen-Fußnote **musste** ohnehin neu, weil ein angebrochener Monat jetzt
+auch vom Zeitraum-Rand kommen kann.
+
+**5. Der Vergleichs-Haken ist immer sichtbar**, ausgegraut statt versteckt,
+wenn oben kein Vergleichsportfolio läuft. Vorher konnte man nicht wissen,
+dass es die Möglichkeit gibt.
+
+**Dazu zwei Ergänzungen:**
+
+- **Ø-Zeile je Kalendermonat** (geometrisches Mittel, ausschließlich über
+  **vollständige** Kalenderjahre). Die Beschränkung ist keine Vorsicht,
+  sondern die Bedingung dafür, dass sich die Ø-Zeile exakt zu ihrem eigenen
+  Ø-Jahr verkettet — dieselbe Zusage wie bei jeder anderen Zeile. Der Beweis
+  hängt daran, dass für alle zwölf Monate dieselbe Jahresmenge zugrunde
+  liegt. An *Muster ausgewogen cVV* gemessen: 17 volle Jahre, Verkettung
+  5,16079 %, Ø-Jahr 5,16079 %, Abweichung 4,4e-16.
+- **Haken „Tabelle anzeigen"** unter jeder Matrix, nach dem Muster des
+  Balken-Charts — aus einem Plotly-Chart bekommt man keine Zahlen heraus.
+
+**Beweise:**
+
+- **`ui_dump` vorher/nachher zeichengleich.** Die Standardansicht hat sich
+  nicht um ein Zeichen geändert; die Heatmap ist standardmäßig aus.
+- **Der Broschüren-Pfad ist unberührt** — belegt statt behauptet: Alle
+  geänderten Symbole (`MONATSNAMEN_*`, `monat_*`, `monats_durchschnitt`,
+  `HEATMAP_*`) erreichen ausschließlich `risiko_ansicht.py`. `analytics.py`,
+  `formats.py` und `shared.py` sind zwar Export-Module, aber es wurde dort
+  nur ergänzt, nichts geändert.
+- Alle **21 Suiten grün**, `pyflakes` bei null.
+
+**Zwei eigene Fehler, die dabei auffielen** — beide in Tests, nicht im Code:
+Die Kennzeilen-Prüfung verglich `"bester Monat"` gegen einen
+kleingeschriebenen String und konnte nie zutreffen; und die Prüfung „kommen
+die Monatsnamen aus `strftime`?" fand per Textsuche die **Warnung im
+Docstring**, die genau davor warnt. Sie läuft jetzt über den Syntaxbaum.
 
 ### 14.08.2026 – Monatsrenditen-Heatmap und Risiko-Überblick
 

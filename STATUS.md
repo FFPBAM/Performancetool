@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 14.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 66 Commits vor `main`
+· 71 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -151,12 +151,15 @@ Der angenehme Nebeneffekt: Beim Vergleich zweier Strategien fällt der
 Zeitraum, in dem die jüngere noch nicht lief, **von selbst** weg.
 
 **2. Der Zuschnitt hätte fünfzehn Jahre gekostet.** Die Blöcke rechnen auf
-den **ungeschnittenen** Reihen. `df1`/`df2` sind zweifach beschnitten — auf
-die Zeitraum-Schnellwahl und, sobald das Vergleichsportfolio läuft, per
-Inner-Join auf die gemeinsamen Handelstage. *Muster ausgewogen cVV* (ab 2009)
-gegen *Comdirect 100* (ab 2024) hätte so die gesamte Historie bis 2024
-verloren. Die Heatmap zeigt deshalb **immer die volle Historie**, unabhängig
-vom gewählten Zeitraum; eine Caption sagt das ausdrücklich.
+den **ungeschnittenen** Reihen und schneiden selbst. `df1`/`df2` sind
+zweifach beschnitten — auf die Zeitraum-Schnellwahl und, sobald das
+Vergleichsportfolio läuft, per Inner-Join auf die gemeinsamen Handelstage.
+*Muster ausgewogen cVV* (ab 2009) gegen *Comdirect 100* (ab 2024) hätte so
+die gesamte Historie bis 2024 verloren.
+
+*(Am 14.08. nachmittags geändert: Die Heatmap **folgt** jetzt dem gewählten
+Zeitraum — siehe „Nachgeschärft" weiter unten. Der Schutz vor der
+Schnittmenge bleibt aber genau derselbe.)*
 
 **3. `historie_beschneiden` lag am falschen Ort.** Die Funktion stand in
 `portfolioanalyse.py` und griff deshalb **nur im Broschüren-Export**. Ohne
@@ -208,6 +211,72 @@ eingebetteten Arbeitsmappen — an einem Beispiel nachgewiesen, dass nach
 Entfernen von `dcterms:created`/`modified` Zeichengleichheit besteht.
 `ui_dump` vorher/nachher: **genau eine** geänderte Zeile, die neue
 Sidebar-Überschrift. Alle 21 Suiten grün, `pyflakes` bei null.
+
+### Nachgeschärft nach der Sichtprüfung (14.08. nachmittags)
+
+Philip hat die Heatmap am Bildschirm gesichtet. **Fünf Befunde, keiner davon
+durch einen Test auffindbar** — genau dafür ist die Sichtprüfung da.
+
+| Befund | Was daraus wurde |
+|---|---|
+| „Skala wirkt zu blass" | Grenzen von ±5 % auf **±3 %** (Differenz ±2,5 % → **±1,5 %**), Endfarben etwas satter. Der Hebel lag bei den **Grenzen**, nicht bei den Farben — Details unten. |
+| Zeitraum soll greifen | Die Heatmap **folgt jetzt der Schnellwahl** oben. Risiko-Block und Vola-Chart bewusst nicht. |
+| „Mrz" → „März" | Dazu ausgeschriebene Monatsnamen in Fließtexten und gestraffte Captions. |
+| Farblegende fehlt | Waagerecht unter der Matrix, Enden mit **„≤" und „≥"**. |
+| Vergleichs-Option unsichtbar | Der Haken steht jetzt **immer** da, ausgegraut statt versteckt. |
+
+Dazu zwei Ergänzungen: eine **Ø-Zeile je Kalendermonat** und ein Haken
+**„Tabelle anzeigen"** unter jeder Matrix.
+
+**Warum die Skala blass wirkte — die Lehre ist methodisch.** Die Grenzen kamen
+aus dem 95. Perzentil der Beträge (5,28 %). Saubere Zahl, falsche Frage: Ein
+Perzentil am Rand beantwortet „was schneide ich ab?". Über die Wirkung
+entscheidet die **Mitte**, und der typische Monat bringt nur **1,2 %**:
+
+| | Grenze aus P95 (±5 %) | Grenze aus dem Median (±3 %) |
+|---|---:|---:|
+| typischer Monat (1,2 %) | 24 % Sättigung | 40 % |
+| guter Monat (2,0 %) | 40 % | 67 % |
+| starker Monat (3,0 %) | 60 % | 100 % |
+
+Kräftigere Farben allein hätten es nicht gelöst — die vielen kleinen Monate
+wären blass geblieben — und sie kosten Kontrast. Nachgerechnet über 21
+Stützstellen: **4,55:1**, knapp über den 4,5:1 der WCAG AA. Signalfarben
+lägen bei 3,20:1, und die Zahl in der Zelle ist die eigentliche Aussage.
+Rund 15 % der Monate sättigen jetzt aus; deshalb tragen die Enden der
+Legende „≤" und „≥".
+
+**Beim Zeitraum lauerte dieselbe Falle wie am Vormittag.** Die Kopplung darf
+**nicht** über `sd`/`sd_vor` laufen: Die sind auf `mind` geklemmt, und `mind`
+ist bei aktivem Vergleichsportfolio die **Schnittmenge** beider Historien.
+Ein naives „folgt dem Zeitraum" hätte *Muster ausgewogen cVV* bei
+„Seit Auflage" wieder auf 2024 gestutzt, sobald jemand *Comdirect 100*
+danebenstellt. Der Zeitraum wird deshalb eigens abgeleitet; `None` heißt
+„Rand der jeweiligen Reihe". Ein AppTest-Schritt nagelt genau diesen Fall
+fest.
+
+**Nicht gekoppelt sind Risiko-Block und Vola-Chart**, und das ist keine
+Nachlässigkeit: Die Zeilen der Risiko-Tabelle **sind** die Zeiträume — eine
+„10 Jahre"-Zeile in einer Drei-Jahres-Auswahl widerspräche sich selbst. Und
+der Vola-Chart bräuchte ein Jahr Vorlauf, das es bei „1 Jahr" nicht gäbe.
+
+**Die Ø-Zeile hat eine hübsche Eigenschaft.** Geometrisch gemittelt und
+ausschließlich über **vollständige** Kalenderjahre, verkettet sie sich exakt
+zu ihrem eigenen Ø-Jahr — dieselbe Zusage wie bei jeder anderen Zeile. Der
+Beweis hängt daran, dass für alle zwölf Monate dieselbe Jahresmenge zugrunde
+liegt; deshalb die Beschränkung. An *Muster ausgewogen cVV* gemessen: 17
+volle Jahre, Verkettung 5,16079 %, Ø-Jahr 5,16079 %, Abweichung 4,4e-16.
+
+**Beweise.** `ui_dump` vorher/nachher **zeichengleich** — die Standardansicht
+hat sich nicht um ein Zeichen geändert. Der Broschüren-Pfad ist belegbar
+unberührt: Alle geänderten Symbole erreichen ausschließlich
+`risiko_ansicht.py`. Alle 21 Suiten grün, `pyflakes` bei null.
+
+*(Zwei eigene Fehler fielen dabei auf, beide in Tests statt im Code: Die
+Kennzeilen-Prüfung verglich „bester Monat" gegen einen kleingeschriebenen
+String und konnte nie zutreffen; und die Prüfung „kommen die Monatsnamen aus
+`strftime`?" fand per Textsuche die **Warnung im Docstring**, die genau davor
+warnt. Sie läuft jetzt über den Syntaxbaum.)*
 
 ### Der Säulen-Chart zeigte vier Monate als Jahresbalken
 
@@ -474,18 +543,19 @@ fehlte. **Wer eine SCHWEIZ-Broschüre vor dem 11.08.2026 verschickt hat, hat zu
 gute Zahlen verschickt.** Prüfstein `tests/test_honorarsatz.py` schlägt künftig
 an, sobald eine Strategie ohne Satz dasteht.
 
-### Die Bilanz des Branches (gemessen 14.08.2026, gegen `main`)
+### Die Bilanz des Branches (gemessen 14.08.2026 nachmittags, gegen `main`)
 
 | | Zeilen |
 |---|---:|
-| Produktivcode (15 Dateien inkl. `risiko_ansicht.py`) | +3.630 / −3.640 → **netto −10** |
-| Tests (22 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+5.725** |
-| Dokumentation (8 Dateien) | +3.241 / −87 |
+| Produktivcode (15 Dateien inkl. `risiko_ansicht.py`) | +3.904 / −3.640 → **netto +264** |
+| Tests (22 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+5.959** |
+| Dokumentation (8 Dateien) | +3.430 / −87 |
 
-Der Produktivcode ist mit dem Stand von `main` praktisch gleichauf — bei
-deutlich mehr Funktion, und mit einem Netz darunter, das es vorher gar nicht
-gab. *(Am 12.08. stand hier „netto −974"; die Heatmap und der Risiko-Block
-haben rund 960 Zeilen dazugelegt. Gemessen, nicht geschätzt.)*
+Der Produktivcode liegt damit gut 260 Zeilen über `main` — bei erheblich mehr
+Funktion, und mit einem Netz darunter, das es vorher gar nicht gab.
+*(Verlauf: am 12.08. „netto −974", am 14.08. vormittags −10, jetzt +264. Die
+Heatmap und der Risiko-Block haben rund 1.240 Zeilen gebracht. Jedes Mal
+gemessen, nicht geschätzt.)*
 
 ### SCHWEIZ: der Vergleichsmaßstab war an drei Stellen noch da
 
@@ -588,7 +658,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
 | `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |
-| `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5+6 **+ streamlit** | Die Heatmap. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach (beide Toleranzränder, Schaltjahr-Februar, Loch im Monat, Ein-Tages-Monat), Schritt 2 nagelt fest, dass sich die Zeile zur Jahresspalte verkettet, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und nennt die sieben Auflagemonate namentlich |
+| `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–7 **+ streamlit** | Die Heatmap. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach (beide Toleranzränder, Schaltjahr-Februar, Loch im Monat, Ein-Tages-Monat), Schritt 2 nagelt fest, dass sich die Zeile zur Jahresspalte verkettet, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile (verkettet sich zum Ø-Jahr, nimmt nur volle Jahre), Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten, nennt die sieben Auflagemonate namentlich und prüft den Zeitraum-Zuschnitt an beiden Rändern, Schritt 7 fährt die Oberfläche hoch — inkl. „Seit Auflage" mit jungem Vergleichsportfolio, dem Fall, in dem die Schnittmenge fünfzehn Jahre fräße |
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16 |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
@@ -674,20 +744,25 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 **Es sind drei — alle liegen bei Philip.** Zwei weitere Punkte sind
 **bewusst zurückgestellt** und stehen darunter.
 
-1. **Heatmap und Risiko-Block am Bildschirm ansehen** *(neu 14.08.)*. Alle
-   Zahlen sind per Test belegt und die Figur ist strukturell nachgemessen —
-   aber **wie es aussieht, hat noch niemand gesehen**. Das ist genau die
-   Lücke, aus der am 12.08. viermal hintereinander ein Befund kam. Zu prüfen
-   wären besonders:
-   - **Light- und Dark-Mode.** Der Kontrast der Zellzahlen ist gerechnet
-     (5,37:1 im schlechtesten Fall), die Wirkung im Dark Mode nicht gesehen.
-   - Sind ±5 % und ±2,5 % als Skalengrenzen **optisch** richtig gewählt, oder
-     wirkt die Matrix zu blass bzw. zu grell? Beides sind einzelne Konstanten
-     in `shared.py` (`HEATMAP_GRENZE_*`).
-   - *Muster ausgewogen cVV*: 18 Jahreszeilen — ist die Heatmap dann noch
+1. **Die Nachschärfung am Bildschirm gegensehen** *(14.08. nachmittags)*.
+   Die erste Sichtprüfung ist erfolgt und hat fünf Befunde geliefert (oben);
+   alle sind umgesetzt. **Gesehen hat das Ergebnis aber noch niemand.**
+   Besonders:
+   - Wirkt die Skala jetzt kräftig genug? ±3 % und ±1,5 % sind je **eine**
+     Konstante in `shared.py` (`HEATMAP_GRENZE_*`) — eine Zeile, kein Umbau.
+   - **Light- und Dark-Mode**, vor allem die Zellzahlen auf den nun
+     gesättigten Feldern (gerechnet 4,55:1, gesehen nicht).
+   - Zeitraum-Schnellwahl durchklicken, jeweils mit und ohne
+     Vergleichsportfolio. Bei „Seit Auflage" + Vergleich muss *cVV
+     ausgewogen* weiterhin **ab 2009** stehen (per Test belegt, aber die
+     Caption sollte es auch zeigen).
+   - Sitzt die Farblegende sauber unter der Matrix — auch bei nur zwei
+     Jahreszeilen (Zeitraum „1 Jahr")?
+   - *Muster ausgewogen cVV*: 19 Zeilen inklusive Ø, 720 px hoch. Noch
      lesbar oder zu hoch?
-   - Sitzt die Jahresspalte rechts sauber neben der Matrix? Sie ist als
-     Plotly-Annotation gebaut, nicht als Zelle.
+   - Jahresspalte und Ø-Zeile: Beide sind Plotly-Annotationen bzw. eine
+     eigene y-Kategorie, nicht gewöhnliche Zellen.
+   - „Tabelle anzeigen" bei allen drei Matrizen gleichzeitig.
 
    ```
    .venv\Scripts\python.exe -m streamlit run streamlit_app.py
@@ -765,6 +840,11 @@ Kam aus keinem Backlog, sondern aus Philips Wunsch. Zwei neue Prüfsteine
 `tests/test_monatsrenditen.py` und `tests/test_risiko.py`, Transferwissen
 **#52**. Dabei ist `historie_beschneiden` von `portfolioanalyse.py` nach
 `analytics.py` gewandert — sie griff bis dahin nur im Broschüren-Export.
+
+**Nachmittags nachgeschärft** nach Philips Sichtprüfung: Skalengrenzen von
+±5 % auf ±3 %, Zeitraum-Kopplung, Farblegende, „März" statt „Mrz",
+Ø-Zeile je Kalendermonat, Haken „Tabelle anzeigen", Vergleichs-Haken immer
+sichtbar. Der vierte Satz von Transferwissen #52 kam daraus.
 
 **Erledigt am 12.08.2026 (abends, 3):** Der **Rumpfjahr-Balken** im
 Säulen-Chart — gemeldet an Pro, gefunden bei 7 von 19 Strategien. Kam aus
