@@ -74,25 +74,65 @@ def annual_to_daily_rate(annual_rate):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def annual_fee_to_daily_drag(fee_pa_decimal: float) -> float:
-    """Wandelt einen jährlichen Honorarsatz in eine äquivalente tägliche Belastung.
+    """Wandelt einen jährlichen Honorarsatz in die tägliche Belastung.
 
-    Formel: daily = (1 + fee_pa)^(1/365) - 1
+    Formel: daily = 1 - (1 - fee_pa)^(1/365)
+
+    Die Zusage dieser Formel: Ein Jahr ohne Marktbewegung kostet EXAKT den
+    Honorarsatz. Weil der Wert täglich SUBTRAHIERT wird, muss er so gewählt
+    sein, dass sich die 365 Abzüge zu genau `fee_pa` multiplizieren:
+
+        (1 - d)^365 = 1 - f      <=>     d = 1 - (1 - f)^(1/365)
+
+    KORRIGIERT AM 14.08.2026 (Audit-Befund B3). Vorher stand hier
+    `(1 + f)^(1/365) - 1` — dieselbe Umrechnung wie beim risikofreien Zins,
+    und genau das war der Fehler: `annual_to_daily_rate` beantwortet die
+    Frage „welcher Tagessatz wächst über 365 Tage auf 1 + f?" und passt
+    damit zu einer GUTSCHRIFT, die aufgezinst wird. Das Honorar wird
+    abgezogen. Aufzinsen und Abziehen sind nicht symmetrisch, deshalb kam
+    zu wenig heraus:
+
+        Satz p.a.   d (alt)       effektiv alt   d (neu)       effektiv neu
+        0,85 %      2,31895e-05      0,8429 %    2,33869e-05      0,8500 %
+        1,20 %      3,26816e-05      1,1858 %    3,30750e-05      1,2000 %
+        1,25 %      3,40349e-05      1,2346 %    3,44618e-05      1,2500 %
+        1,40 %      3,80909e-05      1,3807 %    3,86264e-05      1,4000 %
+        1,55 %      4,21409e-05      1,5264 %    4,27974e-05      1,5500 %
+        1,60 %      4,34896e-05      1,5749 %    4,41891e-05      1,6000 %
+
+    Das sind alle sechs im Bestand vorkommenden Sätze; die Spalte „effektiv
+    neu" trifft jeden davon auf die vierte Nachkommastelle genau — das ist
+    die Zusage von oben, nachgerechnet.
+
+    Über 17 Jahre summiert sich der Unterschied bei 1,55 % auf 31,3
+    Basispunkte (kumuliertes Honorar 23,010 % alt gegen 23,323 % neu) —
+    klein, aber systematisch und immer zugunsten des Hauses. Genau deshalb
+    war es nicht aufgefallen.
 
     Args:
-        fee_pa_decimal: Honorarsatz p.a. als Dezimal (z.B. 0.012 für 1,2% p.a.)
+        fee_pa_decimal: Honorarsatz p.a. als Dezimal (z.B. 0.012 für 1,2 %)
 
     Returns:
         Tägliche Belastung als Dezimal.
 
+    Raises:
+        ValueError: bei einem Satz von 100 % p.a. oder mehr — dort ist die
+            Formel nicht definiert. Über die Oberfläche unerreichbar (das
+            Eingabefeld deckelt bei 20 %), aber ein stiller Ersatzwert wäre
+            hier genau die Tarnung, die Befund B6 ausgelöst hat (#57).
+
     Examples:
-        >>> round(annual_fee_to_daily_drag(0.012), 8)
-        3.268e-05
+        >>> round(annual_fee_to_daily_drag(0.012), 12)
+        3.3075018e-05
+
+    Prüfstein: tests/test_kosten_mathematik.py
     """
-    # Dieselbe Umrechnung wie beim risikofreien Zins (siehe dort), aber mit
-    # sprechendem Namen: Diese Größe wird abgezogen, nicht gutgeschrieben.
-    # Bit-identisch zur früheren Fassung `(1.0 + fee) ** (1 / 365) - 1`
-    # (12.08.2026 an allen vorkommenden Sätzen nachgemessen).
-    return float(annual_to_daily_rate(fee_pa_decimal))
+    f = float(fee_pa_decimal)
+    if f >= 1.0:
+        raise ValueError(
+            f"Honorarsatz {f:.4f} (= {f * 100:.2f} % p.a.) ist nicht "
+            "darstellbar: Ab 100 % p.a. bliebe kein Vermögen übrig.")
+    return float(1.0 - (1.0 - f) ** (1.0 / 365.0))
 
 
 def calc_daily_returns_after_fee(d_returns_decimal: Sequence[float],

@@ -121,24 +121,48 @@ def schritt3_zahlen():
 
     # 1,55 % p.a. — der Satz der beiden SCHWEIZ-Strategien (11.08.2026).
     drag = annual_fee_to_daily_drag(0.0155)
-    erwartet = (1.0155) ** (1 / 365) - 1
+    erwartet = 1.0 - (1.0 - 0.0155) ** (1 / 365)
     if abs(drag - erwartet) > 1e-15:
         print(f"    FEHLER — Tagesbelastung {drag!r} statt {erwartet!r}")
         fehler += 1
     else:
         print(f"    OK — 1,55 % p.a. ergeben {drag*10000:.4f} Basispunkte/Tag")
 
-    # Ein Jahr ohne Marktbewegung muss exakt das Honorar kosten.
-    idx = make_index_after_fee([0.0] * 365, 0.0155, startwert=100.0)
-    if len(idx) != 366:
-        print(f"    FEHLER — {len(idx)} Werte statt 366 (n+1 inkl. Startwert)")
+    # EIN JAHR OHNE MARKTBEWEGUNG MUSS EXAKT DAS HONORAR KOSTEN.
+    #
+    # Hier stand bis zum 14.08.2026 ein Band: `if not (1.50 < verlust < 1.56)`,
+    # und die Fehlermeldung nannte "statt ~1,53". Der Kommentar sagte also
+    # "exakt", die Pruefung liess drei Basispunkte Spiel — angepasst an den
+    # Wert, der herauskam, statt an die Zusage. Genau in diesem Spielraum
+    # steckte Audit-Befund B3: Die alte Formel zog 1,5264 statt 1,5500 ab.
+    # Eine Toleranz, die den Fehler umschliesst, den sie finden soll, ist
+    # keine Pruefung.
+    #
+    # Jetzt wird der Satz SELBST als Sollwert verlangt, und zwar fuer alle
+    # sechs im Bestand vorkommenden Saetze.
+    for satz in (0.0085, 0.012, 0.0125, 0.014, 0.0155, 0.016):
+        idx = make_index_after_fee([0.0] * 365, satz, startwert=100.0)
+        if len(idx) != 366:
+            print(f"    FEHLER — {len(idx)} Werte statt 366 (n+1 inkl. Start)")
+            fehler += 1
+        verlust = (100.0 - float(idx[-1])) / 100.0
+        if abs(verlust - satz) > 1e-12:
+            print(f"    FEHLER — {satz*100:.2f} % p.a.: 365 Nulltage kosten "
+                  f"{verlust*100:.4f} % statt {satz*100:.4f} % "
+                  f"(Abweichung {(verlust-satz)*10000:+.2f} bp)")
+            fehler += 1
+        else:
+            print(f"    OK — {satz*100:.2f} % p.a.: 365 Nulltage kosten "
+                  f"exakt {verlust*100:.4f} %")
+
+    # Ein Satz von 100 % p.a. oder mehr ist nicht darstellbar und muss
+    # auffallen, statt still einen Ersatzwert zu liefern (#57).
+    try:
+        annual_fee_to_daily_drag(1.0)
+        print("    FEHLER — 100 % Honorar liefert stillschweigend einen Wert")
         fehler += 1
-    verlust = 100.0 - float(idx[-1])
-    if not (1.50 < verlust < 1.56):
-        print(f"    FEHLER — 365 Nulltage kosten {verlust:.4f} statt ~1,53")
-        fehler += 1
-    else:
-        print(f"    OK — 365 Nulltage kosten {verlust:.4f} von 100")
+    except ValueError:
+        print("    OK — 100 % Honorar wird abgelehnt statt still ersetzt")
 
     # Startwert 1.0 ist der Pfad der Wertentwicklungs-Folie.
     idx1 = make_index_after_fee([0.0] * 10, 0.0155, startwert=1.0)

@@ -113,12 +113,33 @@ def schritt1_bausteine():
     f += _nah("annual_to_daily_rate(0.03)", tag, 8.098629905317623e-05, 1e-18)
     f += _nah("365 Tage zurueckgerechnet", (1 + tag) ** 365 - 1, 0.03, 1e-12)
     f += _nah("0 % ergibt 0", float(annual_to_daily_rate(0.0)), 0.0)
-    # Derselbe Wert wie beim Honorar — die Mathematik ist identisch, nur die
-    # Groesse ist eine andere (der eine Satz wird abgezogen, der andere
-    # gutgeschrieben). Laufen die beiden auseinander, stimmt etwas nicht.
-    f += _ist("annual_fee_to_daily_drag == annual_to_daily_rate",
-              annual_fee_to_daily_drag(0.0155) == float(annual_to_daily_rate(0.0155)),
-              True)
+    # HIER STAND BIS ZUM AUDIT (14.08.2026) DAS GEGENTEIL:
+    #
+    #   "Derselbe Wert wie beim Honorar — die Mathematik ist identisch, nur
+    #    die Groesse ist eine andere (der eine Satz wird abgezogen, der
+    #    andere gutgeschrieben)."
+    #
+    # In diesem "nur" steckte Audit-Befund B3. Aufzinsen und Abziehen sind
+    # NICHT symmetrisch:
+    #
+    #   Gutschrift (rf):  (1 + d)^365 = 1 + r   ->  d = (1+r)^(1/365) - 1
+    #   Belastung (Fee):  (1 - d)^365 = 1 - f   ->  d = 1 - (1-f)^(1/365)
+    #
+    # Der rf-Tagessatz wird zwar auch subtrahiert (Excess Return), aber er
+    # muss sich als ZINS aufzinsen — deshalb bleibt dort (1+r).
+    #
+    # Die beiden MUESSEN jetzt auseinanderlaufen. Liefen sie wieder gleich,
+    # waere die alte Formel zurueck.
+    drag_f = annual_fee_to_daily_drag(0.0155)
+    rate_f = float(annual_to_daily_rate(0.0155))
+    f += _ist("Fee-Drag und rf-Umrechnung sind verschieden",
+              drag_f != rate_f, True)
+    f += _nah("Fee-Drag 1,55 %", drag_f, 1.0 - (1.0 - 0.0155) ** (1 / 365), 1e-18)
+    # Die Zusage der Fee-Formel: 365 Abzuege ergeben exakt den Jahressatz.
+    f += _nah("365 Abzuege ergeben den Satz", 1.0 - (1.0 - drag_f) ** 365,
+              0.0155, 1e-12)
+    # Und die Zusage der rf-Formel bleibt das Aufzinsen (schon oben geprueft).
+    f += _nah("rf-Satz zinst sich auf", (1 + rate_f) ** 365 - 1, 0.0155, 1e-12)
     # Reihe statt Einzelwert: der rf kommt als Zeitreihe.
     reihe_tag = annual_to_daily_rate([0.03, 0.0, 0.025])
     f += _ist("Reihe bleibt eine Reihe", len(reihe_tag), 3)
@@ -126,7 +147,7 @@ def schritt1_bausteine():
 
     # Nach-Kosten-Renditen: jeder Tag traegt denselben Abzug.
     netto = calc_daily_returns_after_fee([0.01, 0.02], 0.0155)
-    drag = (1.0155) ** (1 / 365) - 1
+    drag = 1.0 - (1.0 - 0.0155) ** (1 / 365)
     f += _nah("calc_daily_returns_after_fee[0]", netto[0], 0.01 - drag)
     f += _nah("calc_daily_returns_after_fee[1]", netto[1], 0.02 - drag)
 
@@ -379,11 +400,20 @@ def schritt6_umrechnung_nur_einmal():
                 else:
                     treffer.append(f"{pfad}:{nr}: {zeile.strip()}")
 
-    if in_erlaubter_datei != 1:
+    # SEIT DEM AUDIT (14.08.2026) SIND ES ZWEI, und das ist richtig so:
+    #   annual_to_daily_rate      (1 + r)^(1/365) - 1   Gutschrift, rf
+    #   annual_fee_to_daily_drag  1 - (1 - f)^(1/365)   Belastung, Honorar
+    # Vorher delegierte die zweite an die erste - genau darin steckte
+    # Befund B3. Es sind zwei verschiedene Fragen, also zwei Formeln.
+    # Entscheidend bleibt, dass BEIDE nur hier stehen: Der Wert unten
+    # ("treffer") muss leer sein.
+    ERWARTET = 2
+    if in_erlaubter_datei != ERWARTET:
         print(f"    FEHLER — in {erlaubt} steht die Umrechnung "
-              f"{in_erlaubter_datei}× statt genau einmal")
+              f"{in_erlaubter_datei}× statt genau {ERWARTET}×")
         return 1
-    print(f"    OK — {erlaubt} enthaelt sie genau einmal")
+    print(f"    OK — {erlaubt} enthaelt sie genau {ERWARTET}× "
+          "(Gutschrift und Belastung, bewusst getrennt)")
 
     if treffer:
         print(f"    FEHLER — {len(treffer)} weitere Fundstelle(n):")
