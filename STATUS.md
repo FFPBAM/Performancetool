@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 12.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 60 Commits vor `main`
+**Letzte Sitzung:** 14.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
+· 63 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -101,7 +101,7 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Toter Code** | ~1.900 Zeilen: `performance.py`, `macrobond_upload.py`, `generate_pf_pdf`, Platzhalter-Dateien. |
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
-| **Tests** | **19 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Tests** | **21 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
@@ -122,6 +122,92 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 | **Quelle im Disclaimer** | *(12.08.)* Hinweis von Philip an der Offensiv-Broschüre: Die Quellenangabe wird vom Disclaimer überdruckt. Am PowerPoint-Rendering nachgemessen: **16 von 16** Wertentwicklungs-Folien, alle sechs Vorlagen. Zwei Ursachen, beide behoben. Details unten. |
 | **Rumpfjahr im Säulen-Chart** | *(12.08.)* Hinweis von Philip an der Pro-Broschüre: Der Benchmarkvergleich zeigt ein Jahr **2023**, obwohl die Strategie erst seit 01.09.2023 läuft. Nachgemessen: **7 von 19** Strategien zeigten ihr angebrochenes Auflagejahr als vollen Jahresbalken. Details unten. |
 | **Anlagekriterien für Thema** | *(12.08.)* Die Excel kannte nur 14 Strategien — weil sie aus den PPTX-Vorlagen abgeleitet wurde und die Thema-Vorlage keinen Kriterien-Kasten hat. Offensiv, Pro und Pro Dividende sind jetzt drin (Werte von der Bank-Webseite) und erscheinen **im Tool**; die Broschüren bleiben byte-identisch. **17 von 19** — SCHWEIZ fehlt noch. |
+| **Monatsrenditen-Heatmap** | *(14.08.)* Neu im Tool: jeder Monat der Historie als eingefärbtes Feld, wahlweise als Differenz zur eigenen Benchmark oder zum Vergleichsportfolio. Geometrisch gerechnet, damit die Zeile sich zur Jahresspalte verkettet. Details unten. |
+| **Risiko im Überblick** | *(14.08.)* Rollierende Volatilität als Chart plus Volatilität, Sharpe, Tracking Error und Information Ratio je Zeitraum; dazu eine Max-Drawdown-Tabelle am bestehenden Drawdown-Block. Details unten. |
+
+### Heatmap und Risiko-Block: der Aufwand steckte in den ungleichen Historien
+
+Zwei neue Auswertungen im Tool (**nicht** in der Broschüre). In der Sidebar
+gibt es dafür eine eigene Gruppe **„Analysen"** mit vier Haken; die
+Vergleichsstrategie ist bewusst das **bestehende** Vergleichsportfolio, kein
+zweites Auswahlfeld.
+
+Die Darstellung war der kleinere Teil. Drei Dinge waren zu klären:
+
+**1. Angebrochene Monate — #51 eine Ebene feiner.** Jeder Auflagemonat ist
+angebrochen, und der laufende ist es bei *jeder* Strategie. Gemessen:
+**26 Stück** über alle 19 Reihen. Ohne Prüfung stünde in der Matrix ein
+20-Tage-Wert von comdirect als vollwertiger März 2024 — und bei *Muster FFPB
+Pro* ein 21-Tage-Wert von **−7,54 %** als Juli 2026.
+
+Behandelt werden sie **unterschiedlich, je nachdem was mit ihnen geschieht**:
+
+| | absolute Matrix | Differenz-Matrix |
+|---|---|---|
+| angebrochener Monat | steht mit `*` | **entfällt** |
+| warum | ist wahr für seine Tage | 20 Tage gegen 31 ist keine Differenz |
+
+Der angenehme Nebeneffekt: Beim Vergleich zweier Strategien fällt der
+Zeitraum, in dem die jüngere noch nicht lief, **von selbst** weg.
+
+**2. Der Zuschnitt hätte fünfzehn Jahre gekostet.** Die Blöcke rechnen auf
+den **ungeschnittenen** Reihen. `df1`/`df2` sind zweifach beschnitten — auf
+die Zeitraum-Schnellwahl und, sobald das Vergleichsportfolio läuft, per
+Inner-Join auf die gemeinsamen Handelstage. *Muster ausgewogen cVV* (ab 2009)
+gegen *Comdirect 100* (ab 2024) hätte so die gesamte Historie bis 2024
+verloren. Die Heatmap zeigt deshalb **immer die volle Historie**, unabhängig
+vom gewählten Zeitraum; eine Caption sagt das ausdrücklich.
+
+**3. `historie_beschneiden` lag am falschen Ort.** Die Funktion stand in
+`portfolioanalyse.py` und griff deshalb **nur im Broschüren-Export**. Ohne
+sie stünde in der Heatmap bei den fünf cVV-Strategien eine Zelle **Dez 2008
+mit genau einem Tag** — die beiden 2008er-Zeilen sind reine Indexbasis (#43).
+Sie ist nach `analytics.py` gewandert. Dieselbe Krankheit wie Backlog B/E/F,
+nur bei einer Regel statt bei einer Formel.
+
+**Die Differenz ist geometrisch** (Festlegung Philip). Nur so verkettet sich
+die Zeile exakt zur Jahresspalte:
+
+```
+Strategie  +10 %  +10 %   ->  +21,00 %
+Benchmark   +5 %   +5 %   ->  +10,25 %     Jahr: 1,21/1,1025 - 1 = +9,75 %
+
+geometrisch   1,10/1,05 - 1 = +4,76 % je Monat -> 1,0476² - 1 = +9,75 %  stimmt
+arithmetisch  10 - 5        = +5,00 PP je Monat -> Summe = +10,00 PP     passt nicht
+```
+
+Nachgemessen an allen 19 Strategien und allen Jahren: Abweichung durchweg
+unter 1e-10.
+
+**Der Risiko-Block** bringt die rollierende Volatilität über 365 Tage als
+Chart und je Strategie eine Tabelle (YTD/1/3/5/10 Jahre/seit Auflage) mit
+Volatilität, Sharpe Ratio, Tracking Error und Information Ratio. Die beiden
+Benchmark-Spalten **entfallen ganz** ohne hinterlegte Benchmark, statt eine
+Spalte aus lauter „–" zu zeigen. Eine Periode, die weiter zurückreicht als
+die Historie, bleibt leer — dort steht bewusst kein gekürzter Wert.
+
+Die rollierende Vola nutzt **dieselbe Formel wie `calc_vola`** (√365, nicht
+√252). Der letzte Punkt der Kurve trifft damit die Kennzahlen-Kachel darüber;
+ein eigener Testschritt nagelt das fest. Zwei verschiedene Volatilitäten auf
+einem Bildschirm wären schlimmer als jede Lehrbuch-Ungenauigkeit.
+
+**Farben.** Rot–neutral–grün, gedämpft, mit festen Grenzen bei ±5 % (absolut)
+und ±2,5 % (Differenz) — aus einer Messung über alle 19 Strategien (|Wert|
+P95 = 5,28 % bzw. 2,41 %). Fest und nicht datenabhängig, sonst färbte die
+Skala zwei Strategien unterschiedlich ein. In jeder Zelle steht die **Zahl**;
+`go.Heatmap` kann die Schriftfarbe nicht je Zelle setzen, deshalb wurde der
+Kontrast über elf Stützstellen nachgerechnet: schlechtester Wert **5,37:1**,
+WCAG AA verlangt 4,5:1.
+
+**Beweise.** Das Rot wurde nachgestellt: Mit der naiven Fassung
+(`return not sub.empty`) meldete der Prüfstein bei **allen 19 Strategien**
+angebrochene Monate als vollständig. Sieben Broschüren vorher/nachher
+verglichen (wegen des Funktions-Umzugs): 2056 ZIP-Einträge, **34
+Abweichungen, ausnahmslos Zeitstempel** in `docProps/core.xml` der
+eingebetteten Arbeitsmappen — an einem Beispiel nachgewiesen, dass nach
+Entfernen von `dcterms:created`/`modified` Zeichengleichheit besteht.
+`ui_dump` vorher/nachher: **genau eine** geänderte Zeile, die neue
+Sidebar-Überschrift. Alle 21 Suiten grün, `pyflakes` bei null.
 
 ### Der Säulen-Chart zeigte vier Monate als Jahresbalken
 
@@ -388,17 +474,18 @@ fehlte. **Wer eine SCHWEIZ-Broschüre vor dem 11.08.2026 verschickt hat, hat zu
 gute Zahlen verschickt.** Prüfstein `tests/test_honorarsatz.py` schlägt künftig
 an, sobald eine Strategie ohne Satz dasteht.
 
-### Die Bilanz des Branches (gemessen 12.08.2026, gegen `main`)
+### Die Bilanz des Branches (gemessen 14.08.2026, gegen `main`)
 
 | | Zeilen |
 |---|---:|
-| Produktivcode (14 Dateien) | +2.663 / −3.637 → **netto −974** |
-| Tests (20 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+4.798** |
-| Dokumentation (8 Dateien) | +2.926 / −87 |
+| Produktivcode (15 Dateien inkl. `risiko_ansicht.py`) | +3.630 / −3.640 → **netto −10** |
+| Tests (22 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+5.725** |
+| Dokumentation (8 Dateien) | +3.241 / −87 |
 
-Weniger Produktivcode bei mehr Funktion, und zum ersten Mal ein Netz darunter.
-*(Die frühere Angabe „netto etwa −1.800 Zeilen" stammte vom 11.08. und stimmt
-seit den Umbauten von heute nicht mehr — hier steht der gemessene Stand.)*
+Der Produktivcode ist mit dem Stand von `main` praktisch gleichauf — bei
+deutlich mehr Funktion, und mit einem Netz darunter, das es vorher gar nicht
+gab. *(Am 12.08. stand hier „netto −974"; die Heatmap und der Risiko-Block
+haben rund 960 Zeilen dazugelegt. Gemessen, nicht geschätzt.)*
 
 ### SCHWEIZ: der Vergleichsmaßstab war an drei Stellen noch da
 
@@ -501,6 +588,8 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
 | `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |
+| `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5+6 **+ streamlit** | Die Heatmap. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach (beide Toleranzränder, Schaltjahr-Februar, Loch im Monat, Ein-Tages-Monat), Schritt 2 nagelt fest, dass sich die Zeile zur Jahresspalte verkettet, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und nennt die sieben Auflagemonate namentlich |
+| `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16 |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -522,6 +611,8 @@ python tests/test_folien_config.py
 python tests/test_chartachsen.py [C:\pfad\zur\ausgabe]
 python tests/test_quelle_position.py [C:\pfad\zur\ausgabe]
 python tests/test_kalenderjahre.py
+python tests/test_monatsrenditen.py
+python tests/test_risiko.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
@@ -533,7 +624,7 @@ dem System-Python gestartet (hat pandas und numpy, aber **kein** streamlit und
 | Verhalten ohne streamlit/pptx | Suiten |
 |---|---|
 | laufen vollständig durch | `test_analytics`, `test_formats`, `test_kosten_mathematik`, `test_benchmark_erkennung`, `test_streamlit_api`, `test_keine_piktogramme` |
-| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_chartachsen`, `test_kalenderjahre` |
+| laufen, überspringen ihre AppTest-/PPTX-Schritte | `test_anlagekriterien`, `test_app_titel`, `test_legende_musterdepot`, `test_benchmark_charts`, `test_chartachsen`, `test_kalenderjahre`, `test_monatsrenditen`, `test_risiko` *(beide neu am 14.08.)* |
 | überspringen sich ganz (Rückgabewert 0) | `test_bedienung`, `test_historie_ab`, `test_honorarsatz`, `test_export_smoke`, `test_trennstriche`, `test_folien_config`, `test_quelle_position` |
 | **brechen ab** | keine |
 
@@ -580,11 +671,29 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind nur noch zwei — beide liegen bei Philip.** Alle Sichtprüfungen
-sind erledigt (siehe oben, zuletzt der Säulen-Chart am 12.08. abends); zwei
-weitere Punkte sind **bewusst zurückgestellt** und stehen darunter.
+**Es sind drei — alle liegen bei Philip.** Zwei weitere Punkte sind
+**bewusst zurückgestellt** und stehen darunter.
 
-1. **PR mergen** — alles andere hängt daran.
+1. **Heatmap und Risiko-Block am Bildschirm ansehen** *(neu 14.08.)*. Alle
+   Zahlen sind per Test belegt und die Figur ist strukturell nachgemessen —
+   aber **wie es aussieht, hat noch niemand gesehen**. Das ist genau die
+   Lücke, aus der am 12.08. viermal hintereinander ein Befund kam. Zu prüfen
+   wären besonders:
+   - **Light- und Dark-Mode.** Der Kontrast der Zellzahlen ist gerechnet
+     (5,37:1 im schlechtesten Fall), die Wirkung im Dark Mode nicht gesehen.
+   - Sind ±5 % und ±2,5 % als Skalengrenzen **optisch** richtig gewählt, oder
+     wirkt die Matrix zu blass bzw. zu grell? Beides sind einzelne Konstanten
+     in `shared.py` (`HEATMAP_GRENZE_*`).
+   - *Muster ausgewogen cVV*: 18 Jahreszeilen — ist die Heatmap dann noch
+     lesbar oder zu hoch?
+   - Sitzt die Jahresspalte rechts sauber neben der Matrix? Sie ist als
+     Plotly-Annotation gebaut, nicht als Zelle.
+
+   ```
+   .venv\Scripts\python.exe -m streamlit run streamlit_app.py
+   ```
+
+2. **PR mergen** — alles andere hängt daran.
 2. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
@@ -620,14 +729,26 @@ Im Code ist darüber hinaus nichts offen außer Nachrangigem: internes Hosting
 (§15 Punkt 8) und die Alt-Aufgaben aus Phase 2, die vor einer Umsetzung
 ohnehin erst mit Philip zu klären sind.
 
+**Neu am 14.08.2026 und ausdrücklich nicht nebenbei erledigt:**
+`historie_beschneiden` wird im Performance-Tab **nur** von der Heatmap und
+dem Risiko-Block angewandt. Kennzahlen, Linien-Chart und rollierende Tabelle
+rechnen bei den fünf cVV-Strategien weiterhin ab dem **31.12.2008**, die
+Broschüre ab dem **01.01.2009**. Die Wirkung auf CAGR und Volatilität ist
+klein (zwei Tage auf siebzehn Jahre), aber es ist dieselbe Klasse Fund wie
+Backlog B/E/F: eine Regel, die nur an einem von zwei Orten greift. Eine
+Angleichung **ändert ausgewiesene Zahlen** und gehört deshalb entschieden.
+
 *(Die Sichtprüfungen SCHWEIZ, Datumsachse, Wertachse und Quellenangabe
 standen hier bis zum 12.08.2026 als offene Punkte — alle vier sind erledigt,
 siehe „Sichtprüfung in echtem PowerPoint".)*
 
 ### `pyflakes` ist ab jetzt ein echtes Signal
 
-Über alle **33 Dateien null Meldungen** (12.08.2026). Wer eine neue erzeugt,
-sieht sie sofort — vorher ging sie in 16 bekannten unter. Aufruf:
+Über alle **36 Dateien null Meldungen** (Stand 14.08.2026; am 12.08. waren es
+33). Wer eine neue erzeugt, sieht sie sofort — vorher ging sie in 16
+bekannten unter. Am 14.08. hat die Prüfung prompt geliefert: Nach dem Umzug
+von `historie_beschneiden` war `HISTORIE_AB` in `portfolioanalyse.py`
+ungenutzt und wurde gemeldet. Aufruf:
 
 ```
 .venv\Scripts\python.exe -m pyflakes streamlit_app.py modules\*.py tests\*.py
@@ -636,6 +757,14 @@ sieht sie sofort — vorher ging sie in 16 bekannten unter. Aufruf:
 In PowerShell expandiert `modules\*.py` **nicht** von selbst; entweder die
 Dateiliste vorher aufbauen (`Get-ChildItem`) oder den Aufruf über die Bash
 absetzen.
+
+**Erledigt am 14.08.2026:** **Monatsrenditen-Heatmap** (absolut, gegen die
+eigene Benchmark, gegen das Vergleichsportfolio) und **Risiko im Überblick**
+(rollierende Vola als Chart, Kennzahlen je Zeitraum, Max-Drawdown-Tabelle).
+Kam aus keinem Backlog, sondern aus Philips Wunsch. Zwei neue Prüfsteine
+`tests/test_monatsrenditen.py` und `tests/test_risiko.py`, Transferwissen
+**#52**. Dabei ist `historie_beschneiden` von `portfolioanalyse.py` nach
+`analytics.py` gewandert — sie griff bis dahin nur im Broschüren-Export.
 
 **Erledigt am 12.08.2026 (abends, 3):** Der **Rumpfjahr-Balken** im
 Säulen-Chart — gemeldet an Pro, gefunden bei 7 von 19 Strategien. Kam aus

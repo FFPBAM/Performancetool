@@ -191,6 +191,8 @@ python tests/test_historie_ab.py             # pandas + streamlit
 python tests/test_folien_config.py           # pandas + streamlit
 python tests/test_chartachsen.py [<ordner>]  # Schritte 1+2 ohne jedes Paket
 python tests/test_kalenderjahre.py           # Schritte 1+2 nur pandas, 3 + pptx
+python tests/test_monatsrenditen.py          # Schritte 1-4 nur numpy + pandas
+python tests/test_risiko.py                  # Schritte 1-2+4 nur numpy + pandas
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx

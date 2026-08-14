@@ -2057,6 +2057,70 @@ Prüfstein: `tests/test_kalenderjahre.py`. Stellschrauben:
 
 ---
 
+### 52. Eine Differenz stellt strengere Fragen als ein Einzelwert (NEU 14.08.2026) ⭐
+
+Die Monatsrenditen-Heatmap ist #51 eine Ebene feiner: Wo dort ein
+Rumpf**jahr** als Jahresbalken stand, stünde hier ein Rumpf**monat** als
+Monatsrendite. Gemessen am 14.08.2026 über alle 19 Strategien sind das **26
+angebrochene Monate** — jeder Auflagemonat und, bei **jeder** Strategie, der
+laufende. Die Antwort ist dieselbe: `_ist_voller_monat` als Zwilling zu
+`_ist_volles_jahr`, beide Ränder geprüft.
+
+Neu und übertragbar ist etwas anderes — **derselbe Fehlwert wiegt in einer
+Differenz schwerer als in einem Einzelwert.**
+
+Ein angebrochener Monat ist für sich eine **wahre** Aussage: „In den zwanzig
+Tagen seit Auflage waren es +1,6 %." Er darf mit Kennzeichen stehenbleiben.
+Dieselbe Zahl in einer Differenz ist eine **falsche** Aussage: Zwanzig Tage
+der einen Strategie gegen einunddreißig der anderen ergeben keine
+Monatsdifferenz, sondern gar nichts. Deshalb behandelt derselbe Code
+denselben Monat unterschiedlich, je nachdem, was mit ihm geschieht:
+
+| | absolute Matrix | Differenz-Matrix |
+|---|---|---|
+| angebrochener Monat | steht mit `*` | **entfällt** |
+| Regel | „ist wahr für seine Tage" | „beide Seiten müssen voll sein" |
+
+Der angenehme Nebeneffekt: Beim Vergleich zweier Strategien fällt der
+Zeitraum, in dem die jüngere noch nicht lief, **von selbst** weg — es
+braucht keinen eigenen Sonderfall für ungleich lange Historien.
+
+**Die zweite Lehre betrifft die Verkettung.** Eine Differenz kann
+arithmetisch (`r_a − r_b`) oder geometrisch (`(1+r_a)/(1+r_b) − 1` )
+gerechnet werden. Steht neben den Monaten eine **Jahresspalte**, ist nur die
+geometrische Variante in sich stimmig:
+
+```
+Strategie  +10 %  +10 %   ->  +21,00 %
+Benchmark   +5 %   +5 %   ->  +10,25 %      Jahr: 1,21/1,1025 - 1 = +9,75 %
+
+geometrisch   1,10/1,05 - 1 = +4,76 % je Monat, 1,0476² - 1 = +9,75 %   stimmt
+arithmetisch  10 - 5        = +5,00 PP je Monat, Summe      = +10,00 PP  passt nicht
+```
+
+Verallgemeinert: **Wer eine Zeile und ihre Summenspalte nebeneinanderstellt,
+schuldet dem Leser, dass die Zeile die Summe ergibt.** Sonst steht auf einem
+Bildschirm eine Zahl, die der Zahl daneben widerspricht — und der Leser hat
+recht, wenn er beiden misstraut. Bei der absoluten Matrix geht das nur auf,
+**weil** angebrochene Monate gezeigt werden; bei der Differenz nur, weil die
+Jahresspalte aus den gültigen Monaten verkettet und nicht direkt gerechnet
+wird.
+
+**Dritter Punkt, unabhängig von der Fachlichkeit: eine Farbskala hat genau
+eine Textfarbe.** `go.Heatmap` kann die Schriftfarbe nicht je Zelle setzen.
+Wer Zahlen in die Zellen schreibt — und das muss man, weil Farbe die Aussage
+nie allein tragen darf —, muss die Skala so wählen, dass **eine** Textfarbe
+über die ganze Spannweite liest. Nachgerechnet statt geschätzt: elf
+Stützstellen, schlechtester Kontrast 5,37:1, WCAG AA verlangt 4,5:1. Eine
+Skala mit kräftigen dunklen Enden hätte das nicht geschafft.
+
+Prüfsteine: `tests/test_monatsrenditen.py`, `tests/test_risiko.py`.
+Stellschrauben: `_ist_voller_monat`, `MONAT_RAND_TOLERANZ_TAGE`,
+`ROLL_FENSTER_TAGE` in `modules/analytics.py`; `HEATMAP_*` in
+`modules/shared.py`.
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -3125,6 +3189,95 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 14.08.2026 – Monatsrenditen-Heatmap und Risiko-Überblick
+
+**Neu im Tool, nicht in der Broschüre** (Festlegung Philip): zwei
+Auswertungen, die es bisher nicht gab. Die Ansicht zeigte Wertentwicklung,
+Kennzahlen und Drawdown-Verlauf — aber nichts, woran sich die **Struktur**
+einer Strategie über die Zeit ablesen ließ, und Volatilität wie Max Drawdown
+gab es nur als **einen** Wert über den Gesamtzeitraum.
+
+**Sidebar-Gruppe „Analysen"** mit vier Haken: Monatsrenditen (Heatmap),
+darunter eingerückt Differenz zur eigenen Benchmark und Differenz zum
+Vergleichsportfolio, sowie Risiko im Überblick. Die Vergleichsstrategie ist
+bewusst das **bestehende** Vergleichsportfolio — ein zweites Auswahlfeld mit
+demselben Inhalt daneben hätte die Sidebar unruhig gemacht.
+
+**Der eigentliche Aufwand steckte nicht in der Darstellung, sondern in den
+ungleichen Historien.** Die Reihen laufen von 2009 (cVV, nach `HISTORIE_AB`)
+bis 03/2024 (comdirect). Drei Dinge waren zu lösen:
+
+1. **Angebrochene Monate.** #51 eine Ebene feiner — gemessen 26 Stück über
+   alle 19 Strategien. Sie stehen in der absoluten Matrix mit `*` und
+   entfallen in jeder Differenz. Begründung als Transferwissen **#52**.
+2. **Der Zuschnitt.** Die Blöcke rechnen auf `data[ps1]` und **nicht** auf
+   `df1`/`df2`. Letztere sind zweifach beschnitten — auf die
+   Zeitraum-Schnellwahl und, sobald das Vergleichsportfolio läuft, per
+   Inner-Join auf die gemeinsamen Handelstage. *Muster ausgewogen cVV* gegen
+   *Comdirect 100* hätte dabei **fünfzehn Jahre** verloren.
+3. **`historie_beschneiden` lag am falschen Ort.** Die Funktion stand in
+   `portfolioanalyse.py` und griff deshalb nur im Broschüren-Export. Ohne
+   sie stünde in der Heatmap bei den fünf cVV-Strategien eine Zelle
+   **Dez 2008 mit genau einem Tag** (+0,13 / +0,16 / +0,27 / +0,30 /
+   −0,01 %) — die beiden 2008er-Zeilen sind reine Indexbasis (#43). Sie ist
+   nach `analytics.py` gewandert; dieselbe Krankheit wie Backlog B/E/F, nur
+   bei einer Regel statt bei einer Formel.
+
+**Die Differenz ist geometrisch** (Festlegung Philip). Nur so verketten sich
+die zwölf Monate einer Zeile exakt zur Jahresspalte — nachgerechnet an allen
+19 Strategien und allen Jahren, Abweichung durchweg unter 1e-10.
+
+**Risiko im Überblick:** rollierende Volatilität über 365 Tage als Chart,
+darunter je Strategie eine Tabelle mit Volatilität, Sharpe Ratio, Tracking
+Error und Information Ratio je Zeitraum (YTD/1/3/5/10 Jahre/seit Auflage).
+Die beiden Benchmark-Spalten **entfallen ganz**, wenn keine Benchmark
+hinterlegt ist, statt eine Spalte aus lauter „–" zu zeigen. Die
+Drawdown-Perioden-Tabelle hängt am bestehenden Drawdown-Haken; beide speisen
+sich aus **einer** Funktion `risiko_perioden`.
+
+Die rollierende Volatilität nutzt bewusst dieselbe Formel wie `calc_vola`
+(std ddof=1 × √365, nicht √252). Der letzte Punkt der Kurve trifft damit die
+Kennzahlen-Kachel darüber — zwei verschiedene Volatilitäten auf einem
+Bildschirm wären schlimmer als jede Lehrbuch-Ungenauigkeit. Ein eigener
+Testschritt nagelt es fest.
+
+**Farbskala.** Rot–neutral–grün, gedämpft, feste Grenzen bei ±5 % (absolut)
+und ±2,5 % (Differenz). Fest und nicht datenabhängig: Eine Skala, die sich je
+Strategie neu kalibriert, färbt zwei Strategien unterschiedlich ein. Die
+Grenzen kommen aus einer Messung über alle 19 Strategien (|Wert| P95 = 5,28 %
+bzw. 2,41 %) und liegen knapp darunter — 95 % der Monate nutzen die Skala
+aus, die Extreme sättigen aus.
+
+**Vorgehen und Beweise:**
+
+- **Rot vor Grün nachgestellt.** `_ist_voller_monat` wurde vorübergehend auf
+  die naive Fassung (`return not sub.empty`) gesetzt: Der Prüfstein meldete
+  daraufhin bei **allen 19 Strategien** angebrochene Monate als vollständig,
+  inklusive der 20-Tage-Monate von comdirect und der 1-Tages-Zelle der
+  cVV-Indexbasis. Erst danach kam die Prüfung hinein.
+- **Sieben Broschüren vorher/nachher rekursiv verglichen** (wegen des
+  `historie_beschneiden`-Umzugs): 2056 ZIP-Einträge, **34 Abweichungen,
+  ausnahmslos `docProps/core.xml`** der eingebetteten Arbeitsmappen. An einem
+  Beispiel nachgewiesen, dass darin nur `dcterms:created`/`modified` steht —
+  nach Entfernen der Zeitstempel zeichengleich.
+- **`ui_dump` vorher/nachher: genau EINE geänderte Zeile**, die neue
+  Sidebar-Überschrift „Analysen". Die Standardansicht ist unverändert.
+- **Alle 21 Suiten grün**, `pyflakes` über 34 Dateien bei null Meldungen.
+
+**Nebenbefund:** `HISTORIE_AB` wurde aus dem Re-Export-Block in
+`portfolioanalyse.py` entfernt — nach dem Umzug meldete `pyflakes` es als
+ungenutzt, und kein Modul und kein Test holt es von dort (nachgeprüft).
+`pyflakes` kennt kein `noqa`, ein stehengelassener Re-Export hätte die
+Prüfung dauerhaft rot gehalten.
+
+**Offen und bewusst nicht angefasst:** `historie_beschneiden` wird im
+Performance-Tab weiterhin **nur** von der Heatmap und dem Risiko-Block
+angewandt. Kennzahlen, Linien-Chart und rollierende Tabelle rechnen bei den
+fünf cVV-Strategien unverändert ab dem 31.12.2008, die Broschüre ab dem
+01.01.2009. Die Wirkung auf CAGR und Volatilität ist klein, aber es ist
+dieselbe Klasse Fund wie Backlog B/E/F. Eine Angleichung ändert ausgewiesene
+Zahlen und gehört deshalb entschieden, nicht nebenbei gemacht.
 
 ### 12.08.2026 (abends, 6) – Der Säulen-Chart zeigte ein Rumpfjahr als Jahresbalken
 
