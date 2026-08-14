@@ -32,6 +32,7 @@ from modules.shared import (
     # (to_decimal_interval wird seitdem nur noch innerhalb von shared.py
     # gebraucht und ist deshalb hier nicht mehr importiert.)
     load_all_csvs, build_portfolio_timeseries,
+    strategien_ohne_honorarsatz,
 )
 # Performance-Berechnungs-Funktionen (Single Source of Truth — siehe modules/analytics.py)
 #
@@ -807,6 +808,22 @@ if ansicht == _VIEW_PERF:
     # abweichen (Zeitraum-Filter, Vergleichs-Schnittmenge, editierter Satz),
     # das ist GEWOLLT — muss aber sichtbar sein, sonst wirken die Zahlen
     # "inkonsistent". Diese Caption benennt live jede aktive Abweichung.
+    # FEHLENDER HONORARSATZ (Audit 14.08.2026) — muss VOR allem anderen
+    # stehen. Findet der Loader keine Mapping-Zeile, rechnet die Strategie
+    # mit 0 % Honorar; die Zahlen darunter waeren dann brutto, sind aber
+    # ueberall als "nach Kosten" beschriftet. Frueher fiel das lautlos aus.
+    _ohne_satz = strategien_ohne_honorarsatz(
+        [(ds1, data.get(ps1)),
+         (ds2, data.get(ps2)) if (sc and ps2) else (None, None)])
+    if _ohne_satz:
+        st.error(
+            "**Kein Honorarsatz hinterlegt für " + " und ".join(_ohne_satz)
+            + ".** Im Honorarsatz-Mapping fehlt eine Zeile zu dieser "
+            "Strategie. Das Feld in der Seitenleiste ist deshalb mit 0,00 % "
+            "vorbelegt — alle Zahlen unten sind damit **brutto**, obwohl sie "
+            "als „nach Kosten“ beschriftet sind. Bitte den Satz von Hand "
+            "eintragen oder das Mapping ergänzen.")
+
     _pp_abweichungen = []
     if sd > mind or ed < maxd:
         _pp_abweichungen.append(f"Zeitraum gefiltert ({fmt_date_de(sd)} – {fmt_date_de(ed)})")

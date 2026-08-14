@@ -478,10 +478,31 @@ def build_portfolio_timeseries(files, mapping):
                 rf_arr = rf_raw
             except Exception:
                 rf_arr = None
-        try:
-            fd = float(mapping.loc[mapping["Inhaber"] == pn, "Honorarsatz Standard"].values[0])
-        except Exception:
-            fd = 0.0
+        # HONORARSATZ — kein blankes except mehr (Audit 14.08.2026).
+        #
+        # Vorher stand hier `except Exception: fd = 0.0`. Fehlte die Zeile im
+        # Mapping, lief die Strategie mit 0 % Honorar: BRUTTOzahlen, als
+        # Nettozahlen beschriftet, lautlos und in der schmeichelnden
+        # Richtung. Auf dem Bildschirm war das nicht von einem echten 0 %
+        # zu unterscheiden — der Satz steht in einem Eingabefeld, und 0,00
+        # sieht dort aus wie eine Angabe, nicht wie ein Ausfall.
+        #
+        # Der Satz BLEIBT 0,0, damit die App weiterlaeuft und der Berater
+        # ihn ueberschreiben kann. Aber die Zeitreihe merkt sich, dass er
+        # geraten ist; streamlit_app.py macht daraus eine Fehlermeldung, die
+        # die betroffene Strategie beim Namen nennt.
+        #
+        # Ein GEFUNDENER Satz von 0,0 ist etwas anderes als ein fehlender
+        # und loest deshalb keine Meldung aus.
+        fd = 0.0
+        honorar_gefunden = False
+        if {"Inhaber", "Honorarsatz Standard"} <= set(mapping.columns):
+            treffer = mapping.loc[mapping["Inhaber"] == pn, "Honorarsatz Standard"]
+            if len(treffer):
+                wert = pd.to_numeric(treffer.iloc[0], errors="coerce")
+                if pd.notna(wert):
+                    fd = float(wert)
+                    honorar_gefunden = True
         idx = dates.iloc[1:].reset_index(drop=True)
         df = pd.DataFrame(index=idx)
         df.index.name = "Datum"
@@ -491,5 +512,37 @@ def build_portfolio_timeseries(files, mapping):
         df["fee_default"] = fd
         df = df.sort_index()
         df.attrs["benchmark_name"] = bn
+        # Merkt sich, ob der Honorarsatz aus dem Mapping stammt oder geraten
+        # ist — die Oberflaeche macht daraus eine Meldung (Audit 14.08.2026).
+        df.attrs["honorar_gefunden"] = honorar_gefunden
         out[pn] = df
     return out
+
+
+def strategien_ohne_honorarsatz(paare):
+    """Welche der angezeigten Strategien haben keinen Satz aus dem Mapping?
+
+    Args:
+        paare: Liste von (Anzeigename, Zeitreihe). Ein None-Eintrag bei der
+            Zeitreihe wird uebersprungen — die Aufrufstelle muss nicht
+            vorher filtern, ob ein Vergleichsportfolio gewaehlt ist.
+
+    Returns:
+        Liste der Anzeigenamen ohne Mapping-Zeile, in der Reihenfolge der
+        Eingabe. Leer heisst: alles in Ordnung.
+
+    EIGENE FUNKTION UND NICHT INLINE IN DER OBERFLAECHE (14.08.2026): Genau
+    daran ist in dieser Session schon einmal ein Fehler durchgerutscht — die
+    Zeitraum-Ableitung stand mitten im Renderpfad und war fuer keinen
+    Pruefstein erreichbar. Wer eine Entscheidung trifft, die man pruefen
+    koennen muss, gibt ihr einen Namen.
+
+    Der Vorgabewert `True` ist Absicht: Eine Zeitreihe aus einer aelteren
+    Fassung ohne dieses Attribut gilt als in Ordnung und loest keine
+    Falschmeldung aus.
+
+    Pruefstein: tests/test_honorarsatz.py, Schritt 4
+    """
+    return [name for name, reihe in paare
+            if reihe is not None
+            and not reihe.attrs.get("honorar_gefunden", True)]
