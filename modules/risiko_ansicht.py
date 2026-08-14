@@ -32,19 +32,22 @@ DREI HAUSREGELN, die hier besonders wehtun und deshalb oben stehen:
    "–" liefern.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 
 from modules.analytics import (
-    BAND_MIN_JAHRE, RISIKO_PERIODEN, ROLL_FENSTER_TAGE, bandbreite,
-    calc_daily_returns_after_fee, has_benchmark, heatmap_kennzahlen,
-    monats_durchschnitt, monatsrenditen, monatsrenditen_differenz,
-    risiko_perioden, rollierende_vola,
+    BAND_DUENN_UNTER, BAND_JAHRE, RISIKO_PERIODEN, ROLL_FENSTER_TAGE,
+    bandbreite, calc_daily_returns_after_fee, has_benchmark,
+    heatmap_kennzahlen, monats_durchschnitt, monatsrenditen,
+    monatsrenditen_differenz, risiko_perioden, rollierende_vola,
 )
 from modules.formats import (
-    EMPTY_VALUE, MONATSNAMEN_KURZ, fmt_pct, fmt_ratio, monat_kurz, monat_lang,
+    EMPTY_VALUE, MONATSNAMEN_KURZ, fmt_date_de, fmt_pct, fmt_ratio,
+    monat_kurz, monat_lang,
 )
 from modules.shared import (
     FFPB_PALETTE, HEATMAP_GRENZE_ABSOLUT, HEATMAP_GRENZE_DIFFERENZ,
@@ -75,6 +78,9 @@ ANSICHTEN = (ANSICHT_JAHRE, ANSICHT_BAND)
 ZEILE_HOEHE_MIN = 30.0
 ZEILE_HOEHE_MAX = 80.0
 
+# Untergrenze der datengetriebenen Farbskala (siehe _grenze_aus_daten).
+BAND_GRENZE_MIN = 0.01
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Heatmap
@@ -92,15 +98,56 @@ def _zellentext(wert, vollstaendig: bool) -> str:
     return text + ("" if vollstaendig else UNVOLLSTAENDIG)
 
 
-def _colorbar(grenze: float) -> dict:
+def _zellentext_band(wert, vollstaendig: bool) -> str:
+    """Zellbeschriftung der Bandbreite: zwei Stellen, KEIN Pluszeichen.
+
+    Abweichend von der Jahr-für-Jahr-Ansicht (Festlegung Philip, 14.08.2026,
+    nach der Bloomberg-Vorlage). Zwei Stellen sind hier bezahlbar, weil die
+    Ansicht nur zwölf Spalten hat statt dreizehn; und ohne Pluszeichen liest
+    sich eine Zahlenkolonne ruhiger, weil nur die Minuszeichen hervortreten.
+    """
+    if wert is None or pd.isna(wert):
+        return ""
+    text = f"{float(wert) * 100:.2f}".replace(".", ",")
+    return text + ("" if vollstaendig else UNVOLLSTAENDIG)
+
+
+def _grenze_aus_daten(zeilen: list) -> float:
+    """Symmetrische Skalengrenze aus den gezeigten Werten (Dezimal).
+
+    Die Bandbreite färbt datengetrieben statt fest (Festlegung Philip,
+    14.08.2026): Ihre Zeilen sind Extremwerte, die bei festen ±3 % fast
+    durchgehend aussättigen und dann keine Abstufung mehr zeigen.
+
+    Aufgerundet auf halbe Prozentpunkte, damit die Legende glatte Zahlen
+    trägt. Untergrenze ±1 %: Eine sehr ruhige Reihe bekäme sonst für
+    Zehntelprozente volle Farbe und sähe dramatischer aus, als sie ist.
+    """
+    werte = []
+    for zl in zeilen:
+        for monat in range(1, 13):
+            wert = zl["werte"].loc[monat]
+            if pd.notna(wert):
+                werte.append(abs(float(wert)))
+    if not werte:
+        return BAND_GRENZE_MIN
+    aufgerundet = math.ceil(max(werte) * 200.0) / 200.0   # halbe Prozentpunkte
+    return max(BAND_GRENZE_MIN, aufgerundet)
+
+
+def _colorbar(grenze: float, gesaettigt: bool = True) -> dict:
     """Waagerechte Farblegende unter der Matrix.
 
-    Die Enden tragen "≤" und "≥" (NEU 14.08.2026): Werte jenseits der Grenze
-    sättigen aus, und das gehört benannt statt verschwiegen. Rund 15 % der
-    Monate liegen über ±3 % — ohne diese beiden Zeichen sähe es so aus, als
-    wäre der dunkelste Ton der Höchstwert.
+    Bei fester Skala tragen die Enden "≤" und "≥": Werte jenseits der Grenze
+    sättigen aus, und das gehört benannt statt verschwiegen — ohne diese
+    beiden Zeichen sähe es so aus, als wäre der dunkelste Ton der Höchstwert.
+
+    Bei einer aus den Daten abgeleiteten Skala (`gesaettigt=False`) entfallen
+    sie, weil dort nichts abgeschnitten wird: Die Grenze IST der größte
+    vorkommende Betrag.
     """
     halb = grenze / 2.0
+    links, rechts = fmt_pct(-grenze, 1), fmt_pct(grenze, 1)
     return dict(
         orientation="h", x=0.5, xanchor="center", y=-0.18, yanchor="top",
         len=0.55, thickness=12, outlinewidth=0,
@@ -108,9 +155,9 @@ def _colorbar(grenze: float) -> dict:
         tickvals=[-grenze * 100, -halb * 100, 0.0, halb * 100, grenze * 100],
         # Alle fuenf Beschriftungen durch fmt_pct: Eine von Hand gesetzte
         # Null ("0 %") stand sonst als einzige mit anderem Abstand da.
-        ticktext=[f"≤ {fmt_pct(-grenze, 1)}", fmt_pct(-halb, 1),
-                  fmt_pct(0.0, 1), fmt_pct(halb, 1),
-                  f"≥ {fmt_pct(grenze, 1)}"],
+        ticktext=[f"≤ {links}" if gesaettigt else links,
+                  fmt_pct(-halb, 1), fmt_pct(0.0, 1), fmt_pct(halb, 1),
+                  f"≥ {rechts}" if gesaettigt else rechts],
     )
 
 
@@ -187,81 +234,169 @@ def _zeilen_jahr_fuer_jahr(daten: dict, titel_hover: str) -> list:
     return zeilen
 
 
-def _zeilen_bandbreite(daten: dict, band: dict, titel_hover: str) -> list:
+def _monatszeitraum(ts_df, jahr, monat):
+    """(Stand vor dem Monat, letzter Tag im Monat) als Text — für den Hover.
+
+    Eine Monatsrendite misst vom SCHLUSS des Vormonats bis zum Schluss des
+    Monats: Die erste Tagesrendite des März ist die vom 28.02.-Schluss auf
+    den 01.03.-Schluss. Der Hover nennt deshalb den letzten Datenpunkt VOR
+    dem Monat, nicht den ersten IM Monat — sonst suggerierte er einen um
+    einen Tag zu kurzen Zeitraum.
+    """
+    if ts_df is None or len(ts_df) == 0:
+        return None
+    anfang = pd.Timestamp(int(jahr), int(monat), 1)
+    ende = anfang + pd.offsets.MonthEnd(0)
+    im_monat = ts_df.loc[anfang:ende]
+    if len(im_monat) == 0:
+        return None
+    davor = ts_df.loc[:anfang - pd.Timedelta(days=1)]
+    stand = davor.index.max() if len(davor) else None
+    letzter = im_monat.index.max()
+    if stand is None:
+        return f"bis {fmt_date_de(letzter)}"
+    return f"{fmt_date_de(stand)} – {fmt_date_de(letzter)}"
+
+
+def _zeilen_bandbreite(daten: dict, band: dict, titel_hover: str,
+                       ts_df=None) -> list:
     """Hoch / Mittel / Tief des Fensters, darunter das laufende Jahr.
 
     Reihenfolge wie bei Bloomberg: erst das Band, dann die Zeile, die man
-    dagegen liest.
+    dagegen liest. Keine Jahresspalte — die Vorlage hat zwölf Spalten.
     """
-    n = len(band["jahre"])
+    jahre = band["jahre"]
+    n = len(jahre)
     praefix = f"{n}J"
     aktuell = band["aktuelles_jahr"]
     renditen, vollst = daten["renditen"], daten["vollstaendig"]
+    spanne = f"{jahre[0]}–{jahre[-1]}" if n > 1 else f"{jahre[0]}"
 
-    def _hover_extrem(art, werte, wann):
+    def _hover_extrem(art, wann):
         def _machen(monat, wert):
             if pd.isna(wert):
-                return f"{monat_lang(monat)}<br>keine Daten"
+                return f"{monat_lang(monat)}<br>keine Vergleichswerte"
             jahr = wann.loc[monat]
-            zusatz = f" ({jahr})" if jahr is not None else ""
-            return (f"{monat_lang(monat)}<br>{art} der {n} Jahre: "
-                    f"{fmt_pct(wert)}{zusatz}")
+            zeilen = [f"<b>{monat_lang(monat)} — {art} von {spanne}</b>",
+                      f"Rendite: {fmt_pct(wert)}"]
+            if jahr is not None:
+                zeilen.append(f"Jahr: {jahr}")
+                zeitraum = _monatszeitraum(ts_df, jahr, monat)
+                if zeitraum:
+                    zeilen.append(f"Zeitraum: {zeitraum}")
+            return "<br>".join(zeilen)
         return _machen
 
     def _hover_mittel(monat, wert):
         if pd.isna(wert):
-            return f"{monat_lang(monat)}<br>keine Daten"
+            return f"{monat_lang(monat)}<br>keine Vergleichswerte"
+        anz = int(band["anzahl"].loc[monat])
+        geo = band["mittel_geo"].loc[monat]
         quote = band["trefferquote"].loc[monat]
-        anteil = ("" if pd.isna(quote) else
-                  f"<br>in {round(quote * n)} von {n} Jahren positiv")
-        return f"{monat_lang(monat)}<br>Mittel: {fmt_pct(wert)}{anteil}"
+        zeilen = [f"<b>{monat_lang(monat)} — Mittel {spanne}</b>",
+                  f"Durchschnitt: {fmt_pct(wert)} (arithmetisch)"]
+        if pd.notna(geo):
+            # Die Ø-Zeile der anderen Ansicht rechnet geometrisch. Beide
+            # Zahlen hier zu nennen ist billiger als ein unerklaerter
+            # Unterschied zwischen zwei Ansichten desselben Werkzeugs.
+            zeilen.append(f"geometrisch: {fmt_pct(geo)}")
+        zeilen.append(f"Anzahl Werte: {anz}")
+        if pd.notna(quote):
+            zeilen.append(f"davon positiv: {round(quote * anz)}")
+        return "<br>".join(zeilen)
 
     def _hover_aktuell(monat, wert):
         if pd.isna(wert):
             return f"{monat_lang(monat)} {aktuell}<br>noch kein Wert"
-        lage = ""
+        zeilen = [f"<b>{monat_lang(monat)} {aktuell}</b>",
+                  f"{titel_hover}: {fmt_pct(wert)}"]
+        zeitraum = _monatszeitraum(ts_df, aktuell, monat)
+        if zeitraum:
+            zeilen.append(f"Zeitraum: {zeitraum}")
+        if not bool(vollst.loc[aktuell, monat]):
+            zeilen.append("angebrochener Monat")
         hoch, tief = band["hoch"].loc[monat], band["tief"].loc[monat]
         if pd.notna(hoch) and wert > hoch:
-            lage = f"<br>über dem {n}-Jahres-Hoch"
+            zeilen.append(f"<b>über dem {praefix}-Hoch</b>")
         elif pd.notna(tief) and wert < tief:
-            lage = f"<br>unter dem {n}-Jahres-Tief"
-        return (f"{monat_lang(monat)} {aktuell}<br>"
-                f"{titel_hover}: {fmt_pct(wert)}{lage}")
+            zeilen.append(f"<b>unter dem {praefix}-Tief</b>")
+        return "<br>".join(zeilen)
 
     return [
-        _zeile(f"{praefix}-Hoch", band["hoch"], lambda m: True,
-               _hover_extrem("Höchster", band["hoch"], band["hoch_wann"]),
-               jahr_wert=band["hoch_jahr"]),
-        _zeile(f"{praefix}-Mittel", band["mittel"], lambda m: True,
-               _hover_mittel, jahr_wert=band["mittel_jahr"]),
-        _zeile(f"{praefix}-Tief", band["tief"], lambda m: True,
-               _hover_extrem("Niedrigster", band["tief"], band["tief_wann"]),
-               jahr_wert=band["tief_jahr"]),
+        _zeile(f"{praefix} Hoch", band["hoch"], lambda m: True,
+               _hover_extrem("Hoch", band["hoch_wann"])),
+        _zeile(f"{praefix} Mittel", band["mittel"], lambda m: True,
+               _hover_mittel),
+        _zeile(f"{praefix} Tief", band["tief"], lambda m: True,
+               _hover_extrem("Tief", band["tief_wann"])),
         _zeile(str(aktuell), renditen.loc[aktuell],
-               lambda m: bool(vollst.loc[aktuell, m]), _hover_aktuell,
-               jahr_wert=daten["jahr"].loc[aktuell],
-               jahr_voll=bool(daten["jahr_vollstaendig"].loc[aktuell])),
+               lambda m: bool(vollst.loc[aktuell, m]), _hover_aktuell),
     ]
 
 
-def _heatmap_figur(zeilen: list, grenze: float) -> go.Figure:
-    """Zeichnet, was sie bekommt — ohne zu wissen, was die Zeilen bedeuten."""
-    z, texte, hover, beschriftungen = [], [], [], []
+def _heatmap_figur(zeilen: list, grenze: float, mit_jahresspalte: bool = True,
+                   zellentext=None, gesaettigt: bool = True) -> go.Figure:
+    """Zeichnet, was sie bekommt — ohne zu wissen, was die Zeilen bedeuten.
 
-    for zl in zeilen:
+    Args:
+        zeilen: Liste von `_zeile`-Dicts, in LESERICHTUNG (erste Zeile oben)
+        grenze: Skalengrenze als Dezimal, symmetrisch um null
+        mit_jahresspalte: 13. Spalte „Jahr"; die Bandbreite hat sie nicht
+        zellentext: Formatierer(wert, vollstaendig) -> str; None nimmt den
+            Standard mit Vorzeichen und einer Nachkommastelle
+        gesaettigt: ob Werte jenseits der Grenze abgeschnitten werden — nur
+            dann trägt die Legende „≤" und „≥"
+
+    ZWEI DINGE, DIE HIER NICHT DEM ZUFALL ÜBERLASSEN WERDEN (14.08.2026,
+    nach einem Renderfehler in der Bandbreiten-Ansicht):
+
+    1. **Der Achsentyp wird gesetzt, nicht geraten.** Ohne `type="category"`
+       entscheidet Plotly anhand der Werte. Die Bandbreite hatte y-Labels wie
+       ["17J-Hoch", "17J-Mittel", "17J-Tief", "2026"] — drei echte Strings
+       und einen zahlartigen. Sobald "2026" als Zahl gelesen wird, spannt die
+       Achse bis 2026 und die vier Kategorien fallen zu einem Streifen am
+       unteren Rand zusammen. Genau so sah es aus.
+
+    2. **Annotationen sitzen auf INDIZES, nicht auf Beschriftungen.** Ein
+       `y="2026"` verlangt von Plotly eine zweite Namensauflösung gegen die
+       Kategorienliste — und die kann scheitern, ohne dass jemand es merkt.
+       Ein `y=2` kann das nicht. Dieselbe Klasse wie das nicht greifende
+       `majorTimeUnit` (#49).
+
+    REIHENFOLGE: Bei `go.Heatmap` gehört `z[0]` zu `y[0]`, und das wird
+    UNTEN gezeichnet. `zeilen` kommt aber in Leserichtung herein (erste Zeile
+    oben). Deshalb wird hier einmal umgedreht — bewusst und an genau einer
+    Stelle, statt die Aufrufer rückwärts denken zu lassen.
+    """
+    if zellentext is None:
+        zellentext = _zellentext
+
+    spalten = list(MONATSNAMEN_KURZ)
+    if mit_jahresspalte:
+        spalten = spalten + [JAHR_SPALTE]
+
+    # Von oben nach unten gedacht, von unten nach oben gezeichnet.
+    von_unten = list(reversed(zeilen))
+
+    z, texte, hover, beschriftungen = [], [], [], []
+    for zl in von_unten:
         z_zeile, t_zeile, h_zeile = [], [], []
         for monat in range(1, 13):
             wert = zl["werte"].loc[monat]
             voll = bool(zl["voll"](monat))
             z_zeile.append(None if pd.isna(wert) else float(wert) * 100.0)
-            t_zeile.append(_zellentext(wert, voll))
+            t_zeile.append(zellentext(wert, voll))
             h_zeile.append(zl["hover"](monat, wert))
-        # Die Jahresspalte bleibt ohne Füllung (z = None) und ohne Text;
-        # ihr Wert kommt als Annotation. Grund: Eine Zelle mit fehlendem
-        # z-Wert rendert je nach Plotly-Fassung ihren Text nicht mit.
-        z.append(z_zeile + [None])
-        texte.append(t_zeile + [""])
-        hover.append(h_zeile + [""])
+        if mit_jahresspalte:
+            # Die Jahresspalte bleibt ohne Füllung (z = None) und ohne Text;
+            # ihr Wert kommt als Annotation. Grund: Eine Zelle mit fehlendem
+            # z-Wert rendert je nach Plotly-Fassung ihren Text nicht mit.
+            z_zeile.append(None)
+            t_zeile.append("")
+            h_zeile.append("")
+        z.append(z_zeile)
+        texte.append(t_zeile)
+        hover.append(h_zeile)
         beschriftungen.append(zl["label"])
 
     hoehe_zeile = _zeilenhoehe(len(zeilen))
@@ -269,7 +404,7 @@ def _heatmap_figur(zeilen: list, grenze: float) -> go.Figure:
 
     fig = go.Figure(go.Heatmap(
         z=z,
-        x=list(MONATSNAMEN_KURZ) + [JAHR_SPALTE],
+        x=spalten,
         y=beschriftungen,
         text=texte,
         texttemplate="%{text}",
@@ -282,66 +417,72 @@ def _heatmap_figur(zeilen: list, grenze: float) -> go.Figure:
         zmax=grenze * 100.0,
         xgap=2, ygap=2,
         showscale=True,
-        colorbar=_colorbar(grenze),
+        colorbar=_colorbar(grenze, gesaettigt),
     ))
 
     # Jahreswerte als Annotationen — garantiert farblos und damit ohne
-    # Einfluss auf die Skala der Monate.
-    for zl in zeilen:
-        wert = zl["jahr_wert"]
-        if wert is None or pd.isna(wert):
-            continue
-        fig.add_annotation(
-            x=JAHR_SPALTE, y=zl["label"],
-            text=f"<b>{_zellentext(wert, zl['jahr_voll'])}</b>",
-            showarrow=False, font=dict(size=schrift), xanchor="center",
-        )
+    # Einfluss auf die Skala der Monate. y ist der INDEX in `beschriftungen`.
+    if mit_jahresspalte:
+        for i, zl in enumerate(von_unten):
+            wert = zl["jahr_wert"]
+            if wert is None or pd.isna(wert):
+                continue
+            fig.add_annotation(
+                x=len(spalten) - 1, y=i,
+                text=f"<b>{zellentext(wert, zl['jahr_voll'])}</b>",
+                showarrow=False, font=dict(size=schrift), xanchor="center",
+            )
 
     fig.update_layout(
         height=round(len(zeilen) * hoehe_zeile + 150),
         margin=dict(l=10, r=10, t=10, b=60),
-        xaxis=dict(side="top", fixedrange=True, showgrid=False, ticks=""),
-        yaxis=dict(fixedrange=True, showgrid=False, ticks=""),
+        xaxis=dict(type="category", categoryorder="array",
+                   categoryarray=spalten, side="top",
+                   fixedrange=True, showgrid=False, ticks=""),
+        yaxis=dict(type="category", categoryorder="array",
+                   categoryarray=beschriftungen,
+                   fixedrange=True, showgrid=False, ticks=""),
         separators=",.",
     )
     return fig
 
 
-def _heatmap_tabelle(daten: dict) -> pd.DataFrame:
+def _zeilen_tabelle(zeilen: list, mit_jahresspalte: bool = True,
+                    zellentext=None) -> pd.DataFrame:
     """Dieselben Zahlen als kopierbare Tabelle.
 
     Aus einem Plotly-Chart bekommt man Werte nicht heraus; Berater ziehen sie
     aber gern nach Excel. Dasselbe Muster wie beim Balken-Chart.
+
+    Gebaut aus DENSELBEN `zeilen` wie die Figur (14.08.2026), nicht aus den
+    Rohdaten: Vorher gab es zwei Wege zu denselben Zahlen, und der zweite
+    hätte jede Änderung an der Zeilenzusammenstellung verpasst.
+
+    Ueber monat_kurz() und nicht MONATSNAMEN_KURZ[monat - 1]: Die Spalten
+    muessen exakt denen der Heatmap entsprechen, und die Index-Arithmetik ist
+    genau die Stelle, an der ein Off-by-one entstuende.
     """
-    renditen, vollst = daten["renditen"], daten["vollstaendig"]
-    schnitt = monats_durchschnitt(daten)
-    spalten = [JAHR_SPALTE] + list(MONATSNAMEN_KURZ) + ["Gesamt"]
+    if zellentext is None:
+        zellentext = _zellentext
+    spalten = [""] + list(MONATSNAMEN_KURZ)
+    if mit_jahresspalte:
+        spalten = spalten + ["Gesamt"]
 
     def _text(wert, voll):
-        gesetzt = _zellentext(wert, voll)
+        gesetzt = zellentext(wert, voll)
         return gesetzt if gesetzt else EMPTY_VALUE
 
-    # Ueber monat_kurz() und nicht MONATSNAMEN_KURZ[monat - 1]: Die Spalten
-    # muessen exakt denen der Heatmap entsprechen, und die Index-Arithmetik
-    # ist genau die Stelle, an der ein Off-by-one entstuende.
-    zeilen = []
-    for jahr in sorted(renditen.index, reverse=True):
-        zeile = {JAHR_SPALTE: str(jahr)}
+    ausgabe = []
+    for zl in zeilen:
+        zeile = {"": zl["label"]}
         for monat in range(1, 13):
-            zeile[monat_kurz(monat)] = _text(
-                renditen.loc[jahr, monat], bool(vollst.loc[jahr, monat]))
-        zeile["Gesamt"] = _text(daten["jahr"].loc[jahr],
-                                bool(daten["jahr_vollstaendig"].loc[jahr]))
-        zeilen.append(zeile)
+            zeile[monat_kurz(monat)] = _text(zl["werte"].loc[monat],
+                                             bool(zl["voll"](monat)))
+        if mit_jahresspalte:
+            zeile["Gesamt"] = _text(zl["jahr_wert"], zl["jahr_voll"])
+        ausgabe.append(zeile)
 
-    if not schnitt["monate"].empty:
-        zeile = {JAHR_SPALTE: DURCHSCHNITT_ZEILE}
-        for monat in range(1, 13):
-            zeile[monat_kurz(monat)] = _text(schnitt["monate"].loc[monat], True)
-        zeile["Gesamt"] = _text(schnitt["jahr"], True)
-        zeilen.append(zeile)
-
-    return pd.DataFrame(zeilen, columns=spalten)
+    return pd.DataFrame(ausgabe, columns=spalten)
 
 
 def _kennzeile(daten: dict, ist_differenz: bool) -> str:
@@ -420,30 +561,30 @@ def _kennzeile_band(daten: dict, band: dict) -> str:
 
 
 def _zeichne_matrix(daten, grenze, hover_titel, ist_differenz, schluessel,
-                    ansicht=ANSICHT_JAHRE, band_jahre=None):
+                    ansicht=ANSICHT_JAHRE, ts_df=None):
     """Chart, Kennzeile, Fußnoten und der Haken für die Tabelle."""
     if daten["renditen"].empty or not daten["renditen"].notna().any().any():
         st.caption("Für diese Auswahl gibt es keine Monatsrenditen.")
         return
 
-    band = bandbreite(daten, band_jahre) if ansicht == ANSICHT_BAND else None
-    if ansicht == ANSICHT_BAND and not band["jahre"]:
-        volle = int(daten["jahr_vollstaendig"].sum())
+    band = bandbreite(daten) if ansicht == ANSICHT_BAND else None
+    if band is not None and not band["jahre"]:
         st.caption(
-            f"Die Bandbreite braucht mindestens {BAND_MIN_JAHRE} "
-            f"abgeschlossene Kalenderjahre vor dem laufenden — hier "
-            f"{'ist es nur eines' if volle == 1 else f'sind es {volle}'}. "
-            "Bei einem einzigen Jahr wären Hoch, Mittel und Tief dieselbe "
-            f"Zahl. Die Ansicht „{ANSICHT_JAHRE}“ zeigt die Daten trotzdem.")
+            "Für die Bandbreite fehlt ein abgeschlossenes Vergleichsjahr vor "
+            f"dem laufenden. Die Ansicht „{ANSICHT_JAHRE}“ zeigt die Daten "
+            "trotzdem.")
         return
 
     if band is not None:
-        zeilen = _zeilen_bandbreite(daten, band, hover_titel)
+        zeilen = _zeilen_bandbreite(daten, band, hover_titel, ts_df)
+        grenze = _grenze_aus_daten(zeilen)
+        figur = _heatmap_figur(zeilen, grenze, mit_jahresspalte=False,
+                               zellentext=_zellentext_band, gesaettigt=False)
     else:
         zeilen = _zeilen_jahr_fuer_jahr(daten, hover_titel)
+        figur = _heatmap_figur(zeilen, grenze)
 
-    st.plotly_chart(_heatmap_figur(zeilen, grenze),
-                    config={"displayModeBar": False}, key=schluessel)
+    st.plotly_chart(figur, config={"displayModeBar": False}, key=schluessel)
 
     if band is not None:
         st.caption(_kennzeile_band(daten, band))
@@ -461,15 +602,32 @@ def _zeichne_matrix(daten, grenze, hover_titel, ist_differenz, schluessel,
 
     if band is not None:
         jahre = band["jahre"]
-        st.caption(
-            f"Bandbreite über die {len(jahre)} abgeschlossenen Kalenderjahre "
-            f"{jahre[0]}–{jahre[-1]}; {band['aktuelles_jahr']} ist bewusst "
-            "nicht darin enthalten, sonst verglichen sich die Zahlen mit sich "
-            "selbst. In den Zeilen Hoch und Tief steht je Monat das Extrem "
-            "**dieses Monats**, in der Jahresspalte das Extrem **des "
-            "Jahres** — beides sind Extreme, sie stammen aber nicht "
-            "zwangsläufig aus demselben Jahr. Nur die Mittel-Zeile ergibt "
-            "verkettet ihren Jahreswert.")
+        spanne = f"{jahre[0]}–{jahre[-1]}" if len(jahre) > 1 else f"{jahre[0]}"
+        teile = [
+            f"Vergleichsfenster: die letzten {BAND_JAHRE} Kalenderjahre vor "
+            f"{band['aktuelles_jahr']}, hier {spanne} mit {len(jahre)} "
+            f"{'Jahr' if len(jahre) == 1 else 'Jahren'} verwertbarer Daten. "
+            f"{band['aktuelles_jahr']} ist bewusst nicht enthalten — sonst "
+            "verglichen sich die Zahlen mit sich selbst.",
+            "Mittel = arithmetischer Durchschnitt der gültigen Werte je "
+            "Monat. Jeder Monat rechnet für sich; fehlt ein einzelner, fällt "
+            "nur er weg.",
+            f"Die Farbskala läuft hier symmetrisch bis {fmt_pct(grenze, 1)} "
+            "und richtet sich nach den gezeigten Werten — sie ist deshalb "
+            "zwischen zwei Strategien nicht vergleichbar.",
+            "Die Zeitraum-Auswahl oben wirkt in dieser Ansicht nicht.",
+        ]
+        if len(jahre) < BAND_DUENN_UNTER:
+            teile.insert(1, (
+                f"**Nur {len(jahre)} Vergleichsjahr"
+                f"{'' if len(jahre) == 1 else 'e'}** — "
+                + ("Hoch, Mittel und Tief sind damit dieselbe Zahl; eine "
+                   "Bandbreite entsteht erst ab zwei Jahren."
+                   if len(jahre) == 1 else
+                   "die Spanne ist der Abstand von zwei Beobachtungen und "
+                   "trägt noch wenig.")))
+        for teil in teile:
+            st.caption(teil)
     else:
         schnitt = monats_durchschnitt(daten)
         if not schnitt["monate"].empty:
@@ -485,7 +643,10 @@ def _zeichne_matrix(daten, grenze, hover_titel, ist_differenz, schluessel,
     if st.checkbox("Tabelle anzeigen", value=False, key=f"tbl_{schluessel}",
                    help="Blendet dieselben Zahlen als Tabelle ein — zum "
                         "Herauskopieren."):
-        st.dataframe(_heatmap_tabelle(daten), hide_index=True)
+        st.dataframe(_zeilen_tabelle(zeilen, mit_jahresspalte=band is None,
+                                     zellentext=(_zellentext_band if band
+                                                 else _zellentext)),
+                     hide_index=True)
 
 
 def _zuschnitt(ts_df, von, bis):
@@ -502,8 +663,7 @@ def _zuschnitt(ts_df, von, bis):
 def zeige_monatsheatmap(label, ts_df, fee_dec,
                         gegen_benchmark=False, benchmark_name="Benchmark",
                         vergleich=None, mwst_suffix="", schluessel="p1",
-                        von=None, bis=None,
-                        band_von=None, band_bis=None, band_jahre=None):
+                        von=None, bis=None):
     """Monatsrenditen-Heatmap einer Strategie, wahlweise mit Differenzen.
 
     Args:
@@ -517,8 +677,7 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
         mwst_suffix: Textbaustein " (exkl. MwSt.)" für die Beschriftung
         schluessel: Suffix für die Plotly-Keys (mehrere Charts je Seite)
         von, bis: Zeitraum-Grenzen für „Jahr für Jahr"; None heißt „Rand der
-            jeweiligen Reihe"
-        band_von, band_bis, band_jahre: eigenes Fenster für die Bandbreite
+            jeweiligen Reihe". Die Bandbreite ignoriert sie (siehe unten).
 
     DER ZUSCHNITT PASSIERT HIER UND NICHT VORHER (14.08.2026). Die Heatmap
     folgt seit der Sichtprüfung dem oben gewählten Zeitraum — aber sie
@@ -531,12 +690,14 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
 
     Mit `von=None` beginnt deshalb JEDE Reihe an ihrem eigenen ersten Monat.
 
-    WARUM DIE BANDBREITE EIN EIGENES FENSTER BRAUCHT: Sie denkt in ganzen
-    KALENDERJAHREN, der Zuschnitt oben in Tagen. Bei „5 Jahre" schneidet der
-    tagbasierte Zuschnitt am 21.07.2021 — 2021 ist damit unvollständig und
-    fiele aus dem Band, das dann nur vier Jahre hätte, obwohl „5J" darüber
-    stünde. Deshalb bekommt sie `band_jahre` und schneidet allenfalls nach
-    `band_von`/`band_bis` (nur beim eigenen Zeitraum gesetzt).
+    DIE BANDBREITE IGNORIERT DEN ZEITRAUM (Festlegung Philip, 14.08.2026).
+    Sie nimmt immer die letzten `BAND_JAHRE` Kalenderjahre vor dem laufenden
+    und rechnet auf der ungeschnittenen Reihe. Grund: Ihre Zeilen heißen
+    „5J Hoch/Mittel/Tief", und eine Beschriftung, die eine Zahl behauptet,
+    muss sie halten können. Ein tagbasierter Zuschnitt bei „5 Jahre" schnitte
+    am 21.07.2021 — 2021 wäre unvollständig und das Band hätte vier Jahre.
+    Eine Caption sagt in der Ansicht ausdrücklich, dass die Auswahl oben hier
+    nicht wirkt.
     """
     voll_df = ts_df
     ts_df = _zuschnitt(ts_df, von, bis)
@@ -560,12 +721,11 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
               f"„{ANSICHT_BAND}“ stellt dem laufenden Jahr Hoch, Mittel und "
               "Tief der Vorjahre gegenüber — je Kalendermonat."))
 
-    # Die beiden Ansichten rechnen auf verschieden geschnittenen Reihen: „Jahr
-    # für Jahr" auf dem tagbasierten Zuschnitt, die Bandbreite auf dem eigenen
-    # Fenster (siehe Docstring). Ab hier arbeitet alles auf `basis`.
+    # „Jahr für Jahr" rechnet auf dem Zeitraum-Zuschnitt, die Bandbreite auf
+    # der vollen Reihe (siehe Docstring). Ab hier arbeitet alles auf `basis`.
     band = ansicht == ANSICHT_BAND
-    basis = _zuschnitt(voll_df, band_von, band_bis) if band else ts_df
-    v_von, v_bis = (band_von, band_bis) if band else (von, bis)
+    basis = voll_df if band else ts_df
+    v_von, v_bis = (None, None) if band else (von, bis)
 
     st.caption(f"{basis.index.min():%m/%Y} – {basis.index.max():%m/%Y}, "
                f"nach Kosten{mwst_suffix}.")
@@ -573,7 +733,7 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
     absolut = monatsrenditen(basis, fee_dec)
     _zeichne_matrix(absolut, HEATMAP_GRENZE_ABSOLUT, label,
                     False, f"heat_abs_{schluessel}",
-                    ansicht=ansicht, band_jahre=band_jahre)
+                    ansicht=ansicht, ts_df=basis)
 
     if gegen_benchmark:
         st.markdown(f"**Differenz zur Benchmark ({benchmark_name})**")
@@ -592,7 +752,7 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
             _zeichne_matrix(diff, HEATMAP_GRENZE_DIFFERENZ,
                             f"{label} gegen {benchmark_name}",
                             True, f"heat_bm_{schluessel}",
-                            ansicht=ansicht, band_jahre=band_jahre)
+                            ansicht=ansicht, ts_df=basis)
 
     if vergleich is not None:
         v_label, v_df, v_fee = vergleich
@@ -612,7 +772,7 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
         _zeichne_matrix(diff, HEATMAP_GRENZE_DIFFERENZ,
                         f"{label} gegen {v_label}", True,
                         f"heat_cmp_{schluessel}",
-                        ansicht=ansicht, band_jahre=band_jahre)
+                        ansicht=ansicht, ts_df=v_df)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
