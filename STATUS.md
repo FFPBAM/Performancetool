@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 14.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 79 Commits vor `main`
+· 81 Commits vor `main`
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -353,6 +353,44 @@ also annähernd quadratisch statt zum liegenden Balken.
 | 11 | 55 | 750 | Zeitraum „10 Jahre" |
 | 19 | 32 | 750 | „Seit Auflage" |
 
+### Der Zeitraum schnitt mitten ins Jahr (14.08. nachts)
+
+Philip an der Ansicht „Jahr für Jahr" mit der Schnellwahl **„3 Jahre"**:
+Januar bis Juni 2023 fehlen als Kacheln.
+
+Der Zuschnitt rechnete `Datenstand − 3 Jahre` = **21.07.2023**. Jan–Jun 2023
+lagen damit außerhalb, Juli 2023 blieb als Elf-Tage-Rumpfmonat stehen —
+**sechs leere Kacheln, bei jeder Schnellwahl**, weil der Schnitt immer im
+Monat des Datenstands landet.
+
+**Das war ein Fehler, nicht nur unschön.** Eine leere Kachel bedeutet in
+dieser Matrix schon etwas: *„die Strategie lief da noch nicht"* (bei
+comdirect vor 03/2024). Hier bedeutete dieselbe Kachel *„es gibt Daten, der
+Zeitraum blendet sie aus"*. Zwei Bedeutungen, ein Aussehen.
+
+**Behoben** durch Ausrichtung auf ganze Kalenderjahre. Das kostet nichts:
+
+| Auswahl | Zeilen vorher | Zeilen jetzt | leere Kacheln |
+|---|---:|---:|---|
+| 1 Jahr | 2 | 2 | 6 → 0 |
+| 3 Jahre | 4 | 4 | 6 → 0 |
+| 5 Jahre | 6 | 6 | 6 → 0 |
+| 10 Jahre | 11 | 11 | 6 → 0 |
+
+Ein **eigener Zeitraum wird weiterhin wörtlich** genommen — wer Daten
+eintippt, meint genau diese. In Kauf genommen: „3 Jahre" zeigt jetzt
+01/2023–07/2026, ein halbes Jahr mehr als die Kennzahlen darüber. Die Caption
+sagt es dazu.
+
+**Der eigentliche Befund:** Auf dieser Heatmap lagen zehn Testschritte — und
+**keiner konnte diese Zeile anfassen**, weil sie inline im Renderpfad von
+`streamlit_app.py` stand. Es gab nichts zu importieren, nichts aufzurufen.
+Sie heißt jetzt `zeitraum_fuer_heatmap`, und Schritt 9 prüft sie gegen sieben
+gerechnete Fälle plus die Wirkung an allen 19 Strategien. Steht als
+Transferwissen **#55** — *wer eine Entscheidung trifft, die man prüfen können
+muss, gibt ihr einen Namen.* Die Schwester von #54: dort fehlte die
+Layout-Prüfung, hier die Erreichbarkeit.
+
 ### Ein Renderfehler, den kein Test finden konnte
 
 Die Bandbreite war am Bildschirm unbrauchbar — **und alle Prüfsteine waren
@@ -660,18 +698,19 @@ fehlte. **Wer eine SCHWEIZ-Broschüre vor dem 11.08.2026 verschickt hat, hat zu
 gute Zahlen verschickt.** Prüfstein `tests/test_honorarsatz.py` schlägt künftig
 an, sobald eine Strategie ohne Satz dasteht.
 
-### Die Bilanz des Branches (gemessen 14.08.2026 spät, gegen `main`)
+### Die Bilanz des Branches (gemessen 14.08.2026 nachts, gegen `main`)
 
 | | Zeilen |
 |---|---:|
-| Produktivcode (15 Dateien inkl. `risiko_ansicht.py`) | +4.454 / −3.640 → **netto +814** |
-| Tests (22 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+6.382** |
-| Dokumentation (8 Dateien) | +3.809 / −87 |
+| Produktivcode (15 Dateien inkl. `risiko_ansicht.py`) | +4.516 / −3.640 → **netto +876** |
+| Tests (22 Dateien inkl. `ui_dump.py`, vorher gab es keine) | **+6.490** |
+| Dokumentation (8 Dateien) | +3.949 / −87 |
 
 *(Verlauf: 12.08. netto −974, 14.08. vormittags −10, nachmittags +264, abends
-+651, jetzt +814. Heatmap, Risiko-Block und Bandbreite haben zusammen rund
-1.790 Zeilen gebracht — dem stehen die rund 2.600 gegenüber, die in den
-Runden davor weggefallen sind. Jedes Mal gemessen, nicht geschätzt.)*
++651, spät +814, jetzt +876. Heatmap, Risiko-Block und Bandbreite haben
+zusammen rund 1.850 Zeilen gebracht — dem stehen die rund 2.600 gegenüber,
+die in den Runden davor weggefallen sind. Jedes Mal gemessen, nicht
+geschätzt.)*
 
 ### SCHWEIZ: der Vergleichsmaßstab war an drei Stellen noch da
 
@@ -774,7 +813,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
 | `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |
-| `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–10 **+ streamlit** | Die Heatmap, zehn Schritte. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach, Schritt 2 die Verkettung Zeile → Jahresspalte, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile, Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und prüft den Zeitraum-Zuschnitt an beiden Rändern, **Schritt 7 die Bandbreite** (arithmetisches Mittel gegen von Hand gerechnete Werte, Je-Monat-Toleranz, festes Fenster, Invariante `Tief ≤ Mittel ≤ Hoch` über alle Strategien), **Schritt 8 die FIGUR statt der Daten** — Achsentyp, Kategorienreihenfolge, Spaltenzahl, Koordinatentypen der Annotationen; das ist die Prüfung, durch deren Fehlen der Renderfehler schlüpfte —, Schritt 9 die Kachelhöhe, Schritt 10 fährt die Oberfläche hoch (beide Ansichten, alle Zeiträume, „Seit Auflage mit jungem Vergleichsportfolio") |
+| `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–11 **+ streamlit** | Die Heatmap, elf Schritte. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach, Schritt 2 die Verkettung Zeile → Jahresspalte, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile, Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und prüft den Zeitraum-Zuschnitt an beiden Rändern, **Schritt 7 die Bandbreite** (arithmetisches Mittel gegen von Hand gerechnete Werte, Je-Monat-Toleranz, festes Fenster, Invariante `Tief ≤ Mittel ≤ Hoch` über alle Strategien), **Schritt 8 die FIGUR statt der Daten** — Achsentyp, Kategorienreihenfolge, Spaltenzahl, Koordinatentypen der Annotationen; das ist die Prüfung, durch deren Fehlen der Renderfehler schlüpfte —, **Schritt 9 die Zeitraum-Ableitung** (sieben gerechnete Fälle plus die Zusage, dass die älteste Jahreszeile keine Lücke hat), Schritt 10 die Kachelhöhe, Schritt 11 fährt die Oberfläche hoch (beide Ansichten, alle Zeiträume, „Seit Auflage mit jungem Vergleichsportfolio") |
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16 |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
@@ -876,6 +915,10 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
    - Umschalten, mit und ohne Differenz-Matrizen, alle Zeiträume. Die
      Bandbreite darf sich vom Zeitraum **nicht** verändern — das ist Absicht
      und steht als Caption dort.
+   - **Schnellwahl durchklicken:** Bei 1 / 3 / 5 / 10 Jahren muss die
+     älteste Jahreszeile jetzt **vollständig** sein. Bei „Eigener Zeitraum"
+     dagegen bleiben angebrochene Randmonate stehen (mit `*`) — auch das ist
+     Absicht.
    - *Comdirect_100* in der Bandbreite: `2J`-Zeilen plus Vorbehalt-Hinweis.
    - „Tabelle anzeigen" bei allen drei Matrizen gleichzeitig.
 

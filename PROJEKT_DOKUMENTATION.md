@@ -2262,6 +2262,62 @@ sofort vier Abweichungen.
 
 ---
 
+### 55. Was inline in der Oberfläche steht, ist für keinen Prüfstein erreichbar (BUG, NEU 14.08.2026) ⭐
+
+Philip meldet: In der Monatsrenditen-Heatmap fehlen bei der Schnellwahl
+„3 Jahre" die Kacheln Januar bis Juni 2023.
+
+Die Ursache war eine einzige Zeile. Der Zuschnitt rechnete
+`Datenstand − 3 Jahre`; bei einem Datenstand vom **21.07.2026** schnitt er am
+**21.07.2023**. Jan–Jun 2023 fielen aus der Matrix, Juli 2023 blieb als
+Elf-Tage-Rumpfmonat stehen. **Sechs leere Kacheln, und zwar bei jeder
+Schnellwahl** — weil der Schnitt immer in demselben Monat landet wie der
+Datenstand.
+
+**Warum das ein Fehler war und nicht nur unschön:** Eine leere Kachel bedeutet
+in dieser Matrix bereits etwas — *„die Strategie lief da noch nicht"*, so wie
+bei comdirect vor März 2024. Hier bedeutete dieselbe Kachel *„es gibt Daten,
+der Zeitraum blendet sie aus"*. Zwei Bedeutungen, ein Aussehen; dieselbe
+Klasse wie ein Fehlwert, der aussieht wie ein Messwert (#46).
+
+Die Reparatur ist trivial: auf den Jahresanfang runden. Gleiche Zeilenzahl
+(nachgemessen für 1/3/5/10 Jahre), null Lücken, und das älteste Jahr zählt
+danach als vollständig in die Ø-Zeile.
+
+**Der eigentliche Befund ist ein anderer.** Auf dieser Heatmap lagen zu dem
+Zeitpunkt **zehn Testschritte** — Grenzfälle, Verkettungszusagen, die
+Invariante der Bandbreite, sogar die Figur-Geometrie nach #54. Und **keiner
+davon konnte diese Zeile anfassen**, weil sie inline mitten im Renderpfad von
+`streamlit_app.py` stand:
+
+```python
+_heat_von = (pd.Timestamp(maxd) - pd.DateOffset(years=jahre)).date()
+```
+
+Es gab nichts zu importieren, nichts aufzurufen, nichts zu vergleichen. Der
+AppTest hätte es theoretisch über die gerenderte Caption sehen können — aber
+nur, wenn jemand vorher auf die Idee gekommen wäre, genau danach zu suchen.
+
+**Übertragbar:** *Wer eine Entscheidung trifft, die man prüfen können muss,
+gibt ihr einen Namen.* Eine Berechnung im Renderpfad hat keine
+Angriffsfläche; dieselbe Berechnung als Funktion mit Rückgabewert hat eine.
+Nach dem Herausziehen prüft ein Testschritt sie gegen sieben von Hand
+gerechnete Fälle und misst zusätzlich die Wirkung an allen 19 Strategien —
+gegen die alte Formel meldet er neun Abweichungen und die sechs Lücken je
+Strategie.
+
+Das ist die Schwester von **#54**: Dort war die Lücke die fehlende
+**Layout**-Prüfung, hier die fehlende **Erreichbarkeit**. Beide Male war die
+Ursache nicht mangelnde Sorgfalt beim Testen, sondern dass es nichts gab,
+woran ein Test hätte ansetzen können.
+
+**Nebenbei mitgenommen:** Weil „3 Jahre" in der Heatmap jetzt 01/2023–07/2026
+umfasst und damit ein halbes Jahr mehr als der Kennzahlen-Block darüber, sagt
+die Caption es dazu. Zwei verschiedene Spannen unkommentiert untereinander
+wären wieder eine Zahl, die der Zahl daneben widerspricht (vgl. #52).
+
+---
+
 ## 1. Projektübersicht
 
 Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
@@ -3330,6 +3386,48 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 14.08.2026 (nachts) – Zeitraum-Zuschnitt der Heatmap auf Kalenderjahre
+
+Philip: In „Jahr für Jahr" fehlen bei der Schnellwahl „3 Jahre" die Kacheln
+Januar bis Juni 2023.
+
+**Gemessen:** Der Zuschnitt rechnete `Datenstand − 3 Jahre` = 21.07.2023.
+Jan–Jun 2023 lagen außerhalb, Juli 2023 blieb als Elf-Tage-Rumpfmonat stehen.
+Sechs leere Kacheln — bei **jeder** Schnellwahl, weil der Schnitt immer im
+Monat des Datenstands landet.
+
+**Warum das ein Fehler war:** Eine leere Kachel bedeutet in dieser Matrix
+schon etwas („die Strategie lief da noch nicht", bei comdirect vor 03/2024).
+Hier bedeutete dieselbe Kachel „es gibt Daten, der Zeitraum blendet sie aus".
+Zwei Bedeutungen, ein Aussehen (#46).
+
+**Behoben** durch Ausrichtung auf ganze Kalenderjahre: „N Jahre" bedeutet in
+der Heatmap die letzten N vollen Kalenderjahre plus das laufende. Kostet
+nichts — gleiche Zeilenzahl bei 1/3/5/10 Jahren, null Lücken, und das älteste
+Jahr zählt danach als vollständig in die Ø-Zeile. Ein **eigener Zeitraum wird
+weiterhin wörtlich** genommen; wer Daten eintippt, meint genau diese.
+
+In Kauf genommen: „3 Jahre" zeigt jetzt 01/2023–07/2026, also ein halbes Jahr
+mehr als der Kennzahlen-Block darüber, der taggenau rechnet. Die Caption sagt
+das dazu — zwei verschiedene Spannen unkommentiert untereinander wären wieder
+eine Zahl, die der Zahl daneben widerspricht.
+
+**Der eigentliche Befund** steht als Transferwissen **#55**: Auf dieser
+Heatmap lagen zehn Testschritte, und **keiner konnte diese Zeile anfassen**,
+weil sie inline im Renderpfad von `streamlit_app.py` stand. Sie heißt jetzt
+`zeitraum_fuer_heatmap` und ist eine reine Funktion; der neue **Schritt 9**
+prüft sie gegen sieben von Hand gerechnete Fälle (inklusive Jahreswechsel und
+eigenem Zeitraum) und misst zusätzlich die Wirkung an allen 19 Strategien:
+Die älteste Jahreszeile darf keine leere Kachel haben, solange die Strategie
+in diesem Jahr durchgehend lief.
+
+**Rot vor Grün nachgestellt:** Gegen die alte Formel meldet Schritt 9 neun
+Abweichungen an der Ableitung plus die sechs Lücken je Strategie.
+
+Die **Bandbreiten-Ansicht ist unberührt** — sie ignoriert den Zeitraum
+ohnehin und nimmt fest fünf Kalenderjahre. `ui_dump` vorher/nachher
+zeichengleich, alle 21 Suiten grün, `pyflakes` bei null.
 
 ### 14.08.2026 (spät) – Renderfehler behoben, Bandbreite nach Spezifikation
 
