@@ -127,17 +127,42 @@ Tooltip der Kachel sagt es bereits („Erster verfügbarer Datenpunkt der
 Strategie im Portfoliomanagement-System"), die Broschüre trägt die Fußnote
 zur vollständigen Historie auf Anfrage.
 
-**Noch offen, braucht eine Entscheidung — keine Fehler:**
+**Ebenfalls behoben (14.08.2026, zweite Runde):**
 
-- **B3** Der Honorarabzug ist minimal zu niedrig: `d = (1+f)^(1/365)−1` wird
-  subtrahiert, effektiv also `1−(1−d)^365`. Bei 1,55 % sind das 1,5264 %
-  — **−2,36 bp p.a.**, über 17 Jahre −31 bp, zugunsten des Hauses.
-- **B4** „3 Jahre" bedeutet an drei Stellen drei Spannen (Kennzahlen
-  21.07.2023, Heatmap 01.01.2023 mit Hinweis, Risikotabelle 22.07.2023 und
-  unabhängig von der Schnellwahl).
-- **B5** Tracking Error und Information Ratio vergleichen Netto-Strategie
-  gegen Brutto-Benchmark. IR −0,464 statt −0,118. Vertretbar und konsistent,
-  steht aber nirgends auf dem Bildschirm.
+**B3 — der Honorarabzug traf den eigenen Satz nicht.** Die Tagesbelastung
+kam aus `annual_to_daily_rate`, also aus der Aufzins-Formel für eine
+**Gutschrift** — abgezogen wurde sie trotzdem. Aufzinsen und Abziehen sind
+nicht symmetrisch:
+
+| | Frage | Formel |
+|---|---|---|
+| Gutschrift (rf) | welcher Tagessatz *wächst* auf 1+r? | `d = (1+r)^(1/365) − 1` |
+| Belastung (Honorar) | welcher Tagessatz *zehrt* auf 1−f? | `d = 1 − (1−f)^(1/365)` |
+
+Bei 1,55 % wurden effektiv **1,5264 %** abgezogen statt 1,5500 %. Die
+ausgewiesene CAGR sinkt nun um **0,74 bis 2,80 bp** (Median 2,52 bp),
+kumuliert bis **120 bp** bei der 17-Jahres-Reihe (Muster offensiv cVV:
+184,92 % → 183,72 %). **Die Broschürenzahlen ändern sich dadurch.**
+
+Der eigentliche Fund war der Prüfstein: Sein Kommentar sagte „muss exakt das
+Honorar kosten", geprüft wurde ein Band von 1,50 bis 1,56, und die
+Fehlermeldung nannte als Soll „~1,53". Die Toleranz war an den gemessenen
+Wert angepasst und umschloss genau den Fehler, den sie finden sollte
+(Transferwissen #58). Jetzt wird für alle sechs Sätze im Bestand auf 1e−12
+genau geprüft.
+
+**B4 — „3 Jahre" ist jetzt an jeder Stelle verortet.** Die Risikotabelle
+sagte bereits, dass die Auswahl oben nicht wirkt, nannte aber nicht ihren
+eigenen Bezug; die Drawdown-Tabelle sagte gar nichts. Beide tragen jetzt
+`zeitraum_hinweis()`: „Gezählt wird taggenau ab dem Datenstand 21.07.2026 —
+‚3 Jahre' meint hier 22.07.2023 bis 21.07.2026."
+
+**B5 — die Kostenbasis von TE und IR steht jetzt dabei.** Beide vergleichen
+die Strategie nach Kosten mit der Benchmark ohne Kosten (IR −0,464 statt
+−0,118). Die Festlegung bleibt — sie ist konsistent mit dem übrigen Werkzeug
+und entspricht dem, was der Kunde erlebt —, sie wird nur nicht mehr
+verschwiegen. TE und IR erreichen die Broschüre nicht, sie stehen nur im
+Werkzeug.
 
 **Nicht verifiziert:** Verhalten unter Python 3.14 in der Cloud, die
 erzeugte Broschüre selbst (nur Smoke-Test), das optische Erscheinungsbild im

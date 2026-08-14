@@ -2362,6 +2362,44 @@ simulierten Handelstag-Lieferung (Werktaganteil 1,000 statt 0,714).
 
 ---
 
+### #58 — Eine Toleranz, die an den Messwert angepasst ist, prüft nichts mehr
+
+**Gefunden im Audit vom 14.08.2026, Befund B3.** In
+`test_kosten_mathematik.py` stand:
+
+```python
+# Ein Jahr ohne Marktbewegung muss exakt das Honorar kosten.
+verlust = 100.0 - float(idx[-1])
+if not (1.50 < verlust < 1.56):
+    print(f"    FEHLER — 365 Nulltage kosten {verlust:.4f} statt ~1,53")
+```
+
+Der Kommentar sagt **„exakt"**. Die Prüfung lässt **drei Basispunkte** Spiel.
+Und die Fehlermeldung nennt als Sollwert **„~1,53"** — nicht 1,55.
+
+Damit ist die Geschichte vollständig erzählt: Jemand hat den Wert gemessen,
+der herauskam, das Band darum gelegt und den erwarteten Wert aus der Messung
+abgeschrieben. Genau in diesem Spielraum saß der Fehler — die Formel zog
+1,5264 % statt 1,5500 % ab. Der Test konnte ihn nie finden, weil er ihn
+umschloss.
+
+**Übertragbar:** *Der Sollwert einer Prüfung kommt aus der Zusage, nicht aus
+dem Ergebnis.* Wo eine Zusage „exakt" lautet, gehört dort auch eine exakte
+Prüfung hin (`abs(ist - soll) > 1e-12`). Eine Toleranz braucht eine
+Begründung aus der Sache — Fließkomma-Rundung, Datenungenauigkeit — und
+niemals „so kam es halt heraus". Wer eine Toleranz setzt, muss sagen können,
+welchen Fehler sie noch fangen soll.
+
+**Konkret geändert:** Der Schritt verlangt jetzt für **alle sechs** im
+Bestand vorkommenden Sätze, dass 365 Nulltage exakt den Satz kosten
+(0,85 / 1,20 / 1,25 / 1,40 / 1,55 / 1,60 %), auf 1e−12 genau.
+
+Verwandt mit **#56**: Dort war die *Begründung* falsch und das Ergebnis
+richtig, hier war die *Prüfung* zu weich und das Ergebnis falsch. Beide Male
+hätte der Blick auf die Zusage statt auf die Zahl es gezeigt.
+
+---
+
 ### #57 — Ein stiller Rückfall ist dort am gefährlichsten, wo er plausibel aussieht
 
 **Gefunden im Audit vom 14.08.2026, Befund B6.** In `shared.py` stand:
