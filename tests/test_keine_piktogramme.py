@@ -37,6 +37,7 @@ DATEIEN = [
     os.path.join("modules", "portfolioanalyse.py"),
     os.path.join("modules", "download_helfer.py"),
     os.path.join("modules", "portfolio_builder.py"),
+    os.path.join("modules", "risiko_ansicht.py"),
 ]
 
 
