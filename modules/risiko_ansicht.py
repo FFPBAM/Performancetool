@@ -649,6 +649,61 @@ def _zeichne_matrix(daten, grenze, hover_titel, ist_differenz, schluessel,
                      hide_index=True)
 
 
+def zeitraum_fuer_heatmap(jahre, eigener, sd, ed, maxd):
+    """Zeitraum-Grenzen der Ansicht „Jahr für Jahr" aus der Schnellwahl.
+
+    Args:
+        jahre: Anzahl Jahre aus der Schnellwahl; None für „Seit Auflage"
+        eigener: True, wenn der Nutzer eigene Kalenderdaten eingetragen hat
+        sd, ed: diese eigenen Daten
+        maxd: letzter Datenpunkt (Datenstand)
+
+    Returns:
+        (von, bis, gerundet) — `von`/`bis` als date oder None,
+        `gerundet` sagt, ob auf ganze Kalenderjahre ausgerichtet wurde.
+
+    WARUM AUF KALENDERJAHRE GERUNDET WIRD (14.08.2026, Philip gemeldet):
+    Vorher rechnete die Ableitung `maxd − N Jahre`. Bei Datenstand 21.07.2026
+    schnitt „3 Jahre" damit am 21.07.2023 — Januar bis Juni 2023 fielen aus
+    der Matrix, Juli 2023 blieb als Elf-Tage-Rumpfmonat stehen. Sechs leere
+    Kacheln, und zwar bei JEDER Schnellwahl, weil der Schnitt immer im selben
+    Monat landet wie der Datenstand.
+
+    Eine leere Kachel bedeutet in dieser Matrix aber schon etwas: „die
+    Strategie lief da noch nicht" (bei comdirect vor 03/2024). Hier bedeutete
+    dieselbe Kachel „es gibt Daten, der Zeitraum blendet sie aus" — zwei
+    Bedeutungen, ein Aussehen. Dieselbe Klasse wie ein Fehlwert, der aussieht
+    wie ein Messwert (#46).
+
+    Der Zuschnitt auf den Jahresanfang kostet nichts: gleiche Zeilenzahl
+    (nachgemessen für 1/3/5/10 Jahre), null Lücken, und das älteste Jahr
+    zählt danach als vollständig in die Ø-Zeile.
+
+    In Kauf genommen: „3 Jahre" zeigt 01/2023–07/2026, also ein halbes Jahr
+    mehr als die Kennzahlen darüber, die taggenau rechnen. Deshalb liefert
+    die Funktion `gerundet` mit — die Oberfläche sagt es dann dazu.
+
+    EIN EIGENER ZEITRAUM WIRD WÖRTLICH GENOMMEN. Wer zwei Kalenderdaten
+    eintippt, meint genau diese; entstehen dabei Randmonate, ist das die
+    Folge der eigenen Eingabe und keine Überraschung.
+
+    NICHT auf den Datenbeginn geklemmt: `_zuschnitt` schneidet ohnehin nur,
+    was vorhanden ist, und eine jüngere Strategie beginnt weiterhin an ihrem
+    eigenen ersten Monat.
+
+    Diese Ableitung stand bis zum 14.08.2026 INLINE in `streamlit_app.py` und
+    war damit für keinen Prüfstein erreichbar — obwohl zehn Testschritte auf
+    dieser Heatmap liegen. Genau deshalb ist der Fehler durchgerutscht.
+    Prüfstein: tests/test_monatsrenditen.py
+    """
+    if eigener:
+        return sd, ed, False
+    if jahre is None:
+        return None, None, False
+    erstes_jahr = pd.Timestamp(maxd).year - int(jahre)
+    return pd.Timestamp(erstes_jahr, 1, 1).date(), None, True
+
+
 def _zuschnitt(ts_df, von, bis):
     """Reihe auf den gewählten Zeitraum kürzen; None heißt „offenes Ende"."""
     if ts_df is None or len(ts_df) == 0:
@@ -663,7 +718,7 @@ def _zuschnitt(ts_df, von, bis):
 def zeige_monatsheatmap(label, ts_df, fee_dec,
                         gegen_benchmark=False, benchmark_name="Benchmark",
                         vergleich=None, mwst_suffix="", schluessel="p1",
-                        von=None, bis=None):
+                        von=None, bis=None, gerundet=False):
     """Monatsrenditen-Heatmap einer Strategie, wahlweise mit Differenzen.
 
     Args:
@@ -727,8 +782,14 @@ def zeige_monatsheatmap(label, ts_df, fee_dec,
     basis = voll_df if band else ts_df
     v_von, v_bis = (None, None) if band else (von, bis)
 
+    # Der Rundungshinweis ist nicht kosmetisch: Der Kennzahlen-Block oben
+    # nennt seinen eigenen Zeitraum (taggenau). Ohne diesen Satz stuenden
+    # zwei verschiedene Spannen unkommentiert untereinander.
+    zusatz = ("" if band or not gerundet else
+              " Die Auswahl oben ist hier auf ganze Kalenderjahre gerundet, "
+              "damit keine angeschnittenen Jahreszeilen entstehen.")
     st.caption(f"{basis.index.min():%m/%Y} – {basis.index.max():%m/%Y}, "
-               f"nach Kosten{mwst_suffix}.")
+               f"nach Kosten{mwst_suffix}.{zusatz}")
 
     absolut = monatsrenditen(basis, fee_dec)
     _zeichne_matrix(absolut, HEATMAP_GRENZE_ABSOLUT, label,

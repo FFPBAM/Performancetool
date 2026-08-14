@@ -23,8 +23,9 @@ Summe im Widerspruch.
      dazu der Zeitraum-Zuschnitt an beiden Raendern
   7. Die Bandbreite: arithmetisch, je Monat tolerant, festes Fenster
   8. Die FIGUR statt der Daten: Achsentyp, Reihenfolge, Annotationen
-  9. Die Kachelhoehe waechst, wenn es wenige Zeilen gibt
- 10. Die Oberflaeche rendert beide Ansichten ohne Fehler (AppTest)
+  9. Der Zeitraum-Zuschnitt laesst keine Luecken in der aeltesten Zeile
+ 10. Die Kachelhoehe waechst, wenn es wenige Zeilen gibt
+ 11. Die Oberflaeche rendert beide Ansichten ohne Fehler (AppTest)
 
 SCHRITT 8 GIBT ES WEGEN EINES FEHLERS, DEN DIE UEBRIGEN NICHT FANDEN
 (14.08.2026): Die Bandbreiten-Ansicht war unbrauchbar - vier Zeilen zu einem
@@ -41,6 +42,7 @@ Schritt 10 die AppTest-Umgebung; alle ueberspringen sich sauber.
     python tests/test_monatsrenditen.py
 """
 
+import datetime
 import os
 import sys
 
@@ -61,14 +63,14 @@ from modules.analytics import (  # noqa: E402
     monatsrenditen, monatsrenditen_differenz,
 )
 
-# Kachelhoehe und Figur-Geometrie liegen in der Darstellung, nicht in der
-# Mathematik. Sie brauchen streamlit — deshalb erst hier und mit sauberem
-# Ueberspringen.
+# Kachelhoehe, Figur-Geometrie und die Zeitraum-Ableitung liegen in der
+# Darstellung, nicht in der Mathematik. Sie brauchen streamlit — deshalb erst
+# hier und mit sauberem Ueberspringen.
 try:
     from modules.risiko_ansicht import (  # noqa: E402
         BAND_GRENZE_MIN, ZEILE_HOEHE_MAX, ZEILE_HOEHE_MIN, _grenze_aus_daten,
         _heatmap_figur, _zeilen_bandbreite, _zeilen_jahr_fuer_jahr,
-        _zeilenhoehe, _zellentext_band,
+        _zeilenhoehe, _zellentext_band, zeitraum_fuer_heatmap,
     )
     HAT_ANSICHT = True
 except ImportError:
@@ -864,8 +866,113 @@ def schritt8_geometrie():
     return f
 
 
-def schritt9_kachelgroesse():
-    print("Schritt 9 — die Kachelhoehe waechst, wenn es wenige Zeilen gibt")
+def schritt9_zeitraum():
+    print("Schritt 9 — der Zeitraum-Zuschnitt laesst keine Luecken")
+    if not HAT_ANSICHT:
+        print("    UEBERSPRUNGEN — modules.risiko_ansicht braucht streamlit")
+        return 0
+
+    # WARUM ES DIESEN SCHRITT GIBT (14.08.2026): Die Ableitung des Zeitraums
+    # stand INLINE in streamlit_app.py und war fuer keinen Pruefstein
+    # erreichbar - obwohl zehn Schritte auf dieser Heatmap liegen. Sie
+    # rechnete `maxd - N Jahre`; bei Datenstand 21.07.2026 schnitt
+    # "3 Jahre" damit am 21.07.2023, und Januar bis Juni 2023 fehlten als
+    # Kacheln. Sechs Luecken, bei JEDER Schnellwahl.
+    #
+    # Eine leere Kachel bedeutet in dieser Matrix aber schon etwas: "die
+    # Strategie lief da noch nicht". Zwei Bedeutungen, ein Aussehen (#46).
+    f = 0
+    maxd = datetime.date(2026, 7, 21)
+
+    faelle = [
+        # (jahre, erwartetes von, warum)
+        (1,  datetime.date(2025, 1, 1),  "1 Jahr"),
+        (3,  datetime.date(2023, 1, 1),  "3 Jahre - der gemeldete Fall"),
+        (5,  datetime.date(2021, 1, 1),  "5 Jahre"),
+        (10, datetime.date(2016, 1, 1),  "10 Jahre"),
+    ]
+    for jahre, soll, warum in faelle:
+        von, bis, gerundet = zeitraum_fuer_heatmap(jahre, False, None, None, maxd)
+        f += _ist(f"{warum}: von", von, soll)
+        f += _ist(f"{warum}: bis bleibt offen", bis, None)
+        f += _ist(f"{warum}: als gerundet gemeldet", gerundet, True)
+        # Die Zusage, die die alte Formel verletzte
+        if not (von.month == 1 and von.day == 1):
+            print(f"    FEHLER — {warum}: {von} ist kein Jahresanfang")
+            f += 1
+
+    von, bis, gerundet = zeitraum_fuer_heatmap(None, False, None, None, maxd)
+    f += _ist("Seit Auflage: von", von, None)
+    f += _ist("Seit Auflage: bis", bis, None)
+    f += _ist("Seit Auflage: nicht gerundet", gerundet, False)
+
+    # Ein eigener Zeitraum wird WOERTLICH genommen
+    sd, ed = datetime.date(2023, 5, 15), datetime.date(2026, 6, 20)
+    von, bis, gerundet = zeitraum_fuer_heatmap(None, True, sd, ed, maxd)
+    f += _ist("eigener Zeitraum: von unveraendert", von, sd)
+    f += _ist("eigener Zeitraum: bis unveraendert", bis, ed)
+    f += _ist("eigener Zeitraum: nicht gerundet", gerundet, False)
+    # Auch wenn zusaetzlich eine Jahreszahl gesetzt ist, gewinnt die Eingabe
+    f += _ist("eigener Zeitraum schlaegt die Schnellwahl",
+              zeitraum_fuer_heatmap(3, True, sd, ed, maxd)[0], sd)
+
+    # Jahreswechsel: Der Zuschnitt haengt nur am JAHR des Datenstands
+    for stand in (datetime.date(2026, 12, 31), datetime.date(2026, 1, 1)):
+        f += _ist(f"Datenstand {stand}: '3 Jahre'",
+                  zeitraum_fuer_heatmap(3, False, None, None, stand)[0],
+                  datetime.date(2023, 1, 1))
+
+    # ── Die Wirkung: keine Luecke in der aeltesten Zeile ─────────────────
+    try:
+        from modules.shared import (
+            DATA_FOLDER, EXCLUDE_SUBSTRINGS, detect_newest_date_tag,
+            load_all_csvs, load_mapping, build_portfolio_timeseries,
+        )
+        from modules.risiko_ansicht import _zuschnitt
+    except ImportError as ex:
+        print(f"    HINWEIS — echte Daten uebersprungen: {ex}")
+        return f
+
+    tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+    if tag is None:
+        print("    HINWEIS — keine CSVs gefunden")
+        return f
+    ts = build_portfolio_timeseries(
+        load_all_csvs(DATA_FOLDER, tag, EXCLUDE_SUBSTRINGS), load_mapping())
+
+    luecken = 0
+    geprueft = 0
+    for name in sorted(ts):
+        voll = historie_beschneiden(ts[name], name)
+        fee = float(voll["fee_default"].iloc[0]) if len(voll) else 0.0
+        echt_maxd = voll.index.max().date()
+        for jahre in (1, 3, 5, 10, None):
+            von, bis, _ = zeitraum_fuer_heatmap(jahre, False, None, None,
+                                                echt_maxd)
+            aus = _zuschnitt(voll, von, bis)
+            if aus is None or len(aus) == 0:
+                continue
+            m = monatsrenditen(aus, fee)
+            aelteste = min(m["renditen"].index)
+            # Nur pruefen, wenn die Strategie in diesem Jahr durchgehend
+            # lief - sonst sind die Luecken echt (Auflage mitten im Jahr).
+            if voll.index.min().date() > datetime.date(int(aelteste), 1, 4):
+                continue
+            geprueft += 1
+            leer = int(m["renditen"].loc[aelteste].isna().sum())
+            if leer:
+                print(f"    FEHLER — {name} / {jahre} Jahre: {leer} leere "
+                      f"Kacheln in der aeltesten Zeile ({aelteste})")
+                luecken += 1
+    f += luecken
+    if not luecken:
+        print(f"    OK — {geprueft} Faelle: keine leere Kachel in der "
+              f"aeltesten Jahreszeile")
+    return f
+
+
+def schritt10_kachelgroesse():
+    print("Schritt 10 — die Kachelhoehe waechst, wenn es wenige Zeilen gibt")
     if not HAT_ANSICHT:
         print("    UEBERSPRUNGEN — modules.risiko_ansicht braucht streamlit")
         return 0
@@ -897,8 +1004,8 @@ def schritt9_kachelgroesse():
     return f
 
 
-def schritt10_apptest():
-    print("Schritt 10 — die Oberflaeche rendert die Heatmap ohne Fehler")
+def schritt11_apptest():
+    print("Schritt 11 — die Oberflaeche rendert die Heatmap ohne Fehler")
     import importlib.util
     if importlib.util.find_spec("streamlit.testing.v1") is None:
         print("    UEBERSPRUNGEN — streamlit.testing nicht verfuegbar")
@@ -1119,7 +1226,8 @@ def main():
                     schritt3_differenz, schritt4_degeneriert,
                     schritt5_durchschnitt, schritt6_echte_daten,
                     schritt7_bandbreite, schritt8_geometrie,
-                    schritt9_kachelgroesse, schritt10_apptest):
+                    schritt9_zeitraum, schritt10_kachelgroesse,
+                    schritt11_apptest):
         fehler += schritt()
         print()
     if fehler:

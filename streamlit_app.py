@@ -56,6 +56,7 @@ from modules.analytics import (
 from modules.portfolioanalyse import render_portfolioanalyse
 from modules.risiko_ansicht import (
     zeige_drawdown_tabelle, zeige_monatsheatmap, zeige_risiko_ueberblick,
+    zeitraum_fuer_heatmap,
 )
 
 
@@ -765,13 +766,12 @@ if ansicht == _VIEW_PERF:
     # Gilt nur für die Ansicht „Jahr für Jahr". Die Bandbreiten-Ansicht nimmt
     # immer die letzten fünf Kalenderjahre und ignoriert die Auswahl (siehe
     # `zeige_monatsheatmap`) — sie sagt das in einer Caption auch.
-    if eigener:
-        _heat_von, _heat_bis = sd, ed
-    elif jahre is None:
-        _heat_von = _heat_bis = None
-    else:
-        _heat_von = (pd.Timestamp(maxd) - pd.DateOffset(years=jahre)).date()
-        _heat_bis = None
+    #
+    # Die Ableitung stand bis zum 14.08.2026 hier inline und war damit für
+    # keinen Prüfstein erreichbar; genau deshalb blieb ein Fehler darin lange
+    # unbemerkt (Transferwissen #55). Sie hat jetzt einen Namen.
+    _heat_von, _heat_bis, _heat_gerundet = zeitraum_fuer_heatmap(
+        jahre, eigener, sd, ed, maxd)
 
     def _analyse_reihen(kurz=False):
         """(label, reihe, honorar[, benchmark_name, hat_benchmark]) je Strategie.
@@ -976,7 +976,8 @@ if ansicht == _VIEW_PERF:
         zeige_monatsheatmap(l1,_voll1,fdec1,gegen_benchmark=sheat_bm,
                             benchmark_name=bn1,vergleich=_vgl,
                             mwst_suffix=mwst_suffix,
-                            von=_heat_von,bis=_heat_bis)
+                            von=_heat_von,bis=_heat_bis,
+                            gerundet=_heat_gerundet)
 
     if srisk:
         zeige_risiko_ueberblick(_analyse_reihen(),mwst_suffix=mwst_suffix)
