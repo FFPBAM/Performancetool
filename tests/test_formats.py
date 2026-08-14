@@ -26,8 +26,9 @@ sys.path.insert(0, WURZEL)
 os.chdir(WURZEL)
 
 from modules.formats import (  # noqa: E402
-    DATE_FORMAT_DE, DISCLAIMER_PERFORMANCE, EMPTY_VALUE, PCT_FORMAT_CODE,
-    QUELLE_PREFIX, fmt_date_de, fmt_pct, fmt_ratio, quelle_text,
+    DATE_FORMAT_DE, DISCLAIMER_PERFORMANCE, EMPTY_VALUE, MONATSNAMEN_KURZ,
+    MONATSNAMEN_LANG, PCT_FORMAT_CODE, QUELLE_PREFIX, fmt_date_de, fmt_pct,
+    fmt_ratio, monat_kurz, monat_lang, quelle_text,
 )
 
 
@@ -196,12 +197,62 @@ def schritt7_shared_reicht_durch():
     return f
 
 
+def schritt8_monatsnamen():
+    print("Schritt 8 — deutsche Monatsnamen (NEU 14.08.2026)")
+    f = 0
+
+    f += _pruefe("12 Kuerzel", len(MONATSNAMEN_KURZ), 12)
+    f += _pruefe("12 lange Namen", len(MONATSNAMEN_LANG), 12)
+    f += _pruefe("Maerz ausgeschrieben statt 'Mrz'", MONATSNAMEN_KURZ[2], "März")
+    f += _pruefe("monat_kurz(1)", monat_kurz(1), "Jan")
+    f += _pruefe("monat_kurz(3)", monat_kurz(3), "März")
+    f += _pruefe("monat_kurz(12)", monat_kurz(12), "Dez")
+    f += _pruefe("monat_lang(1)", monat_lang(1), "Januar")
+    f += _pruefe("monat_lang(3)", monat_lang(3), "März")
+    f += _pruefe("monat_lang(12)", monat_lang(12), "Dezember")
+
+    # Fest verdrahtet und NICHT ueber strftime("%b"): Das haengt an der
+    # Locale und liefert auf einem englischen System "Mar".
+    #
+    # Geprueft ueber den SYNTAXBAUM und nicht per Textsuche: Der Docstring
+    # von MONATSNAMEN_KURZ nennt strftime("%b") ausdruecklich als das, was
+    # man NICHT tun soll — eine Textsuche findet genau diese Warnung und
+    # meldet sie als Verstoss. (Am 14.08.2026 prompt passiert.)
+    import ast
+    with open(os.path.join("modules", "formats.py"), encoding="utf-8") as fh:
+        baum = ast.parse(fh.read())
+    treffer = []
+    for knoten in ast.walk(baum):
+        if not isinstance(knoten, ast.Call):
+            continue
+        ziel = knoten.func
+        if isinstance(ziel, ast.Attribute) and ziel.attr == "strftime":
+            for arg in knoten.args:
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    if "%b" in arg.value or "%B" in arg.value:
+                        treffer.append(arg.value)
+    if treffer:
+        print(f"    FEHLER — Monatsnamen aus strftime (Locale-abhaengig): "
+              f"{treffer}")
+        f += 1
+    else:
+        print("    OK — keine Locale-abhaengige Monatsnamen-Erzeugung")
+
+    # Grenzfaelle. Der Bool-Fall ist der interessante: In Python ist
+    # isinstance(True, int) wahr — ohne eigene Abfrage waere True der Januar.
+    for wert in (0, 13, -1, None, "3", 3.0, True, False):
+        f += _pruefe(f"monat_kurz({wert!r})", monat_kurz(wert), EMPTY_VALUE)
+        f += _pruefe(f"monat_lang({wert!r})", monat_lang(wert), EMPTY_VALUE)
+    return f
+
+
 def main():
     print("Pruefstein: modules/formats.py\n")
     fehler = 0
     for schritt in (schritt1_prozent_und_ratio, schritt2_fehlwerte,
                     schritt3_datum, schritt4_texte, schritt5_pandas_fehlwerte,
-                    schritt6_streamlitfrei, schritt7_shared_reicht_durch):
+                    schritt6_streamlitfrei, schritt7_shared_reicht_durch,
+                    schritt8_monatsnamen):
         fehler += schritt()
         print()
     if fehler:

@@ -18,12 +18,14 @@ Summe im Widerspruch.
   2. monatsrenditen — Zeile verkettet sich zur Jahresspalte
   3. Geometrische Differenz — das nachgerechnete Zwei-Monats-Beispiel
   4. Degenerierte Eingaben liefern Fehlwerte statt Nullen oder Abstuerze
-  5. Die 19 echten Strategien — jeder angebrochene Monat nachgemessen
-  6. Die Oberflaeche rendert die Heatmap ohne Fehler (AppTest)
+  5. Die Durchschnittszeile verkettet sich zum Durchschnittsjahr
+  6. Die 19 echten Strategien — jeder angebrochene Monat nachgemessen,
+     dazu der Zeitraum-Zuschnitt an beiden Raendern
+  7. Die Oberflaeche rendert die Heatmap ohne Fehler (AppTest)
 
-Schritte 1-4 brauchen nur numpy und pandas. Schritt 5 braucht zusaetzlich
-streamlit (fuer die CSV-Loader), Schritt 6 die AppTest-Umgebung; beide
-ueberspringen sich sauber.
+Schritte 1-4 brauchen nur numpy und pandas. Schritt 5 nutzt die echten CSVs
+nur fuer die Gegenprobe, Schritt 6 braucht sie ganz (streamlit fuer die
+Loader), Schritt 7 die AppTest-Umgebung; alle ueberspringen sich sauber.
 
     python tests/test_monatsrenditen.py
 """
@@ -44,7 +46,8 @@ except ImportError as ex:
 
 from modules.analytics import (  # noqa: E402
     MONAT_RAND_TOLERANZ_TAGE, _ist_voller_monat, heatmap_kennzahlen,
-    historie_beschneiden, monatsrenditen, monatsrenditen_differenz,
+    historie_beschneiden, monats_durchschnitt, monatsrenditen,
+    monatsrenditen_differenz,
 )
 
 TOLERANZ = 1e-12
@@ -309,8 +312,102 @@ def schritt4_degeneriert():
     return f
 
 
-def schritt5_echte_daten():
-    print("Schritt 5 — die 19 echten Strategien: jeder angebrochene Monat nachgemessen")
+def schritt5_durchschnitt():
+    print("Schritt 5 — die Durchschnittszeile verkettet sich zum Durchschnittsjahr")
+    f = 0
+
+    # Zwei volle Jahre. 2024 jeden Monat +1 %, 2025 jeden Monat -1 %.
+    # Das geometrische Mittel je Monat ist damit sqrt(1,01 * 0,99) - 1
+    # = -0,00005001..., fuer jeden der zwoelf Monate gleich.
+    idx = pd.date_range("2024-01-01", "2025-12-31", freq="D")
+    rp = np.zeros(len(idx))
+    for jahr, wert in ((2024, 0.01), (2025, -0.01)):
+        for monat in range(1, 13):
+            rp[idx.get_loc(pd.Timestamp(jahr, monat, 15))] = wert
+    df = pd.DataFrame({"ret_port": rp}, index=idx)
+
+    m = monatsrenditen(df, 0.0)
+    s = monats_durchschnitt(m)
+    f += _ist("beide Jahre einbezogen", s["jahre"], [2024, 2025])
+    f += _nah("Januar-Mittel = sqrt(1,01 x 0,99) - 1",
+              s["monate"].loc[1], (1.01 * 0.99) ** 0.5 - 1.0)
+    f += _ist("alle 12 Monate gefuellt", int(s["monate"].notna().sum()), 12)
+
+    # DIE Zusage: Die Zeile verkettet sich exakt zum Durchschnittsjahr.
+    verkettet = float(np.prod(1.0 + s["monate"].to_numpy(dtype=float)) - 1.0)
+    f += _nah("Verkettung der Ø-Monate trifft das Ø-Jahr",
+              verkettet, s["jahr"], 1e-14)
+    # Und das Ø-Jahr ist das geometrische Mittel der beiden Jahreswerte.
+    f += _nah("Ø-Jahr = geometrisches Mittel der Jahre",
+              s["jahr"],
+              ((1 + m["jahr"].loc[2024]) * (1 + m["jahr"].loc[2025])) ** 0.5 - 1.0,
+              1e-14)
+
+    # Angebrochene Jahre duerfen NICHT eingehen — sonst haette der Januar
+    # mehr Beobachtungen als der Dezember und die Verkettung braeche.
+    mit_rumpf = pd.DataFrame(
+        {"ret_port": np.concatenate([rp, np.zeros(60)])},
+        index=idx.append(pd.date_range("2026-01-01", "2026-03-01", freq="D")))
+    s2 = monats_durchschnitt(monatsrenditen(mit_rumpf, 0.0))
+    f += _ist("Rumpfjahr 2026 bleibt aussen vor", s2["jahre"], [2024, 2025])
+    f += _nah("Ø-Monate unveraendert", s2["monate"].loc[1],
+              s["monate"].loc[1], 1e-15)
+
+    # Kein volles Jahr -> keine Zeile
+    kurz = monatsrenditen(df.loc["2024-03-01":"2024-08-31"], 0.0)
+    s3 = monats_durchschnitt(kurz)
+    f += _ist("ohne volles Kalenderjahr: keine Ø-Zeile",
+              bool(s3["monate"].empty), True)
+    f += _ist("ohne volles Kalenderjahr: kein Ø-Jahr", s3["jahr"], None)
+
+    # Degeneriert
+    f += _ist("leere Matrix: keine Ø-Zeile",
+              bool(monats_durchschnitt(monatsrenditen(None))["monate"].empty),
+              True)
+
+    # An echten Daten: ueber ALLE Strategien muss die Verkettung aufgehen.
+    try:
+        from modules.shared import (
+            DATA_FOLDER, EXCLUDE_SUBSTRINGS, detect_newest_date_tag,
+            load_all_csvs, load_mapping, build_portfolio_timeseries,
+        )
+    except ImportError as ex:
+        print(f"    HINWEIS — echte Daten uebersprungen: {ex}")
+        return f
+
+    tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+    if tag is None:
+        print("    HINWEIS — keine CSVs gefunden")
+        return f
+    ts = build_portfolio_timeseries(
+        load_all_csvs(DATA_FOLDER, tag, EXCLUDE_SUBSTRINGS), load_mapping())
+
+    geprueft = 0
+    for name in sorted(ts):
+        d = historie_beschneiden(ts[name], name)
+        m = monatsrenditen(d, float(d["fee_default"].iloc[0]) if len(d) else 0.0)
+        s = monats_durchschnitt(m)
+        if s["monate"].empty:
+            continue
+        geprueft += 1
+        verkettet = float(np.prod(1.0 + s["monate"].to_numpy(dtype=float)) - 1.0)
+        if abs(verkettet - float(s["jahr"])) > 1e-10:
+            print(f"    FEHLER — {name}: Ø-Verkettung {verkettet:.10f} gegen "
+                  f"Ø-Jahr {float(s['jahr']):.10f}")
+            f += 1
+        # Jedes einbezogene Jahr muss wirklich vollstaendig sein
+        for jahr in s["jahre"]:
+            if not bool(m["jahr_vollstaendig"].loc[jahr]):
+                print(f"    FEHLER — {name}: {jahr} ist nicht vollstaendig, "
+                      f"geht aber in den Durchschnitt ein")
+                f += 1
+    print(f"    OK — {geprueft} echte Strategien: Ø-Zeile verkettet sich zum "
+          f"Ø-Jahr, nur volle Jahre einbezogen")
+    return f
+
+
+def schritt6_echte_daten():
+    print("Schritt 6 — die 19 echten Strategien: jeder angebrochene Monat nachgemessen")
     try:
         from modules.shared import (
             DATA_FOLDER, EXCLUDE_SUBSTRINGS, detect_newest_date_tag,
@@ -438,11 +535,44 @@ def schritt5_echte_daten():
     if not abweichungen:
         print("    OK — bei allen Strategien und Jahren verkettet sich die "
               "Zeile zur Jahresspalte")
+
+    # ── Zeitraum-Zuschnitt (NEU 14.08.2026) ────────────────────────────────
+    # Seit die Heatmap dem gewaehlten Zeitraum folgt, entstehen an BEIDEN
+    # Raendern angebrochene Monate — auch mitten in der Historie, wo die
+    # Strategie laengst laeuft. Sie muessen genauso gekennzeichnet werden wie
+    # der Auflagemonat, sonst behauptet ein Zuschnitt-Artefakt eine
+    # Monatsrendite.
+    name = "Muster ausgewogen cVV"
+    if name in ts:
+        voll = historie_beschneiden(ts[name], name)
+        # Ausschnitt mitten in der Historie, an beiden Seiten angebrochen
+        aus = voll.loc[pd.Timestamp("2015-05-12"):pd.Timestamp("2018-09-20")]
+        ma = monatsrenditen(aus, 0.0)
+        f += _ist("Zuschnitt: erster Monat 05/2015 angebrochen",
+                  bool(ma["vollstaendig"].loc[2015, 5]), False)
+        f += _ist("Zuschnitt: letzter Monat 09/2018 angebrochen",
+                  bool(ma["vollstaendig"].loc[2018, 9]), False)
+        f += _ist("Zuschnitt: Juni 2015 dazwischen ist voll",
+                  bool(ma["vollstaendig"].loc[2015, 6]), True)
+        f += _ist("Zuschnitt: 2016 und 2017 sind volle Jahre",
+                  [bool(ma["jahr_vollstaendig"].loc[j]) for j in (2016, 2017)],
+                  [True, True])
+        f += _ist("Zuschnitt: 2015 und 2018 sind KEINE vollen Jahre",
+                  [bool(ma["jahr_vollstaendig"].loc[j]) for j in (2015, 2018)],
+                  [False, False])
+        # Der Durchschnitt darf nur die beiden vollen Jahre nehmen
+        f += _ist("Zuschnitt: Ø nur ueber 2016 und 2017",
+                  monats_durchschnitt(ma)["jahre"], [2016, 2017])
+        # Ein Ausschnitt auf exakte Jahresgrenzen hat KEINE Randmonate
+        genau = voll.loc[pd.Timestamp("2016-01-01"):pd.Timestamp("2017-12-31")]
+        mg = monatsrenditen(genau, 0.0)
+        f += _ist("exakte Jahresgrenzen: kein angebrochener Monat",
+                  int((~mg["vollstaendig"].to_numpy()).sum()), 0)
     return f
 
 
-def schritt6_apptest():
-    print("Schritt 6 — die Oberflaeche rendert die Heatmap ohne Fehler")
+def schritt7_apptest():
+    print("Schritt 7 — die Oberflaeche rendert die Heatmap ohne Fehler")
     import importlib.util
     if importlib.util.find_spec("streamlit.testing.v1") is None:
         print("    UEBERSPRUNGEN — streamlit.testing nicht verfuegbar")
@@ -492,11 +622,14 @@ def schritt6_apptest():
         else:
             print("    OK — Ueberschrift steht")
         captions = " ".join(c.value for c in at.caption).lower()
-        if "bester monat" not in captions:
-            print("    FEHLER — die Kennzeile unter der Heatmap fehlt")
-            f += 1
-        else:
-            print("    OK — Kennzeile steht")
+        for stueck, bez in (("bester:", "Kennzeile"),
+                            ("angebrochener monat", "Sternchen-Fussnote"),
+                            ("geometrisches mittel", "Ø-Fussnote")):
+            if stueck not in captions:
+                print(f"    FEHLER — {bez} fehlt (suchte '{stueck}')")
+                f += 1
+            else:
+                print(f"    OK — {bez} steht")
 
     _lauf("Heatmap gegen die Benchmark", p_heat=True, p_heat_bm=True)
     _lauf("Heatmap gegen das Vergleichsportfolio",
@@ -505,6 +638,55 @@ def schritt6_apptest():
     # Eine Strategie ohne Benchmark darf nicht in eine leere Matrix laufen.
     _lauf("SCHWEIZ ohne Benchmark, Differenz angehakt",
           p_sel1="Muster SCHWEIZ Aktien", p_heat=True, p_heat_bm=True)
+
+    # ── Zeitraum-Kopplung (NEU 14.08.2026) ─────────────────────────────────
+    for zeitraum in ("1 Jahr", "3 Jahre", "10 Jahre", "Seit Auflage"):
+        _lauf(f"Zeitraum '{zeitraum}'", p_heat=True, p_zeitraum=zeitraum)
+
+    # Der Fall, der die Kopplung heikel macht: „Seit Auflage" MIT
+    # Vergleichsportfolio. Die alte Strategie darf ihre Historie NICHT an die
+    # Schnittmenge mit der jungen verlieren.
+    at = _lauf("Seit Auflage + junges Vergleichsportfolio",
+               p_heat=True, p_zeitraum="Seit Auflage", p_cmp=True,
+               p_sel1="Muster ausgewogen cVV", p_sel2="Comdirect 100")
+    if at is not None:
+        captions = " ".join(c.value for c in at.caption)
+        if "01/2009" not in captions:
+            print("    FEHLER — die Heatmap beginnt nicht bei 01/2009; "
+                  "die Schnittmenge hat die Historie beschnitten")
+            f += 1
+        else:
+            print("    OK — volle cVV-Historie trotz jungem Vergleich")
+
+    _lauf("Eigener Zeitraum", p_heat=True, p_zeit_frei=True)
+
+    # Tabelle unter der Heatmap
+    at = _lauf("Tabelle anzeigen", p_heat=True, tbl_heat_abs_p1=True)
+    if at is not None:
+        if not at.dataframe:
+            print("    FEHLER — die Tabelle unter der Heatmap fehlt")
+            f += 1
+        else:
+            print(f"    OK — Tabelle steht ({len(at.dataframe)} Stueck)")
+
+    # Alle drei Matrizen mit Tabelle gleichzeitig — Key-Kollisionen faenden
+    # sich genau hier.
+    _lauf("drei Matrizen, alle mit Tabelle",
+          p_heat=True, p_heat_bm=True, p_heat_cmp=True, p_cmp=True,
+          tbl_heat_abs_p1=True, tbl_heat_bm_p1=True, tbl_heat_cmp_p1=True)
+
+    # Der Vergleichs-Haken muss auch OHNE Vergleichsportfolio da sein
+    # (ausgegraut) und darf dann nichts ausloesen.
+    at = _lauf("Vergleichs-Haken ohne Vergleichsportfolio",
+               p_heat=True, p_cmp=False, p_heat_cmp=True)
+    if at is not None:
+        markdown = " ".join(m.value for m in at.markdown)
+        if "Differenz zu " in markdown:
+            print("    FEHLER — Vergleichs-Matrix erscheint ohne "
+                  "Vergleichsportfolio")
+            f += 1
+        else:
+            print("    OK — ohne Vergleichsportfolio keine Vergleichs-Matrix")
     return f
 
 
@@ -513,7 +695,8 @@ def main():
     fehler = 0
     for schritt in (schritt1_voller_monat, schritt2_verkettung,
                     schritt3_differenz, schritt4_degeneriert,
-                    schritt5_echte_daten, schritt6_apptest):
+                    schritt5_durchschnitt, schritt6_echte_daten,
+                    schritt7_apptest):
         fehler += schritt()
         print()
     if fehler:
