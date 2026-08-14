@@ -735,6 +735,73 @@ def monatsrenditen_differenz(a: dict, b: dict) -> dict:
     }
 
 
+def monats_durchschnitt(daten: dict) -> dict:
+    """Geometrisches Mittel je Kalendermonat über die VOLLSTÄNDIGEN Jahre.
+
+    Beantwortet die Frage, die eine Monats-Heatmap unweigerlich auslöst:
+    „Ist der September historisch schwach?"
+
+    Returns:
+        dict mit
+          "monate": Series, index=1..12, Dezimal (leer, wenn kein volles Jahr)
+          "jahr":   float oder None — das durchschnittliche Kalenderjahr
+          "jahre":  Liste der einbezogenen Jahre
+
+    WARUM NUR VOLLSTÄNDIGE KALENDERJAHRE, und warum geometrisch: Aus beidem
+    zusammen folgt eine Eigenschaft, die diese Zeile erst brauchbar macht —
+    sie verkettet sich exakt zu ihrer eigenen Jahresspalte, genau wie jede
+    andere Zeile der Matrix.
+
+        Ø_m = (Π_y (1 + r_{y,m}))^(1/N) − 1
+
+        Π_m (1 + Ø_m) = (Π_y Π_m (1 + r_{y,m}))^(1/N)
+                      = (Π_y (1 + R_y))^(1/N)
+                      = 1 + Ø_Jahr
+
+    Der Beweis hängt daran, dass für ALLE ZWÖLF Monate dieselbe Jahresmenge
+    zugrunde liegt. Nimmt man angebrochene Jahre hinzu, hat der Januar
+    plötzlich mehr Beobachtungen als der Dezember, die Umformung bricht, und
+    die Zeile widerspräche ihrer Summenspalte. Deshalb die Beschränkung.
+
+    Bleibt kein vollständiges Kalenderjahr übrig, ist die Rückgabe leer und
+    die Zeile entfällt in der Darstellung — kein Durchschnitt ist besser als
+    ein Durchschnitt aus einem halben Jahr.
+    """
+    leer = {"monate": pd.Series(dtype=float), "jahr": None, "jahre": []}
+    renditen, vollstaendig = daten["renditen"], daten["vollstaendig"]
+    if renditen.empty:
+        return leer
+
+    volle = [int(j) for j in renditen.index
+             if bool(daten["jahr_vollstaendig"].loc[j])]
+    if not volle:
+        return leer
+
+    # Sicherheitsnetz: In einem als vollstaendig geltenden Kalenderjahr muss
+    # jeder der zwoelf Monate vorhanden UND vollstaendig sein. Sonst waere die
+    # Jahresmenge je Monat doch verschieden.
+    volle = [j for j in volle
+             if bool(vollstaendig.loc[j].all())
+             and bool(renditen.loc[j].notna().all())]
+    if not volle:
+        return leer
+
+    n = len(volle)
+    monate = pd.Series(np.nan, index=list(range(1, 13)), dtype=float)
+    for monat in range(1, 13):
+        werte = renditen.loc[volle, monat].to_numpy(dtype=float)
+        wachstum = float(np.prod(1.0 + werte))
+        if wachstum <= 0:
+            continue
+        monate.loc[monat] = wachstum ** (1.0 / n) - 1.0
+
+    jahres_werte = daten["jahr"].loc[volle].to_numpy(dtype=float)
+    wachstum_jahr = float(np.prod(1.0 + jahres_werte))
+    jahr = wachstum_jahr ** (1.0 / n) - 1.0 if wachstum_jahr > 0 else None
+
+    return {"monate": monate, "jahr": jahr, "jahre": volle}
+
+
 def heatmap_kennzahlen(daten: dict) -> dict:
     """Kennzahlen über die VOLLSTÄNDIGEN Monate einer Matrix.
 

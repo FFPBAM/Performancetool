@@ -553,9 +553,9 @@ if ansicht == _VIEW_PERF:
         # ignoriert bewusst den gewaehlten Zeitraum. Das gehoert getrennt.
         st.caption("**Analysen**")
         sheat=st.checkbox("Monatsrenditen (Heatmap)",value=False,key="p_heat",
-            help="Zeigt jeden Monat der Historie als eingefärbtes Feld: rot "
-                 "negativ, grün positiv, mit der Zahl darin. Bewusst immer "
-                 "die volle Historie, unabhängig vom gewählten Zeitraum.")
+            help="Zeigt jeden Monat als eingefärbtes Feld: rot negativ, grün "
+                 "positiv, mit der Zahl darin. Folgt dem oben gewählten "
+                 "Zeitraum.")
         sheat_bm=sheat_cmp=False
         if sheat:
             sheat_bm=st.checkbox("Differenz zur eigenen Benchmark",value=False,
@@ -563,11 +563,17 @@ if ansicht == _VIEW_PERF:
                 help="Zweite Matrix: um wieviel die Strategie im jeweiligen "
                      "Monat besser oder schlechter war als ihr "
                      "Vergleichsmaßstab. Geometrisch gerechnet.")
-            if sc:
-                sheat_cmp=st.checkbox("Differenz zum Vergleichsportfolio",
-                    value=False,key="p_heat_cmp",
-                    help="Dasselbe gegen die oben gewählte zweite Strategie. "
-                         "Gezeigt werden nur Monate, in denen beide liefen.")
+            # Der Haken steht IMMER da, auch ohne aktives Vergleichsportfolio
+            # (Philip, 14.08.2026): Vorher tauchte er erst auf, wenn oben ein
+            # Vergleichsportfolio gewählt war — man konnte also nicht wissen,
+            # dass es die Möglichkeit gibt. Ausgegraut statt versteckt.
+            sheat_cmp=st.checkbox("Differenz zum Vergleichsportfolio",
+                value=False,key="p_heat_cmp",disabled=not sc,
+                help=("Dasselbe gegen die oben gewählte zweite Strategie. "
+                      "Gezeigt werden nur Monate, in denen beide liefen."
+                      if sc else
+                      "Dafür oben „Vergleichsportfolio“ einschalten und eine "
+                      "zweite Strategie wählen."))
         srisk=st.checkbox("Risiko im Überblick",value=False,key="p_risk",
             help="Rollierende Volatilität über ein Jahr als Chart, dazu "
                  "Volatilität, Sharpe Ratio, Tracking Error und Information "
@@ -745,6 +751,23 @@ if ansicht == _VIEW_PERF:
     # 2008er-Zeilen sind reine Indexbasis und kein Track Record.
     _voll1 = historie_beschneiden(data[ps1], ps1)
     _voll2 = historie_beschneiden(data[ps2], ps2) if sc and ps2 else None
+
+    # Zeitraum für die Heatmap (14.08.2026). Sie folgt der Auswahl oben, aber
+    # BEWUSST NICHT über sd/sd_vor: Die sind auf `mind` geklemmt, und `mind`
+    # ist bei aktivem Vergleichsportfolio die SCHNITTMENGE beider Historien
+    # (siehe oben). "Muster ausgewogen cVV" verlöre bei „Seit Auflage"
+    # fünfzehn Jahre, sobald jemand eine junge Strategie danebenstellt.
+    #
+    # None heißt „Rand der jeweiligen Reihe" — jede Strategie beginnt dann an
+    # ihrem eigenen ersten Monat. Der Zuschnitt selbst passiert in
+    # `zeige_monatsheatmap`, damit beide Reihen ihn unabhängig bekommen.
+    if eigener:
+        _heat_von, _heat_bis = sd, ed
+    elif jahre is None:
+        _heat_von = _heat_bis = None
+    else:
+        _heat_von = (pd.Timestamp(maxd) - pd.DateOffset(years=jahre)).date()
+        _heat_bis = None
 
     def _analyse_reihen(kurz=False):
         """(label, reihe, honorar[, benchmark_name, hat_benchmark]) je Strategie.
@@ -948,7 +971,8 @@ if ansicht == _VIEW_PERF:
             _vgl=(l2, _voll2, fdec2)
         zeige_monatsheatmap(l1,_voll1,fdec1,gegen_benchmark=sheat_bm,
                             benchmark_name=bn1,vergleich=_vgl,
-                            mwst_suffix=mwst_suffix)
+                            mwst_suffix=mwst_suffix,
+                            von=_heat_von,bis=_heat_bis)
 
     if srisk:
         zeige_risiko_ueberblick(_analyse_reihen(),mwst_suffix=mwst_suffix)
