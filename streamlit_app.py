@@ -51,8 +51,12 @@ from modules.analytics import (
     calc_period_return,
     calc_period_return_after_fee,
     has_benchmark,
+    historie_beschneiden,
 )
 from modules.portfolioanalyse import render_portfolioanalyse
+from modules.risiko_ansicht import (
+    zeige_drawdown_tabelle, zeige_monatsheatmap, zeige_risiko_ueberblick,
+)
 
 
 # ==========================================================================
@@ -542,6 +546,33 @@ if ansicht == _VIEW_PERF:
         sbar=st.checkbox("Balken-Chart",value=True,key="p_bar",
             help="Wertentwicklung je Kalenderjahr bzw. Zeitraum als Balken, "
                  "im Vergleich zur Benchmark.")
+
+        # Eigene Gruppe (14.08.2026): Die Schalter unter "Darstellung"
+        # blenden Sichten auf DIESELBEN Zahlen ein. Die beiden hier bringen
+        # zusaetzliche Auswertungen mit eigener Rechnung — und die Heatmap
+        # ignoriert bewusst den gewaehlten Zeitraum. Das gehoert getrennt.
+        st.caption("**Analysen**")
+        sheat=st.checkbox("Monatsrenditen (Heatmap)",value=False,key="p_heat",
+            help="Zeigt jeden Monat der Historie als eingefärbtes Feld: rot "
+                 "negativ, grün positiv, mit der Zahl darin. Bewusst immer "
+                 "die volle Historie, unabhängig vom gewählten Zeitraum.")
+        sheat_bm=sheat_cmp=False
+        if sheat:
+            sheat_bm=st.checkbox("Differenz zur eigenen Benchmark",value=False,
+                key="p_heat_bm",
+                help="Zweite Matrix: um wieviel die Strategie im jeweiligen "
+                     "Monat besser oder schlechter war als ihr "
+                     "Vergleichsmaßstab. Geometrisch gerechnet.")
+            if sc:
+                sheat_cmp=st.checkbox("Differenz zum Vergleichsportfolio",
+                    value=False,key="p_heat_cmp",
+                    help="Dasselbe gegen die oben gewählte zweite Strategie. "
+                         "Gezeigt werden nur Monate, in denen beide liefen.")
+        srisk=st.checkbox("Risiko im Überblick",value=False,key="p_risk",
+            help="Rollierende Volatilität über ein Jahr als Chart, dazu "
+                 "Volatilität, Sharpe Ratio, Tracking Error und Information "
+                 "Ratio je Zeitraum.")
+
         st.markdown("---")
         st.caption("**Honorar**")
         fd1=float(data[ps1]["fee_default"].iloc[0]) if len(data[ps1]) else 0.0
@@ -700,6 +731,38 @@ if ansicht == _VIEW_PERF:
         sa2t=pd.Series(make_index_after_fee(r2t,float(fdec2),100.0),index=pd.to_datetime(xd))
     bn1=data[ps1].attrs.get("benchmark_name","Benchmark"); bn2=data[ps2].attrs.get("benchmark_name","Benchmark") if sc and ps2 else None
     bt1=d2b.get(ds1,""); bt2=d2b.get(ds2,"") if ds2 else ""
+
+    # ── Reihen für Heatmap und Risiko-Block (14.08.2026) ────────────────────
+    # Diese Blöcke rechnen bewusst auf der VOLLEN Reihe aus `data`, nicht auf
+    # df1/df2. df1/df2 sind zweifach beschnitten: auf die Zeitraum-Schnellwahl
+    # und — sobald das Vergleichsportfolio läuft — per Inner-Join oben auf die
+    # gemeinsamen Handelstage beider Strategien. "Muster ausgewogen cVV" (ab
+    # 2009) gegen "Comdirect 100" (ab 2024) verlöre dabei fünfzehn Jahre.
+    #
+    # historie_beschneiden wird hier angewandt, damit die Heatmap dieselbe
+    # Basis nutzt wie die Broschüre: Ohne sie stünde bei den fünf
+    # cVV-Strategien eine Zelle "Dez 2008" mit genau EINEM Tag — die beiden
+    # 2008er-Zeilen sind reine Indexbasis und kein Track Record.
+    _voll1 = historie_beschneiden(data[ps1], ps1)
+    _voll2 = historie_beschneiden(data[ps2], ps2) if sc and ps2 else None
+
+    def _analyse_reihen(kurz=False):
+        """(label, reihe, honorar[, benchmark_name, hat_benchmark]) je Strategie.
+
+        `kurz` lässt die beiden Benchmark-Felder weg — die Drawdown-Tabelle
+        braucht sie nicht.
+        """
+        raus = []
+        for lab, reihe, fee, bmn in ((l1, _voll1, fdec1, bn1),
+                                     (l2, _voll2, fdec2, bn2)):
+            if reihe is None or not lab:
+                continue
+            if kurz:
+                raus.append((lab, reihe, fee))
+            else:
+                hat = "ret_bm" in reihe.columns and has_benchmark(reihe["ret_bm"])
+                raus.append((lab, reihe, fee, bmn or "Benchmark", bool(sb and hat)))
+        return raus
 
     # ── rf aggregieren und rf-Index für Chart bauen ──
     rf_series_1 = df1["rf"] if "rf" in df1.columns else pd.Series(dtype=float)
@@ -871,12 +934,24 @@ if ansicht == _VIEW_PERF:
             if df2 is not None: fdd.add_trace(go.Scatter(x=xd,y=drawdown_from_index(ia2_100),mode="lines",name=f"{l2} – DD (nK)"))
             fdd.update_layout(height=350,xaxis_title="Datum",xaxis=dict(tickformat="%d.%m.%Y"),yaxis_title="Drawdown",hovermode="x unified",colorway=FFPB_PALETTE)
         st.plotly_chart(fdd,config={"displayModeBar": False})
+        zeige_drawdown_tabelle(_analyse_reihen(kurz=True))
 
     dfr=None
     if stbl:
         sl=f"Seit: {fmt_date_de(df1.index.min())}"
         dfr=build_rolling_table(sb1t,sa1t,l1,sb2t,sa2t,l2,sl)
         st.subheader("Wertentwicklung rollierend"); st.dataframe(dfr)
+
+    if sheat:
+        _vgl=None
+        if sheat_cmp and sc and ps2:
+            _vgl=(l2, _voll2, fdec2)
+        zeige_monatsheatmap(l1,_voll1,fdec1,gegen_benchmark=sheat_bm,
+                            benchmark_name=bn1,vergleich=_vgl,
+                            mwst_suffix=mwst_suffix)
+
+    if srisk:
+        zeige_risiko_ueberblick(_analyse_reihen(),mwst_suffix=mwst_suffix)
 
     if sbar:
         st.markdown("---"); st.subheader("Performance blockweise")
