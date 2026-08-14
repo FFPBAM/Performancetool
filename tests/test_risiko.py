@@ -474,12 +474,67 @@ def schritt6_kalendertaeglich():
     return f
 
 
+def schritt7_zeitraum_hinweis():
+    """Der Satz, der "3 Jahre" konkret verortet (Audit-Befund B4).
+
+    Die Tabellen sagten zwar, dass die Zeitraum-Auswahl nicht wirkt, aber
+    nicht, worauf sie sich stattdessen beziehen. Auf einem Bildschirm
+    bedeutet "3 Jahre" an drei Stellen drei Spannen.
+    """
+    print("SCHRITT 7 — der Zeitraum-Hinweis nennt die echte Spanne")
+    try:
+        from modules.risiko_ansicht import zeitraum_hinweis
+    except ImportError as ex:
+        print(f"    UEBERSPRUNGEN — {ex}")
+        return 0
+
+    f = 0
+    stand = pd.Timestamp("2026-07-21")
+    df = pd.DataFrame({"ret_port": [0.0] * 400},
+                      index=pd.date_range(end=stand, periods=400, freq="D"))
+
+    # Beide Formen von _analyse_reihen muessen durchgehen.
+    for bez, reihen in (("3er-Form", [("A", df, 0.0155)]),
+                        ("5er-Form", [("A", df, 0.0155, "BM", True)])):
+        satz = zeitraum_hinweis(reihen)
+        if "21.07.2026" in satz and "22.07.2023" in satz:
+            print(f"    OK — {bez}: {satz.strip()}")
+        else:
+            print(f"    FEHLER — {bez}: {satz.strip()!r}")
+            f += 1
+
+    # Leere Eingabe darf keinen halben Satz erzeugen.
+    for bez, reihen in (("keine Reihen", []),
+                        ("Reihe ohne Daten", [("A", df.iloc[:0], 0.0)]),
+                        ("Reihe ist None", [("A", None, 0.0)])):
+        satz = zeitraum_hinweis(reihen)
+        if satz == "":
+            print(f"    OK — {bez}: leerer Zusatz")
+        else:
+            print(f"    FEHLER — {bez}: {satz!r} statt \"\"")
+            f += 1
+
+    # Die Grenze muss aus _perioden_start kommen, nicht nachgebaut sein:
+    # Gegenprobe an einem Schaltjahr-Rand.
+    stand2 = pd.Timestamp("2024-02-29")
+    df2 = pd.DataFrame({"ret_port": [0.0] * 400},
+                       index=pd.date_range(end=stand2, periods=400, freq="D"))
+    satz2 = zeitraum_hinweis([("A", df2, 0.0)])
+    if "01.03.2021" in satz2:
+        print(f"    OK — Schaltjahr-Rand: {satz2.strip()}")
+    else:
+        print(f"    FEHLER — Schaltjahr-Rand: {satz2.strip()!r}")
+        f += 1
+    return f
+
+
 def main():
     print("Pruefstein: Risiko-Kennzahlen\n")
     fehler = 0
     for schritt in (schritt1_konsistenz, schritt2_degeneriert,
                     schritt3_perioden, schritt4_tracking_error,
-                    schritt5_apptest, schritt6_kalendertaeglich):
+                    schritt5_apptest, schritt6_kalendertaeglich,
+                    schritt7_zeitraum_hinweis):
         fehler += schritt()
         print()
     if fehler:

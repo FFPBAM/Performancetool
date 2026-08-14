@@ -41,6 +41,7 @@ import plotly.graph_objects as go
 
 from modules.analytics import (
     BAND_DUENN_UNTER, BAND_JAHRE, RISIKO_PERIODEN, ROLL_FENSTER_TAGE,
+    _perioden_start,
     bandbreite, calc_daily_returns_after_fee, has_benchmark,
     heatmap_kennzahlen, monats_durchschnitt, monatsrenditen,
     monatsrenditen_differenz, risiko_perioden, rollierende_vola,
@@ -874,6 +875,45 @@ def _vola_figur(reihen):
     return fig
 
 
+def zeitraum_hinweis(reihen):
+    """Ein Satz, der die festen Perioden der Tabellen konkret verortet.
+
+    Args:
+        reihen: Liste, deren zweites Element je Eintrag die Zeitreihe ist —
+            passt auf die 3er- wie auf die 5er-Form von `_analyse_reihen`.
+
+    Returns:
+        Der Hinweissatz, oder "" wenn keine Reihe Daten hat.
+
+    WARUM ES DIESEN SATZ GIBT (Audit-Befund B4, 14.08.2026): Auf einem
+    Bildschirm bedeutet „3 Jahre" an drei Stellen drei verschiedene Spannen.
+
+        Kennzahlen-Block   21.07.2023   taggenau ab Datenstand
+        Heatmap            01.01.2023   auf Kalenderjahre gerundet
+        Risiko/Drawdown    22.07.2023   taggenau, eigene feste Perioden
+
+    Keine davon ist falsch, und die Heatmap nennt ihre Rundung bereits. Was
+    fehlte, war die dritte Angabe: Die Tabellen sagten zwar, dass die
+    Auswahl oben nicht wirkt — aber nicht, worauf sie sich stattdessen
+    beziehen. Eine Zahl, die der Zahl daneben widerspricht, ohne dass
+    jemand den Unterschied benennt, ist genau das Muster aus #52.
+
+    Die Periodengrenze kommt aus `_perioden_start`, damit hier keine zweite
+    Fassung derselben Logik entsteht.
+
+    Prüfstein: tests/test_risiko.py, Schritt 7
+    """
+    staende = [df.index.max() for _, df, *_ in reihen
+               if df is not None and len(df)]
+    if not staende:
+        return ""
+    stand = max(staende)
+    beginn = _perioden_start(stand, "3 Jahre") + pd.Timedelta(days=1)
+    return (f" Gezählt wird taggenau ab dem Datenstand "
+            f"{stand:%d.%m.%Y} — „3 Jahre“ meint hier "
+            f"{beginn:%d.%m.%Y} bis {stand:%d.%m.%Y}.")
+
+
 def _perioden_tabelle(reihen, spalten):
     """Formatierte Perioden-Tabelle je Strategie.
 
@@ -916,7 +956,8 @@ def zeige_risiko_ueberblick(reihen, mwst_suffix=""):
     st.markdown("---")
     st.subheader("Risiko im Überblick")
     st.caption("Immer über die volle Historie — die Zeilen der Tabelle sind "
-               "selbst die Zeiträume. Die Auswahl oben wirkt hier nicht.")
+               "selbst die Zeiträume. Die Auswahl oben wirkt hier nicht."
+               + zeitraum_hinweis(reihen))
 
     fig = _vola_figur(reihen)
     if fig is None:
@@ -947,7 +988,11 @@ def zeige_risiko_ueberblick(reihen, mwst_suffix=""):
         "Strategie, bleibt leer — dort steht bewusst kein gekürzter Wert. "
         "Tracking Error ist die Schwankungsbreite der Rendite gegenüber der "
         "Benchmark, die Information Ratio setzt die Mehrrendite dazu ins "
-        "Verhältnis; beide entfallen ohne hinterlegte Benchmark.")
+        "Verhältnis; beide entfallen ohne hinterlegte Benchmark. "
+        "**Beide vergleichen die Strategie nach Kosten mit der Benchmark "
+        "ohne Kosten** — so, wie der Kunde es erlebt. Das Honorar steckt "
+        "damit in der Mehrrendite und drückt die Information Ratio; als "
+        "Maß für die reine Managementleistung fiele sie günstiger aus.")
 
 
 def zeige_drawdown_tabelle(reihen):
@@ -963,4 +1008,6 @@ def zeige_drawdown_tabelle(reihen):
     st.caption(
         "Jeweils der tiefste Rückgang vom Höchststand innerhalb des "
         "Zeitraums, nach Kosten. Reicht ein Zeitraum weiter zurück als die "
-        "Historie, bleibt er leer.")
+        "Historie, bleibt er leer. Die Zeilen sind selbst die Zeiträume; "
+        "die Auswahl oben wirkt hier nicht."
+        + zeitraum_hinweis(reihen))
