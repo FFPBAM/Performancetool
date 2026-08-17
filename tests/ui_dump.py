@@ -13,6 +13,16 @@ Abgezogen werden alle Kennzahlen (st.metric), Captions, Markdown-Bloecke,
 Ueberschriften und Tabellen der Standard-Ansicht. Sind beide Dateien
 zeichengleich, zeigt die Oberflaeche dasselbe wie vorher.
 
+ZWEITE ANSICHT (17.08.2026): Bis dahin erfasste das Skript ausschliesslich die
+Performance-Ansicht — fuer die Portfolioanalyse gab es also gar keinen
+Vorher/Nachher-Beweis, obwohl dort Einzeltitel-Tabelle, Ringe und
+Anleihen-Block haengen. Ein zweites Argument waehlt die Ansicht:
+
+    python tests/ui_dump.py vorher_pf.json portfolio
+
+Ohne das Argument bleibt alles wie bisher (Ansicht "Performance"), damit
+aeltere Dumps weiter vergleichbar sind.
+
 GRENZEN — ehrlich gesagt: Erfasst wird nur, was OHNE Interaktion gerendert
 wird. Wer einen Bedienpfad prueft (Zeitraum umstellen, Vergleich einschalten),
 braucht zusaetzlich eine AppTest-Suite, die klickt — siehe test_bedienung.py.
@@ -36,7 +46,13 @@ except ImportError:
     sys.exit(2)
 
 
-def dump(ziel):
+# Die Ansicht haengt an session_state["nav_view"] (segmented_control in
+# streamlit_app.py). Die Namen stehen dort als _VIEW_PERF/_VIEW_PF; hier
+# bewusst als Klartext, damit das Werkzeug nichts aus der App importieren muss.
+ANSICHTEN = {"performance": "Performance", "portfolio": "Portfolioanalyse"}
+
+
+def dump(ziel, ansicht="performance"):
     at = AppTest.from_file(os.path.join(WURZEL, "streamlit_app.py"),
                            default_timeout=400)
     # Der Login wird uebersprungen; secrets muessen trotzdem gesetzt sein,
@@ -44,6 +60,8 @@ def dump(ziel):
     at.secrets["passwords"] = {"t": "t"}
     at.session_state["logged_in"] = True
     at.session_state["username"] = "t"
+    if ansicht != "performance":
+        at.session_state["nav_view"] = ANSICHTEN[ansicht]
     at.run()
 
     daten = {
@@ -78,4 +96,9 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(2)
-    sys.exit(dump(sys.argv[1]))
+    _ansicht = sys.argv[2].lower() if len(sys.argv) > 2 else "performance"
+    if _ansicht not in ANSICHTEN:
+        print(f"ABBRUCH — unbekannte Ansicht {_ansicht!r}, "
+              f"moeglich: {', '.join(sorted(ANSICHTEN))}")
+        sys.exit(2)
+    sys.exit(dump(sys.argv[1], _ansicht))
