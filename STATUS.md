@@ -1,7 +1,14 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 17.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 88 Commits vor `main` · Stand `5beecff`, vollständig auf GitHub
+· vollständig auf GitHub · **getesteter Stand `5beecff`** (21 von 21 Suiten
+grün), danach nur Doku-Commits
+
+*Diese Zeile nennt bewusst den **getesteten** Stand und nicht den jeweils
+letzten: Ein Commit kann seinen eigenen Hash nicht enthalten, deshalb war die
+Kopfzeile bisher nach jeder Sitzung genau einen Commit alt. Die aktuelle Zahl
+liefert `git log --oneline origin/main..origin/verbesserungen`. Wer hier
+wieder einen Hash einträgt, handelt sich die Drift erneut ein.*
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
