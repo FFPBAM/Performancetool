@@ -2451,6 +2451,118 @@ Schritt 4 ist jetzt die Gegenprobe dazu. Verwandt mit **#55**: Die Prüfung
 lag auch hier nicht am Ort der Entscheidung, deshalb liegt
 `strategien_ohne_honorarsatz` ausdrücklich **nicht** inline im Renderpfad.
 
+### #59 — Ein Aggregat muss sagen, was es nicht enthält
+
+**Gefunden am 17.08.2026**, beim Umsetzen eines Beraterwunsches (Fälligkeiten
+der einzelnen Anleihen). Der Wunsch war klein, der Nebenbefund nicht.
+
+Der Anleihen-Block der Portfolioanalyse zeigt oben eine Kachel „Gewicht
+Anleihen" und darunter ein Balkenchart „Fälligkeitsstruktur". Beide sprachen
+von **verschiedenen Mengen**: Die Kachel zählte alle Renten-Positionen, der
+Chart nur die mit einem Fälligkeitsdatum. Renten-ETFs und Rentenfonds haben
+keines — sie fielen wortlos heraus.
+
+Gemessen über alle 19 Strategien:
+
+| Strategie | Kachel | Summe der Balken | Differenz |
+|---|---:|---:|---:|
+| ETF Muster 40/60 ausgew. | 46,54 % | 0,00 % | **46,54 %** (gar kein Chart) |
+| Muster SCHWEIZ Substanz | 30,89 % | 15,35 % | **15,54 %** |
+| Muster SCHWEIZ Aktien | 11,56 % | 0,00 % | 11,56 % (gar kein Chart) |
+| ETF Muster 100/100 offensiv | 11,38 % | 0,00 % | 11,38 % (gar kein Chart) |
+| ESG Muster defensiv | 61,14 % | 57,83 % | 3,31 % |
+| übrige 9 mit Anleihen | | | 0,00 % |
+
+Bei drei Strategien erschien **überhaupt kein Chart** — an dieser Stelle stand
+eine Leerstelle, und eine Leerstelle sagt nichts. Wer sie sah, konnte „diese
+Strategie hat keine Anleihen" verstehen, obwohl 46,54 % des Portfolios in
+Renten steckten.
+
+**Die Klasse ist bekannt, der Ort war neu.** #46 und #57 handeln davon, dass
+ein *Fehlwert* wie ein *Messwert* aussieht. Hier sieht ein **unvollständiges
+Aggregat** wie ein vollständiges aus: Der Chart lügt nicht über die Balken,
+die er zeigt — er verschweigt, dass es weitere gibt.
+
+**Übertragbar:** *Wo ein Teilaggregat neben seiner Gesamtgröße steht, gehört
+die Differenz benannt.* Und: Ein Filter, der Zeilen ohne einen bestimmten Wert
+verwirft (`notna()`), erzeugt fast immer so ein Teilaggregat — die Frage
+„wie viel habe ich gerade weggelassen?" ist dann Pflicht, nicht Kür.
+Verwandt mit #51 (*ein Filter auf „leer" ist kein Filter auf „vollständig"*),
+nur umgekehrt: dort war der Filter zu schwach, hier ist er richtig, aber
+sein Rest bleibt unerwähnt.
+
+**Behoben:** `get_bond_summary` liefert `gewicht_ohne_faelligkeit` und
+`anzahl_ohne_faelligkeit` (additiv, die bestehenden Schlüssel bleiben), die
+Anzeige benennt die Differenz, und wo es keinen Chart gibt, steht jetzt ein
+Satz. Prüfstein `tests/test_portfolioanalyse.py`, Schritt 3, rechnet über
+alle Strategien nach, dass Balkensumme + Rest wieder die Kachel ergibt
+(Toleranz 1e-12).
+
+---
+
+### #60 — Manche Sprachen sind nicht vorgesehen, und das sieht aus wie ein Fehler
+
+**Gemeldet von Kollegen am 17.08.2026:** Der Kalender im „Eigenen Zeitraum"
+zeigt englische Monatsnamen.
+
+Der erste Reflex — „da fehlt eine Einstellung" — führt hier ins Leere, und
+das kostet Zeit, wenn man es nicht weiß:
+
+| Vermutung | Befund |
+|---|---|
+| `format="DD.MM.YYYY"` reicht nicht? | Richtig. Der Parameter wirkt nur auf den Text **im Feld**, nicht auf das Popover. |
+| Browsersprache umstellen? | Wirkungslos. Daraus leitet Streamlit **nur** ab, ob die Woche am Montag oder Sonntag beginnt. |
+| Es gibt einen `locale`-Parameter? | Nein — weder an `st.date_input` noch in `config.toml`. |
+| Vielleicht liefert Streamlit die Sprachdatei nach? | Nein. Im Frontend-Bündel von 1.61 steckt **nur** en-US (date-fns). |
+
+**Nachgesehen statt vermutet:** `.venv/.../streamlit/static/static/js/` —
+`useIntlLocale…js` enthält `January`, `Wednesday` und keinen einzigen
+deutschen Monatsnamen; die Datei leitet aus dem Browser ausschließlich
+`weekStartsOn` ab. Das war die Fünf-Minuten-Messung, die alle weiteren
+Versuche erspart hat.
+
+**Drei Wege, zwei verworfen** (Entscheidung Philip):
+
+| Weg | Warum nicht |
+|---|---|
+| Popover per JavaScript übersetzen | Eingriff in fremdes DOM. Nach einem Streamlit-Update wirkt er still nicht mehr — und ein Prüfstein dafür lässt sich nicht bauen, weil die Wirkung erst im Browser entsteht (#54 in anderer Gestalt). |
+| Fremdkomponente | Neue Abhängigkeit im öffentlichen Repo, die in der Cloud unter Python 3.14 laufen müsste — die Auto-Update-Falle #20, gegen die die requirements gerade erst gedeckelt wurden. |
+| **Eigene Felder** | Gewählt. Tag / Monat / Jahr als `st.selectbox`, Namen aus `formats.MONATSNAMEN_LANG`. Kostet den anklickbaren Kalender, ist aber garantiert deutsch und vollständig prüfbar. |
+
+**Was beim Nachbau die Arbeit macht** — nicht die Darstellung, sondern der
+Zustand:
+
+1. **Rechenreihenfolge ≠ Anzeigereihenfolge.** Welche Tage zulässig sind,
+   hängt an Monat und Jahr. Also erst Jahr, dann Monat, dann Tag beschreiben —
+   und trotzdem Tag | Monat | Jahr anzeigen. `st.columns` erlaubt beides.
+2. **`min_value`/`max_value` haben kein Gegenstück.** Statt eine freie Eingabe
+   hinterher zurechtzubiegen, werden die **Optionen beschnitten**: im
+   Anfangsjahr 2008 nur Dezember ab dem 30., im Endjahr 2026 nur Januar bis
+   Juli. Ein unmögliches Datum ist damit nicht wählbar — und die Oberfläche
+   zeigt nie eine Auswahl, die etwas anderes bedeutet als sie sagt.
+3. **Optionen können verschwinden.** Steht im Zustand der 31. und jemand
+   wechselt auf Februar, wirft `st.selectbox`, weil der gespeicherte Wert
+   nicht mehr in `options` steht. Der Wert muss **vor** dem Anlegen des
+   Widgets geklemmt werden. Das ist erlaubt, solange das Widget in diesem Lauf
+   noch nicht existiert — die Ausnahme zu #4, wo das Setzen eines *aktiven*
+   Widget-Keys wirft.
+4. **Vorbelegung über `session_state`, nicht über `index=`.** Sonst hängt das
+   Verhalten davon ab, ob der Key schon existiert — und der Zurücksetzen-Knopf
+   mit seinen Zähler-Keys (#4, Lösung A) verliert seine Wirkung.
+
+**Gemeldet war eine Stelle, betroffen waren vier.** Start/Ende im eigenen
+Zeitraum **und** Von/Bis am Balken-Chart. Der zweite Bedienpfad war bis dahin
+von keinem Test berührt. Schritt 1b in `tests/test_bedienung.py` sperrt
+`st.date_input` jetzt repo-weit per AST — gegen den alten Stand gerechnet
+meldet er genau diese vier.
+
+**Und ein Prüf-Detail, das leicht danebengeht:** Die Auswahlfelder tragen
+intern die Monats**nummer** und zeigen den Namen über `format_func`. In
+Streamlits AppTest liefert `.value` den Rohwert (`7`), `.options` die
+**Beschriftung** (`"Juli"`). Ein Test auf `.value` wäre grün, während am
+Bildschirm „July" steht — geprüft gehört die Anzeige. Dasselbe Muster wie
+#54: nicht das Objekt prüfen, sondern das, was ankommt.
+
 ---
 
 ## 1. Projektübersicht
@@ -3521,6 +3633,79 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 17.08.2026 – Kollegen-Feedback: deutsche Datumsauswahl, Einzeltitel, Fälligkeiten
+
+Erste Rückmeldung aus dem Gegentest durch Kollegen. Drei gemeldete Punkte,
+zwei Befunde beim Nachmessen dazu. Vier Commits, alle mit Prüfstein.
+
+**1. Der Kalender im „Eigenen Zeitraum" war englisch** (gemeldet). Keine
+Fehlkonfiguration: Streamlit 1.61 liefert im Frontend nur die englische
+Sprachdatei aus, `format="DD.MM.YYYY"` wirkt lediglich auf den Text im Feld,
+einen Sprachparameter gibt es nicht. Ersetzt durch `shared.datum_waehler_de`
+(Tag | Monat | Jahr, Namen aus `formats.MONATSNAMEN_LANG`). **Betroffen waren
+alle vier Datumsfelder**, nicht die zwei gemeldeten — Von/Bis am Balken-Chart
+gehören dazu und waren bis dahin von keinem Test berührt. Ausführlich als
+Transferwissen **#60**.
+
+**2. Die Einzeltitel-Übersicht zwang zum Scrollen** (gemeldet). `st.dataframe`
+lief mit der Vorgabe `height="auto"`, und die bedeutet laut Streamlit-
+Quelltext „zeigt höchstens zehn Zeilen". Bei *Muster FFPB Pro* (32 Aktien in
+einer Gattung) waren zwei Drittel des Bestands unsichtbar. Jetzt
+`height="content"`. Die Breite war nie das Problem — `width` steht ohnehin auf
+`"stretch"`. Bewusst kein gerechneter Pixelwert.
+
+**3. Die Fälligkeiten der einzelnen Anleihen fehlten** (gemeldet, Wunsch von
+Beratern). Der Balkenchart zeigt Gewicht je Fälligkeits*jahr*; welche Anleihe
+dahintersteckt, sagte er nicht. Neu darunter eine Tabelle Wertpapier /
+Fälligkeit / Restlaufzeit / Kupon / Rendite / Duration / Gewicht, aufsteigend
+sortiert. `build_faelligkeiten_tabelle` steht bewusst als eigene Funktion und
+nicht inline im Renderpfad (#55). Die Restlaufzeit rechnet gegen das
+**Auswertungsdatum** der Bestandsdatei — bewusst nicht „Datenstand" genannt,
+weil auf derselben Seite zwei verschiedene Daten stehen (21.07.2026 aus dem
+Dateinamen, 20.07.2026 aus der Spalte).
+
+**4. Anleihen ohne feste Fälligkeit fielen still aus dem Chart** (nicht
+gemeldet, beim Nachmessen gefunden). Bis zu 46,54 Prozentpunkte
+Rentengewicht ohne ein Wort dazu; bei drei Strategien erschien gar kein
+Chart. Transferwissen **#59**, Zahlen dort.
+
+**5. „Anzahl Titel" stand überall um 1 zu hoch** (nicht gemeldet).
+`n_titel = len(df)` zählte die leere CSV-Abschlusszeile mit — **38 von 38**
+Dateien, Abweichung immer genau +1. Die Gattungs-Tabellen darunter waren
+korrekt, weil `groupby` das NaN verwirft; deshalb fiel der Widerspruch nie
+auf. Korrigiert über `anzahl_titel()`, bewusst nicht zentral in
+`parse_pf_data` — das hätte den Broschüren-Pfad berührt für einen Fehler mit
+genau einem Verbraucher.
+
+**Nebenbei aufgeräumt:** Die Anleihen-Erkennung stand dreimal wortgleich im
+Modul; jetzt `ANLEIHEN_KENNWORTE` / `ist_anleihe` / `nur_anleihen` an einer
+Stelle. Und `tests/ui_dump.py` erfasst seit heute auch die
+**Portfolioanalyse** (`python tests/ui_dump.py datei.json portfolio`) — für
+diese Ansicht gab es bis dahin gar keinen Vorher/Nachher-Beweis, obwohl genau
+sie hier umgebaut wurde.
+
+**Neuer Prüfstein `tests/test_portfolioanalyse.py`** (sechs Schritte) — die
+Ansicht hatte bis dahin keinen eigenen. Damit **22 Suiten**.
+
+**Beweise.** 22 von 22 Suiten grün, kein Schritt übersprungen, `pyflakes` bei
+null. `ui_dump` vorher/nachher: Performance-Ansicht **zeichengleich** (der
+eigene Zeitraum ist in der Standardansicht aus); Portfolioanalyse ändert
+genau vier Zeilen — neue Überschrift, neue Tabelle, neue Caption und „Anzahl
+Titel" 23 → 22. Sieben Broschüren aus einem Arbeitsbaum auf dem alten Stand
+gebaut und rekursiv verglichen: **2105 ZIP-Einträge, 0 inhaltliche
+Abweichungen** — der Export-Pfad ist unberührt, obwohl `portfolioanalyse.py`
+darin liegt. Jeder Schritt des neuen Prüfsteins schlägt gegen den alten Stand
+an (1 Tabelle ohne `height`, 38 von 38 Titelzahlen, 4 × `st.date_input`,
+beide neuen Funktionen fehlen).
+
+*(Drei eigene Fehler fielen beim Bauen auf, alle in Tests bzw. beim
+Formatieren, alle im Code vermerkt: ein `.replace(".", ",")` über den fertigen
+String machte aus „0,6 J." ein „0,6 J,"; der AppTest-Schritt setzte die
+Strategie auf CSV-Namen statt Anzeigenamen und lief grün, ohne etwas zu
+prüfen — derselbe Fehler wie am 14.08.2026; und `.options` liefert
+Beschriftungen (Strings), `.value` den Rohwert (int), weshalb ein Vergleich
+`'2008' != 2008` das Verstellen ins Leere laufen ließ.)*
 
 ### 14.08.2026 (nachts) – Zeitraum-Zuschnitt der Heatmap auf Kalenderjahre
 

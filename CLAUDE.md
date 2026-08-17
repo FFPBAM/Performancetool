@@ -175,6 +175,37 @@ prüfte statt gegen eine Schwelle (#47).
   Ergebnis nicht. **Für `ret_bm` gilt die Nullen-Aussage weiter und zu Recht**
   (`has_benchmark`) — ein pauschales Ersetzen hätte drei korrekte Stellen
   zerstört.
+- **Kein `st.date_input` mehr** (#60, 17.08.2026). Streamlit zeigt sein
+  Kalender-Popover **ausschließlich auf Englisch** — 1.61 liefert im Frontend
+  nur die englische Sprachdatei aus, aus der Browsersprache wird lediglich der
+  erste Wochentag abgeleitet, und einen Sprachparameter gibt es nicht.
+  `format="DD.MM.YYYY"` wirkt nur auf den Text **im Feld**. Datumsfelder
+  laufen deshalb über `shared.datum_waehler_de` (Tag | Monat | Jahr, Namen aus
+  `formats.MONATSNAMEN_LANG`). Prüfstein: `tests/test_bedienung.py`,
+  Schritt 1b sperrt `st.date_input` repo-weit.
+- **Ein Vorgabewert eines Widgets ist keine Grenze.** Wer `min_value`/
+  `max_value` ersetzt, **beschneidet die Optionen** statt die Eingabe
+  hinterher zurechtzubiegen — sonst zeigt die Oberfläche eine Auswahl, die
+  etwas anderes bedeutet als sie sagt. Und wenn Optionen von einer anderen
+  Auswahl abhängen (Tage vom Monat), muss der gespeicherte Wert **vor** dem
+  Anlegen des Widgets geklemmt werden: Ein Wert, der nicht mehr in `options`
+  steht, lässt `st.selectbox` werfen. Die Zuweisung an einen Widget-Key ist
+  dabei erlaubt, solange das Widget in diesem Lauf noch nicht existiert —
+  das ist die Ausnahme zu #4.
+- **`st.dataframe` zeigt von sich aus höchstens zehn Zeilen** (17.08.2026).
+  Die Vorgabe `height="auto"` bedeutet genau das; danach entsteht ein
+  Scrollbalken **innerhalb** der Tabelle. Wo eine Tabelle vollständig gelesen
+  werden soll, gehört `height="content"` dazu. Bewusst **kein** gerechneter
+  Pixelwert — eine Annahme über die Zeilenhöhe kippt beim nächsten
+  Streamlit-Update still. (`width` steht ohnehin schon auf `"stretch"`.)
+- **Ein Aggregat muss sagen, was es NICHT enthält** (#59, 17.08.2026). Der
+  Fälligkeits-Balkenchart der Portfolioanalyse zeigte nur Anleihen **mit**
+  Fälligkeit, während die Kachel darüber alle zählte: bei *Muster SCHWEIZ
+  Substanz* 30,89 % über Balken, die sich auf 15,35 % summieren, bei den
+  ETF-Strategien gar kein Chart. Renten-ETFs und -fonds haben keine feste
+  Fälligkeit — sie fielen still heraus. Wo ein Teilaggregat neben seiner
+  Gesamtgröße steht, gehört die **Differenz benannt** (§10.9, dieselbe Klasse
+  wie #46/B6). Prüfstein: `tests/test_portfolioanalyse.py`, Schritt 3.
 - **Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen.** Wo eine
   Strategie keine Anleihen hält, steht dort die **Liquiditätsgrenze**: `cVV
   dynamic` „max. 10 %", Pro und Pro Dividende „max. 15 %". Die Bank-Webseite
@@ -193,7 +224,7 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/chart_dynamik.py` | **wie** es aussieht (Optik, nie Werte) |
 | `modules/pptx_helpers.py` | generische PPTX-Mechanik |
 | `modules/pptx_charts.py` | Chart-XML + Bug-Workarounds |
-| `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht** |
+| `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht**; dazu `datum_waehler_de` (deutsche Datumsauswahl, #60) |
 | `modules/formats.py` | **alle** Zahlen-, Prozent- und Datumsformate + Fehlwert `–`; streamlit-frei, gilt für Tool *und* Broschüre |
 | `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
 
@@ -232,6 +263,7 @@ python tests/test_chartachsen.py [<ordner>]  # Schritte 1+2 ohne jedes Paket
 python tests/test_kalenderjahre.py           # Schritte 1+2 nur pandas, 3 + pptx
 python tests/test_monatsrenditen.py          # Schritte 1-4 nur numpy + pandas
 python tests/test_risiko.py                  # Schritte 1-2+4 nur numpy + pandas
+python tests/test_portfolioanalyse.py        # Schritte 1-5 pandas, 6 + streamlit
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
@@ -241,6 +273,7 @@ Dazu ein Werkzeug, kein Test — für den Beweis nach einem UI-Umbau:
 
 ```
 python tests/ui_dump.py vorher.json     # umbauen, dann nachher.json, vergleichen
+python tests/ui_dump.py vorher_pf.json portfolio   # zweite Ansicht (17.08.2026)
 ```
 
 Tests bewusst **ohne pytest** — sie sollen in der eingeschränkten

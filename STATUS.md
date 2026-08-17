@@ -1,8 +1,8 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 17.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· vollständig auf GitHub · **getesteter Stand `5beecff`** (21 von 21 Suiten
-grün), danach nur Doku-Commits
+**Letzte Sitzung:** 17.08.2026 (zweite Runde) · **Branch:** `verbesserungen` ·
+**Nicht gemergt** · vollständig auf GitHub · **getesteter Stand `d99c61a`**
+(22 von 22 Suiten grün), danach nur Doku-Commits
 
 *Diese Zeile nennt bewusst den **getesteten** Stand und nicht den jeweils
 letzten: Ein Commit kann seinen eigenen Hash nicht enthalten, deshalb war die
@@ -22,12 +22,20 @@ wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
 > **Achtung:** Befund B3 (Honorarformel) verändert die Broschürenzahlen um
 > bis zu 120 Basispunkte — alles Weitere unter „Audit vom 14.08.2026".
 
-> **Stand 17.08.2026.** Abnahmelauf, **keine Codeänderung**: 21 von 21 Suiten
-> grün im vollen Umfang, `pyflakes` bei null, die Nachkosten-Zahlen gegen die
-> dokumentierten Sollwerte nachgerechnet (auf zwei Nachkommastellen getroffen).
-> Philip hat die beiden neuen Ansichten am Bildschirm gesichtet — **in
-> Ordnung**. Sie liegen jetzt bei Kollegen zum Gegentesten; der Branch wartet
-> auf deren Rückmeldung und dann auf den Merge.
+> **Stand 17.08.2026, vormittags.** Abnahmelauf, **keine Codeänderung**: 21 von
+> 21 Suiten grün im vollen Umfang, `pyflakes` bei null, die Nachkosten-Zahlen
+> gegen die dokumentierten Sollwerte nachgerechnet (auf zwei Nachkommastellen
+> getroffen). Philip hat die beiden neuen Ansichten am Bildschirm gesichtet —
+> **in Ordnung**. Sie gingen dann an Kollegen zum Gegentesten.
+
+> **Stand 17.08.2026, nachmittags — die Rückmeldung ist da und eingearbeitet.**
+> Drei gemeldete Punkte (englischer Kalender, Einzeltitel-Scrollbalken,
+> Fälligkeiten je Anleihe), dazu **zwei Befunde beim Nachmessen**: Anleihen
+> ohne feste Fälligkeit fielen still aus dem Chart (bis zu 46,54
+> Prozentpunkte), und „Anzahl Titel" stand bei **38 von 38** Dateien um genau
+> 1 zu hoch. Alles behoben, vier Commits, neuer Prüfstein — **22 Suiten**.
+> **Offen ist jetzt die Sichtprüfung am Bildschirm** (Liste unter „Offene
+> Punkte", Punkt 1), dann der Merge.
 
 ---
 
@@ -111,7 +119,68 @@ Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 
 **https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen**
 
-### Abnahmelauf vom 17.08.2026 — grün, ohne Codeänderung
+### Kollegen-Feedback vom 17.08.2026 — eingearbeitet
+
+Die erste Rückmeldung aus dem Gegentest. Drei Punkte kamen von Kollegen, zwei
+kamen beim Nachmessen dazu. Fachliche Tiefe steht als Transferwissen **#59**
+und **#60** sowie im Changelog; hier nur, was man wissen muss.
+
+| # | Woher | Kern | Wirkung |
+|---|---|---|---|
+| 1 | Kollegen | Kalender im „Eigenen Zeitraum" zeigt **englische Monate** | betraf **4 von 4** Datumsfeldern |
+| 2 | Kollegen | Einzeltitel-Übersicht zwingt zum **Scrollen in der Tabelle** | bei *Pro* waren 22 von 32 Aktien unsichtbar |
+| 3 | Berater | **Fälligkeiten der einzelnen Anleihen** fehlen | neue Tabelle unter dem Balkenchart |
+| 4 | nachgemessen | Anleihen **ohne feste Fälligkeit** fielen still aus dem Chart | bis **46,54 Prozentpunkte** |
+| 5 | nachgemessen | „Anzahl Titel" zählt die leere CSV-Zeile mit | **38 von 38** Dateien, immer +1 |
+
+**Zu Punkt 1 — es war nichts falsch eingestellt.** Streamlit 1.61 liefert im
+Frontend **ausschließlich** die englische Sprachdatei aus; aus der
+Browsersprache wird nur abgeleitet, ob die Woche am Montag beginnt, und einen
+Sprachparameter gibt es nicht. `format="DD.MM.YYYY"` wirkt nur auf den Text
+*im Feld*. Verworfen wurden ein JavaScript-Eingriff (nicht prüfbar, kippt
+still beim Update) und eine Fremdkomponente (neue Abhängigkeit, Auto-Update-
+Falle #20). Gebaut wurde `shared.datum_waehler_de`: **Tag | Monat | Jahr** als
+Auswahlfelder, Namen aus `formats.MONATSNAMEN_LANG`. Der anklickbare Kalender
+entfällt — das ist der bewusst gezahlte Preis (Entscheidung Philip).
+
+**Zu Punkt 2 — ein Parameter, kein Pixelrechnen.** `st.dataframe` lief mit der
+Vorgabe `height="auto"`, und die bedeutet laut Streamlit-Quelltext wörtlich
+„zeigt höchstens zehn Zeilen". Jetzt `height="content"`. Die **Breite war nie
+das Problem** (`width` steht ohnehin auf `"stretch"`) — die Annahme, dass die
+Tabellen zu schmal seien, hat sich beim Nachsehen nicht gehalten.
+
+**Zu Punkt 4 — die Kachel und der Chart sprachen von verschiedenen Mengen.**
+Renten-ETFs und Rentenfonds haben keine feste Fälligkeit. Sie zählten oben mit
+und fehlten unten wortlos:
+
+| Strategie | Kachel „Gewicht Anleihen" | Summe der Balken | fehlte |
+|---|---:|---:|---:|
+| ETF Muster 40/60 ausgew. | 46,54 % | 0,00 % | **46,54 %** (kein Chart) |
+| Muster SCHWEIZ Substanz | 30,89 % | 15,35 % | **15,54 %** |
+| Muster SCHWEIZ Aktien | 11,56 % | 0,00 % | 11,56 % (kein Chart) |
+| ETF Muster 100/100 offensiv | 11,38 % | 0,00 % | 11,38 % (kein Chart) |
+| ESG Muster defensiv | 61,14 % | 57,83 % | 3,31 % |
+
+Dieselbe Klasse wie Audit-Befund B6: Ein Fehlwert darf nicht wie ein Messwert
+aussehen — hier sah ein **unvollständiges Aggregat** wie ein vollständiges
+aus. Die Differenz wird jetzt benannt, und wo gar kein Chart erscheint, steht
+ein Satz statt einer Leerstelle.
+
+**Beweise.** 22 von 22 Suiten grün, kein Schritt übersprungen, `pyflakes` bei
+null. `ui_dump` vorher/nachher: Performance-Ansicht **zeichengleich**;
+Portfolioanalyse ändert genau vier Zeilen (neue Überschrift, neue Tabelle,
+neue Caption, „Anzahl Titel" 23 → 22). Sieben Broschüren aus einem
+Arbeitsbaum auf dem alten Stand gebaut und rekursiv verglichen: **2105
+ZIP-Einträge, 0 inhaltliche Abweichungen** — obwohl `portfolioanalyse.py` im
+Export-Pfad liegt. Jeder Schritt des neuen Prüfsteins schlägt gegen den alten
+Stand an.
+
+*(Ein Werkzeug ist dabei besser geworden: `ui_dump` erfasste bis heute nur die
+Performance-Ansicht. Für die Portfolioanalyse gab es also gar keinen
+Vorher/Nachher-Beweis — ausgerechnet für die Ansicht, die hier umgebaut wurde.
+Jetzt `python tests/ui_dump.py datei.json portfolio`.)*
+
+### Abnahmelauf vom 17.08.2026 (vormittags) — grün, ohne Codeänderung
 
 Kein neuer Commit. Geprüft wurde der Stand `5beecff`, so wie er auf GitHub
 liegt.
@@ -288,7 +357,8 @@ Browser, die Richtigkeit der Quelldaten aus dem Vorsystem.
 | **Toter Code** | ~1.900 Zeilen: `performance.py`, `macrobond_upload.py`, `generate_pf_pdf`, Platzhalter-Dateien. |
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
-| **Tests** | **21 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Tests** | **22 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Kollegen-Feedback** | *(17.08.)* Deutsche Datumsauswahl (Streamlit kann den Kalender nicht auf Deutsch), Einzeltitel ohne Scrollbalken, Fälligkeiten je Anleihe. Dazu zwei Befunde beim Nachmessen: still fehlendes Rentengewicht im Fälligkeits-Chart (bis 46,54 PP) und „Anzahl Titel" bei 38 von 38 Dateien um 1 zu hoch. Details oben. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
@@ -983,7 +1053,8 @@ Alle laufen ohne pytest, mit reinem `python`:
 
 | Test | Braucht | Prüft |
 |---|---|---|
-| `test_bedienung.py` | **+ streamlit** | Zeitraum-Schnellwahl rechnet richtig, PDF-Weg entfernt, Benchmark-Zeile genau einmal, Logo + Datenstand — alles per AppTest am laufenden Programm |
+| `test_bedienung.py` | Schritt 1b **nichts**, sonst **+ streamlit** | Zeitraum-Schnellwahl rechnet richtig, PDF-Weg entfernt, Benchmark-Zeile genau einmal, Logo + Datenstand — alles per AppTest am laufenden Programm. **Neu am 17.08.2026:** Schritt 1b sperrt `st.date_input` repo-weit per AST (Streamlit zeigt den Kalender nur auf Englisch, #60) und läuft **ohne jedes Paket**; Schritt 1c rechnet `datum_auswahl_optionen` gegen 10 Fälle nach (beide Ränder, Schaltjahr, `mind == maxd`); Schritt 1d prüft den Balken-Chart-Pfad, der bis dahin von keinem Test berührt war. Die Monatsnamen werden an der **Anzeige** geprüft (`.options` liefert „Juli", `.value` die 7) |
+| `test_portfolioanalyse.py` *(neu 17.08.2026)* | Schritte 1–5 pandas (5 gar nichts), Schritt 6 **+ streamlit** | Die Portfolioanalyse-Ansicht, die bis dahin **keinen eigenen Prüfstein** hatte. Schritt 1 rechnet „Anzahl Titel" gegen die echten Positionen **aller 38** Dateien (alter Stand: 38 Abweichungen), Schritt 2 die Fälligkeiten-Tabelle gegen die Rohdaten, **Schritt 3 die Zusage** Balkensumme + „ohne feste Fälligkeit" == Kachel „Gewicht Anleihen" über alle Strategien (1e−12), Schritt 4 Sortierung, Restlaufzeit und fünf Grenzfälle, Schritt 5 statisch, dass die langen Tabellen `height="content"` tragen, Schritt 6 die gerenderte Ansicht für drei Fälle (mit Anleihen / ohne Anleihen / Anleihen ohne Fälligkeit) |
 | `test_streamlit_api.py` | **nichts** | keine abgekündigten Streamlit-Parameter (`use_container_width`) |
 | `test_keine_piktogramme.py` | **nichts** | keine Emoji in Überschriften, Hinweisen, Schaltflächen (Kommentare/Doku ausgenommen) |
 | `test_anlagekriterien.py` | pandas **+ streamlit** | 17 Strategien, Schreibweise, Banner-Bauweise, AppTest in beiden Ansichten **und für eine Thema-Strategie** (9b); Schritt 4b tastet die Vorlagen ab, damit ein Excel-Eintrag nicht unbemerkt in einer Broschüre landet; **mit Ordner-Argument** zusätzlich der Kasten in den erzeugten Broschüren |
@@ -1025,6 +1096,7 @@ python tests/test_quelle_position.py [C:\pfad\zur\ausgabe]
 python tests/test_kalenderjahre.py
 python tests/test_monatsrenditen.py
 python tests/test_risiko.py
+python tests/test_portfolioanalyse.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
@@ -1083,9 +1155,9 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind vier.** Drei liegen bei Philip, einer wartet auf die Kollegen
-(Punkt 1). Zwei weitere Punkte sind **bewusst zurückgestellt** und stehen
-darunter.
+**Es sind vier**, alle bei Philip. Punkt 1 ist neu und ersetzt das Warten auf
+die Kollegen — deren Rückmeldung ist eingearbeitet. Zwei weitere Punkte sind
+**bewusst zurückgestellt** und stehen darunter.
 
 0. **NEU 14.08.2026 — die geänderten Zahlen freigeben.** Befund B3 hat die
    Honorarformel korrigiert; jede Nachkosten-Zahl im Werkzeug **und in der
@@ -1107,15 +1179,41 @@ darunter.
    dass wirklich nur die Kostenseite betroffen ist (`ui_dump` zeigt genau
    eine geänderte Zeile).
 
-1. **Beide Ansichten am Bildschirm gegensehen** — *Philip erledigt am
-   17.08.2026, Ergebnis in Ordnung. Läuft jetzt beim Gegentest durch
-   Kollegen; offen ist nur noch deren Rückmeldung.* Bis die da ist, wird an
-   den Ansichten nichts geändert — sonst testen die Kollegen einen Stand, den
-   es nicht mehr gibt.
+1. **Sichtprüfung der Änderungen aus dem Kollegen-Feedback (NEU, offen).**
+   Die Zahlen sind belegt und die Prüfsteine grün — was kein Test leisten
+   kann, ist die Frage, ob es sich am Bildschirm gut bedient. Bitte ansehen:
 
-   Die Liste bleibt als **Prüfliste für den Gegentest** stehen. Der
-   Renderfehler ist behoben und per Layout-Prüfstein festgenagelt, die Zahlen
-   sind belegt.
+   - **Der Zeitraum hat keinen Kalender mehr**, sondern drei Auswahlfelder
+     Tag | Monat | Jahr. Das ist der Preis dafür, dass die Monate deutsch
+     sind (Streamlit kann es nicht anders, #60). Passen die drei Felder
+     nebeneinander, oder wirkt es gedrängt? Das Spaltenverhältnis steht an
+     **einer** Stelle (`st.columns([3, 3, 2])` in `streamlit_app.py`).
+   - **Am Balken-Chart** („Performance blockweise" → „Benutzerdefiniert")
+     stehen dieselben Felder **gestapelt**, weil die Spalte dort ein Viertel
+     breit ist. Reicht das, oder soll der Block woanders hin?
+   - **Zurücksetzen** im eigenen Zeitraum: einmal verstellen, Knopf drücken —
+     springt es zurück?
+   - **Einzeltitel-Übersicht**: kein Scrollbalken mehr *in* der Tabelle. Bei
+     *Muster FFPB Pro* sind das 32 Zeilen am Stück. Ist das die gewünschte
+     Länge, oder soll ab einer Grenze doch wieder gescrollt werden?
+   - **Anleihen-Detail**: Steht die Tabelle „Einzelne Fälligkeiten" am
+     richtigen Platz? Sind die Spalten die richtigen (Restlaufzeit, Kupon,
+     Rendite, Duration, Gewicht) — fehlt eine, ist eine überflüssig?
+   - **Der Satz zur Lücke** bei *Muster SCHWEIZ Substanz* („Die Balken zeigen
+     15,35 % … weitere 15,54 % entfallen auf Rentenfonds bzw. Renten-ETF ohne
+     feste Fälligkeit"). Verständlich für einen Berater, oder zu technisch?
+   - **Bei *ETF Muster 40/60*** gibt es gar keinen Chart, dafür einen
+     erklärenden Satz. Reicht das, oder soll dort etwas anderes stehen?
+   - **„Anzahl Titel" ist jetzt um 1 kleiner** als bisher (Comdirect 100:
+     21 statt 22). Das ist die Korrektur, kein neuer Fehler.
+   - **Light- und Dark-Mode.**
+
+2. **Beide Ansichten am Bildschirm gegensehen** — *Philip erledigt am
+   17.08.2026, Ergebnis in Ordnung. Der Gegentest durch Kollegen hat
+   stattgefunden, die Rückmeldung ist eingearbeitet (siehe oben).*
+
+   Die Liste bleibt als **Prüfliste** stehen. Der Renderfehler ist behoben und
+   per Layout-Prüfstein festgenagelt, die Zahlen sind belegt.
    - **„Jahr für Jahr" bitte auf die Reihenfolge ansehen:** 2026 muss jetzt
      **oben** stehen, die Ø-Zeile unten. Vorher war es umgekehrt, ohne dass
      es aufgefallen wäre.
@@ -1224,7 +1322,8 @@ siehe „Sichtprüfung in echtem PowerPoint".)*
 
 ### `pyflakes` ist ab jetzt ein echtes Signal
 
-Über alle **38 Dateien null Meldungen** (nachgemessen 17.08.2026; am 14.08.
+Über alle **39 Dateien null Meldungen** (nachgemessen 17.08.2026 nachmittags,
+nach dem Kollegen-Feedback; vormittags waren es 38 Dateien; am 14.08.
 waren es 36 gezählte, am 12.08. 33). Wer eine neue erzeugt, sieht sie sofort
 — vorher ging sie in 16 bekannten unter. Am 14.08. hat die Prüfung prompt
 geliefert: Nach dem Umzug
