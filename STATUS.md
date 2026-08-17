@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 14.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
-· 87 Commits vor `main` · Stand `065190f`, vollständig auf GitHub
+**Letzte Sitzung:** 17.08.2026 · **Branch:** `verbesserungen` · **Nicht gemergt**
+· 88 Commits vor `main` · Stand `5beecff`, vollständig auf GitHub
 
 Diese Datei ist der Einstiegspunkt für die nächste Sitzung. Sie beschreibt,
 wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
@@ -14,6 +14,13 @@ wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
 > behoben**, einer wurde von Philip als beabsichtigt entschieden.
 > **Achtung:** Befund B3 (Honorarformel) verändert die Broschürenzahlen um
 > bis zu 120 Basispunkte — alles Weitere unter „Audit vom 14.08.2026".
+
+> **Stand 17.08.2026.** Abnahmelauf, **keine Codeänderung**: 21 von 21 Suiten
+> grün im vollen Umfang, `pyflakes` bei null, die Nachkosten-Zahlen gegen die
+> dokumentierten Sollwerte nachgerechnet (auf zwei Nachkommastellen getroffen).
+> Philip hat die beiden neuen Ansichten am Bildschirm gesichtet — **in
+> Ordnung**. Sie liegen jetzt bei Kollegen zum Gegentesten; der Branch wartet
+> auf deren Rückmeldung und dann auf den Merge.
 
 ---
 
@@ -96,6 +103,74 @@ git config --global --add safe.directory '%(prefix)///RCO-MASCHINE/DRACOON/Entwi
 Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
 
 **https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen**
+
+### Abnahmelauf vom 17.08.2026 — grün, ohne Codeänderung
+
+Kein neuer Commit. Geprüft wurde der Stand `5beecff`, so wie er auf GitHub
+liegt.
+
+| Gemessen | Ergebnis |
+|---|---|
+| Testsuiten | **21 von 21 grün**, rund 100 Sekunden |
+| `pyflakes` über 38 Dateien | **null Meldungen** |
+| Arbeitsverzeichnis | sauber, identisch mit `origin/verbesserungen` |
+
+**Gelaufen ist der volle Umfang, nicht die Kurzfassung** — das ist bei dieser
+Testlandschaft die eigentliche Frage. Die Suiten überspringen ihre schweren
+Schritte stillschweigend, wenn Pakete fehlen (siehe „Tests"); gestartet wurde
+deshalb gegen `.venv\Scripts\python.exe`, und die Protokolle wurden auf
+übersprungene Schritte durchsucht: **keiner**. Die AppTest-Schritte sind
+wirklich hochgefahren, die PPTX-Schritte haben neun echte Broschüren gebaut
+(inkl. `Thema_x3`, `Thema_SCHWEIZ`, `comdirect`) und wieder eingelesen.
+
+Damit sind auch die Prüfsteine des Audits am aktuellen Stand bestätigt:
+`test_kosten_mathematik` Schritt 3 (die auf 1e−12 verschärfte Prüfung über
+alle sechs Honorarsätze, an der B3 hängt), `test_monatsrenditen` Schritt 8
+(Layout statt Daten, #54) und `test_risiko` Schritt 7.
+
+**Die Nachkosten-Zahlen sind gegengerechnet.** Aus den Rohdaten neu verkettet,
+einmal über die Monatsmatrix und einmal über die Tagesrenditen — beide Wege
+treffen die Sollwerte aus dem Audit auf zwei Nachkommastellen:
+
+| Strategie | gerechnet | Soll (nach B3) |
+|---|---:|---:|
+| Muster offensiv cVV, kumuliert seit 2009 | 183,72 % | 183,72 % |
+| Muster ausgewogen cVV, kumuliert | 144,82 % | 144,82 % |
+
+Das ist mehr als eine Wiederholung des Tests: Gerechnet wurde **von den
+CSV-Rohdaten aus durch die ganze Kette** — Laden, `historie_beschneiden`,
+Honorarabzug, Verkettung —, nicht an der einzelnen Funktion, die der
+Prüfstein aufruft. Die korrigierte Formel kommt also in der ausgewiesenen
+Kennzahl an. *(Nicht gemessen: eine gebaute Broschüre wieder aufgemacht und
+die Zahl dort abgelesen — das bleibt der Sichtprüfung am Endprodukt.)*
+
+**Sichtprüfung: Philip hat die neuen Ansichten am Bildschirm gegengesehen —
+in Ordnung.** Sie gehen jetzt an Kollegen zum Gegentesten; bis deren
+Rückmeldung da ist, wird an den Ansichten nichts geändert. Vorbereitend
+wurden vier Strategien als HTML vorgerendert (*Muster ausgewogen cVV*,
+*Comdirect 100*, *Muster FFPB Pro*, *Muster SCHWEIZ Aktien* — sie decken
+lange Historie, dünne Historie, angebrochenen Monat und fehlende Benchmark
+ab). Vier Zusagen ließen sich dabei an der **Geometrie** nachmessen statt am
+Auge: 2026 steht oben und die Ø-Zeile unten, die Bandbreite trägt bei
+*Comdirect 100* die Zeilen `2J Hoch/Mittel/Tief` ohne Jahresspalte, der Juli
+2026 bei *Muster FFPB Pro* trägt sein Sternchen, und beide Achsentypen sind
+gesetzt statt geraten.
+
+*(Das Renderskript liegt bewusst im Scratchpad und nicht im Repo — es ist ein
+Werkzeug für einen Tag, kein Prüfstein. Was dauerhaft gelten soll, steht in
+`tests/test_monatsrenditen.py`.)*
+
+**Eine Lehre aus dem Vorgehen, die nichts mit dem Code zu tun hat:** Der erste
+Renderlauf rechnete mit **0,0155 % statt 1,55 %** Honorar, weil das
+Wegwerfskript `fee_default` durch 100 teilte — der Wert steht aber bereits
+dezimal in der Zeitreihe, die Oberfläche multipliziert ihn nur fürs
+Eingabefeld mit 100 und teilt danach wieder (`streamlit_app.py`: `fd1*100`
+→ `fdec1 = fp1/100`). Ergebnis wären Bruttozahlen unter der Beschriftung
+„nach Kosten" gewesen — **genau Befund B6, nur selbst gebaut**. Aufgefallen
+ist es an der ausgegebenen Kennzahl, nicht am Bild: 0,02 % passte nicht zu
+den 1,55 %, die im Mapping stehen. Deshalb steht die Gegenprobe oben. Wer ein
+Hilfsskript baut, das dieselben Zahlen zeigt wie das Werkzeug, muss es an
+einer bekannten Zahl festmachen — sonst prüft er sein Skript und nicht die App.
 
 ### Audit vom 14.08.2026 — Ergebnis
 
@@ -1001,8 +1076,9 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind vier — alle liegen bei Philip.** Zwei weitere Punkte sind
-**bewusst zurückgestellt** und stehen darunter.
+**Es sind vier.** Drei liegen bei Philip, einer wartet auf die Kollegen
+(Punkt 1). Zwei weitere Punkte sind **bewusst zurückgestellt** und stehen
+darunter.
 
 0. **NEU 14.08.2026 — die geänderten Zahlen freigeben.** Befund B3 hat die
    Honorarformel korrigiert; jede Nachkosten-Zahl im Werkzeug **und in der
@@ -1024,8 +1100,15 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
    dass wirklich nur die Kostenseite betroffen ist (`ui_dump` zeigt genau
    eine geänderte Zeile).
 
-1. **Beide Ansichten am Bildschirm gegensehen.** Der Renderfehler ist behoben
-   und per Layout-Prüfstein festgenagelt, die Zahlen sind belegt.
+1. **Beide Ansichten am Bildschirm gegensehen** — *Philip erledigt am
+   17.08.2026, Ergebnis in Ordnung. Läuft jetzt beim Gegentest durch
+   Kollegen; offen ist nur noch deren Rückmeldung.* Bis die da ist, wird an
+   den Ansichten nichts geändert — sonst testen die Kollegen einen Stand, den
+   es nicht mehr gibt.
+
+   Die Liste bleibt als **Prüfliste für den Gegentest** stehen. Der
+   Renderfehler ist behoben und per Layout-Prüfstein festgenagelt, die Zahlen
+   sind belegt.
    - **„Jahr für Jahr" bitte auf die Reihenfolge ansehen:** 2026 muss jetzt
      **oben** stehen, die Ø-Zeile unten. Vorher war es umgekehrt, ohne dass
      es aufgefallen wäre.
@@ -1114,9 +1197,10 @@ siehe „Sichtprüfung in echtem PowerPoint".)*
 
 ### `pyflakes` ist ab jetzt ein echtes Signal
 
-Über alle **36 Dateien null Meldungen** (Stand 14.08.2026; am 12.08. waren es
-33). Wer eine neue erzeugt, sieht sie sofort — vorher ging sie in 16
-bekannten unter. Am 14.08. hat die Prüfung prompt geliefert: Nach dem Umzug
+Über alle **38 Dateien null Meldungen** (nachgemessen 17.08.2026; am 14.08.
+waren es 36 gezählte, am 12.08. 33). Wer eine neue erzeugt, sieht sie sofort
+— vorher ging sie in 16 bekannten unter. Am 14.08. hat die Prüfung prompt
+geliefert: Nach dem Umzug
 von `historie_beschneiden` war `HISTORIE_AB` in `portfolioanalyse.py`
 ungenutzt und wurde gemeldet. Aufruf:
 
