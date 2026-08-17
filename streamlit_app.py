@@ -25,9 +25,6 @@ from modules.shared import (
     DATA_FOLDER, EXCLUDE_SUBSTRINGS,
     load_anlagekriterien, zeige_anlagekriterien,
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
-    # Deutsche Datumsauswahl (17.08.2026): st.date_input zeigt sein
-    # Kalender-Popover immer auf Englisch — siehe shared.datum_waehler_de.
-    datum_waehler_de,
     detect_newest_date_tag, load_mapping, load_name_mapping,
     build_name_lookups,
     # CSV-Loader (07.08.2026): kommen jetzt von hier statt als lokale
@@ -686,21 +683,15 @@ if ansicht == _VIEW_PERF:
             st.session_state["p_zeit_zaehler"] = 0
         n = st.session_state["p_zeit_zaehler"]
 
-        # Deutsche Datumsauswahl statt st.date_input (17.08.2026,
-        # Kollegen-Feedback): Streamlit liefert sein Kalender-Popover
-        # ausschliesslich auf Englisch aus — Begruendung und verworfene Wege
-        # stehen an shared.datum_waehler_de.
-        c1, c2, c3 = st.columns([3, 3, 2], vertical_alignment="bottom")
+        c1, c2, c3 = st.columns([2, 2, 1], vertical_alignment="bottom")
         with c1:
-            sd = datum_waehler_de("Start", sd_vor, mind, maxd,
-                                  key_praefix=f"p_sd_{n}",
-                                  hilfe="Erster Tag des ausgewerteten "
-                                        "Zeitraums.")
+            sd = st.date_input("Start", value=sd_vor, min_value=mind,
+                               max_value=maxd, format="DD.MM.YYYY",
+                               key=f"p_sd_{n}")
         with c2:
-            ed = datum_waehler_de("Ende", ed_vor, mind, maxd,
-                                  key_praefix=f"p_ed_{n}",
-                                  hilfe="Letzter Tag des ausgewerteten "
-                                        "Zeitraums.")
+            ed = st.date_input("Ende", value=ed_vor, min_value=mind,
+                               max_value=maxd, format="DD.MM.YYYY",
+                               key=f"p_ed_{n}")
         with c3:
             if st.button("Zurücksetzen", key="p_zeit_reset",
                          width="stretch",
@@ -1017,11 +1008,8 @@ if ansicht == _VIEW_PERF:
                       "teilt den gewählten Zeitraum in gleich lange Blöcke."))
             csb=ceb=None
             if bm=="Benutzerdefiniert":
-                # untereinander=True: Diese Spalte ist ein Viertel breit
-                # (st.columns([1,3])) — drei Auswahlfelder nebeneinander
-                # waeren dort nicht mehr lesbar.
-                csb=datum_waehler_de("Von",sd,mind,maxd,key_praefix="p_bv",untereinander=True)
-                ceb=datum_waehler_de("Bis",ed,mind,maxd,key_praefix="p_bb",untereinander=True)
+                csb=st.date_input("Von",value=sd,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bv")
+                ceb=st.date_input("Bis",value=ed,min_value=mind,max_value=maxd,format="DD.MM.YYYY",key="p_bb")
         tm={"Kalenderjahre":"PERFORMANCE P.A. (NACH KOSTEN)","Quartale":"PERFORMANCE QUARTALE (NACH KOSTEN)","Benutzerdefiniert":"PERFORMANCE (NACH KOSTEN) – BENUTZERDEFINIERT"}
         def _rb(dfs,fee,lab,bname,btxt,cont,suffix="1"):
             bd=compute_bar_data(dfs,fee,bm,lab,csb,ceb)
