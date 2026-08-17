@@ -1189,14 +1189,34 @@ Im Code ist darüber hinaus nichts offen außer Nachrangigem: internes Hosting
 (§15 Punkt 8) und die Alt-Aufgaben aus Phase 2, die vor einer Umsetzung
 ohnehin erst mit Philip zu klären sind.
 
-**Neu am 14.08.2026 und ausdrücklich nicht nebenbei erledigt:**
-`historie_beschneiden` wird im Performance-Tab **nur** von der Heatmap und
-dem Risiko-Block angewandt. Kennzahlen, Linien-Chart und rollierende Tabelle
-rechnen bei den fünf cVV-Strategien weiterhin ab dem **31.12.2008**, die
-Broschüre ab dem **01.01.2009**. Die Wirkung auf CAGR und Volatilität ist
-klein (zwei Tage auf siebzehn Jahre), aber es ist dieselbe Klasse Fund wie
-Backlog B/E/F: eine Regel, die nur an einem von zwei Orten greift. Eine
-Angleichung **ändert ausgewiesene Zahlen** und gehört deshalb entschieden.
+**Nicht offen, sondern entschieden (Philip, 17.08.2026): der
+Historien-Beginn bleibt unterschiedlich.** `historie_beschneiden` wirkt im
+Performance-Tab **nur** auf Heatmap und Risiko-Block; Kennzahlen,
+Linien-Chart und rollierende Tabelle rechnen bei den fünf alten
+cVV-Strategien ab dem **31.12.2008**, die Broschüre ab dem **01.01.2009**.
+
+Das stand hier bis zum 17.08.2026 als „gehört entschieden". Es ist
+entschieden, und zwar so:
+
+> Dass die Broschüre bei 2009 beginnt, ist **gewollt** und seinerzeit so
+> festgelegt worden. Fachlich ist es nicht ganz sauber, betrifft aber nur die
+> fünf alten cVV-Reihen. **Das Tool indexiert richtig** — dort bleibt es beim
+> tatsächlich ersten Datenpunkt.
+
+Eine Angleichung ist damit **vom Tisch**, nicht vergessen. Die Wirkung ist
+ohnehin klein: zwei Tage auf siebzehn Jahre, bei *Muster ausgewogen cVV*
+145,4853 % gegen 144,8158 % kumuliert.
+
+Wer die Kennzahlen des Tools nachrechnet, nimmt also die **ungeschnittene**
+Reihe. Nachgemessen am 17.08.2026 gegen die laufende Oberfläche: *Muster
+konservativ cVV* zeigt 2,19 % p.a. und 2,97 % Volatilität — aus der
+ungeschnittenen Reihe gerechnet 2,1854 % und 2,9694 %.
+
+*(Die Heatmap schneidet weiterhin, und das aus einem eigenen Grund: Ohne
+`historie_beschneiden` stünde dort eine Kachel **Dez 2008 mit genau einem
+Tag**. In einer Matrix aus Monatsfeldern ist das eine Falschaussage; in einer
+CAGR über siebzehn Jahre sind zwei Tage keine. Die beiden Konventionen folgen
+also der Darstellung und nicht der Nachlässigkeit.)*
 
 *(Die Sichtprüfungen SCHWEIZ, Datumsachse, Wertachse und Quellenangabe
 standen hier bis zum 12.08.2026 als offene Punkte — alle vier sind erledigt,
