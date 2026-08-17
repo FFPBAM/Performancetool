@@ -6,6 +6,8 @@ Quelltext. Was hier gruen ist, hat ein Nutzer auch wirklich vor sich.
 Geprueft wird:
   1. Zeitraum-Schnellwahl rechnet richtig (1/3/5/10 Jahre, Seit Auflage) und
      die Kalenderfelder erscheinen nur auf Wunsch.
+  1b. Der eigene Zeitraum am Balken-Chart erscheint und traegt das deutsche
+     Datumsformat (der Kalender selbst ist englisch, siehe #60).
   2. Der PDF-Weg ist weg — keine Schaltflaeche, keine Funktion, kein
      reportlab/matplotlib in requirements.txt.
   3. Die Benchmark-Zusammensetzung steht genau EINMAL.
@@ -15,6 +17,7 @@ Geprueft wird:
     python tests/test_bedienung.py     (braucht streamlit)
 """
 
+import ast
 import os
 import re
 import sys
@@ -176,6 +179,83 @@ def _pruefe_zuruecksetzen(at):
     return 0
 
 
+def pruefe_balken_zeitraum():
+    """Der eigene Zeitraum am Balken-Chart (NEU 17.08.2026).
+
+    Bis heute hat KEIN Test diesen Bedienpfad je angefasst: "Performance
+    blockweise" -> "Benutzerdefiniert" blendet zwei weitere Datumsfelder ein
+    (`p_bv`, `p_bb`), und ob die Seite dabei stehen bleibt, hat nie jemand
+    gemessen. Aufgefallen ist die Luecke beim Umbau auf deutsche
+    Monatsnamen — der Umbau ist zurueckgenommen, die Luecke bleibt sonst.
+
+    Dazu die Quelltext-Pruefung auf `format="DD.MM.YYYY"`: Das ist der Teil
+    der deutschen Darstellung, den Streamlit KANN (Text im Feld). Die
+    Monatsnamen im aufklappenden Kalender kann es nicht — das ist entschieden
+    und hingenommen (Philip, 17.08.2026, Transferwissen #60). Verschwindet
+    aber der Parameter, steht dort ploetzlich `2026/07/21`, und das faellt
+    ohne Pruefung niemandem auf.
+    """
+    print("\n1b. Eigener Zeitraum am Balken-Chart")
+    fehler = 0
+
+    # a) Quelltext: JEDES Datumsfeld traegt das deutsche Format.
+    quelle = os.path.join(WURZEL, "streamlit_app.py")
+    with open(quelle, encoding="utf-8") as fh:
+        baum = ast.parse(fh.read())
+    ohne_format = []
+    gefunden = 0
+    for knoten in ast.walk(baum):
+        if not (isinstance(knoten, ast.Call)
+                and isinstance(knoten.func, ast.Attribute)
+                and knoten.func.attr == "date_input"):
+            continue
+        gefunden += 1
+        args = {kw.arg: kw.value for kw in knoten.keywords}
+        fmt = args.get("format")
+        if not (isinstance(fmt, ast.Constant) and fmt.value == "DD.MM.YYYY"):
+            ohne_format.append(f"Zeile {knoten.lineno}")
+    if not gefunden:
+        print("   FEHLER — kein einziges Datumsfeld gefunden")
+        fehler += 1
+    elif ohne_format:
+        print(f"   FEHLER — {len(ohne_format)} Datumsfeld(er) ohne "
+              f"format=\"DD.MM.YYYY\": {ohne_format}")
+        fehler += 1
+    else:
+        print(f"   OK — {gefunden} Datumsfelder, alle mit deutschem Format")
+
+    # b) Der Bedienpfad selbst: faehrt hoch, zeigt beide Felder, wirft nichts.
+    at = _app()
+    at.session_state["p_bar"] = True
+    at.run()
+    radio = next((r for r in at.radio if r.key == "p_bm_r"), None)
+    if radio is None:
+        print("   FEHLER — kein Zeitraum-Radio am Balken-Chart")
+        return fehler + 1
+    if "Benutzerdefiniert" not in list(radio.options):
+        print(f"   FEHLER — 'Benutzerdefiniert' fehlt ({list(radio.options)})")
+        return fehler + 1
+
+    radio.set_value("Benutzerdefiniert").run()
+    if at.exception:
+        print(f"   FEHLER — {str(at.exception[0].value)[:200]}")
+        return fehler + 1
+    if _ss(at, "p_bm_r") != "Benutzerdefiniert":
+        print(f"   FEHLER — Auswahl kam nicht an ({_ss(at, 'p_bm_r')!r})")
+        return fehler + 1
+
+    keys = {d.key for d in at.date_input if d.key}
+    fehlend = [k for k in ("p_bv", "p_bb") if k not in keys]
+    if fehlend:
+        print(f"   FEHLER — Datumsfelder {fehlend} fehlen (da: {sorted(keys)})")
+        fehler += 1
+    else:
+        von = next(d for d in at.date_input if d.key == "p_bv")
+        bis = next(d for d in at.date_input if d.key == "p_bb")
+        print(f"   OK — Von {von.value} / Bis {bis.value}, keine Ausnahme")
+    return fehler
+
+
 def pruefe_kein_pdf():
     print("\n2. PDF-Weg ist entfernt")
     fehler = 0
@@ -288,7 +368,7 @@ def main():
         print("UEBERSPRUNGEN — streamlit.testing.v1 nicht verfuegbar")
         return 0
 
-    fehler = (pruefe_zeitraum() + pruefe_kein_pdf()
+    fehler = (pruefe_zeitraum() + pruefe_balken_zeitraum() + pruefe_kein_pdf()
               + pruefe_benchmark_einmal() + pruefe_auftritt())
     print()
     if fehler:
