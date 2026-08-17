@@ -23,6 +23,9 @@ from modules.shared import (
     load_anlagekriterien, zeige_anlagekriterien,
 )
 from modules.download_helfer import download_bereich
+# Der Fehlwert kommt aus formats.py — dieselbe Quelle wie fuer Tool und
+# Broschuere. Ein "–" von Hand hinzuschreiben liefe irgendwann auseinander.
+from modules.formats import EMPTY_VALUE
 # historie_beschneiden liegt seit 14.08.2026 in analytics.py (Berechnungsregel,
 # von Broschuere UND Heatmap gebraucht). Der Re-Export haelt Alt-Importe heil.
 from modules.analytics import historie_beschneiden   # noqa: F401
@@ -168,6 +171,61 @@ trägt eine Konstante die Bedeutung. `portfolio_builder.py` nutzt dieselbe
 Funktion und ist mit umgestellt."""
 
 
+ANLEIHEN_KENNWORTE = ("rente", "anleihe", "bond")
+"""Woran eine Anleihe in der Spalte `Gattung` erkannt wird.
+
+Die Bedingung stand bis zum 17.08.2026 dreimal wortgleich im Modul
+(`build_grouped_title_table`, `get_bond_summary` und einmal im Builder). Das
+ist dieselbe Krankheit wie bei Backlog B/E/F: Solange die Kopien gleich sind,
+faellt nichts auf — erst wenn eine erweitert wird, laufen sie auseinander.
+Wer eine neue Gattungsbezeichnung aufnimmt, aendert genau diese Zeile.
+
+ACHTUNG, die Erkennung ist bewusst grosszuegig: Renten-ETFs und Rentenfonds
+tragen ebenfalls `Renten` und zaehlen deshalb als Anleihen mit — sie haben
+aber keine feste Faelligkeit. Siehe `build_faelligkeiten_tabelle`."""
+
+
+def ist_anleihe(gattung) -> bool:
+    """Traegt diese Gattungsbezeichnung eine Anleihe?"""
+    text = str(gattung).lower()
+    return any(k in text for k in ANLEIHEN_KENNWORTE)
+
+
+def nur_anleihen(df: pd.DataFrame) -> pd.DataFrame:
+    """Die Anleihen-Positionen eines Bestands — leeres Ergebnis statt None.
+
+    `Gattung` wird robust als normale Strings behandelt: Unter Python 3.14 /
+    pandas-Arrow-Backend sind die Spalten teils Arrow-Strings, und verkettete
+    .str-Operationen machen darauf Unfug (#21).
+    """
+    if "Gattung" not in df.columns or df.empty:
+        return df.iloc[0:0]
+    gattung = df["Gattung"].astype("object").astype(str).str.lower()
+    treffer = gattung.apply(ist_anleihe)
+    return df[treffer].copy()
+
+
+def anzahl_titel(df: pd.DataFrame) -> int:
+    """Zahl der echten Positionen im Bestand.
+
+    NICHT `len(df)`: Jede CSV in `Daten_PF/` endet mit einer leeren Zeile
+    (';;;;...'), die `parse_pf_data` bewusst stehen laesst. Bis zum 17.08.2026
+    zaehlte die Kachel "Anzahl Titel" sie mit und stand dadurch bei **38 von
+    38** Dateien um genau 1 zu hoch (Comdirect 100: 22 statt 21).
+
+    Aufgefallen ist es nicht, weil eine Zahl wie "23" fuer sich plausibel
+    aussieht — der Widerspruch zeigt sich erst gegen die Gattungs-Tabellen
+    darunter, die per `groupby` das NaN von selbst verwerfen.
+
+    Bewusst hier korrigiert und nicht zentral in `parse_pf_data`: Die leere
+    Zeile zu verwerfen wuerde den Broschueren-Pfad beruehren, und `len(df)`
+    hatte genau diesen einen Verbraucher.
+    """
+    if "Wertpapier" not in df.columns:
+        return int(len(df))
+    return int(df["Wertpapier"].notna().sum())
+
+
 def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show_ytd: bool = False):
     """
     Baut Tabellen-Daten gruppiert nach Gattung auf.
@@ -194,7 +252,7 @@ def build_grouped_title_table(df: pd.DataFrame, anlagevolumen: float = 0.0, show
         result = sub[available].copy()
 
         # Anleihen-spezifische Spalten nur bei Renten
-        is_bond = "rente" in gattung.lower() or "anleihe" in gattung.lower() or "bond" in gattung.lower()
+        is_bond = ist_anleihe(gattung)
         if is_bond and has_kupon:
             result["Kupon"] = sub["Kupon"]
         if is_bond and has_faelligkeit:
@@ -249,10 +307,7 @@ def get_top_flop(df: pd.DataFrame, col: str, n: int = 5):
 
 
 def get_bond_summary(df: pd.DataFrame) -> dict:
-    # Gattung robust als normale Strings (Arrow-String-dtype kann bei
-    # verketteten .str-Ops Probleme machen).
-    gattung = df["Gattung"].astype("object").astype(str).str.lower()
-    bonds = df[gattung.str.contains("rente|anleihe|bond", na=False)].copy()
+    bonds = nur_anleihen(df)
     if bonds.empty:
         return None
 
@@ -310,7 +365,126 @@ def get_bond_summary(df: pd.DataFrame) -> dict:
     else:
         summary["faelligkeit"] = None
     summary["total_weight"] = float(bonds["Gewicht"].sum())
+
+    # Was NICHT im Balkenchart steht (NEU 17.08.2026). Renten-ETFs und
+    # Rentenfonds tragen keine Faelligkeit; sie zaehlen oben in `count` und
+    # `total_weight` mit, fielen aus dem Chart aber still heraus. Bei
+    # "Muster SCHWEIZ Substanz" standen so 30,89 % ueber Balken, die sich auf
+    # 15,35 % summieren — bei den beiden ETF-Strategien erschien gar kein
+    # Chart, ohne ein Wort dazu. Dieselbe Klasse wie Audit-Befund B6 (#46):
+    # ein Fehlwert darf nicht wie ein Messwert aussehen. Die Groesse steht
+    # jetzt hier, damit die Anzeige die Luecke benennen kann.
+    if "Fälligkeit_parsed" in bonds.columns:
+        ohne = bonds["Fälligkeit_parsed"].isna()
+    else:
+        ohne = pd.Series(True, index=bonds.index)
+    summary["anzahl_ohne_faelligkeit"] = int(ohne.sum())
+    summary["gewicht_ohne_faelligkeit"] = float(bonds.loc[ohne, "Gewicht"].sum())
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Faelligkeiten der einzelnen Anleihen (NEU 17.08.2026)
+# ---------------------------------------------------------------------------
+RESTLAUFZEIT_TAGE_PRO_JAHR = 365.25
+"""Tage je Jahr fuer die Restlaufzeit — mit Schaltjahresanteil.
+
+Bewusst NICHT 365 wie bei der Volatilitaet (#56): Dort geht es um eine
+Renditekonvention ueber Kalendertagreihen, hier um eine schlichte
+Zeitspanne, die ein Berater am Kalender nachrechnen koennen muss.
+"""
+
+
+def build_faelligkeiten_tabelle(df: pd.DataFrame, stichtag=None):
+    """Die einzelnen Anleihen mit ihrer Faelligkeit, aufsteigend sortiert.
+
+    Der Balkenchart darueber zeigt das Gewicht je Faelligkeits*jahr* — welche
+    Anleihe hinter einem Balken steckt, sagt er nicht. Genau danach haben
+    Berater am 17.08.2026 gefragt.
+
+    Bewusst eine eigene Funktion und nicht inline im Renderpfad: Was inline in
+    der Oberflaeche steht, ist fuer keinen Pruefstein erreichbar (#55).
+
+    Titel OHNE feste Faelligkeit (Renten-ETFs, Rentenfonds) stehen am Ende mit
+    Gedankenstrich statt zu verschwinden — sie sind Teil des Rentenanteils, und
+    ihr Gewicht wird getrennt zurueckgegeben, damit die Anzeige die Luecke zum
+    Balkenchart benennen kann.
+
+    Args:
+        df: Bestand nach `parse_pf_data`.
+        stichtag: Datenstand fuer die Restlaufzeit. Ohne ihn bleibt die Spalte
+            leer (`–`) statt gegen "heute" zu rechnen — das Ergebnis haenge
+            sonst davon ab, wann jemand die Seite oeffnet.
+
+    Returns:
+        (disp_df, gewicht_mit_faelligkeit, gewicht_ohne_faelligkeit,
+         anzahl_ohne_faelligkeit)
+    """
+    leer = pd.DataFrame(columns=["Wertpapier", "Fälligkeit", "Restlaufzeit",
+                                 "Kupon", "Rendite", "Duration", "Gewicht"])
+    bonds = nur_anleihen(df)
+    if bonds.empty:
+        return leer, 0.0, 0.0, 0
+
+    if "Fälligkeit_parsed" in bonds.columns:
+        faellig = pd.to_datetime(bonds["Fälligkeit_parsed"], errors="coerce")
+    else:
+        faellig = pd.Series(pd.NaT, index=bonds.index)
+    hat = faellig.notna()
+
+    gewicht = pd.to_numeric(bonds.get("Gewicht"), errors="coerce")
+    gewicht_mit = float(gewicht[hat].sum(skipna=True) or 0.0)
+    gewicht_ohne = float(gewicht[~hat].sum(skipna=True) or 0.0)
+
+    # Sortierung: nach Faelligkeit aufsteigend, Titel ohne Faelligkeit ans
+    # Ende (dort nach Gewicht, damit die groesste Position oben steht).
+    sortiert = bonds.assign(_faellig=faellig, _hat=hat, _gew=gewicht)
+    sortiert = sortiert.sort_values(
+        by=["_hat", "_faellig", "_gew"],
+        ascending=[False, True, False],
+        kind="mergesort",   # stabil: gleiche Faelligkeit behaelt ihre Reihenfolge
+    )
+
+    stichtag_ts = pd.to_datetime(stichtag, errors="coerce") if stichtag is not None else pd.NaT
+
+    def _restlaufzeit(datum):
+        if pd.isna(datum) or pd.isna(stichtag_ts):
+            return EMPTY_VALUE
+        jahre = (datum - stichtag_ts).days / RESTLAUFZEIT_TAGE_PRO_JAHR
+        # Erst die Zahl umstellen, dann die Einheit anhaengen: Ein
+        # .replace(".", ",") ueber den fertigen String trifft auch den Punkt
+        # in "J." und macht daraus "0,6 J," (beim Bau passiert, 17.08.2026).
+        return f"{jahre:.1f}".replace(".", ",") + " J."
+
+    def _duration(wert):
+        if wert is None or pd.isna(wert):
+            return EMPTY_VALUE
+        return f"{float(wert):.2f}".replace(".", ",")
+
+    def _prozent(wert, null_ist_fehlwert=False):
+        if wert is None or pd.isna(wert):
+            return EMPTY_VALUE
+        if null_ist_fehlwert and float(wert) == 0.0:
+            return EMPTY_VALUE
+        return fmt_pct_de(float(wert))
+
+    disp = pd.DataFrame({
+        "Wertpapier": sortiert["Wertpapier"].astype(str),
+        "Fälligkeit": [fmt_date_de(d) if pd.notna(d) else EMPTY_VALUE
+                       for d in sortiert["_faellig"]],
+        "Restlaufzeit": [_restlaufzeit(d) for d in sortiert["_faellig"]],
+        # Kupon 0 % ist bei Fonds/ETFs ein Platzhalter, kein Nullkupon-Papier —
+        # genauso behandelt wie in build_grouped_title_table.
+        "Kupon": [_prozent(w, null_ist_fehlwert=True)
+                  for w in pd.to_numeric(sortiert.get("Kupon"), errors="coerce")],
+        "Rendite": [_prozent(w)
+                    for w in pd.to_numeric(sortiert.get("Rendite"), errors="coerce")],
+        "Duration": [_duration(w)
+                     for w in pd.to_numeric(sortiert.get("Duration"), errors="coerce")],
+        "Gewicht": [_prozent(w) for w in sortiert["_gew"]],
+    })
+    disp = disp.reset_index(drop=True)
+    return disp, gewicht_mit, gewicht_ohne, int((~hat).sum())
 
 
 # ---------------------------------------------------------------------------
@@ -954,7 +1128,10 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
     st.subheader(f"{label}")
 
     # ── Kennzahlen ──
-    liq = calc_liquidity(df); n_titel = len(df); total_weight = df["Gewicht"].sum()
+    # anzahl_titel statt len(df): Die CSVs tragen eine leere Abschlusszeile,
+    # die hier bis zum 17.08.2026 mitgezaehlt wurde (38 von 38 Dateien, immer
+    # genau +1). Begruendung steht an der Funktion.
+    liq = calc_liquidity(df); n_titel = anzahl_titel(df); total_weight = df["Gewicht"].sum()
     kcols = st.columns(4 if use_volume else 3)
     with kcols[0]: st.metric("Anzahl Titel", n_titel)
     with kcols[1]: st.metric("Investitionsgrad", fmt_pct_de(total_weight),
@@ -998,11 +1175,21 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
         st.plotly_chart(fig_top5, config={"displayModeBar": False}, key=f"top5_{suffix}")
 
     # ── Einzeltitel-Tabelle (gruppiert nach Gattung) ──
+    # height="content" seit 17.08.2026 (Kollegen-Feedback). Streamlits Vorgabe
+    # ist height="auto" und bedeutet laut Quelltext "zeigt hoechstens zehn
+    # Zeilen" — danach entsteht ein Scrollbalken INNERHALB der Tabelle. Bei
+    # "Muster FFPB Pro" (32 Aktien in einer Gattung) waren so zwei Drittel des
+    # Bestands unsichtbar, obwohl die Seite daneben Platz hatte. "content"
+    # laesst die Tabelle auf ihre Zeilenzahl wachsen; die Seite scrollt.
+    # Bewusst kein gerechneter Pixelwert: Eine Annahme ueber die Zeilenhoehe
+    # kippt beim naechsten Streamlit-Update still. Pruefstein:
+    # tests/test_portfolioanalyse.py, Schritt 5.
     st.markdown("**Einzeltitel-Übersicht**")
     grouped = build_grouped_title_table(df, anlagevolumen if use_volume else 0.0, show_ytd)
     for i, (gattung_name, gattung_weight, disp_df) in enumerate(grouped):
         st.markdown(f"**{gattung_name}** – {fmt_pct_de(gattung_weight)}")
-        st.dataframe(disp_df, hide_index=True, key=f"tbl_{suffix}_{i}")
+        st.dataframe(disp_df, hide_index=True, height="content",
+                     key=f"tbl_{suffix}_{i}")
 
     # ── Top/Flop Performancebeitrag (nur wenn YTD aktiv) ──
     if show_ytd and "Performancebeitrag" in df.columns and df["Performancebeitrag"].notna().any():
@@ -1078,7 +1265,25 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
                          "erwartete jährliche Rendite, wenn alle Anleihen bis zur "
                          "Fälligkeit gehalten werden.")
 
-        if bond_summary["faelligkeit"] is not None and not bond_summary["faelligkeit"].empty:
+        # ── Fälligkeitsstruktur + die einzelnen Fälligkeiten ──────────────
+        # Der Balkenchart zeigt das Gewicht je Fälligkeits*jahr*; welche
+        # Anleihe hinter einem Balken steckt, sagt er nicht. Danach haben
+        # Berater am 17.08.2026 gefragt — deshalb die Tabelle darunter.
+        #
+        # Dabei kam ein zweiter Befund heraus: Renten-ETFs und Rentenfonds
+        # haben keine feste Fälligkeit. Sie zählen in den Kacheln oben mit,
+        # fielen aus dem Chart aber still heraus — bei „Muster SCHWEIZ
+        # Substanz" standen 30,89 % über Balken, die sich auf 15,35 %
+        # summieren. Die Lücke wird jetzt benannt (§10.9, #46).
+        stichtag_bestand = None
+        if "Auswertungsdatum" in df.columns:
+            stichtag_bestand = df["Auswertungsdatum"].dropna().max()
+        faell_tab, gew_mit, gew_ohne, n_ohne = build_faelligkeiten_tabelle(
+            df, stichtag_bestand)
+
+        hat_chart = (bond_summary["faelligkeit"] is not None
+                     and not bond_summary["faelligkeit"].empty)
+        if hat_chart:
             st.markdown("**Fälligkeitsstruktur**")
             faell = bond_summary["faelligkeit"]
             fig_f = go.Figure(data=[go.Bar(
@@ -1088,3 +1293,44 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
             fig_f.update_layout(height=300, xaxis_title="Fälligkeitsjahr", yaxis_title="Gewicht",
                 yaxis=dict(tickformat=".1%"), margin=dict(t=30, b=40, l=50, r=20))
             st.plotly_chart(fig_f, config={"displayModeBar": False}, key=f"faell_{suffix}")
+
+        # Der Hinweis steht auch dann da, wenn es gar keinen Chart gibt — bei
+        # den ETF-Strategien war dort bisher eine unerklärte Leerstelle.
+        if n_ohne:
+            if hat_chart:
+                st.caption(
+                    f"Die Balken zeigen {fmt_pct_de(gew_mit)} des Portfolios. "
+                    f"Weitere {fmt_pct_de(gew_ohne)} entfallen auf "
+                    f"{n_ohne} Rentenfonds bzw. Renten-ETF ohne feste "
+                    f"Fälligkeit – zusammen die "
+                    f"{fmt_pct_de(bond_summary['total_weight'])} aus der "
+                    f"Kachel oben.")
+            else:
+                st.caption(
+                    f"Keine der {bond_summary['count']} Anleihen hat eine "
+                    f"feste Fälligkeit – es sind ausschließlich Rentenfonds "
+                    f"bzw. Renten-ETF ({fmt_pct_de(gew_ohne)} des "
+                    f"Portfolios). Deshalb gibt es hier keine "
+                    f"Fälligkeitsstruktur.")
+
+        if not faell_tab.empty:
+            st.markdown("**Einzelne Fälligkeiten**")
+            st.dataframe(faell_tab, hide_index=True, height="content",
+                         key=f"faell_tab_{suffix}")
+            if stichtag_bestand is not None and pd.notna(stichtag_bestand):
+                # Bewusst „Auswertungsdatum" und NICHT „Datenstand": Auf
+                # dieser Seite stehen zwei verschiedene Daten — der Datenstand
+                # oben (21.07.2026, aus dem Dateinamen) und das
+                # Auswertungsdatum der Bestandsdatei (20.07.2026, aus der
+                # gleichnamigen Spalte, auch in der Quelle-Zeile). Gerechnet
+                # wird gegen das zweite; dasselbe Wort für beide zu benutzen
+                # hätte die Zahl unnachvollziehbar gemacht.
+                st.caption(
+                    f"Aufsteigend nach Fälligkeit; Titel ohne feste "
+                    f"Fälligkeit stehen am Ende. Die Restlaufzeit ist "
+                    f"taggenau ab dem Auswertungsdatum "
+                    f"{fmt_date_de(stichtag_bestand)} gerechnet.")
+            else:
+                st.caption(
+                    "Aufsteigend nach Fälligkeit; Titel ohne feste "
+                    "Fälligkeit stehen am Ende.")
