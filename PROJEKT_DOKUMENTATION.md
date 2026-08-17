@@ -265,6 +265,47 @@ Und definierst `KONSTANTE_NEU` in `B.py`.
 
 ---
 
+**ZWEITER FALL — derselbe Fehler, gegenteilige Abhilfe (NEU 17.08.2026).**
+
+Ein `ImportError` nach einem Push heißt **nicht** zwangsläufig, dass die
+Datei im Repo falsch ist. Er kann auch bedeuten, dass die Cloud
+`streamlit_app.py` neu ausgeführt, das importierte Modul aber aus dem
+`sys.modules` des alten Prozesses genommen hat — dort existiert der neue Name
+noch nicht.
+
+| | Fall A (Juni 2026) | Fall B (17.08.2026) |
+|---|---|---|
+| Symbol im Repo vorhanden? | **nein** | **ja** |
+| Reboot hilft? | **nein** | **ja** |
+| Abhilfe | Datei richtig pushen | „Manage app" → „Reboot app" |
+
+Am 17.08.2026 wurde `datum_waehler_de` gemeinsam mit seinem Import in **einem**
+Commit gepusht. Trotzdem stürzte die App beim Start ab. Nachgemessen auf
+`origin/verbesserungen`: Die Funktion stand auf Modulebene, **alle 23** aus
+`modules.shared` importierten Namen waren vorhanden, keine Schattendatei,
+lokal 22 von 22 Suiten grün. Ein Reboot hat es behoben.
+
+**Die Prüfreihenfolge lautet deshalb ab jetzt:**
+
+1. **Steht das Symbol wirklich auf dem Server?**
+   `git show origin/<branch>:<datei> | grep "def <name>"` — zehn Sekunden, und
+   sie trennen Fall A von Fall B.
+2. **Fall B (Symbol ist da): Reboot app.** Der oben stehende Satz „Mehrfaches
+   ‚Reboot app' ändert nichts" gilt **nur für Fall A** und hat die Suche am
+   17.08. zunächst in die falsche Richtung geschickt.
+3. **Erst danach in die Logs** (`Manage app` → Logs) — sie nennen den genauen
+   Namen und die Datei.
+
+**Nebenbei ein Diagnose-Werkzeug, das gut funktioniert hat:** Ab Python 3.13
+kürzt der Traceback mehrzeilige Anweisungen zu `...<N lines>...`. **N
+identifiziert die Revision.** Am 17.08. war so ohne jeden Zugriff auf den
+Server belegbar, welcher Commit tatsächlich lief: Der Import-Block umfasste im
+neuen Stand 18 Zeilen (`...<16 lines>...`), im Vorgängerstand 15
+(`...<13 lines>...`) — gemeldet war 16. Genau das hat auch aufgedeckt, dass die
+Cloud den Branch `verbesserungen` bedient und nicht `main`.
+
+---
+
 ### 12. python-pptx `chart.replace_data()` ist VERSEUCHT — Bug-QUARTETT bei Charts mit embedded Excel
 
 > **Update Juli 2026:** Zu den drei bekannten Bugs kam ein VIERTER dazu
@@ -2500,7 +2541,18 @@ alle Strategien nach, dass Balkensumme + Rest wieder die Kachel ergibt
 
 ---
 
-### #60 — Manche Sprachen sind nicht vorgesehen, und das sieht aus wie ein Fehler
+### #60 — Machbar ist nicht dasselbe wie besser (BITTE NICHT ERNEUT VERSUCHEN)
+
+> **Ergebnis vorweg, damit niemand denselben Weg ein zweites Mal geht:** Der
+> Streamlit-Datepicker lässt sich **nicht** auf Deutsch umstellen. Der Ersatz
+> durch eigene Auswahlfelder wurde am 17.08.2026 gebaut, getestet und am
+> Bildschirm gesichtet — und **verworfen**, weil er schlechter aussieht als
+> der englische Kalender. *„Es darf auf Englisch sein. Weil jetzt sieht es
+> nicht schön aus."* (Philip, 17.08.2026). Der Code ist zurückgebaut;
+> `st.date_input` mit `format="DD.MM.YYYY"` ist der richtige Baustein.
+>
+> **Was bleibt, ist die Analyse darunter** — sie erspart dem Nächsten die
+> Suche nach einer Einstellung, die es nicht gibt.
 
 **Gemeldet von Kollegen am 17.08.2026:** Der Kalender im „Eigenen Zeitraum"
 zeigt englische Monatsnamen.
@@ -2527,7 +2579,20 @@ Versuche erspart hat.
 |---|---|
 | Popover per JavaScript übersetzen | Eingriff in fremdes DOM. Nach einem Streamlit-Update wirkt er still nicht mehr — und ein Prüfstein dafür lässt sich nicht bauen, weil die Wirkung erst im Browser entsteht (#54 in anderer Gestalt). |
 | Fremdkomponente | Neue Abhängigkeit im öffentlichen Repo, die in der Cloud unter Python 3.14 laufen müsste — die Auto-Update-Falle #20, gegen die die requirements gerade erst gedeckelt wurden. |
-| **Eigene Felder** | Gewählt. Tag / Monat / Jahr als `st.selectbox`, Namen aus `formats.MONATSNAMEN_LANG`. Kostet den anklickbaren Kalender, ist aber garantiert deutsch und vollständig prüfbar. |
+| **Eigene Felder** | Gebaut — und nach der Sichtprüfung **wieder entfernt.** Tag / Monat / Jahr als `st.selectbox`, Namen aus `formats.MONATSNAMEN_LANG`. Technisch einwandfrei, 22 Suiten grün. Am Bildschirm trotzdem schlechter: Aus zwei Bedienelementen wurden sechs, der anklickbare Kalender war weg, und der Gewinn war ein Monatsname. |
+
+**Die eigentliche Lehre ist nicht technisch.** Die Machbarkeit war nach einer
+halben Stunde geklärt, der Bau lief glatt, die Prüfsteine waren grün — und das
+Ergebnis war trotzdem eine Verschlechterung. *Ein gelöstes Problem ist noch
+keine Verbesserung.* Bei einer Änderung, deren einziger Zweck das Aussehen
+ist, entscheidet **allein die Sichtprüfung**, und die gehört **vor** den
+Ausbau der Tests, nicht danach. Verwandt mit dem Muster, das dieses Projekt
+schon zweimal getroffen hat (#44 Ring-Labels, Dichte der beiden Ansichten):
+vermessen, verstanden — und bewusst nicht geändert.
+
+Der Rückbau lief über `git revert`, nicht über `reset --hard`: Sollte
+Streamlit die Sprache eines Tages unterstützen, ist der gebaute Weg in der
+Historie nachlesbar (Commit `d99c61a`).
 
 **Was beim Nachbau die Arbeit macht** — nicht die Darstellung, sondern der
 Zustand:
@@ -2552,16 +2617,20 @@ Zustand:
 
 **Gemeldet war eine Stelle, betroffen waren vier.** Start/Ende im eigenen
 Zeitraum **und** Von/Bis am Balken-Chart. Der zweite Bedienpfad war bis dahin
-von keinem Test berührt. Schritt 1b in `tests/test_bedienung.py` sperrt
-`st.date_input` jetzt repo-weit per AST — gegen den alten Stand gerechnet
-meldet er genau diese vier.
+**von keinem Test berührt** — das ist der einzige bleibende Ertrag dieser
+Runde: Schritt 1b in `tests/test_bedienung.py` fährt ihn jetzt hoch und prüft
+zugleich, dass **alle vier** Felder `format="DD.MM.YYYY"` tragen. Das ist der
+Teil der deutschen Darstellung, den Streamlit kann; fällt der Parameter weg,
+steht dort `2026/07/21`, und ohne Prüfung sieht das niemand.
 
-**Und ein Prüf-Detail, das leicht danebengeht:** Die Auswahlfelder tragen
-intern die Monats**nummer** und zeigen den Namen über `format_func`. In
-Streamlits AppTest liefert `.value` den Rohwert (`7`), `.options` die
-**Beschriftung** (`"Juli"`). Ein Test auf `.value` wäre grün, während am
-Bildschirm „July" steht — geprüft gehört die Anzeige. Dasselbe Muster wie
-#54: nicht das Objekt prüfen, sondern das, was ankommt.
+**Ein Prüf-Detail für den Fall, dass es doch jemand nochmal baut:** Die
+Auswahlfelder tragen intern die Monats**nummer** und zeigen den Namen über
+`format_func`. In Streamlits AppTest liefert `.value` den Rohwert (`7`),
+`.options` die **Beschriftung** (`"Juli"`). Ein Test auf `.value` wäre grün,
+während am Bildschirm „July" steht — geprüft gehört die Anzeige. Dasselbe
+Muster wie #54: nicht das Objekt prüfen, sondern das, was ankommt. Und beim
+Vergleichen aufpassen: `'2008' != 2008`, die beiden Seiten haben verschiedene
+Typen.
 
 ---
 
@@ -2582,7 +2651,21 @@ per `st.segmented_control` oben auf der Seite navigiert, davor `st.tabs`).
 | (PPTX Orchestrierung) | `modules/pptx_export.py` | — | Broschüren-Aufbau: N Strategien, `template_config`/`block_reihenfolge`, `compute_performance_data`, `compute_rollierend_data`, Block-Dispatcher, `LAST_BUILD_ERRORS` |
 | (Tests) | `tests/test_benchmark_erkennung.py` | ~130 | Regressionstest gegen die echten CSVs; läuft ohne pytest und ohne Streamlit |
 
-**Deployment:** Streamlit Community Cloud via GitHub (Repo `FFPBAM/Performancetool`, Branch `main`). Cloud-Python: **3.14**. streamlit ist gepinnt, pandas/numpy stehen weiter auf `>=` (Transferwissen #20).
+**Deployment:** Streamlit Community Cloud via GitHub (Repo `FFPBAM/Performancetool`), Branch **`verbesserungen`**. Cloud-Python: **3.14**. Alle Abhängigkeiten sind seit 11.08.2026 nach oben gedeckelt (Transferwissen #20).
+
+> ⚠️ **Der Arbeitsbranch IST die produktive App.** Bis zum 17.08.2026 stand
+> hier „Branch `main`", und `Start.txt` schrieb dazu „Solange main steht, sieht
+> der Streamlit-Deploy nichts davon". **Beides war falsch.** Belegt am
+> 17.08.2026 an einem Traceback aus der laufenden Cloud-App: Python fasst
+> mehrzeilige Anweisungen als `...<N lines>...` zusammen, und N identifizierte
+> den Import-Block eindeutig als den des **neuen** Commits auf
+> `verbesserungen` (18 Zeilen → `...<16 lines>...`; der Vorgängerstand hätte
+> `...<13 lines>...` gezeigt).
+>
+> Die Folge war ein echter Ausfall: Ein Push, der in dem Glauben erfolgte, er
+> sei folgenlos, hat die App für die Kollegen angehalten. **Wer auf
+> `verbesserungen` pusht, ändert das laufende Werkzeug** — Testlauf vorher,
+> App ansehen nachher.
 
 ⚠️ **Repo-Sichtbarkeit:** Frühere Fassungen dieser Doku forderten „Repo MUSS privat sein (Honorarsätze im Mapping!)". Das Repo ist tatsächlich **öffentlich** (am 07.08.2026 über die GitHub-API verifiziert: `"visibility": "public"`, angelegt am 19.02.2026) — und bleibt es nach Entscheidung von Philip, damit der Cloud-Deploy unverändert läuft. Damit sind Honorarsätze, Benchmark-Zusammensetzungen und die Musterdepot-CSVs öffentlich einsehbar. **Kundendaten sind nicht betroffen** (nur „Muster"-Portfolios; der `EXCLUDE_SUBSTRINGS`-Filter hält Stiftungsdepots draußen), und `secrets.toml` wurde nie committet. Wer hier Daten ergänzt, sollte das im Bewusstsein tun, dass sie öffentlich werden — und dass die Git-Historie sie auch nach dem Löschen behält.
 
@@ -3634,19 +3717,60 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 ## 16. Changelog
 
+### 17.08.2026 (abends) – Datumsauswahl zurückgebaut, zwei falsche Doku-Sätze korrigiert
+
+**Die deutsche Datumsauswahl ist wieder draußen.** Nicht weil sie nicht
+funktioniert hätte — 22 Suiten waren grün —, sondern weil sie am Bildschirm
+schlechter aussieht als der englische Kalender. Aus zwei Bedienelementen waren
+sechs geworden, der anklickbare Kalender war weg, und der Gewinn war ein
+Monatsname. Entscheidung Philip: *„Es darf auf Englisch sein."* `git revert`
+statt `reset --hard`, damit der gebaute Weg nachlesbar bleibt; die drei
+Dateien sind danach zeichengleich mit dem Stand davor. Transferwissen **#60**
+ist auf dieses Ergebnis umgeschrieben und trägt jetzt oben ein „bitte nicht
+erneut versuchen".
+
+**Ein Prüfstein bleibt** — der einzige bleibende Ertrag der Runde: Der
+Bedienpfad „Performance blockweise" → „Benutzerdefiniert" war von **keinem**
+Test je berührt. Schritt 1b in `tests/test_bedienung.py` fährt ihn jetzt hoch
+und prüft zugleich, dass alle vier Datumsfelder `format="DD.MM.YYYY"` tragen.
+
+**Der eigentliche Befund des Abends war ein Doku-Fehler.** Nach dem Push am
+Nachmittag stürzte die Cloud-App mit `ImportError` ab. Ursache war ein
+veraltetes Modul im Speicher der Cloud — ein Reboot hat es behoben, der Code
+war in Ordnung (nachgemessen: alle 23 aus `modules.shared` importierten Namen
+lagen korrekt auf dem Server). Dabei kam heraus:
+
+- **Die Cloud deployt `verbesserungen`, nicht `main`.** Die Doku behauptete an
+  zwei Stellen das Gegenteil (§2 „Branch `main`", `Start.txt` „Solange main
+  steht, sieht der Streamlit-Deploy nichts davon"). Deshalb wurde in dem
+  Glauben gepusht, das sei folgenlos — und die App stand für die Kollegen.
+  Beide Stellen sind korrigiert und tragen jetzt eine Warnung.
+- **Transferwissen #11 war unvollständig** und hat die Suche in die falsche
+  Richtung geschickt: Es sagt für `ImportError` pauschal „Reboot ändert
+  nichts". Das gilt nur, wenn die Datei im Repo falsch ist. Der zweite Fall
+  (Datei richtig, Modul im Speicher alt) steht jetzt daneben, samt
+  Prüfreihenfolge.
+- **Diagnose-Werkzeug fürs nächste Mal:** Ab Python 3.13 kürzt der Traceback
+  mehrzeilige Anweisungen zu `...<N lines>...`, und **N identifiziert die
+  Revision** — so war ohne Serverzugriff belegbar, welcher Commit lief.
+
 ### 17.08.2026 – Kollegen-Feedback: deutsche Datumsauswahl, Einzeltitel, Fälligkeiten
 
 Erste Rückmeldung aus dem Gegentest durch Kollegen. Drei gemeldete Punkte,
 zwei Befunde beim Nachmessen dazu. Vier Commits, alle mit Prüfstein.
 
-**1. Der Kalender im „Eigenen Zeitraum" war englisch** (gemeldet). Keine
-Fehlkonfiguration: Streamlit 1.61 liefert im Frontend nur die englische
+**1. Der Kalender im „Eigenen Zeitraum" war englisch** (gemeldet).
+> ⚠️ **Noch am selben Abend zurückgebaut** — siehe den Eintrag darüber. Der
+> Kalender bleibt englisch. Was hier steht, beschreibt einen Stand, den es
+> nicht mehr gibt; die Analyse dazu ist als #60 weiterhin gültig.
+
+Keine Fehlkonfiguration: Streamlit 1.61 liefert im Frontend nur die englische
 Sprachdatei aus, `format="DD.MM.YYYY"` wirkt lediglich auf den Text im Feld,
-einen Sprachparameter gibt es nicht. Ersetzt durch `shared.datum_waehler_de`
-(Tag | Monat | Jahr, Namen aus `formats.MONATSNAMEN_LANG`). **Betroffen waren
-alle vier Datumsfelder**, nicht die zwei gemeldeten — Von/Bis am Balken-Chart
-gehören dazu und waren bis dahin von keinem Test berührt. Ausführlich als
-Transferwissen **#60**.
+einen Sprachparameter gibt es nicht. Ersetzt wurde es damals durch
+`shared.datum_waehler_de` (Tag | Monat | Jahr, Namen aus
+`formats.MONATSNAMEN_LANG`). **Betroffen waren alle vier Datumsfelder**, nicht
+die zwei gemeldeten — Von/Bis am Balken-Chart gehören dazu und waren bis dahin
+von keinem Test berührt. Ausführlich als Transferwissen **#60**.
 
 **2. Die Einzeltitel-Übersicht zwang zum Scrollen** (gemeldet). `st.dataframe`
 lief mit der Vorgabe `height="auto"`, und die bedeutet laut Streamlit-

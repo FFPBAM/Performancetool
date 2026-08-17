@@ -175,23 +175,27 @@ prüfte statt gegen eine Schwelle (#47).
   Ergebnis nicht. **Für `ret_bm` gilt die Nullen-Aussage weiter und zu Recht**
   (`has_benchmark`) — ein pauschales Ersetzen hätte drei korrekte Stellen
   zerstört.
-- **Kein `st.date_input` mehr** (#60, 17.08.2026). Streamlit zeigt sein
-  Kalender-Popover **ausschließlich auf Englisch** — 1.61 liefert im Frontend
-  nur die englische Sprachdatei aus, aus der Browsersprache wird lediglich der
-  erste Wochentag abgeleitet, und einen Sprachparameter gibt es nicht.
-  `format="DD.MM.YYYY"` wirkt nur auf den Text **im Feld**. Datumsfelder
-  laufen deshalb über `shared.datum_waehler_de` (Tag | Monat | Jahr, Namen aus
-  `formats.MONATSNAMEN_LANG`). Prüfstein: `tests/test_bedienung.py`,
-  Schritt 1b sperrt `st.date_input` repo-weit.
-- **Ein Vorgabewert eines Widgets ist keine Grenze.** Wer `min_value`/
-  `max_value` ersetzt, **beschneidet die Optionen** statt die Eingabe
-  hinterher zurechtzubiegen — sonst zeigt die Oberfläche eine Auswahl, die
-  etwas anderes bedeutet als sie sagt. Und wenn Optionen von einer anderen
-  Auswahl abhängen (Tage vom Monat), muss der gespeicherte Wert **vor** dem
-  Anlegen des Widgets geklemmt werden: Ein Wert, der nicht mehr in `options`
-  steht, lässt `st.selectbox` werfen. Die Zuweisung an einen Widget-Key ist
-  dabei erlaubt, solange das Widget in diesem Lauf noch nicht existiert —
-  das ist die Ausnahme zu #4.
+- **Der Kalender bleibt englisch — nicht erneut versuchen** (#60, entschieden
+  17.08.2026). `st.date_input` ist der richtige Baustein; `format="DD.MM.YYYY"`
+  macht den Text **im Feld** deutsch, das aufklappende Popover kann Streamlit
+  nicht übersetzen (1.61 liefert im Frontend nur die englische Sprachdatei
+  aus, aus der Browsersprache kommt nur der erste Wochentag, einen
+  Sprachparameter gibt es nicht). Der Ersatz durch eigene Tag/Monat/Jahr-Felder
+  **wurde gebaut und wieder verworfen**: technisch einwandfrei, am Bildschirm
+  schlechter — aus zwei Bedienelementen wurden sechs (Philip: „Es darf auf
+  Englisch sein"). Prüfstein: `tests/test_bedienung.py`, Schritt 1b hält
+  `format="DD.MM.YYYY"` an allen vier Feldern fest.
+- **Ein gelöstes Problem ist noch keine Verbesserung** (#60). Wo eine Änderung
+  nur das Aussehen betrifft, entscheidet die **Sichtprüfung** — und die gehört
+  **vor** den Ausbau der Tests. Am 17.08.2026 waren 22 Suiten grün, bevor
+  jemand das Ergebnis am Bildschirm gesehen hat; danach musste alles zurück.
+- **Der Arbeitsbranch `verbesserungen` IST die laufende App.** Streamlit Cloud
+  deployt ihn, nicht `main` — die Doku behauptete bis 17.08.2026 das Gegenteil
+  und ein Push in dem Glauben hat die App für die Kollegen angehalten. Vor dem
+  Push alle Tests grün, **nach** dem Push die App ansehen. Stürzt sie mit
+  `ImportError` ab: erst prüfen, ob das Symbol wirklich auf dem Server fehlt
+  (`git show origin/verbesserungen:<datei>`), dann **Reboot app** (die Cloud
+  kann ein altes Modul im Speicher behalten), erst dann in die Logs (#11).
 - **`st.dataframe` zeigt von sich aus höchstens zehn Zeilen** (17.08.2026).
   Die Vorgabe `height="auto"` bedeutet genau das; danach entsteht ein
   Scrollbalken **innerhalb** der Tabelle. Wo eine Tabelle vollständig gelesen
@@ -224,7 +228,7 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/chart_dynamik.py` | **wie** es aussieht (Optik, nie Werte) |
 | `modules/pptx_helpers.py` | generische PPTX-Mechanik |
 | `modules/pptx_charts.py` | Chart-XML + Bug-Workarounds |
-| `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht**; dazu `datum_waehler_de` (deutsche Datumsauswahl, #60) |
+| `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht** |
 | `modules/formats.py` | **alle** Zahlen-, Prozent- und Datumsformate + Fehlwert `–`; streamlit-frei, gilt für Tool *und* Broschüre |
 | `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
 

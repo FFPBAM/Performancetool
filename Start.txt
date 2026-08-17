@@ -1,5 +1,5 @@
 START-PROMPT — FFPB Performancetool
-Stand: 11.08.2026 · Branch verbesserungen · 28 Commits vor main
+Stand: 17.08.2026 · Branch verbesserungen · 94 Commits vor main
 
 ==========================================================================
 DIESE DREI ZEILEN IN DEN CHAT KOPIEREN:
@@ -17,18 +17,37 @@ FALLS DU GLEICH ETWAS BESTIMMTES WILLST, HAENG EINE ZEILE AN:
   ... Danach: <dein Thema>.
 
 ==========================================================================
+ACHTUNG — DER ARBEITSBRANCH IST DIE LAUFENDE APP
+==========================================================================
+
+Streamlit Cloud deployt den Branch VERBESSERUNGEN, nicht main.
+Jeder Push geht sofort in das Werkzeug, mit dem die Kollegen arbeiten.
+
+Hier stand bis zum 17.08.2026 das Gegenteil ("Solange main steht, sieht
+der Streamlit-Deploy nichts davon"). Das war falsch und hat an dem Tag
+einen Ausfall verursacht: Ein Push in dem Glauben, er sei folgenlos, hat
+die App angehalten.
+
+Also: vor dem Push alle Tests gruen, nach dem Push die App ansehen.
+Stuerzt sie mit ImportError ab, ZUERST "Manage app" -> "Reboot app"
+(die Cloud kann ein altes Modul im Speicher behalten), erst danach in
+die Logs sehen. Details in PROJEKT_DOKUMENTATION.md, Transferwissen #11.
+
+==========================================================================
 WAS OFFEN IST (Details in STATUS.md)
 ==========================================================================
 
-1. PR MERGEN — daran haengt alles. 28 Commits warten:
-   https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen
-   Solange main steht, sieht der Streamlit-Deploy nichts davon.
+1. SICHTPRUEFUNG der Aenderungen vom 17.08.2026 in der laufenden App —
+   Faelligkeiten je Anleihe, Einzeltitel ohne Scrollbalken, korrigierte
+   Kachel "Anzahl Titel". Prueflisten stehen in STATUS.md.
 
-2. SICHTPRUEFUNG in echtem PowerPoint — die Anlagekriterien-Kaesten sind
-   nur numerisch geprueft. CVV.pptx Folie 15 hat sich am meisten geaendert.
+2. PR MERGEN — https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen
+   ACHTUNG: Der Merge aendert am Betrieb nichts, weil die Cloud bereits
+   auf verbesserungen laeuft. Er raeumt die Historie auf.
 
-3. Backlog: pandas/numpy pinnen · flache Benchmark-Linie bei SCHWEIZ ·
-   Durchreich-Wrapper in pptx_export.py
+3. Zurueckgestellt (Entscheidung Philip, 12.08.2026): Anlagekriterien
+   SCHWEIZ (Werte muessen aus dem Haus kommen) und der
+   comdirect-Disclaimer (falsche Kostenregel im Vorlagentext).
 
 ==========================================================================
 WICHTIG FUER DIE NAECHSTE SITZUNG
@@ -38,6 +57,12 @@ WICHTIG FUER DIE NAECHSTE SITZUNG
   nachgezogen. Warum: pip dauert dort 20x laenger, und es tauchen
   Geisterdateien auf.
 - .venv liegt im Projekt und uebersteht den Neustart.
-- Elf Testsuiten unter tests/ — vor jedem Push alle gruen.
+- 22 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
+  .venv\Scripts\python.exe (sonst ueberspringen sie ihre schweren
+  Schritte stillschweigend).
 - Keine Emoji in der Oberflaeche, kein use_container_width. Beides ist
   per Test gesperrt.
+- Der Kalender von st.date_input ist ENGLISCH und bleibt es. Streamlit
+  kann das nicht, der Ersatz durch eigene Felder wurde gebaut und aus
+  optischen Gruenden verworfen (Transferwissen #60). Bitte nicht erneut
+  versuchen.

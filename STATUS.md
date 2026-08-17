@@ -1,8 +1,22 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 17.08.2026 (zweite Runde) · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · vollständig auf GitHub · **getesteter Stand `d99c61a`**
+**Nicht gemergt** · vollständig auf GitHub · **getesteter Stand `7f3a1b2`**
 (22 von 22 Suiten grün), danach nur Doku-Commits
+
+> ### ⚠️ Zuerst lesen: Dieser Branch IST die laufende App
+>
+> Streamlit Cloud deployt **`verbesserungen`**, nicht `main`. Jeder Push geht
+> sofort in das Werkzeug, mit dem die Kollegen arbeiten. Die Doku behauptete
+> bis zum 17.08.2026 das Gegenteil (§2 der Projektdokumentation und
+> `Start.txt`) — deshalb wurde an dem Tag in dem Glauben gepusht, es sei
+> folgenlos, und die App stand. Beide Stellen sind korrigiert.
+>
+> **Vor dem Push** alle Suiten grün. **Nach dem Push** die App ansehen.
+> Stürzt sie mit `ImportError` ab: erst prüfen, ob das Symbol wirklich auf
+> dem Server fehlt, dann **Manage app → Reboot app** (die Cloud kann ein
+> altes Modul im Speicher behalten), erst dann in die Logs. Beide Fälle
+> stehen als Transferwissen **#11**.
 
 *Diese Zeile nennt bewusst den **getesteten** Stand und nicht den jeweils
 letzten: Ein Commit kann seinen eigenen Hash nicht enthalten, deshalb war die
@@ -34,8 +48,16 @@ wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
 > ohne feste Fälligkeit fielen still aus dem Chart (bis zu 46,54
 > Prozentpunkte), und „Anzahl Titel" stand bei **38 von 38** Dateien um genau
 > 1 zu hoch. Alles behoben, vier Commits, neuer Prüfstein — **22 Suiten**.
-> **Offen ist jetzt die Sichtprüfung am Bildschirm** (Liste unter „Offene
-> Punkte", Punkt 1), dann der Merge.
+
+> **Stand 17.08.2026, abends — der Kalender ist zurückgebaut.** Die deutsche
+> Datumsauswahl ist wieder draußen: Sie funktionierte, sah aber schlechter aus
+> als vorher (aus zwei Bedienelementen wurden sechs, der anklickbare Kalender
+> war weg). Philip: *„Es darf auf Englisch sein."* `st.date_input` ist zurück,
+> die drei Dateien sind zeichengleich mit dem Stand davor. **Die drei anderen
+> Verbesserungen bleiben** — Fälligkeiten, Einzeltitel, Titelzahl.
+> Dabei kam der eigentliche Befund des Tages heraus: **die Doku sagte einen
+> falschen Deploy-Branch** (siehe Kasten oben). **Offen ist die Sichtprüfung
+> am Bildschirm** (Liste unter „Offene Punkte", Punkt 1), dann der Merge.
 
 ---
 
@@ -127,21 +149,41 @@ und **#60** sowie im Changelog; hier nur, was man wissen muss.
 
 | # | Woher | Kern | Wirkung |
 |---|---|---|---|
-| 1 | Kollegen | Kalender im „Eigenen Zeitraum" zeigt **englische Monate** | betraf **4 von 4** Datumsfeldern |
+| 1 | Kollegen | Kalender im „Eigenen Zeitraum" zeigt **englische Monate** | **gebaut und wieder zurückgebaut** — bleibt englisch |
 | 2 | Kollegen | Einzeltitel-Übersicht zwingt zum **Scrollen in der Tabelle** | bei *Pro* waren 22 von 32 Aktien unsichtbar |
 | 3 | Berater | **Fälligkeiten der einzelnen Anleihen** fehlen | neue Tabelle unter dem Balkenchart |
 | 4 | nachgemessen | Anleihen **ohne feste Fälligkeit** fielen still aus dem Chart | bis **46,54 Prozentpunkte** |
 | 5 | nachgemessen | „Anzahl Titel" zählt die leere CSV-Zeile mit | **38 von 38** Dateien, immer +1 |
 
-**Zu Punkt 1 — es war nichts falsch eingestellt.** Streamlit 1.61 liefert im
-Frontend **ausschließlich** die englische Sprachdatei aus; aus der
-Browsersprache wird nur abgeleitet, ob die Woche am Montag beginnt, und einen
-Sprachparameter gibt es nicht. `format="DD.MM.YYYY"` wirkt nur auf den Text
-*im Feld*. Verworfen wurden ein JavaScript-Eingriff (nicht prüfbar, kippt
-still beim Update) und eine Fremdkomponente (neue Abhängigkeit, Auto-Update-
-Falle #20). Gebaut wurde `shared.datum_waehler_de`: **Tag | Monat | Jahr** als
-Auswahlfelder, Namen aus `formats.MONATSNAMEN_LANG`. Der anklickbare Kalender
-entfällt — das ist der bewusst gezahlte Preis (Entscheidung Philip).
+**Zu Punkt 1 — gebaut, angesehen, verworfen. Der Kalender bleibt englisch.**
+
+Es war nichts falsch eingestellt: Streamlit 1.61 liefert im Frontend
+**ausschließlich** die englische Sprachdatei aus; aus der Browsersprache wird
+nur abgeleitet, ob die Woche am Montag beginnt, und einen Sprachparameter gibt
+es nicht. `format="DD.MM.YYYY"` wirkt nur auf den Text *im Feld* — dieser Teil
+der deutschen Darstellung bleibt und ist per Test festgenagelt.
+
+Verworfen wurden zuerst ein JavaScript-Eingriff (nicht prüfbar, kippt still
+beim Update) und eine Fremdkomponente (neue Abhängigkeit, Auto-Update-Falle
+#20). Gebaut wurde dann `shared.datum_waehler_de` — **Tag | Monat | Jahr** als
+Auswahlfelder. Technisch einwandfrei, 22 Suiten grün.
+
+**Am Bildschirm war es trotzdem schlechter** (Philip, 17.08.2026: *„Es darf
+auf Englisch sein. Weil jetzt sieht es nicht schön aus."*): Aus zwei
+Bedienelementen wurden sechs, der anklickbare Kalender war weg, und der Gewinn
+war ein Monatsname. **Zurückgebaut per `git revert`** — die drei Dateien sind
+zeichengleich mit dem Stand davor, der gebaute Weg bleibt in der Historie
+nachlesbar (`d99c61a`).
+
+Die Lehre steht als Transferwissen **#60** und ist keine technische: *Ein
+gelöstes Problem ist noch keine Verbesserung.* Wo eine Änderung nur das
+Aussehen betrifft, gehört die Sichtprüfung **vor** den Ausbau der Tests — hier
+waren 22 Suiten grün, bevor überhaupt jemand das Ergebnis gesehen hatte.
+
+**Geblieben ist ein Prüfstein:** Der Bedienpfad „Performance blockweise" →
+„Benutzerdefiniert" war von **keinem** Test je berührt. Er wird jetzt
+hochgefahren, und alle vier Datumsfelder werden auf `format="DD.MM.YYYY"`
+geprüft.
 
 **Zu Punkt 2 — ein Parameter, kein Pixelrechnen.** `st.dataframe` lief mit der
 Vorgabe `height="auto"`, und die bedeutet laut Streamlit-Quelltext wörtlich
@@ -358,7 +400,7 @@ Browser, die Richtigkeit der Quelldaten aus dem Vorsystem.
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
 | **Tests** | **22 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
-| **Kollegen-Feedback** | *(17.08.)* Deutsche Datumsauswahl (Streamlit kann den Kalender nicht auf Deutsch), Einzeltitel ohne Scrollbalken, Fälligkeiten je Anleihe. Dazu zwei Befunde beim Nachmessen: still fehlendes Rentengewicht im Fälligkeits-Chart (bis 46,54 PP) und „Anzahl Titel" bei 38 von 38 Dateien um 1 zu hoch. Details oben. |
+| **Kollegen-Feedback** | *(17.08.)* Einzeltitel ohne Scrollbalken, Fälligkeiten je Anleihe. Dazu zwei Befunde beim Nachmessen: still fehlendes Rentengewicht im Fälligkeits-Chart (bis 46,54 PP) und „Anzahl Titel" bei 38 von 38 Dateien um 1 zu hoch. Der vierte Punkt — deutsche Monatsnamen im Kalender — wurde gebaut und wieder **zurückgebaut**; er ist nicht im Branch. Details oben. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
 | **Anlagekriterien** | *(10.08.)* Aus der Vorlage in `Mapping_Anlagekriterien.xlsx` überführt — **eine Quelle für Tool und Broschüre**. Banner in beiden Ansichten, Rückschreiben in die PPTX. 19 Textfehler in Kundenbroschüren bereinigt (u. a. „FPFB Strategie 30"). |
@@ -1053,7 +1095,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 
 | Test | Braucht | Prüft |
 |---|---|---|
-| `test_bedienung.py` | Schritt 1b **nichts**, sonst **+ streamlit** | Zeitraum-Schnellwahl rechnet richtig, PDF-Weg entfernt, Benchmark-Zeile genau einmal, Logo + Datenstand — alles per AppTest am laufenden Programm. **Neu am 17.08.2026:** Schritt 1b sperrt `st.date_input` repo-weit per AST (Streamlit zeigt den Kalender nur auf Englisch, #60) und läuft **ohne jedes Paket**; Schritt 1c rechnet `datum_auswahl_optionen` gegen 10 Fälle nach (beide Ränder, Schaltjahr, `mind == maxd`); Schritt 1d prüft den Balken-Chart-Pfad, der bis dahin von keinem Test berührt war. Die Monatsnamen werden an der **Anzeige** geprüft (`.options` liefert „Juli", `.value` die 7) |
+| `test_bedienung.py` | **+ streamlit** | Zeitraum-Schnellwahl rechnet richtig, PDF-Weg entfernt, Benchmark-Zeile genau einmal, Logo + Datenstand — alles per AppTest am laufenden Programm. **Neu am 17.08.2026: Schritt 1b**, der eigene Zeitraum am **Balken-Chart** („Performance blockweise" → „Benutzerdefiniert"). Dieser Bedienpfad war bis dahin von keinem Test je berührt; er wird jetzt hochgefahren, und es wird geprüft, dass die Auswahl ankommt, beide Felder (`p_bv`, `p_bb`) erscheinen und nichts wirft. Dazu per AST: **alle vier** Datumsfelder tragen `format="DD.MM.YYYY"` — der Teil der deutschen Darstellung, den Streamlit kann; die Monatsnamen im Kalender kann es nicht (#60) |
 | `test_portfolioanalyse.py` *(neu 17.08.2026)* | Schritte 1–5 pandas (5 gar nichts), Schritt 6 **+ streamlit** | Die Portfolioanalyse-Ansicht, die bis dahin **keinen eigenen Prüfstein** hatte. Schritt 1 rechnet „Anzahl Titel" gegen die echten Positionen **aller 38** Dateien (alter Stand: 38 Abweichungen), Schritt 2 die Fälligkeiten-Tabelle gegen die Rohdaten, **Schritt 3 die Zusage** Balkensumme + „ohne feste Fälligkeit" == Kachel „Gewicht Anleihen" über alle Strategien (1e−12), Schritt 4 Sortierung, Restlaufzeit und fünf Grenzfälle, Schritt 5 statisch, dass die langen Tabellen `height="content"` tragen, Schritt 6 die gerenderte Ansicht für drei Fälle (mit Anleihen / ohne Anleihen / Anleihen ohne Fälligkeit) |
 | `test_streamlit_api.py` | **nichts** | keine abgekündigten Streamlit-Parameter (`use_container_width`) |
 | `test_keine_piktogramme.py` | **nichts** | keine Emoji in Überschriften, Hinweisen, Schaltflächen (Kommentare/Doku ausgenommen) |
@@ -1183,14 +1225,9 @@ die Kollegen — deren Rückmeldung ist eingearbeitet. Zwei weitere Punkte sind
    Die Zahlen sind belegt und die Prüfsteine grün — was kein Test leisten
    kann, ist die Frage, ob es sich am Bildschirm gut bedient. Bitte ansehen:
 
-   - **Der Zeitraum hat keinen Kalender mehr**, sondern drei Auswahlfelder
-     Tag | Monat | Jahr. Das ist der Preis dafür, dass die Monate deutsch
-     sind (Streamlit kann es nicht anders, #60). Passen die drei Felder
-     nebeneinander, oder wirkt es gedrängt? Das Spaltenverhältnis steht an
-     **einer** Stelle (`st.columns([3, 3, 2])` in `streamlit_app.py`).
-   - **Am Balken-Chart** („Performance blockweise" → „Benutzerdefiniert")
-     stehen dieselben Felder **gestapelt**, weil die Spalte dort ein Viertel
-     breit ist. Reicht das, oder soll der Block woanders hin?
+   - **Der Zeitraum trägt wieder ein Kalenderfeld je Datum** — Anzeige
+     `TT.MM.JJJJ`, das aufklappende Popup ist englisch und bleibt es (#60).
+     Kurz gegensehen, dass der Rückbau vollständig angekommen ist.
    - **Zurücksetzen** im eigenen Zeitraum: einmal verstellen, Knopf drücken —
      springt es zurück?
    - **Einzeltitel-Übersicht**: kein Scrollbalken mehr *in* der Tabelle. Bei
