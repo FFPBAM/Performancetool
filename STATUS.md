@@ -49,15 +49,18 @@ wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
 > Prozentpunkte), und „Anzahl Titel" stand bei **38 von 38** Dateien um genau
 > 1 zu hoch. Alles behoben, vier Commits, neuer Prüfstein — **22 Suiten**.
 
-> **Stand 17.08.2026, abends — der Kalender ist zurückgebaut.** Die deutsche
-> Datumsauswahl ist wieder draußen: Sie funktionierte, sah aber schlechter aus
-> als vorher (aus zwei Bedienelementen wurden sechs, der anklickbare Kalender
-> war weg). Philip: *„Es darf auf Englisch sein."* `st.date_input` ist zurück,
-> die drei Dateien sind zeichengleich mit dem Stand davor. **Die drei anderen
-> Verbesserungen bleiben** — Fälligkeiten, Einzeltitel, Titelzahl.
-> Dabei kam der eigentliche Befund des Tages heraus: **die Doku sagte einen
-> falschen Deploy-Branch** (siehe Kasten oben). **Offen ist die Sichtprüfung
-> am Bildschirm** (Liste unter „Offene Punkte", Punkt 1), dann der Merge.
+> **Stand 17.08.2026, abends — der Kalender ist zurückgebaut, alles gesichtet.**
+> Die deutsche Datumsauswahl ist wieder draußen: Sie funktionierte, sah aber
+> schlechter aus als vorher (aus zwei Bedienelementen wurden sechs, der
+> anklickbare Kalender war weg). Philip: *„Es darf auf Englisch sein."*
+> `st.date_input` ist zurück, die drei Dateien sind zeichengleich mit dem
+> Stand davor. **Die drei anderen Verbesserungen bleiben** — Fälligkeiten,
+> Einzeltitel, Titelzahl —, und Philip hat sie am selben Abend an der
+> laufenden Cloud-App **abgenommen** („Neues Anleihendetail sieht auch super
+> aus. Und man hat die Vollansicht."). Dabei kam der eigentliche Befund des
+> Tages heraus: **die Doku nannte einen falschen Deploy-Branch** (siehe Kasten
+> oben). **Offen ist damit nur noch der Merge** — er ändert am Betrieb nichts,
+> weil die Cloud ohnehin auf `verbesserungen` läuft, räumt aber die Historie.
 
 ---
 
@@ -1072,6 +1075,22 @@ Zweimal geschehen, beide Male von Philip am Endprodukt und nicht nur im XML:
   **Vorlage**, nicht die Regel: Ein Balken, der ein Rumpfjahr als
   Jahresrendite ausgibt, bleibt eine falsche Sachaussage (§10.9).
 
+- **17.08.2026 (abends)** — **Kollegen-Feedback: alle drei Punkte an der
+  laufenden Cloud-App abgenommen.** Philip: *„Der Datumspicker ist wieder der
+  alte. Neues Anleihendetail sieht auch super aus. Und man hat die
+  Vollansicht."* Damit ist bestätigt, was kein Test zeigen konnte: dass der
+  Rückbau vollständig angekommen ist, dass die Fälligkeiten-Tabelle den
+  Beraterwunsch trifft, und dass die Einzeltitel-Übersicht ohne Scrollbalken
+  tatsächlich als Gewinn empfunden wird.
+
+  **Bemerkenswert an dieser Runde ist die Richtung des Urteils.** Vier
+  Änderungen gingen hinaus, alle mit denselben Belegen — 22 grüne Suiten,
+  Broschüren byte-identisch, `ui_dump` zeichengleich. Drei kamen gut an, eine
+  nicht, und das ließ sich an den Belegen **nicht ablesen**: Die deutsche
+  Datumsauswahl war die am gründlichsten geprüfte Änderung des Tages und die
+  einzige, die zurückmusste. Wo es ums Aussehen geht, entscheidet der
+  Bildschirm, und zwar früh (#60).
+
 Alle Funde dieses Abends kamen aus dem **Auge**, nicht aus einem Test: erst
 ein Kollege, der die Datumsachse mit den Daten verglich, dann Philip an der
 frisch korrigierten Broschüre — zweimal hintereinander, denn die Wertachse
@@ -1197,9 +1216,9 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**Es sind vier**, alle bei Philip. Punkt 1 ist neu und ersetzt das Warten auf
-die Kollegen — deren Rückmeldung ist eingearbeitet. Zwei weitere Punkte sind
-**bewusst zurückgestellt** und stehen darunter.
+**Es sind noch drei**, alle bei Philip. Punkt 1 (Sichtprüfung) ist am
+17.08.2026 abends **erledigt** und bleibt nur als Beleg stehen. Zwei weitere
+Punkte sind **bewusst zurückgestellt** und stehen darunter.
 
 0. **NEU 14.08.2026 — die geänderten Zahlen freigeben.** Befund B3 hat die
    Honorarformel korrigiert; jede Nachkosten-Zahl im Werkzeug **und in der
@@ -1221,29 +1240,26 @@ die Kollegen — deren Rückmeldung ist eingearbeitet. Zwei weitere Punkte sind
    dass wirklich nur die Kostenseite betroffen ist (`ui_dump` zeigt genau
    eine geänderte Zeile).
 
-1. **Sichtprüfung der Änderungen aus dem Kollegen-Feedback (NEU, offen).**
-   Die Zahlen sind belegt und die Prüfsteine grün — was kein Test leisten
-   kann, ist die Frage, ob es sich am Bildschirm gut bedient. Bitte ansehen:
+1. ~~**Sichtprüfung der Änderungen aus dem Kollegen-Feedback.**~~ —
+   **ERLEDIGT, Philip am 17.08.2026 abends an der laufenden Cloud-App:**
 
-   - **Der Zeitraum trägt wieder ein Kalenderfeld je Datum** — Anzeige
-     `TT.MM.JJJJ`, das aufklappende Popup ist englisch und bleibt es (#60).
-     Kurz gegensehen, dass der Rückbau vollständig angekommen ist.
-   - **Zurücksetzen** im eigenen Zeitraum: einmal verstellen, Knopf drücken —
-     springt es zurück?
-   - **Einzeltitel-Übersicht**: kein Scrollbalken mehr *in* der Tabelle. Bei
-     *Muster FFPB Pro* sind das 32 Zeilen am Stück. Ist das die gewünschte
-     Länge, oder soll ab einer Grenze doch wieder gescrollt werden?
-   - **Anleihen-Detail**: Steht die Tabelle „Einzelne Fälligkeiten" am
-     richtigen Platz? Sind die Spalten die richtigen (Restlaufzeit, Kupon,
-     Rendite, Duration, Gewicht) — fehlt eine, ist eine überflüssig?
-   - **Der Satz zur Lücke** bei *Muster SCHWEIZ Substanz* („Die Balken zeigen
-     15,35 % … weitere 15,54 % entfallen auf Rentenfonds bzw. Renten-ETF ohne
-     feste Fälligkeit"). Verständlich für einen Berater, oder zu technisch?
-   - **Bei *ETF Muster 40/60*** gibt es gar keinen Chart, dafür einen
-     erklärenden Satz. Reicht das, oder soll dort etwas anderes stehen?
-   - **„Anzahl Titel" ist jetzt um 1 kleiner** als bisher (Comdirect 100:
-     21 statt 22). Das ist die Korrektur, kein neuer Fehler.
-   - **Light- und Dark-Mode.**
+   > *„Der Datumspicker ist wieder der alte. Neues Anleihendetail sieht auch
+   > super aus. Und man hat die Vollansicht."*
+
+   Damit sind alle drei Punkte des Kollegen-Feedbacks am Endprodukt bestätigt
+   — nicht nur im Testlauf, sondern dort, wo die Berater arbeiten:
+
+   | Geprüft | Ergebnis |
+   |---|---|
+   | Rückbau der Datumsauswahl vollständig angekommen | in Ordnung |
+   | Anleihen-Detail mit den einzelnen Fälligkeiten | in Ordnung |
+   | Einzeltitel-Übersicht ohne Scrollbalken („Vollansicht") | in Ordnung |
+
+   *(Nicht ausdrücklich zurückgemeldet und deshalb offen, falls es später
+   stört: ob 32 Zeilen am Stück bei „Muster FFPB Pro" die gewünschte Länge
+   sind, und ob der Satz zur Lücke bei „Muster SCHWEIZ Substanz" für einen
+   Berater verständlich formuliert ist. Beides ist eine Konstante bzw. ein
+   Satz — jederzeit änderbar, ohne dass etwas nachgerechnet werden müsste.)*
 
 2. **Beide Ansichten am Bildschirm gegensehen** — *Philip erledigt am
    17.08.2026, Ergebnis in Ordnung. Der Gegentest durch Kollegen hat
