@@ -393,9 +393,126 @@ def ueberschneidung_tabelle(bestaende, bezug, spalte):
             .sort_values("anteil", ascending=False))
 
 
-def _balkenhoehe(anzahl):
-    """Hoehe der Balken-Charts - mitwachsend, aber gedeckelt."""
-    return int(min(760, max(220, 120 + anzahl * 30)))
+# ── Geometrie der beiden Balken-Charts ─────────────────────────────────────
+# Gemeldet am 18.08.2026 aus dem Gegentest: Bei zwei Strategien und der
+# Aufteilung "Segment innerhalb Aktien" ueberdeckte die Legende die
+# Achsenbeschriftung "Anteil am Depot". Nachgemessen:
+#
+#   Hoehe 220 px (Untergrenze), oberer Rand 30, unterer Rand NICHT gesetzt
+#   -> Plotly-Standard 80  =>  Zeichenflaeche 110 px
+#   Legende bei y = -0,12  =>  13 px darunter, im Band des Achsentitels
+#   11 Segmente, fuenf davon ueber 18 Zeichen -> mehrere Legendenzeilen
+#
+# ZWEI URSACHEN, die zusammenwirkten:
+#
+# 1. `y = -0,12` ist relativ zur ZEICHENFLAECHE. Bei 110 px sind das 13 px,
+#    bei 760 px waeren es 91 - der Abstand schrumpfte also genau dann, wenn
+#    er am meisten gebraucht wird: bei WENIGEN Strategien.
+# 2. Die Legende waechst nach unten, und niemand reservierte Platz.
+#
+# Dazu ein struktureller Mangel: Die alte `_balkenhoehe` kannte nur die Zahl
+# der BALKEN. Die Zahl der SEGMENTE bestimmt den Platzbedarf mit, ging aber
+# nirgends ein.
+#
+# WARUM DAS HIER EINE RECHNUNG IST UND KEINE SCHAETZUNG: Die naheliegende
+# Loesung waere "schaetze, wie viele Legendeneintraege in eine Zeile passen" -
+# also eine Annahme ueber Zeichenbreiten, und damit genau das, was CLAUDE.md
+# seit dem 17.08.2026 verbietet. Plotly 6.9 macht sie ueberfluessig:
+#
+#   legend.entrywidthmode="fraction", entrywidth=1/3
+#       -> GENAU drei Eintraege je Zeile. Die Zeilenzahl ist ceil(n/3),
+#          exakt statt geraten.
+#   legend.yref="container", yanchor="bottom", y=0
+#       -> die Legende haengt am Rand der FIGUR statt an der Zeichenflaeche.
+#          Ursache 1 kann damit nicht zurueckkommen.
+#
+# Drei je Zeile sind so gewaehlt, dass die laengste Beschriftung im Bestand
+# ("Banken,Versicherer,Finanzdienstl.", 33 Zeichen) bequem passt.
+LEGENDE_JE_ZEILE = 3
+
+# Die EINE verbleibende Pixelannahme, und sie wird hier benannt statt
+# versteckt: die Hoehe einer Legendenzeile. Sie ist beherrschbar, weil die
+# Schriftgroesse der Legende ausdruecklich gesetzt wird (LEGENDE_SCHRIFT) -
+# anders als bei `st.dataframe`, wo die Zeilenhoehe Streamlit gehoert und
+# eine Annahme darueber beim naechsten Update still kippt (17.08.2026).
+# Grosszuegig gewaehlt, nicht knapp.
+LEGENDE_ZEILE_PX = 26
+LEGENDE_SCHRIFT = 12
+
+# Platz fuer Achsenbeschriftung und Achsentitel unterhalb der Zeichenflaeche.
+ACHSE_UNTEN_PX = 58
+RAND_OBEN_PX = 30
+
+# AUSDRUECKLICHE LUFT zwischen Achsentitel und Legende. Ohne sie ginge die
+# Rechnung zwar auf, aber knapp: Der Achsentitel sitzt rund 50 px unter der
+# Zeichenflaeche, die Legende waechst von unten - bei vier Legendenzeilen
+# blieben acht Pixel dazwischen. Genau diese Enge war der gemeldete Fehler,
+# und ein Abstand, der sich rechnerisch gerade so ausgeht, ist keiner.
+LEGENDE_ABSTAND_PX = 12
+
+# Feste Hoehe je Balken statt einer Mindesthoehe fuer die ganze Figur
+# (Philip, 18.08.2026): Zwei Strategien ergaben vorher zwei fette Kloetze auf
+# 110 px Zeichenflaeche. Mit Deckel nach dem Vorbild der Heatmap
+# (`risiko_ansicht._zeilenhoehe`): Wuerde die Zeichenflaeche zu hoch, schrumpft
+# die Hoehe je Balken - bis zu einem Boden, unter dem nichts mehr lesbar ist.
+BALKEN_HOEHE_PX = 44
+BALKEN_HOEHE_MIN_PX = 26
+ZEICHENFLAECHE_MAX_PX = 700
+
+
+def balkenhoehe_je_zeile(anzahl):
+    """Hoehe EINES Balkens. Konstant, bis der Deckel greift."""
+    if anzahl <= 0:
+        return BALKEN_HOEHE_PX
+    if anzahl * BALKEN_HOEHE_PX <= ZEICHENFLAECHE_MAX_PX:
+        return float(BALKEN_HOEHE_PX)
+    return max(float(BALKEN_HOEHE_MIN_PX), ZEICHENFLAECHE_MAX_PX / anzahl)
+
+
+def legendenzeilen(eintraege):
+    """Wie viele Zeilen die Legende belegt - exakt, nicht geschaetzt."""
+    if eintraege <= 0:
+        return 0
+    return -(-int(eintraege) // LEGENDE_JE_ZEILE)   # aufgerundete Division
+
+
+def balken_geometrie(balken, legendeneintraege=0):
+    """(hoehe, rand_unten) fuer ein waagerechtes Balken-Chart.
+
+    Args:
+        balken: Zahl der Strategien, also der Balken
+        legendeneintraege: Zahl der Legendeneintraege; 0 heisst keine Legende
+
+    Returns:
+        (hoehe_px, rand_unten_px). `rand_unten` reserviert den Platz fuer
+        Achsentitel UND Legende - der Achsentitel liegt darin oberhalb der
+        Legende, und beide koennen sich nicht mehr ueberdecken.
+
+    Beide Balken-Charts des Tabs nutzen dieselbe Rechnung. Die
+    Ueberschneidung hat keine Legende (`showlegend=False`), also
+    `legendeneintraege=0` - dieselbe Formel, ein Summand faellt weg.
+    """
+    zeilen = legendenzeilen(legendeneintraege)
+    rand_unten = ACHSE_UNTEN_PX
+    if zeilen:
+        rand_unten += LEGENDE_ABSTAND_PX + zeilen * LEGENDE_ZEILE_PX
+    zeichenflaeche = max(1, balken) * balkenhoehe_je_zeile(balken)
+    return int(round(RAND_OBEN_PX + zeichenflaeche + rand_unten)), int(rand_unten)
+
+
+def legenden_layout():
+    """Die Legende unter dem Chart, am Rand der FIGUR verankert.
+
+    yref="container" ist der Kern: Damit haengt die Legende am unteren Rand
+    der Figur und nicht an der Zeichenflaeche, deren Hoehe je nach Zahl der
+    Strategien zwischen 88 und 700 px schwankt. Der frueher benutzte
+    Paper-Bezug (`y=-0.12`) machte den Abstand genau dort klein, wo er
+    gebraucht wurde.
+    """
+    return dict(orientation="h", yref="container", yanchor="bottom", y=0,
+                xref="paper", xanchor="left", x=0,
+                entrywidthmode="fraction", entrywidth=1.0 / LEGENDE_JE_ZEILE,
+                font=dict(size=LEGENDE_SCHRIFT))
 
 
 def ueberschneidung_figur(tabelle, bezug, ebene):
@@ -434,8 +551,9 @@ def ueberschneidung_figur(tabelle, bezug, ebene):
                        "gemeinsam: %{customdata[1]} " + einheit
                        + "<extra></extra>"),
     ))
+    hoehe, rand_unten = balken_geometrie(len(namen))
     fig.update_layout(
-        height=_balkenhoehe(len(namen)),
+        height=hoehe,
         # Kurzer Achsentitel (18.08.2026): Der lange Satz gehoert unter das
         # Chart, nicht an die Achse.
         xaxis=dict(type="linear", ticksuffix=" %",
@@ -450,7 +568,7 @@ def ueberschneidung_figur(tabelle, bezug, ebene):
         yaxis=dict(type="category", categoryorder="array",
                    categoryarray=list(reversed(namen)), title=None,
                    automargin=True),
-        separators=",.", margin=dict(t=30),
+        separators=",.", margin=dict(t=RAND_OBEN_PX, b=rand_unten),
         showlegend=False,
     )
     return fig
@@ -557,9 +675,10 @@ def exposure_figur(tabelle, achse):
             hovertemplate=("<b>%{y}</b><br>" + beschriftung
                            + ": %{x:.2f} %<extra></extra>"),
         ))
+    hoehe, rand_unten = balken_geometrie(len(namen), len(tabelle.columns))
     fig.update_layout(
         barmode="stack",
-        height=_balkenhoehe(len(namen)),
+        height=hoehe,
         xaxis=dict(type="linear", ticksuffix=" %", range=[0, 100],
                    title="Anteil am Depot"),
         # automargin: siehe `ueberschneidung_figur` — der linke Rand muss
@@ -567,8 +686,8 @@ def exposure_figur(tabelle, achse):
         yaxis=dict(type="category", categoryorder="array",
                    categoryarray=list(reversed(namen)), title=None,
                    automargin=True),
-        separators=",.", margin=dict(t=30),
-        legend=dict(orientation="h", yanchor="top", y=-0.12, x=0),
+        separators=",.", margin=dict(t=RAND_OBEN_PX, b=rand_unten),
+        legend=legenden_layout(),
     )
     return fig
 
