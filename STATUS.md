@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **23 von 23 Suiten grün**, `pyflakes` bei null.
+**Nicht gemergt** · **24 von 24 Suiten grün**, `pyflakes` bei null.
 
 > **Der dritte Tab ist gepusht und damit live** (18.08.2026, `fa5e85c`).
 > Die Sichtprüfung fand davor statt — Philip: *„sieht gut aus"*, und die
@@ -220,6 +220,130 @@ beurteilen sind vor allem:
 **Ohne die App ansehen:** Es liegt eine gerenderte HTML-Vorschau mit sechs
 Fällen (beide Achsen, mit und ohne Namen, drei Zeiträume) im Scratchpad der
 Sitzung — `fig.write_html`, kein Kaleido nötig.
+
+---
+
+### Stufe 2 des Strategievergleichs: Überschneidung und Exposure (18.08.2026)
+
+Der dritte Tab hat zwei Abschnitte dazubekommen — untereinander, die
+Strategieauswahl oben gilt für alle drei. Dazu ist der Umschalter der
+Punktwolke auf die Bauform der Heatmap umgestellt.
+
+| Abschnitt | Was es beantwortet |
+|---|---|
+| **Überschneidung** | *„Der Kunde hat schon X — was bringt Y dazu?"* Fokus auf eine Bezugsstrategie, dagegen alle anderen als sortierte Balken |
+| **Exposure** | Wie sind die Strategien aufgeteilt — alle nebeneinander statt je Strategie als Ring |
+
+#### Das Maß: Überlappung = Σ min(w_A, w_B)
+
+Die Gegengröße zur *Active Share*, im Gespräch in einem Satz erklärbar:
+*„Diese beiden Depots halten zu 69,6 % des Gewichts dieselben Titel."* Eine
+reine Titelzahl wäre irreführend — zwei Depots können neun Titel teilen, die
+zusammen 3 % wiegen. Gemessen am Stichtag 21.07.2026:
+
+| Paar | Überschneidung | gemeinsame Titel |
+|---|---:|---:|
+| cVV defensiv plus ↔ cVV ausgewogen | **69,56 %** | 22 |
+| Comdirect 70 ↔ Comdirect 100 | 61,4 % | 13 |
+| **cVV dynamic ↔ Comdirect 100** | **44,98 %** | 13 |
+| cVV ausgewogen ↔ Comdirect 100 | 20,53 % | 5 |
+
+Innerhalb der Familien hoch — erwartbar. Der Wert liegt im Blick **über die
+Familien hinweg**; 30 von 171 Paaren haben keinen gemeinsamen Titel.
+
+**Zwei Vorbehalte stehen als Caption in der Ansicht**, weil beide sonst
+falsch gelesen würden:
+
+1. **Die Ebenen sind nicht vergleichbar.** Dasselbe Paar (*cVV ausgewogen* ↔
+   *Comdirect 100*) liest sich auf Einzeltitel-Ebene als **20,5 %** und auf
+   Gattungs-Ebene als **73,8 %** — bei vier Gattungen können sich zwei Depots
+   kaum verfehlen. Wer nur die Zahl sieht, hält zwei Depots für fast
+   identisch, die auf Titelebene zu einem Fünftel übereinstimmen.
+2. **100 % sind unerreichbar.** Die Titelgewichte machen je Strategie nur
+   **88,8 bis 98,2 %** aus, der Rest ist Liquidität. Bewusst *nicht*
+   wegnormiert: Eine Normierung ließe zwei Depots mit viel Kasse ähnlicher
+   aussehen, als sie sind.
+
+#### Exposure: jede Zeile summiert auf 100 %
+
+Gestapelte Balken über **Gattung, Region, Währung** und **Segment innerhalb
+einer Gattung**. Die Liquidität ist als eigenes Segment ausgewiesen — ein
+Balken, der bei 94 % endet und trotzdem wie ein volles Depot aussieht,
+behauptet eine Vollinvestition, die es nicht gibt (#59).
+
+**Segment nur innerhalb einer Gattung** (Entscheidung Philip): Die Spalte
+trägt zwei Bedeutungen. „Financials" sind **23 Rentenpositionen**, „Banken,
+Versicherer, Finanzdienstl." **42 Aktienpositionen** — flach nebeneinander
+sähen sie aus wie zwei Branchen, dabei ist es dasselbe Kreditrisiko in zwei
+Formen.
+
+**Region trägt einen Vorbehalt:** Es gibt **kein Look-through** in Fonds und
+ETFs. „Europa" sind ausschließlich Fonds, ETFs und Zertifikate, „Europa ohne
+Deutschland" ausschließlich Einzeltitel — sachlich richtig, aber der
+ausgewiesene Deutschland-Anteil ist dadurch eher zu niedrig. Philip am
+18.08.2026 dazu: *„Das haben ETFs an sich."*
+
+**Der Marktrisikowert war gebaut und ist wieder ausgebaut** (Philip,
+18.08.2026). Die Spalte liegt in den Daten und ließe sich je Strategie
+aufteilen — aber das Haus **legt sie im Asset Management selbst fest**. Eine
+vergebene Kennzahl sieht neben gemessenen Größen aus wie eine Beobachtung.
+Ein Testschritt hält die Entscheidung fest, weil die Spalte in den Daten
+bleibt und sich sonst leicht wieder einbauen ließe.
+
+#### Neues Modul `bestandsanalytik.py` — streamlit-frei
+
+`analytics.py` trägt die Mathematik der **Zeitreihen**, die Tool *und*
+Broschüre teilen. Was auf den **Einzeltiteln eines Stichtags** rechnet, hat
+jetzt einen eigenen, oberflächenfreien Ort: `ueberlappung`,
+`gewichte_je_kategorie`, `kategorien_vereinigt` — und `calc_liquidity`, die
+aus `portfolioanalyse.py` dorthin umgezogen ist und dort per Zuweisung
+weitergereicht wird. Sie wird inzwischen an drei Stellen gebraucht.
+
+Dort gehören auf Dauer auch `build_allocation`, `get_bond_summary` und
+`duration_info_aus_bestand` hin — sie sind heute hinter dem Streamlit-Import
+von `portfolioanalyse.py` eingesperrt. Der Umzug war bewusst nicht Teil
+dieser Runde.
+
+**`build_allocation` wird bewusst NICHT wiederverwendet.** Sie fasst
+Kategorien unter 3 % zu „Sonstige" zusammen — je Strategie einzeln. Für einen
+Ring ist das richtig, für einen Vergleich wäre es fatal: Dieselbe Region
+stünde bei der einen Strategie als eigener Balken und wäre bei der nächsten
+unsichtbar. Dieselbe Lehre wie bei der Farbskala der Heatmap — was verglichen
+wird, muss fest sein.
+
+#### Beweise
+
+| Gemessen | Ergebnis |
+|---|---|
+| Testsuiten | **24 von 24 grün**, kein Schritt übersprungen |
+| `pyflakes` über 43 Dateien | **null** |
+| `ui_dump` Performance + Portfolioanalyse | **zeichengleich** |
+| **Broschüren vorher/nachher, rekursiv** | **7 Stück, 2056 ZIP-Einträge, 0 inhaltliche Abweichungen** |
+| Überschneidung gegen die Vormessung | 69,564 / 44,982 / 20,53 % — exakt getroffen |
+| Exposure-Zeilensummen | 100 % auf 2,2e−16 |
+
+Der Broschüren-Vergleich war hier **nicht optional**: `calc_liquidity` läuft
+im Export-Pfad. Jetzt ist es bewiesen statt argumentiert.
+
+#### Drei Funde beim Bauen, alle aus dem Messen
+
+1. **Eine Zahl in der Planung war erfunden.** Dort stand „cVV ausgewogen ↔
+   Comdirect 100: 9 gemeinsame Titel". Es sind **5** — am Rohdatensatz
+   gegengerechnet. Der Prozentwert stimmte; die Titelzahl war beim Schreiben
+   gefüllt worden, ohne sie zu messen.
+2. **Der Fehlwert-Filter funktionierte nur zufällig.** `parse_pf_data` räumt
+   „Währung" und „Marktrisikowert" **nicht** auf; bei diesen Spalten hing das
+   Aussortieren der leeren Schlusszeile allein daran, dass sie auch kein
+   *Gewicht* trägt. Jetzt wird der Fehlwert ausdrücklich zuerst entfernt.
+3. **pandas 3.0 wirft NA-Schlüssel beim `groupby` von selbst weg.** Die erste
+   Gegenprobe war deshalb gar nicht naiv genug und meldete „greift bei 0 von
+   19". Sie braucht `dropna=False` — und das ist selbst ein Befund: Im
+   Standardpfad schützt das Werkzeug, nicht der Code. Auf so etwas sollte man
+   sich nicht verlassen (#20).
+
+Dazu hat der Prüfstein zwei **gerundete Sollwerte** kassiert (0,696 statt
+0,69564). Richtig so: Ein Sollwert, der aus der Anzeige abgeschrieben ist,
+trägt eine Unschärfe, die niemand begründen kann (#58).
 
 ---
 
@@ -563,6 +687,7 @@ Browser, die Richtigkeit der Quelldaten aus dem Vorsystem.
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
 | **Tests** | **23 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
 | **Dritter Tab** | *(18.08.)* **Strategievergleich**: Risiko-Rendite-Punktwolke über alle 19 Strategien, X-Achse umschaltbar zwischen Volatilität und Max Drawdown, Farbe nach Familie. Die eigentliche Arbeit war der **Zeitraum** — ungleiche Historien von 1,7 bis 17,6 Jahren verschieben die Rangfolge um bis zu zehn Plätze. Wer den gewählten Zeitraum nicht abdeckt, wird genannt statt gezeichnet. Details oben. |
+| **Stufe 2 desselben Tabs** | *(18.08.)* **Überschneidung** (Σ min der Gewichte, fünf Ebenen, Fokus auf eine Bezugsstrategie) und **Exposure** (gestapelte 100-%-Balken über Gattung, Region, Währung, Segment-innerhalb-Gattung). Neues streamlit-freies Modul `bestandsanalytik.py`; `calc_liquidity` dorthin umgezogen. Broschüren bewiesen unverändert. |
 | **Kollegen-Feedback** | *(17.08.)* Einzeltitel ohne Scrollbalken, Fälligkeiten je Anleihe. Dazu zwei Befunde beim Nachmessen: still fehlendes Rentengewicht im Fälligkeits-Chart (bis 46,54 PP) und „Anzahl Titel" bei 38 von 38 Dateien um 1 zu hoch. Der vierte Punkt — deutsche Monatsnamen im Kalender — wurde gebaut und wieder **zurückgebaut**; er ist nicht im Branch. Details oben. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
@@ -1295,6 +1420,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–11 **+ streamlit** | Die Heatmap, elf Schritte. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach, Schritt 2 die Verkettung Zeile → Jahresspalte, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile, Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und prüft den Zeitraum-Zuschnitt an beiden Rändern, **Schritt 7 die Bandbreite** (arithmetisches Mittel gegen von Hand gerechnete Werte, Je-Monat-Toleranz, festes Fenster, Invariante `Tief ≤ Mittel ≤ Hoch` über alle Strategien), **Schritt 8 die FIGUR statt der Daten** — Achsentyp, Kategorienreihenfolge, Spaltenzahl, Koordinatentypen der Annotationen; das ist die Prüfung, durch deren Fehlen der Renderfehler schlüpfte —, **Schritt 9 die Zeitraum-Ableitung** (sieben gerechnete Fälle plus die Zusage, dass die älteste Jahreszeile keine Lücke hat), Schritt 10 die Kachelhöhe, Schritt 11 fährt die Oberfläche hoch (beide Ansichten, alle Zeiträume, „Seit Auflage mit jungem Vergleichsportfolio") |
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16. **Neu am 14.08.2026: Schritt 6** prüft die *Voraussetzung* der 365-Konvention an den echten Daten (kalendertäglich, lückenlos, Werktaganteil rund 5/7) — eine Handelstag-Lieferung würde 365 Zeilen zu 1,40 Jahren machen und √365 falsch. **Schritt 7** prüft den Zeitraum-Hinweis der beiden Tabellen gegen beide Aufrufformen, drei leere Eingaben und einen Schaltjahr-Rand |
 | `test_strategievergleich.py` *(neu 18.08.2026)* | Schritte 1+4 numpy/pandas, 2+3 zusätzlich die echten CSVs, 5 **+ streamlit** | Die Risiko-Rendite-Punktwolke des dritten Tabs. Schritt 1 die neue Spalte `rendite` gegen den Anker „eine Reihe ohne Marktbewegung kostet exakt den Satz" (derselbe wie bei B3), dazu die geschlossene Form und vier Grenzfälle; **Schritt 2 die Zusage**, dass die Punktwolke dieselbe Zahl zeigt wie die Kennzahlen-Kachel — 19 Strategien × 3 Kennzahlen, einmal über die ganze Reihe und einmal über das gemeinsame Fenster; **Schritt 3 die Abdeckung** mit namentlicher Festlegung der fünf bekannten Fälle **und der Gegenprobe gegen eine naive Fassung**; Schritt 4 die **Figur** statt der Daten (#54: Achsentypen, Punktzahl, Spuren je Familie, Drawdown als Betrag, **jeder Punkt trägt seinen Namen** — auch bei 27, und nicht abgeschnitten am Rand); Schritt 5 acht Bedienpfade per AppTest |
+| `test_bestandsanalytik.py` *(neu 18.08.2026)* | Schritt 1 nur numpy/pandas, 2+3 lesen die echten CSVs | Die Bestands-Mathematik. Schritt 1 `ueberlappung` gegen von Hand gerechnete Fälle und Grenzfälle (leer, None, ein Titel, doppelter Schlüssel, NaN-Gewicht), **Schritt 2 die Zusage** „Kategoriegewichte + Liquidität == 1" über 19 Strategien × 4 Ebenen **plus die Gegenprobe** gegen eine naive Fassung mit `dropna=False`, Schritt 3 Symmetrie und Selbstüberschneidung über alle 171 Paare, drei namentlich festgelegte Paare und die Ungleichung „die feine Ebene liegt nie über einer gröberen" |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -1320,6 +1446,7 @@ python tests/test_monatsrenditen.py
 python tests/test_risiko.py
 python tests/test_portfolioanalyse.py
 python tests/test_strategievergleich.py
+python tests/test_bestandsanalytik.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```

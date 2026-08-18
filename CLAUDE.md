@@ -210,6 +210,24 @@ prüfte statt gegen eine Schwelle (#47).
   Fälligkeit — sie fielen still heraus. Wo ein Teilaggregat neben seiner
   Gesamtgröße steht, gehört die **Differenz benannt** (§10.9, dieselbe Klasse
   wie #46/B6). Prüfstein: `tests/test_portfolioanalyse.py`, Schritt 3.
+- **Ein Vergleichsmaß ist nur so aussagekräftig wie seine Ebene** (#62,
+  18.08.2026). Überschneidung, Ähnlichkeit, Abweichung — jedes solche Maß
+  hängt an der gewählten Ebene, und gröbere Kategorien liefern zwangsläufig
+  höhere Werte. Dasselbe Depotpaar liest sich auf Einzeltitel-Ebene als
+  **20,5 %** und auf Gattungs-Ebene als **73,8 %**. Die Ebene gehört deshalb
+  an die Zahl. Zweitens: **Die Obergrenze ist selten 100 %** — die
+  Titelgewichte machen nur 88,8 bis 98,2 % aus, der Rest ist Liquidität; der
+  Vorbehalt wird benannt und nicht wegnormiert. Drittens: **Was verglichen
+  wird, muss fest sein** — `build_allocation` bildet „Sonstige" je Strategie
+  einzeln und ist deshalb für einen Vergleich nebeneinander unbrauchbar
+  (dieselbe Lehre wie bei der Heatmap-Farbskala).
+- **Der Marktrisikowert gehört nicht ins Beratungswerkzeug** (18.08.2026,
+  Philip). Er liegt je Titel in `Daten_PF` und war als Exposure-Achse gebaut
+  — das Haus legt ihn aber im Asset Management **selbst fest**, und eine
+  vergebene Kennzahl sieht neben gemessenen Größen aus wie eine Beobachtung.
+  Wieder ausgebaut; `tests/test_strategievergleich.py` Schritt 7 hält das
+  fest, weil die Spalte in den Daten bleibt. **Ob eine Zahl in das Werkzeug
+  gehört, entscheidet nicht ihre Verfügbarkeit.**
 - **Ein Vergleich ist nur so ehrlich wie sein gemeinsamer Zeitraum** (#61,
   18.08.2026). Sobald mehrere Strategien NEBENEINANDER stehen, verspricht die
   Achsenbeschriftung eine gemeinsame Grundlage — und die Historien halten das
@@ -243,7 +261,8 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/formats.py` | **alle** Zahlen-, Prozent- und Datumsformate + Fehlwert `–`; streamlit-frei, gilt für Tool *und* Broschüre |
 | `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
 | `modules/risiko_ansicht.py` | Heatmap und Risiko-Block **innerhalb** der Performance-Ansicht |
-| `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander im Risiko-Rendite-Raum |
+| `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander — Punktwolke, Überschneidung, Exposure |
+| `modules/bestandsanalytik.py` | Mathematik auf dem **Bestand** (Gewicht je Kategorie, Überschneidung, Liquidität) — **streamlit-frei**, Gegenstück zu `analytics.py` |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.
 `vorlagen_config.py` hat bewusst **keine Importe** — das bitte so lassen.
@@ -282,6 +301,7 @@ python tests/test_monatsrenditen.py          # Schritte 1-4 nur numpy + pandas
 python tests/test_risiko.py                  # Schritte 1-2+4 nur numpy + pandas
 python tests/test_portfolioanalyse.py        # Schritte 1-5 pandas, 6 + streamlit
 python tests/test_strategievergleich.py      # Schritte 1+4 numpy/pandas, 5 + streamlit
+python tests/test_bestandsanalytik.py        # Schritt 1 ohne jedes Paket
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx

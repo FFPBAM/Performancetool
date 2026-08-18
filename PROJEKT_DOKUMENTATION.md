@@ -2634,6 +2634,58 @@ Typen.
 
 ---
 
+### #62 — Ein Vergleichsmaß ist nur so aussagekräftig wie seine Ebene (NEU 18.08.2026) ⭐
+
+Wer zwei Portfolios vergleicht, wählt dabei immer eine **Ebene** — Einzeltitel,
+Branche, Region, Währung. Dieselbe Rechnung auf gröberen Kategorien liefert
+zwangsläufig höhere Werte, weil sich zwei Depots bei vier Gattungen kaum
+verfehlen können. Am Paar *cVV ausgewogen* gegen *Comdirect 100* gemessen
+(Überlappung = Σ min der Gewichte):
+
+| Ebene | Ausprägungen | Überschneidung |
+|---|---:|---:|
+| Einzeltitel (WKN) | 166 | **20,5 %** |
+| Segment | 18 | 52,0 % |
+| Währung | 6 | 60,6 % |
+| Region | 10 | 64,2 % |
+| Gattung | 4 | **73,8 %** |
+
+**Die Zahlen sind nicht untereinander vergleichbar**, und das ist keine
+Feinheit: Wer „73,8 %" ohne die Ebene liest, hält zwei Depots für fast
+identisch, die auf Titelebene zu einem Fünftel übereinstimmen. Die Ebene
+gehört deshalb an die Zahl — im Titel, in der Achse und in der Caption.
+
+**Zweiter Teil derselben Lehre: die Obergrenze ist selten 100 %.** Die
+Titelgewichte der 19 Strategien summieren sich auf 88,8 bis 98,2 %, der Rest
+ist Liquidität. Die maximal mögliche Überschneidung eines Paares ist damit
+`min(Σw_A, Σw_B)`. **Bewusst nicht wegnormiert:** Eine Normierung auf
+„100 % = maximal möglich" ließe zwei Depots mit viel Kasse ähnlicher
+aussehen, als sie sind. Ein Vorbehalt, den man benennt, ist besser als eine
+Zahl, die ihn versteckt (dieselbe Familie wie #59).
+
+**Und was verglichen wird, muss FEST sein.** `build_allocation` fasst
+Kategorien unter 3 % zu „Sonstige" zusammen — je Strategie einzeln. Für einen
+Ring ist das richtig; für einen Vergleich nebeneinander wäre es fatal:
+Dieselbe Region stünde bei der einen Strategie als eigener Balken und wäre
+bei der nächsten in „Sonstige" verschwunden, ohne dass man es sieht. Genau
+diese Lehre gab es schon einmal, bei der Farbskala der Heatmap (14.08.2026):
+Eine datenabhängige Skala färbt zwei Strategien unterschiedlich ein.
+
+**Nebenbefund zur Datenhygiene, den erst der Prüfstein brachte:** Der Filter
+gegen Fehlwerte hing nur zufällig. `parse_pf_data` räumt sieben Spalten auf,
+„Währung" und „Marktrisikowert" gehören **nicht** dazu; dort fiel die leere
+CSV-Schlusszeile allein deshalb heraus, weil sie auch kein Gewicht trägt.
+Dazu: **pandas 3.0 wirft NA-Schlüssel beim `groupby` von sich aus weg** — die
+Gegenprobe eines Prüfsteins muss deshalb `dropna=False` setzen, sonst prüft
+sie das Werkzeug statt den Code. Ein Schutz, den die Bibliothek stellt, kann
+beim nächsten Versionswechsel verschwinden (#20).
+
+**Und eine, die nicht technisch ist:** Der Marktrisikowert war gebaut und ist
+wieder ausgebaut worden (Philip, 18.08.2026). Er liegt je Titel in den Daten
+— aber das Haus **legt ihn selbst fest**. Eine vergebene Kennzahl neben
+gemessenen Größen sieht aus wie eine Beobachtung. Ob eine Zahl in ein
+Beratungswerkzeug gehört, entscheidet nicht ihre Verfügbarkeit.
+
 ### #61 — Ein Vergleich ist nur so ehrlich wie sein gemeinsamer Zeitraum (NEU 18.08.2026) ⭐
 
 Eine Einzelansicht darf „seit Auflage" rechnen — dort steht die Zahl allein,
@@ -2706,7 +2758,8 @@ Listeneintrag — der alte Tab-Bug von #18 kann nicht zurückkehren).
 |---|---|---|---|
 | 📈 Performance | `streamlit_app.py` | ~1.090 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar, Konsistenz-Caption |
 | 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~900 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail (Duration/Rendite aus Titeln), **PPTX-Export** (familiengesteuerte Vorlagenwahl) |
-| 📐 Strategievergleich | `modules/strategievergleich.py` | ~370 | *(NEU 18.08.2026)* Alle Strategien nebeneinander im Risiko-Rendite-Raum; Zeitraum-Ehrlichkeit statt „seit Auflage" (#61). Rechnet nichts selbst — liest `analytics.risiko_perioden` |
+| 📐 Strategievergleich | `modules/strategievergleich.py` | ~800 | *(NEU 18.08.2026)* Alle Strategien nebeneinander: Risiko-Rendite-Punktwolke (#61), Überschneidung und Exposure (#62). Rechnet nichts selbst — liest `analytics.risiko_perioden` und `bestandsanalytik` |
+| (Bestands-Mathematik) | `modules/bestandsanalytik.py` | ~200 | *(NEU 18.08.2026)* **streamlit-frei**: Gewicht je Kategorie, Überschneidung zweier Depots, Liquidität. Gegenstück zu `analytics.py`, das die Zeitreihen trägt |
 | (Berechnungen) | `modules/analytics.py` | — | **Single Source of Truth** für Performance-Mathematik (CAGR, Vola, Sharpe, Drawdown, Perioden-Renditen); genutzt von App UND PPTX-Export |
 | (gemeinsam) | `modules/shared.py` | ~300 | Konstanten, Login, Formatierung, Font-Setup, Corporate-Palette, CSV-Loading-Helpers |
 | (PPTX generisch) | `modules/pptx_helpers.py` | — | Shape/Text/Table/Slide-Manipulation (inkl. `ensure_table_capacity`, `fit_shape_to_table`, `_reorder_slides`) |
@@ -3780,6 +3833,50 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 (Stufe 2) – Überschneidung und Exposure im Strategievergleich
+
+Der dritte Tab hat zwei Abschnitte dazubekommen, untereinander gestapelt; die
+Strategieauswahl oben gilt für alle drei. Dazu ist der Umschalter der
+Punktwolke von `st.radio` auf `st.segmented_control` umgestellt — die Heatmap
+schaltet ihre zwei Ansichten genauso um, und zwei Bauformen für dieselbe
+Aufgabe sehen ungleichmäßig aus (Philip). `required=True` ist dabei nicht
+Kosmetik: Ohne ihn ließe sich das aktive Segment abwählen.
+
+**Überschneidung** = Σ min(w_A, w_B), die Gegengröße zur Active Share. Fokus
+auf eine Bezugsstrategie, dagegen alle anderen als sortierte Balken, fünf
+Ebenen. Zwei Vorbehalte stehen als Caption dabei: Die Ebenen sind nicht
+vergleichbar (dasselbe Paar 20,5 % auf Titel-, 73,8 % auf Gattungsebene), und
+100 % sind unerreichbar, weil die Titelgewichte nur 88,8 bis 98,2 % ausmachen.
+Transferwissen **#62**.
+
+**Exposure** als gestapelte 100-%-Balken über Gattung, Region, Währung und
+Segment innerhalb einer Gattung. Liquidität als eigenes Segment ausgewiesen.
+Segment nur innerhalb einer Gattung, weil die Spalte zwei Bedeutungen trägt
+(„Financials" = 23 Renten-, „Banken, Versicherer, Finanzdienstl." = 42
+Aktienpositionen). Region mit Look-through-Vorbehalt.
+
+**Der Marktrisikowert war gebaut und ist wieder ausgebaut** (Philip): Das
+Haus legt ihn im Asset Management selbst fest; im Beratungswerkzeug sähe er
+neben gemessenen Größen aus wie eine Beobachtung. Ein Testschritt hält die
+Entscheidung fest, weil die Spalte in den Daten bleibt.
+
+**Neues Modul `modules/bestandsanalytik.py`, streamlit-frei.** `analytics.py`
+trägt die Mathematik der Zeitreihen; was auf den Einzeltiteln eines Stichtags
+rechnet, hat jetzt einen eigenen oberflächenfreien Ort. `calc_liquidity` ist
+aus `portfolioanalyse.py` dorthin umgezogen (drei Verbraucher) und wird dort
+per Zuweisung weitergereicht.
+
+**Beweise:** 24 von 24 Suiten grün ohne übersprungenen Schritt, `pyflakes`
+über 43 Dateien bei null, `ui_dump` für Performance und Portfolioanalyse
+**zeichengleich**, und — weil `calc_liquidity` im Export-Pfad läuft — sieben
+Broschüren vorher/nachher rekursiv verglichen: **2056 ZIP-Einträge, 0
+inhaltliche Abweichungen**.
+
+**Drei eigene Fehler, alle durch Messen gefunden:** eine erfundene Zahl in der
+Planung (9 statt der gemessenen 5 gemeinsamen Titel), ein Fehlwert-Filter, der
+nur zufällig griff, und eine Gegenprobe, die nicht naiv genug war, weil
+pandas 3.0 NA-Schlüssel selbst verwirft.
 
 ### 18.08.2026 – Dritter Tab: der Strategievergleich (Risiko-Rendite-Punktwolke)
 
