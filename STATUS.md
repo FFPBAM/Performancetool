@@ -2,7 +2,7 @@
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **28 von 28 Suiten grün**, `pyflakes` bei null ·
-**committet, aber NICHT gepusht — und DRACOON hängt hinterher.**
+**committet, NICHT gepusht — DRACOON steht auf diesem Commit.**
 
 > ### Für Philip: was diese Sitzung geändert hat, und was noch aussteht
 >
@@ -18,11 +18,22 @@
 >
 > 1. **Nicht gepusht.** Der Branch ist die laufende App — der Push geht sofort
 >    an die Kollegen. Er wartet bewusst auf ein Ja.
-> 2. **DRACOON ist nicht nachgezogen.** Der Abgleich steht noch aus; er setzt
->    ohnehin den Push voraus (Reihenfolge unter „Sessionende — DRACOON
->    nachziehen"). Geprüft ist die Ablage: Sie liegt auf `verbesserungen` bei
->    `09a6d1b`, **ohne Vorlauf und ohne Rückstand** — der Reset wird ein
->    reiner Fast-Forward.
+> 2. **DRACOON ist nachgezogen — aber direkt von `C:`, nicht über GitHub.**
+>    Der dokumentierte Weg (`git fetch origin` + `reset --hard`
+>    `origin/verbesserungen`) setzt den Push voraus, und der steht aus. Weil
+>    die Ablage den Stand trotzdem tragen soll, kam der Commit aus der
+>    lokalen Arbeitskopie:
+>
+>    ```
+>    git fetch C:\Entwicklung\Performancetool verbesserungen
+>    git reset --hard FETCH_HEAD
+>    ```
+>
+>    Vorher geprüft: Die Ablage lag auf `verbesserungen` bei `09a6d1b`, **ohne
+>    Vorlauf und ohne Rückstand** — reiner Fast-Forward, nichts überschrieben.
+>    **Ihr `origin/verbesserungen` zeigt aber weiter auf `09a6d1b`**, weil die
+>    Commits noch nicht auf GitHub sind; `git status` meldet dort deshalb einen
+>    Vorlauf. Das ist richtig so und löst sich mit dem Push.
 >
 >    **Achtung, der Pfad ist rechnerabhängig.** Bei Philip ist DRACOON das
 >    Netzlaufwerk `H:`; auf diesem Rechner hängt der Client die Ablage ins
@@ -1054,9 +1065,37 @@ gehört deshalb **gesucht statt angenommen**:
 Get-ChildItem "$env:USERPROFILE\DRACOON" -Directory
 ```
 
-`git reset --hard` auf H: ist unkritisch, **solange dort nicht gearbeitet
-wird** — die Kopie soll ja nur spiegeln. Wer doch etwas auf H: geändert hat:
-vorher `git status` dort ansehen.
+`git reset --hard` in der Ablage ist unkritisch, **solange dort nicht
+gearbeitet wird** — die Kopie soll ja nur spiegeln. Wer doch etwas geändert
+hat: vorher `git status` dort ansehen.
+
+> **Der erste `reset --hard` schlägt dort fehl — und zwar zur Hälfte**
+> (18.08.2026). Git bricht ab mit
+>
+> ```
+> warning: invalid write operation detected; you may try:
+>         git config windows.appendAtomically false
+> error: update_ref failed for ref 'HEAD': cannot update the ref 'HEAD':
+>        unable to append to '.git/logs/HEAD': Invalid argument
+> ```
+>
+> **Das Tückische ist der halbe Zustand:** Arbeitsbaum und Index tragen den
+> neuen Stand bereits, nur `HEAD` bleibt stehen. `git status` zeigt danach
+> jede Datei der Änderung als **vorgemerkt** an — es sieht aus wie ein großer,
+> versehentlich angelegter Änderungssatz, und der Reflex, „aufzuräumen", geht
+> in die falsche Richtung. Richtig ist der Weg, den git selbst nennt:
+>
+> ```
+> git config windows.appendAtomically false     # einmalig, nur diese Ablage
+> git reset --hard FETCH_HEAD                   # jetzt geht er durch
+> ```
+>
+> Der Schalter steht in der Ablage jetzt. Die Ursache ist dieselbe wie bei den
+> Geisterdateien: Der DRACOON-Client verträgt kein anhängendes Schreiben auf
+> `.git/logs/HEAD`. **Ein Fehlschlag, der die Hälfte seiner Arbeit stehen
+> lässt, ist gefährlicher als einer, der gar nichts tut** — nach einem Abbruch
+> auf dieser Ablage also immer `git log` UND `git status` ansehen, nicht nur
+> eines von beiden.
 
 **Am 18.08.2026 durchgeführt.** Der Sprung ging über **10 Commits** — auf H:
 lag noch der Stand vor der Legenden-Geometrie, nicht nur die Farbarbeit des
