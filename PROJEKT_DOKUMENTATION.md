@@ -2634,6 +2634,54 @@ Typen.
 
 ---
 
+### #66 — Ein Widget, das seinen Wert nicht verlieren darf, bekommt einen Schlüssel, der ihn nicht behalten kann (NEU 18.08.2026) ⭐
+
+Ein Auswahlfeld, dessen **Optionen von einer anderen Auswahl abhängen**, kann
+einen Wert zeigen, den es nicht mehr gibt. Im Strategievergleich stand nach
+dem Reduzieren der Strategieauswahl weiter *cVV konservativ* im Feld
+„Bezugsstrategie" — und der Abschnitt zeigte keine Daten.
+
+**Der naheliegende Schutz ist eine Annahme:**
+
+```python
+if st.session_state.get(schluessel) not in optionen:
+    st.session_state.pop(schluessel, None)      # und bleibt es auch?
+```
+
+Er setzt voraus, dass ein gelöschter Schlüssel gelöscht bleibt. Über
+Streamlits Widget-Zustand lässt sich das von außen nicht zusichern — und
+**AppTest kann die Verletzung nicht nachstellen**: drei Bedienwege probiert,
+in der Testumgebung griff der Schutz jedes Mal, in der echten Sitzung nicht.
+
+**Der strukturelle Weg ist älter und trägt:** Der Widget-Schlüssel bekommt
+eine **Kennung der Optionsmenge**. Ändert sich die Menge, ist es ein anderes
+Widget — und ein Widget ohne Vorgeschichte *kann* keinen alten Wert zeigen.
+Das ist #4, Lösung A, nur für einen anderen Zweck: Dort wurde ein Zähler
+benutzt, um ein Feld zurückzusetzen, hier eine Kennung, um es gar nicht erst
+falsch werden zu lassen.
+
+**Zwei Feinheiten, die den Unterschied machen:**
+
+1. **Die Kennung wird über die sortierte Menge gebildet.** Die Reihenfolge
+   folgt der Auswahl des Nutzers und kann sich ändern, ohne dass sich die
+   *Menge* ändert — sonst entstünde bei jedem Umsortieren ein neues Widget.
+2. **`index` statt einer Zuweisung an den `session_state`.** `index` wirkt
+   nur bei der ersten Instanziierung eines Schlüssels, also genau bei einer
+   neuen Optionsmenge; bei unveränderten Optionen bleibt die Wahl des Nutzers
+   unangetastet. Und es wird nie ein Widget-Schlüssel zugewiesen, womit die
+   Falle aus #4 gar nicht erst auftreten kann.
+
+**Die Testlehre steht daneben und ist dieselbe wie bei #64/#65:** Wo ein
+Verhaltenstest die Verletzung nicht erzeugen kann, prüft man die **Regel**.
+Hier sind das zwei streamlit-freie Funktionen und eine Zusage über alle
+Teilmengen — *der übernommene Wert liegt immer in den Optionen*.
+
+**Und die Prüfung der Gegenrichtung nicht vergessen:** Ein noch gültiger Wert
+muss auch wirklich stehen bleiben. Ohne diesen zweiten Schritt wäre die
+Zusage auch mit „nimm immer den ersten" erfüllt — und die Übernahme
+stillschweigend wirkungslos. **Eine Zusage, die eine triviale Umsetzung
+ebenfalls erfüllt, prüft die Umsetzung nicht.**
+
 ### #65 — Ein Test, der seinen Prüfgegenstand nicht findet, muss scheitern (NEU 18.08.2026) ⭐
 
 Die Suiten dieses Projekts überspringen ihre schweren Schritte, wenn ein Paket
@@ -3959,6 +4007,40 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 (Nachtrag 2) – Die Bezugsstrategie blieb stehen
+
+Gemeldet aus dem Gegentest: Nach dem Reduzieren der Strategieauswahl auf zwei
+stand im Feld "Bezugsstrategie" weiter eine Strategie, die nicht mehr gewählt
+war — und der Abschnitt zeigte keine Daten.
+
+DER SCHUTZ EXISTIERTE UND WAR EINE ANNAHME. `_waehle_gueltig` löschte den
+session_state-Schlüssel, wenn der Wert nicht mehr zu den Optionen passte —
+und setzte voraus, dass er gelöscht bleibt. AppTest konnte die Verletzung
+nicht nachstellen (drei Bedienwege probiert), die echte App hat sie gezeigt.
+Dieselbe Feststellung wie beim Keep-Alive am selben Vormittag.
+
+BEHOBEN STRUKTURELL statt durch Nachbessern: Der Widget-Schlüssel trägt jetzt
+eine Kennung der Optionsmenge (`auswahl_kennung`). Ändert sich die Menge, ist
+es ein anderes Widget — und eines ohne Vorgeschichte kann keinen alten Wert
+zeigen. Dasselbe Muster wie beim Strategien-Mehrfachfeld darüber (#4).
+Transferwissen **#66**.
+
+Die bisherige Wahl wird übernommen, wenn sie noch gilt (`auswahl_uebernehmen`,
+Entscheidung Philip): Wer von 19 auf die fünf cVV-Reihen reduziert und
+*cVV defensiv* behält, verliert seinen Bezug nicht; wer ihn wegnimmt, bekommt
+sofort etwas Gültiges. `index` statt einer session_state-Zuweisung — es wirkt
+nur bei der ersten Instanziierung eines Schlüssels und umgeht die Falle
+aus #4 vollständig.
+
+PRÜFSTEIN Schritt 10 prüft die Regel statt des Verhaltens: die beiden reinen
+Funktionen und die Zusage über 371 Teilmengen der 19 Strategien — der
+übernommene Wert liegt immer in den Optionen (1484 Fälle, keine Verletzung).
+Dazu die Gegenrichtung: Ein noch gültiger Wert muss stehen bleiben, sonst
+wäre die Zusage auch mit "nimm immer den ersten" erfüllt.
+
+BEWEISE: 26 von 26 Suiten grün, `pyflakes` über 44 Dateien null, `ui_dump`
+für alle drei Ansichten zeichengleich.
 
 ### 18.08.2026 (Nachtrag) – Legende überdeckte den Achsentitel; Prüfsteine schärfer
 

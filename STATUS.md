@@ -673,6 +673,87 @@ Namen fehlen — und schlägt fehl.
 
 ---
 
+### Die Bezugsstrategie blieb stehen (18.08.2026, aus dem Gegentest)
+
+Gemeldet: Wer die Strategieauswahl oben stark reduziert — etwa auf *Pro* und
+*Pro Dividende* —, sah im Feld **Bezugsstrategie** weiterhin *cVV
+konservativ*. Da diese Strategie nicht mehr gewählt war, lieferte die
+Überschneidung nichts und der Abschnitt zeigte statt Daten den Satz „Keine
+Vergleichsstrategie vorhanden".
+
+**Der Schutz dagegen existierte — und war eine Annahme.** `_waehle_gueltig`
+las den Wert aus dem `session_state`, verglich ihn mit den Optionen und
+löschte den Schlüssel, wenn er nicht mehr passte. Das setzt voraus, dass ein
+gelöschter Schlüssel gelöscht bleibt. **Über Streamlits Widget-Zustand lässt
+sich das von außen nicht zusichern.**
+
+**Und AppTest kann es nicht nachstellen.** Drei Bedienwege probiert — über
+das Strategien-Feld, über die Familien, mit vorher gesetztem Bezug —, in der
+Testumgebung griff der alte Schutz jedes Mal. Dieselbe Feststellung wie beim
+Keep-Alive am selben Vormittag (#64): Die Session-State-Semantik von AppTest
+weicht von der echten Sitzung ab.
+
+**Daraus folgte: nicht den Schutz nachbessern, sondern die Ursache
+entfernen.**
+
+#### Kennungs-Keys statt Aufräumen
+
+Das Muster steht seit dem 07.07.2026 im Projekt (#4, Lösung A) und wird im
+selben Modul bereits benutzt — das Strategien-Mehrfachfeld trägt
+`key="sv_strategien_" + Familien`. **Ändert sich die Optionsmenge, ist es ein
+anderes Widget, und ein Widget ohne Vorgeschichte kann keinen alten Wert
+zeigen.**
+
+Zwei streamlit-freie Funktionen tragen jetzt die Entscheidung:
+
+| Funktion | Aufgabe |
+|---|---|
+| `auswahl_kennung(optionen)` | Kennung der Optionsmenge, **sortiert** — bloßes Umsortieren erzwingt kein neues Widget |
+| `auswahl_uebernehmen(vorher, optionen)` | der bisherige Wert, wenn er noch dabei ist — sonst der erste |
+
+**`index` statt einer Zuweisung an den `session_state`** ist dabei der Kern:
+`index` wirkt nur bei der **ersten** Instanziierung eines Schlüssels, also
+genau dann, wenn die Optionsmenge neu ist. Bei unveränderten Optionen bleibt
+die Wahl des Beraters unangetastet — und es wird nie ein Widget-Schlüssel
+zugewiesen, womit die Falle aus #4 gar nicht erst auftreten kann.
+
+**Die bisherige Wahl wird übernommen, wenn sie noch gilt** (Philip): Wer von
+19 auf die fünf cVV-Reihen reduziert und *cVV defensiv* behält, verliert
+seinen Bezug nicht. Am AppTest nachgemessen:
+
+| Schritt | Bezug |
+|---|---|
+| 19 Strategien, Bezug auf *cVV defensiv* gesetzt | cVV defensiv |
+| auf die fünf cVV reduziert (*cVV defensiv* dabei) | **cVV defensiv** — übernommen |
+| auf *Pro* + *Pro Dividende* reduziert | **Pro** — rückt nach, Daten sofort da |
+| wieder auf sechs erweitert | Pro — bleibt |
+
+#### Der Prüfstein prüft die Regel, nicht das Verhalten
+
+Da AppTest den Fehler nicht erzeugen kann, wäre ein Verhaltenstest wieder ein
+grüner Lauf ohne Aussage (#64/#65). Schritt 10 prüft stattdessen die beiden
+reinen Funktionen — und **die Zusage** über 371 Teilmengen der 19 Strategien:
+*Der übernommene Wert liegt immer in den Optionen.* **1484 Fälle, keine
+Verletzung.**
+
+Dazu eine Prüfung, die leicht vergessen wird: Ein noch gültiger Wert muss
+auch wirklich **stehen bleiben**. Ohne sie wäre die Zusage auch mit „nimm
+immer den ersten" erfüllt — und die Übernahme stillschweigend wirkungslos.
+
+**Gegenprobe:** Gegen die vorherige Fassung ist Schritt 10 rot; die beiden
+Funktionen fehlen dort, und `_symbole` meldet sie namentlich (#65).
+
+#### Beweise
+
+| Gemessen | Ergebnis |
+|---|---|
+| Testsuiten | **26 von 26 grün**, kein Schritt übersprungen |
+| `pyflakes` über 44 Dateien | **null** |
+| `ui_dump` **alle drei** Ansichten | **zeichengleich** |
+| Zusage über 371 Teilmengen | 1484 Fälle, **keine Verletzung** |
+
+---
+
 ## So starten wir beim nächsten Mal
 
 Diese drei Zeilen im Chat genügen (stehen auch in `Start.txt` zum Kopieren):

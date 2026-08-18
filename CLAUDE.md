@@ -59,6 +59,15 @@ prüfte statt gegen eine Schwelle (#47).
   `st.plotly_chart(key=…, on_select="rerun")` ist ein Widget — genau das hat
   die laufende App angehalten. Prüfstein `tests/test_keepalive.py` hält die
   Regel am Syntaxbaum; er läuft ohne jedes Paket.
+- **Ein Auswahlfeld, dessen Optionen von einer anderen Auswahl abhängen,
+  bekommt einen Schlüssel mit Kennung der Optionsmenge** (#66, 18.08.2026).
+  Sonst zeigt es einen Wert, den es nicht mehr gibt. Den Wert nachträglich
+  aus dem `session_state` zu löschen ist eine **Annahme** über Streamlits
+  Widget-Zustand — sie hat nicht gehalten, und AppTest kann die Verletzung
+  nicht nachstellen. Muster: `_waehle_gueltig` in `strategievergleich.py` —
+  Kennung über die **sortierte** Menge (Umsortieren soll kein neues Widget
+  erzwingen), Startwert über **`index`** statt über eine Zuweisung (wirkt nur
+  bei der ersten Instanziierung und umgeht #4).
 - **Ein Test, der seinen Prüfgegenstand nicht findet, muss scheitern**
   (#65, 18.08.2026). Die Suiten überspringen bei fehlendem **Paket** — das
   ist richtig und Hausregel. Sie dürfen aber nicht überspringen, wenn ein
