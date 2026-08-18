@@ -435,9 +435,16 @@ def ueberschneidung_figur(tabelle, bezug, ebene):
                    title=f"Anteil des Depotgewichts, den {bezug} mit der "
                          "jeweiligen Strategie teilt",
                    range=[0, max(100.0, (max(werte) * 1.25) if werte else 0.0)]),
+        # automargin=True UND KEIN festes `l` im margin (18.08.2026): Beides
+        # gehoert zusammen. Ein `margin=dict(l=10)` nagelt den linken Rand
+        # fest, und Plotly kann ihn danach nicht mehr fuer die Beschriftungen
+        # aufweiten — "Schweiz_substanzorientiert" (26 Zeichen) wurde
+        # abgeschnitten. Am Figur-Objekt war davon nichts zu sehen, erst am
+        # gerenderten Bild (#54). Gemeldet von Philip an der HTML-Vorschau.
         yaxis=dict(type="category", categoryorder="array",
-                   categoryarray=list(reversed(namen)), title=None),
-        separators=",.", margin=dict(l=10, t=30),
+                   categoryarray=list(reversed(namen)), title=None,
+                   automargin=True),
+        separators=",.", margin=dict(t=30),
         showlegend=False,
     )
     return fig
@@ -549,9 +556,12 @@ def exposure_figur(tabelle, achse):
         height=_balkenhoehe(len(namen)),
         xaxis=dict(type="linear", ticksuffix=" %", range=[0, 100],
                    title="Anteil am Depot"),
+        # automargin: siehe `ueberschneidung_figur` — der linke Rand muss
+        # sich nach den Strategienamen richten duerfen.
         yaxis=dict(type="category", categoryorder="array",
-                   categoryarray=list(reversed(namen)), title=None),
-        separators=",.", margin=dict(l=10, t=30),
+                   categoryarray=list(reversed(namen)), title=None,
+                   automargin=True),
+        separators=",.", margin=dict(t=30),
         legend=dict(orientation="h", yanchor="top", y=-0.12, x=0),
     )
     return fig

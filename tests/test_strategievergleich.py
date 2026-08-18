@@ -625,6 +625,13 @@ def schritt7_figuren():
         if list(fig.layout.yaxis.categoryarray) != list(reversed(list(tab.index))):
             print(f"    FEHLER — {ebene}: Reihenfolge der y-Achse")
             f += 1
+        # DIE NAMEN MUESSEN PLATZ BEKOMMEN. Ein festes `margin.l` schneidet
+        # die laengsten Strategienamen ab; am Figur-Objekt sieht man das
+        # nicht, nur am gerenderten Bild (#54, gemeldet 18.08.2026).
+        if not fig.layout.yaxis.automargin or fig.layout.margin.l is not None:
+            print(f"    FEHLER — {ebene}: y-Achse ohne automargin oder mit "
+                  f"festem linken Rand ({fig.layout.margin.l})")
+            f += 1
         if list(tab["anteil"]) != sorted(tab["anteil"], reverse=True):
             print(f"    FEHLER — {ebene}: nicht absteigend sortiert")
             f += 1
@@ -663,6 +670,10 @@ def schritt7_figuren():
         if len(fig.data) != len(tab.columns):
             print(f"    FEHLER — Exposure {achse}: {len(fig.data)} Spuren, "
                   f"{len(tab.columns)} Spalten")
+            f += 1
+        if not fig.layout.yaxis.automargin or fig.layout.margin.l is not None:
+            print(f"    FEHLER — Exposure {achse}: y-Achse ohne automargin "
+                  f"oder mit festem linken Rand ({fig.layout.margin.l})")
             f += 1
         for spur in fig.data:
             if len(spur.x) != len(tab):
