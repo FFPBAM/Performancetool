@@ -20,6 +20,15 @@ Anleihen-Block haengen. Ein zweites Argument waehlt die Ansicht:
 
     python tests/ui_dump.py vorher_pf.json portfolio
 
+DRITTE ANSICHT (18.08.2026): der Strategievergleich.
+
+    python tests/ui_dump.py vorher_sv.json vergleich
+
+Sie kam am selben Tag hinzu, an dem sie gebaut wurde — nicht erst, wenn sie
+zum ersten Mal umgebaut wird. Genau das war der Fehler bei der
+Portfolioanalyse: Der Beweis fehlte ausgerechnet fuer die Ansicht, die
+gerade veraendert wurde.
+
 Ohne das Argument bleibt alles wie bisher (Ansicht "Performance"), damit
 aeltere Dumps weiter vergleichbar sind.
 
@@ -49,7 +58,9 @@ except ImportError:
 # Die Ansicht haengt an session_state["nav_view"] (segmented_control in
 # streamlit_app.py). Die Namen stehen dort als _VIEW_PERF/_VIEW_PF; hier
 # bewusst als Klartext, damit das Werkzeug nichts aus der App importieren muss.
-ANSICHTEN = {"performance": "Performance", "portfolio": "Portfolioanalyse"}
+ANSICHTEN = {"performance": "Performance",
+             "portfolio":   "Portfolioanalyse",
+             "vergleich":   "Strategievergleich"}
 
 
 def dump(ziel, ansicht="performance"):
