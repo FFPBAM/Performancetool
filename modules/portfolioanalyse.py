@@ -27,6 +27,7 @@ from modules.download_helfer import download_bereich
 # Broschuere. Ein "–" von Hand hinzuschreiben liefe irgendwann auseinander.
 from modules.formats import EMPTY_VALUE
 from modules.bestandsanalytik import calc_liquidity
+from modules.farben import gattung_farbe
 # historie_beschneiden liegt seit 14.08.2026 in analytics.py (Berechnungsregel,
 # von Broschuere UND Heatmap gebraucht). Der Re-Export haelt Alt-Importe heil.
 from modules.analytics import historie_beschneiden   # noqa: F401
@@ -34,6 +35,12 @@ from modules.analytics import historie_beschneiden   # noqa: F401
 # ---------------------------------------------------------------------------
 # Ring-Chart Farben (Corporate: Fuggerblau #003460, Fuggergold #C3A069)
 # ---------------------------------------------------------------------------
+# GATTUNG IST DIE AUSNAHME: Die Farben der Assetklassen liegen im Corporate
+# Design fest (modules/farben.py) und haengen an der KATEGORIE, nicht an der
+# Groesse. Bis zum 18.08.2026 bekam hier die groesste Gattung immer
+# Fuggerblau, weil die Palette nach dem Sortieren der Reihe nach vergeben
+# wurde - gemeldet von Philip. Region und Segment bleiben bei der Palette,
+# genau wie in der Broschuere.
 RING_COLORS = [
     "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",
     "#8B7340", "#A8CBE8", "#5C6B3C", "#E8D5B0", "#2C5F8A",
@@ -495,6 +502,27 @@ def build_faelligkeiten_tabelle(df: pd.DataFrame, stichtag=None):
 # ---------------------------------------------------------------------------
 # Ring-Diagramm (Plotly) – Labels außerhalb, Corporate Design
 # ---------------------------------------------------------------------------
+# Die Dimension, auf der die festen Assetklassen-Farben gelten. NUR diese:
+# Die Klassifizierung arbeitet mit Teilzeichenketten, und die treffen auch
+# Segment-Werte - "Rentenfonds" wuerde als RENTEN gelesen,
+# "Immobilien-Aktien/Fonds" als AKTIEN (18.08.2026 an den echten Daten
+# gemessen). Die Entscheidung gehoert deshalb an die DIMENSION und nicht an
+# die einzelne Kategorie; im Export macht `_ist_assetklassen_ring` dasselbe.
+DIMENSION_GATTUNG = "Gattung"
+
+
+def _ring_farben(labels, group_col):
+    """Farben eines Rings: fest bei der Gattung, sonst Palette nach Position.
+
+    Die REIHENFOLGE der Segmente bleibt unberuehrt (weiterhin absteigend nach
+    Gewicht) - nur die Farbe folgt jetzt der Kategorie. Beides voneinander zu
+    trennen war der eigentliche Fehler.
+    """
+    if group_col == DIMENSION_GATTUNG:
+        return [gattung_farbe(k) for k in labels]
+    return RING_COLORS[:len(labels)]
+
+
 def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.Figure:
     # Absteigend sortieren (größter Block zuerst)
     sorted_df = alloc_df.sort_values("Gewicht", ascending=False).reset_index(drop=True)
@@ -519,7 +547,7 @@ def build_ring_chart(alloc_df: pd.DataFrame, group_col: str, title: str) -> go.F
         values=values,
         hole=0.5,
         marker=dict(
-            colors=RING_COLORS[:len(sorted_df)],
+            colors=_ring_farben(labels, group_col),
             line=dict(color="white", width=2),
         ),
         textinfo="text",

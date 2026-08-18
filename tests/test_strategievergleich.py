@@ -759,15 +759,35 @@ def schritt7_figuren():
     print(f"    OK — Exposure: {len(EXPOSURE_ACHSEN)} Achsen, jede Zeile 100 %, "
           "gestapelt, Achsentypen gesetzt")
 
-    # Die Sammelposten tragen ihre eigenen Farben und nicht die der Palette —
-    # sonst sieht Liquiditaet aus wie eine Anlagekategorie.
+    # DIE SAMMELPOSTEN, und hier hat sich die Regel am 18.08.2026 geaendert:
+    #
+    # Auf den ANDEREN Achsen tragen sie weiter ihre gedaempften eigenen
+    # Farben - sonst saehe die Liquiditaet dort aus wie eine Anlagekategorie
+    # neben Regionen oder Waehrungen, zu denen sie nicht gehoert.
+    #
+    # Auf der GATTUNGS-Achse ist die Liquiditaet dagegen SELBST eine
+    # Assetklasse und bekommt ihre feste Farbe aus dem Corporate Design.
+    # Die Farbe folgt der Bedeutung, nicht der Rolle im Chart.
+    tab = exposure_tabelle(bestaende, "Region")
+    fig = exposure_figur(tab, "Region")
+    for spur in fig.data:
+        if spur.name in REST_FARBEN and spur.marker.color != REST_FARBEN[spur.name]:
+            print(f"    FEHLER — Region/{spur.name} traegt nicht seine "
+                  "Sammelfarbe")
+            f += 1
+    print("    OK — auf anderen Achsen tragen die Sammelposten gedaempfte Farben")
+
+    from modules.farben import gattung_farbe as _gf
     tab = exposure_tabelle(bestaende, "Gattung")
     fig = exposure_figur(tab, "Gattung")
     for spur in fig.data:
-        if spur.name in REST_FARBEN and spur.marker.color != REST_FARBEN[spur.name]:
-            print(f"    FEHLER — {spur.name} traegt nicht seine Sammelfarbe")
+        soll = _gf(spur.name)
+        if spur.marker.color != soll:
+            print(f"    FEHLER — Gattung/{spur.name}: {spur.marker.color} "
+                  f"statt {soll}")
             f += 1
-    print("    OK — die Sammelposten tragen gedaempfte eigene Farben")
+    print("    OK — auf der Gattungs-Achse gilt die feste Farbe, auch fuer "
+          "die Liquiditaet")
 
     # DER MARKTRISIKOWERT DARF NICHT ZURUECKKOMMEN (Philip, 18.08.2026). Er
     # war gebaut und ist wieder ausgebaut worden: Das Haus legt ihn im Asset

@@ -90,6 +90,7 @@ from modules.bestandsanalytik import (
     GEWICHT_SPALTE, calc_liquidity, gemeinsame_schluessel, gemeinsame_titel,
     gewichte_je_kategorie, kategorien_vereinigt, ueberlappung,
 )
+from modules.farben import gattung_farbe
 from modules.formats import fmt_date_de, fmt_pct
 from modules.shared import FFPB_PALETTE
 
@@ -133,7 +134,12 @@ EBENEN = {
 # sie aus wie zwei Branchen, dabei ist es dasselbe Kreditrisiko in zwei Formen.
 # Deshalb IMMER innerhalb einer Gattung (Festlegung Philip, 18.08.2026).
 ACHSE_SEGMENT = "Segment"
-EXPOSURE_ACHSEN = ("Gattung", "Region", "Währung", ACHSE_SEGMENT)
+# Auf dieser Achse gelten die festen Assetklassen-Farben aus
+# `modules/farben.py`; auf allen anderen die Palette. Siehe die Begruendung
+# bei `_ring_farben` in portfolioanalyse.py - die Klassifizierung wuerde
+# sonst Segment-Werte wie "Rentenfonds" mitfaerben.
+ACHSE_GATTUNG = "Gattung"
+EXPOSURE_ACHSEN = (ACHSE_GATTUNG, "Region", "Währung", ACHSE_SEGMENT)
 
 # DER MARKTRISIKOWERT FEHLT HIER BEWUSST (Philip, 18.08.2026) — er war
 # gebaut und ist wieder ausgebaut worden. Die Spalte liegt in den
@@ -660,16 +666,24 @@ def exposure_figur(tabelle, achse):
     if tabelle is None or tabelle.empty:
         return None
     namen = list(tabelle.index)
+    # AUF DER GATTUNGS-ACHSE liegen die Farben fest (18.08.2026). Auch die
+    # Liquiditaet bekommt dort ihre kanonische Farbe statt des gedaempften
+    # Grau: Sie IST auf dieser Achse eine Assetklasse und kein Sammelposten.
+    # Auf den anderen Achsen bleibt sie grau, weil sie dort neben Kategorien
+    # steht, zu denen sie nicht gehoert.
+    fest = (achse == ACHSE_GATTUNG)
+
     fig = go.Figure()
     farb_index = 0
     for spalte in tabelle.columns:
-        if spalte in REST_FARBEN:
+        beschriftung = str(spalte)
+        if fest and spalte != REST_OHNE_ANGABE:
+            farbe = gattung_farbe(spalte)
+        elif spalte in REST_FARBEN:
             farbe = REST_FARBEN[spalte]
-            beschriftung = str(spalte)
         else:
             farbe = FFPB_PALETTE[farb_index % len(FFPB_PALETTE)]
             farb_index += 1
-            beschriftung = str(spalte)
         werte = (tabelle[spalte] * 100.0).tolist()
         fig.add_trace(go.Bar(
             x=werte, y=namen, orientation="h", name=beschriftung,
