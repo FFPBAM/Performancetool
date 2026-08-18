@@ -85,9 +85,8 @@ import streamlit as st
 
 from modules.analytics import RISIKO_PERIODEN, risiko_perioden
 from modules.bestandsanalytik import (
-    GEWICHT_SPALTE, calc_liquidity, gemeinsame_schluessel,
-    gewichte_je_kategorie,
-    kategorien_vereinigt, ueberlappung,
+    GEWICHT_SPALTE, calc_liquidity, gemeinsame_schluessel, gemeinsame_titel,
+    gewichte_je_kategorie, kategorien_vereinigt, ueberlappung,
 )
 from modules.formats import fmt_date_de, fmt_pct
 from modules.shared import FFPB_PALETTE
@@ -422,18 +421,25 @@ def ueberschneidung_figur(tabelle, bezug, ebene):
     fig = go.Figure(go.Bar(
         x=werte, y=namen, orientation="h",
         marker=dict(color=FFPB_PALETTE[0]),
-        text=[f"{w:.1f} %".replace(".", ",") + f"  ({k} {einheit})"
-              for w, k in zip(werte, schluessel)],
+        # NUR DER PROZENTWERT am Balken (18.08.2026). Vorher stand dort
+        # zusaetzlich die Zahl der gemeinsamen Titel — bei 18 Balken zwei
+        # Angaben je Zeile, das wirkte unruhig. Die Zahl steht jetzt im Hover
+        # und in der Ueberschrift des Drilldowns.
+        text=[f"{w:.1f} %".replace(".", ",") for w in werte],
         textposition="outside", cliponaxis=False,
-        customdata=schluessel,
+        # customdata traegt den NAMEN und die Zahl: den Namen braucht die
+        # Klick-Auswahl (siehe `_gewaehlte_gegenpartei`), die Zahl der Hover.
+        customdata=[[n, k] for n, k in zip(namen, schluessel)],
         hovertemplate=("<b>%{y}</b><br>Überschneidung: %{x:.2f} %<br>"
-                       "gemeinsam: %{customdata} " + einheit + "<extra></extra>"),
+                       "gemeinsam: %{customdata[1]} " + einheit
+                       + "<extra></extra>"),
     ))
     fig.update_layout(
         height=_balkenhoehe(len(namen)),
+        # Kurzer Achsentitel (18.08.2026): Der lange Satz gehoert unter das
+        # Chart, nicht an die Achse.
         xaxis=dict(type="linear", ticksuffix=" %",
-                   title=f"Anteil des Depotgewichts, den {bezug} mit der "
-                         "jeweiligen Strategie teilt",
+                   title="gemeinsames Depotgewicht",
                    range=[0, max(100.0, (max(werte) * 1.25) if werte else 0.0)]),
         # automargin=True UND KEIN festes `l` im margin (18.08.2026): Beides
         # gehoert zusammen. Ein `margin=dict(l=10)` nagelt den linken Rand
@@ -631,7 +637,12 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
         # namentlich darunter, statt stillschweigend zu fehlen.
         periode = st.selectbox("Zeitraum", PERIODEN,
                                index=PERIODEN.index("3 Jahre"),
-                               key="sv_periode")
+                               key="sv_periode",
+                               help="Gerechnet wird je Strategie mit ihrem "
+                                    "hinterlegten Honorarsatz, nach Kosten — "
+                                    "wie in der Broschüre. Das Honorarfeld "
+                                    "der Performance-Ansicht wirkt hier "
+                                    "nicht.")
     with spalte_x:
         # segmented_control statt radio (18.08.2026, Philip): Die Heatmap
         # schaltet ihre zwei Ansichten genauso um, und zwei Bauformen für
@@ -672,9 +683,10 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
     if fehlt:
         st.caption(fehlt)
 
-    st.caption("Gerechnet wird je Strategie mit ihrem hinterlegten "
-               "Honorarsatz, nach Kosten — wie in der Broschüre. Das "
-               "Honorarfeld der Performance-Ansicht wirkt hier nicht.")
+    # Der Honorar-Hinweis stand bis 18.08.2026 als vierte Caption unter dem
+    # Chart. Er ist eine Eigenschaft der Rechnung und keine Aussage ueber das
+    # Ergebnis — er steht jetzt im `help` des Zeitraum-Feldes, wo man ihn
+    # sucht, wenn man ihn braucht.
 
     if fig is not None and st.checkbox("Tabelle anzeigen", key="sv_tabelle"):
         st.dataframe(_tabelle_zum_anzeigen(tabelle, x_groesse),
@@ -713,6 +725,111 @@ def _waehle_gueltig(schluessel, optionen, beschriftung, hilfe=None):
     return st.selectbox(beschriftung, optionen, key=schluessel, help=hilfe)
 
 
+def gewaehlte_gegenpartei(auswahl, tabelle):
+    """Welche Zeile hat der Klick getroffen? Fallback: die staerkste.
+
+    Args:
+        auswahl: Rueckgabe von `st.plotly_chart(..., on_select="rerun")`
+            oder None
+        tabelle: die aktuelle Ausgabe von `ueberschneidung_tabelle`
+
+    Returns:
+        Ein Name aus `tabelle.index`, nie etwas anderes. Bei leerer Tabelle
+        None.
+
+    ES WIRD UEBER DEN NAMEN AUFGELOEST, NICHT UEBER DEN INDEX. Wechselt die
+    Ebene oder die Strategieauswahl, zeigt derselbe Balkenindex auf eine
+    ANDERE Strategie — der Drilldown zeigte dann Titel eines Depots, das
+    niemand angeklickt hat. Dieselbe Klasse wie ein Auswahlfeld-Wert, der ins
+    Leere laeuft (#53).
+
+    Ein Name, den es nicht mehr gibt, faellt deshalb auf die staerkste
+    Ueberschneidung zurueck. Damit gibt es AUCH KEINEN LEEREN ZUSTAND: Wer
+    nie klickt, sieht trotzdem die interessanteste Zeile.
+    """
+    if tabelle is None or tabelle.empty:
+        return None
+    kandidat = None
+    punkte = []
+    try:
+        punkte = list((auswahl or {}).get("selection", {}).get("points", []))
+    except Exception:
+        punkte = []
+    if punkte:
+        punkt = punkte[0]
+        # `y` traegt bei waagerechten Balken die Kategorie; `customdata[0]`
+        # ist der Ersatzweg, falls Plotly die Achse anders zurueckmeldet.
+        kandidat = punkt.get("y")
+        if kandidat not in tabelle.index:
+            daten = punkt.get("customdata")
+            if isinstance(daten, (list, tuple)) and daten:
+                kandidat = daten[0]
+    if kandidat in tabelle.index:
+        return kandidat
+    return tabelle.index[0]
+
+
+# Der Beitragsbalken. Zwoelf Bausteine sind genug, um Groessenverhaeltnisse
+# zu sehen, und schmal genug, dass die Spalte nicht dominiert.
+BALKEN_BREITE = 12
+BALKEN_ZEICHEN = "\u2588"
+
+
+def beitragsbalken(wert, maximum, breite=BALKEN_BREITE):
+    """Ein Balken aus Textbausteinen, laenge proportional zu `wert`.
+
+    WARUM AUS TEXT UND NICHT MIT `st.column_config.ProgressColumn`:
+    Die Spaltenformate von Streamlit formatieren ihre Zahlen selbst — je nach
+    Einstellung englisch ("7.54%") oder nach der Locale des BROWSERS. Beides
+    waere eine zweite Formatierungsquelle neben `modules/formats.py`, und
+    genau eine Quelle fuer Zahlenformate ist in diesem Projekt Hausregel. Ein
+    Textbalken ist dagegen auf jedem Rechner derselbe, braucht kein CSS
+    (Hausregel 1) und laesst sich auf Proportionalitaet PRUEFEN.
+
+    Bezugsgroesse ist der GROESSTE Beitrag der Tabelle und nicht 1,0: Bei
+    Titelgewichten um vier Prozent waeren sonst alle Balken gleich unsichtbar.
+    Der Balken zeigt also Verhaeltnisse INNERHALB des Paares, nicht absolute
+    Groessen — die stehen als Zahl daneben.
+
+    Ein Wert groesser als null bekommt mindestens einen Baustein: Eine leere
+    Zelle wuerde wie ein Fehlwert aussehen, und ein Beitrag von 0,3 % ist
+    keiner (#46).
+    """
+    try:
+        w, m = float(wert), float(maximum)
+    except (TypeError, ValueError):
+        return ""
+    if not (w > 0) or not (m > 0):
+        return ""
+    return BALKEN_ZEICHEN * max(1, min(breite, round(w / m * breite)))
+
+
+def _drilldown_tabelle(bestaende, bezug, gegen, ebene):
+    """Die gemeinsamen Titel als anzeigefertige Tabelle.
+
+    Alle Zahlen sind FERTIG FORMATIERTE Zeichenketten aus `formats.fmt_pct` —
+    deutsche Notation, Fehlwert "–", eine einzige Quelle (siehe
+    `beitragsbalken`).
+    """
+    roh = gemeinsame_titel(bestaende[bezug], bestaende[gegen], EBENEN[ebene])
+    if roh.empty:
+        return None
+
+    hoechster = float(roh["gemeinsam"].max())
+    spalten = {}
+    if ebene == EBENE_TITEL:
+        spalten["Wertpapier"] = list(roh["bezeichnung"])
+        spalten["WKN"] = list(roh["schluessel"])
+        spalten["Gattung"] = list(roh["gattung"])
+    else:
+        spalten[ebene] = list(roh["schluessel"])
+    spalten[bezug] = [fmt_pct(v) for v in roh["gewicht_a"]]
+    spalten[gegen] = [fmt_pct(v) for v in roh["gewicht_b"]]
+    spalten["gemeinsam"] = [fmt_pct(v) for v in roh["gemeinsam"]]
+    spalten[""] = [beitragsbalken(v, hoechster) for v in roh["gemeinsam"]]
+    return pd.DataFrame(spalten)
+
+
 def _zeige_ueberschneidung(bestaende, auswertungsdatum):
     """Abschnitt 2 - wie viel halten zwei Strategien gemeinsam?"""
     st.markdown("---")
@@ -740,38 +857,45 @@ def _zeige_ueberschneidung(bestaende, auswertungsdatum):
         st.caption("Keine Vergleichsstrategie vorhanden.")
         return
 
-    st.plotly_chart(fig, config={"displayModeBar": False}, key="sv_ue_chart")
+    # on_select macht das Chart selbst zur Navigation — ein Klick auf einen
+    # Balken oeffnet den Drilldown darunter. Bewusst KEIN zusaetzliches
+    # Auswahlfeld: Es waere ein Bedienelement mehr fuer dieselbe Sache.
+    auswahl = st.plotly_chart(fig, config={"displayModeBar": False},
+                              key="sv_ue_chart", on_select="rerun",
+                              selection_mode="points")
 
-    # Die oberste Zeile in Klartext - die Zahl allein beantwortet die Frage
-    # des Beraters noch nicht.
-    oben = tabelle.iloc[0]
     einheit = "Titel" if ebene == EBENE_TITEL else "Kategorien"
+    gegen = gewaehlte_gegenpartei(auswahl, tabelle)
+    zeile = tabelle.loc[gegen]
+
     st.markdown(
-        f"**{bezug}** und **{tabelle.index[0]}** halten zu "
-        f"**{fmt_pct(oben['anteil'])}** des Depotgewichts dasselbe "
-        f"({int(oben['schluessel'])} gemeinsame {einheit}) — das ist die "
-        "größte Überschneidung der Auswahl.")
+        f"**{bezug}** und **{gegen}** halten zu "
+        f"**{fmt_pct(zeile['anteil'])}** des Depotgewichts dasselbe — "
+        f"{int(zeile['schluessel'])} gemeinsame {einheit.lower()}.")
+    st.caption("Ein Klick auf einen Balken zeigt die Aufstellung dieses Paares.")
 
-    st.caption(_stichtag_text(auswertungsdatum)
-               + f" Gerechnet wird als Summe des jeweils kleineren Gewichts "
-                 f"je {einheit[:-1] if einheit.endswith('n') else einheit} "
-                 "— die Gegengröße zur Active Share.")
-    st.caption("Die Zahlen verschiedener EBENEN sind nicht vergleichbar: "
-               "Je gröber die Ebene, desto höher fällt sie zwangsläufig aus. "
-               "Dasselbe Paar liest sich auf Titelebene als 20,5 % und auf "
-               "Gattungsebene als 73,8 %.")
-    st.caption("100 % sind nicht erreichbar: Die Titelgewichte machen je nach "
-               "Strategie nur 90 bis 98 % aus, der Rest ist Liquidität und "
-               "zählt hier nicht mit.")
-
-    if st.checkbox("Tabelle anzeigen", key="sv_ue_tabelle"):
-        anzeige = pd.DataFrame({
-            "Strategie": list(tabelle.index),
-            "Überschneidung": [fmt_pct(v) for v in tabelle["anteil"]],
-            f"gemeinsame {einheit}": [int(v) for v in tabelle["schluessel"]],
-        })
+    anzeige = _drilldown_tabelle(bestaende, bezug, gegen, ebene)
+    if anzeige is not None:
         st.dataframe(anzeige, width="stretch", height="content",
                      hide_index=True)
+        st.caption(f"Die {len(anzeige)} Beiträge summieren sich auf die "
+                   f"{fmt_pct(zeile['anteil'])} oben — es ist je Eintrag das "
+                   "kleinere der beiden Gewichte.")
+
+    # EIN Hinweisblock statt drei einzelner Captions (18.08.2026): Drei graue
+    # Absaetze hintereinander lesen sich wie Kleingedrucktes. Der Wortlaut ist
+    # unveraendert — er wurde ausdruecklich als verstaendlich abgenommen.
+    st.caption(
+        _stichtag_text(auswertungsdatum)
+        + " Gerechnet wird als Summe des jeweils kleineren Gewichts, die "
+          "Gegengröße zur Active Share.  \n"
+        + "Die Zahlen verschiedener **Ebenen** sind nicht vergleichbar: Je "
+          "gröber die Ebene, desto höher fällt sie zwangsläufig aus — "
+          "dasselbe Paar liest sich auf Titelebene als 20,5 % und auf "
+          "Gattungsebene als 73,8 %.  \n"
+        + "**100 % sind nicht erreichbar**: Die Titelgewichte machen je nach "
+          "Strategie nur 90 bis 98 % aus, der Rest ist Liquidität und zählt "
+          "hier nicht mit.")
 
 
 def _zeige_exposure(bestaende, auswertungsdatum):

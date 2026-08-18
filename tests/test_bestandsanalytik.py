@@ -24,6 +24,13 @@ DREI ZUSAGEN, und keine davon ist die Formel selbst:
   1. `ueberlappung` gegen von Hand gerechnete Faelle und Grenzfaelle
   2. `gewichte_je_kategorie` an den echten Dateien — mit Gegenprobe
   3. Symmetrie, Selbstueberschneidung und drei namentlich festgelegte Paare
+  4. `gemeinsame_titel`: die Aufstellung summiert sich zur Uebersicht
+
+SCHRITT 4 HAELT DIE ZUSAGE DES DRILLDOWNS. Die Uebersicht sagt, DASS zwei
+Depots zu 69,56 % dasselbe halten; die Aufstellung sagt, WORAUS. Beide Zahlen
+muessen exakt zusammenpassen — sonst stehen in einer Ansicht zwei
+verschiedene Wahrheiten uebereinander. Geprueft ueber alle Paare und alle
+fuenf Ebenen.
 
 WARUM SCHRITT 2 EINE GEGENPROBE HAT: Fuer ein neues Modul gibt es keinen
 alten Stand, auf dem der Test rot waere. Ersatzweise wird die NAIVE Fassung
@@ -60,8 +67,8 @@ except ImportError as ex:
     sys.exit(0)
 
 from modules.bestandsanalytik import (  # noqa: E402
-    calc_liquidity, gemeinsame_schluessel, gewichte_je_kategorie,
-    kategorien_vereinigt, ueberlappung,
+    calc_liquidity, gemeinsame_schluessel, gemeinsame_titel,
+    gewichte_je_kategorie, kategorien_vereinigt, ueberlappung,
 )
 
 TOLERANZ = 1e-12
@@ -327,11 +334,94 @@ def schritt3_bekannte_paare():
     return f
 
 
+def schritt4_gemeinsame_titel():
+    print("Schritt 4 — `gemeinsame_titel`: die Aufstellung stimmt mit der Summe")
+    bestaende = _echte_bestaende()
+    if bestaende is None:
+        return 0
+    f = 0
+
+    # DIE ZUSAGE DES DRILLDOWNS, ueber ALLE Paare und ALLE Ebenen:
+    # Die Summe der Einzelbeitraege IST die Ueberschneidung der Uebersicht.
+    # Bricht das, zeigt die Ansicht zwei verschiedene Wahrheiten uebereinander
+    # — die Zahl im Chart und die Zahl unter der Tabelle.
+    namen = list(bestaende)
+    schlimmste = 0.0
+    paare = 0
+    for spalte in ("WKN", "Gattung", "Region", "Segment", "Währung"):
+        for i, a in enumerate(namen):
+            for b in namen[i + 1:]:
+                tab = gemeinsame_titel(bestaende[a], bestaende[b], spalte)
+                soll = ueberlappung(gewichte_je_kategorie(bestaende[a], spalte),
+                                    gewichte_je_kategorie(bestaende[b], spalte))
+                ist = float(tab["gemeinsam"].sum()) if len(tab) else 0.0
+                schlimmste = max(schlimmste, abs(ist - soll))
+                paare += 1
+                if abs(ist - soll) > TOLERANZ:
+                    print(f"    FEHLER — {a}/{b}/{spalte}: Summe {ist} "
+                          f"statt {soll}")
+                    f += 1
+    if not f:
+        print(f"    OK — {paare} Paar-Ebenen-Kombinationen, groesste "
+              f"Abweichung {schlimmste:.3e}")
+
+    # Absteigend sortiert, und jeder Beitrag ist das KLEINERE der Gewichte.
+    a, b = "cVV ausgewogen", "cVV defensiv plus"
+    tab = gemeinsame_titel(bestaende[a], bestaende[b])
+    if list(tab["gemeinsam"]) != sorted(tab["gemeinsam"], reverse=True):
+        print("    FEHLER — nicht absteigend sortiert")
+        f += 1
+    falsch = [z for _, z in tab.iterrows()
+              if abs(z["gemeinsam"] - min(z["gewicht_a"], z["gewicht_b"])) > TOLERANZ]
+    if falsch:
+        print(f"    FEHLER — {len(falsch)} Zeilen sind nicht das Minimum")
+        f += 1
+    if not falsch:
+        print(f"    OK — {len(tab)} Zeilen, absteigend, je das kleinere Gewicht")
+
+    # NAMENTLICH: der groesste Beitrag dieses Paares.
+    oben = tab.iloc[0]
+    if oben["bezeichnung"] != "XETRA Gold":
+        print(f"    FEHLER — groesster Beitrag ist {oben['bezeichnung']!r} "
+              "statt 'XETRA Gold'")
+        f += 1
+    else:
+        f += _nah("XETRA Gold als groesster Beitrag", oben["gemeinsam"],
+                  0.07544, 5e-6)
+
+    # AUF GROEBEREN EBENEN GIBT ES KEINEN KLARTEXTNAMEN. Beim ersten Schreiben
+    # bildete die Funktion dort "Aktien" auf einen beliebigen Wertpapiernamen
+    # ab, weil je Gattung viele Zeilen in Frage kommen und die letzte gewann.
+    grob = gemeinsame_titel(bestaende[a], bestaende[b], "Gattung")
+    if list(grob["bezeichnung"]) != list(grob["schluessel"]):
+        print(f"    FEHLER — auf Gattungsebene weicht die Bezeichnung vom "
+              f"Schluessel ab: {list(grob['bezeichnung'])[:3]}")
+        f += 1
+    else:
+        print("    OK — auf groeberer Ebene ist der Schluessel der Klartext")
+
+    # Disjunkte Depots -> leere Tabelle statt Absturz.
+    ohne = [(x, y) for x in namen for y in namen
+            if x < y and gemeinsame_schluessel(
+                gewichte_je_kategorie(bestaende[x], "WKN"),
+                gewichte_je_kategorie(bestaende[y], "WKN")) == 0]
+    if ohne:
+        x, y = ohne[0]
+        leer = gemeinsame_titel(bestaende[x], bestaende[y])
+        if not leer.empty:
+            print(f"    FEHLER — {x}/{y} haben keinen gemeinsamen Titel, "
+                  "liefern aber Zeilen")
+            f += 1
+        else:
+            print(f"    OK — {x} / {y}: kein gemeinsamer Titel, leere Tabelle")
+    return f
+
+
 def main():
     print("Pruefstein: Bestands-Mathematik\n")
     fehler = 0
     for schritt in (schritt1_ueberlappung, schritt2_echte_dateien,
-                    schritt3_bekannte_paare):
+                    schritt3_bekannte_paare, schritt4_gemeinsame_titel):
         fehler += schritt()
         print()
     if fehler:

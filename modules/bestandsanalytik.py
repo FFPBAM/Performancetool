@@ -166,6 +166,87 @@ def gemeinsame_schluessel(a: pd.Series, b: pd.Series) -> int:
     return int(len(a.index.intersection(b.index)))
 
 
+def gemeinsame_titel(df_a: pd.DataFrame, df_b: pd.DataFrame,
+                     spalte: str = "WKN") -> pd.DataFrame:
+    """Welche Titel halten beide Depots — und wie viel davon ist gemeinsam?
+
+    Args:
+        df_a, df_b: Bestaende zweier Strategien
+        spalte: Schluesselspalte, in aller Regel "WKN"
+
+    Returns:
+        DataFrame, absteigend nach "gemeinsam"; Spalten:
+            schluessel   der Wert der Schluesselspalte (WKN)
+            bezeichnung  Klartextname des Wertpapiers
+            gattung      Aktien / Renten / Edelmetalle / ...
+            gewicht_a    Gewicht im ersten Depot (dezimal)
+            gewicht_b    Gewicht im zweiten Depot
+            gemeinsam    min(gewicht_a, gewicht_b) — der BEITRAG dieses Titels
+
+    DIE ZUSAGE, DIE DIESE FUNKTION TRAEGT:
+
+        gemeinsame_titel(a, b)["gemeinsam"].sum() == ueberlappung(A, B)
+
+    Die Uebersicht sagt, DASS zwei Depots zu 69,56 % dasselbe halten; diese
+    Funktion sagt, WORAUS sich das zusammensetzt — und beide Zahlen muessen
+    exakt zusammenpassen, sonst zeigt die Ansicht zwei verschiedene
+    Wahrheiten uebereinander. Der Pruefstein misst das ueber alle 171 Paare.
+
+    KEINE KUERZUNG AUF "TOP N". Die fuenf groessten Beitraege machen am
+    18.08.2026 nur 33 % der Ueberschneidung aus; eine gekuerzte Liste
+    verschwiege zwei Drittel und waere wieder ein Aggregat, das nicht sagt,
+    was es nicht enthaelt (#59). Wer weniger sehen will, sortiert oder
+    filtert in der Tabelle.
+
+    Der KLARTEXTNAME kommt aus dem ersten Depot und faellt auf das zweite
+    zurueck: Dieselbe WKN kann in zwei Lieferungen unterschiedlich
+    geschrieben sein, und der Schluessel ist die WKN, nicht der Name.
+    """
+    leer = pd.DataFrame(columns=["schluessel", "bezeichnung", "gattung",
+                                 "gewicht_a", "gewicht_b", "gemeinsam"])
+    a = gewichte_je_kategorie(df_a, spalte)
+    b = gewichte_je_kategorie(df_b, spalte)
+    gemeinsam = a.index.intersection(b.index)
+    if len(gemeinsam) == 0:
+        return leer
+
+    def _klartext(df, quelle):
+        """{schluessel: Wert} aus einer Begleitspalte, ohne Fehlwerte."""
+        if spalte not in df.columns or quelle not in df.columns:
+            return {}
+        d = df[[spalte, quelle]].dropna()
+        d = d.astype(str).apply(lambda sp: sp.str.strip())
+        d = d[~d[quelle].str.lower().isin(("", "nan", "none", "-"))]
+        return dict(zip(d[spalte], d[quelle]))
+
+    # NUR AUF WKN-EBENE gibt es einen Klartextnamen und eine Gattung zum
+    # Schluessel. Auf groeberen Ebenen IST der Schluessel schon der Klartext
+    # ("Aktien", "Nordamerika") — eine Zuordnung Schluessel -> Wertpapier
+    # wuerde dort "Aktien" auf irgendeinen Wertpapiernamen abbilden, weil je
+    # Gattung viele Zeilen in Frage kommen und die letzte gewinnt. Genau so
+    # war diese Funktion beim ersten Schreiben gebaut.
+    if spalte == "WKN":
+        namen = {**_klartext(df_b, "Wertpapier"), **_klartext(df_a, "Wertpapier")}
+        gattungen = {**_klartext(df_b, "Gattung"), **_klartext(df_a, "Gattung")}
+    else:
+        namen, gattungen = {}, {}
+
+    zeilen = []
+    for schluessel in gemeinsam:
+        wa, wb = float(a[schluessel]), float(b[schluessel])
+        zeilen.append({
+            "schluessel":  schluessel,
+            "bezeichnung": namen.get(schluessel, schluessel),
+            "gattung":     gattungen.get(schluessel, "–"),
+            "gewicht_a":   wa,
+            "gewicht_b":   wb,
+            "gemeinsam":   min(wa, wb),
+        })
+    return (pd.DataFrame(zeilen)
+            .sort_values("gemeinsam", ascending=False)
+            .reset_index(drop=True))
+
+
 def kategorien_vereinigt(reihen: dict, spalte: str) -> list:
     """Alle Auspraegungen ueber MEHRERE Bestaende, nach Gesamtgewicht sortiert.
 

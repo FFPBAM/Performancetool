@@ -24,6 +24,7 @@ keine Mathematik, sondern Ehrlichkeit:
   6. Der X-Achsen-Umschalter ist ein segmented_control (per AST)
   7. Die Figuren von Ueberschneidung und Exposure (#54)
   8. Die Oberflaeche der beiden neuen Abschnitte (AppTest)
+  9. Der Drilldown: Auswahl-Aufloesung, Beitragsbalken, deutsche Zahlen
 
 SCHRITT 6 SIEHT AUS WIE KOSMETIK UND IST KEINE. Der Umschalter war zuerst ein
 `st.radio`; die Heatmap benutzt fuer dieselbe Aufgabe `st.segmented_control`.
@@ -782,13 +783,112 @@ def schritt8_apptest_bestand():
     return f
 
 
+def schritt9_drilldown():
+    print("Schritt 9 — der Drilldown: Auswahl, Balken, deutsche Zahlen")
+    try:
+        from modules.strategievergleich import (
+            BALKEN_BREITE, EBENEN, EBENE_TITEL, beitragsbalken,
+            gewaehlte_gegenpartei, ueberschneidung_tabelle,
+            _drilldown_tabelle,
+        )
+    except Exception as ex:
+        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+        return 0
+    bestaende = _bestaende_fuer_test()
+    if bestaende is None:
+        return 0
+
+    f = 0
+    bezug = list(bestaende)[0]
+    tabelle = ueberschneidung_tabelle(bestaende, bezug, "WKN")
+
+    # (a) DIE AUFLOESUNG DER AUSWAHL. Ohne Klick die staerkste Zeile, also nie
+    # ein leerer Zustand.
+    if gewaehlte_gegenpartei(None, tabelle) != tabelle.index[0]:
+        print("    FEHLER — ohne Auswahl nicht die staerkste Zeile")
+        f += 1
+    else:
+        print(f"    OK — ohne Auswahl: {tabelle.index[0]}")
+
+    # Ein echter Treffer wird uebernommen ...
+    ziel = tabelle.index[3]
+    treffer = {"selection": {"points": [{"y": ziel}]}}
+    f += 0 if gewaehlte_gegenpartei(treffer, tabelle) == ziel else 1
+
+    # ... der Ersatzweg ueber customdata ebenso ...
+    ueber_custom = {"selection": {"points": [{"y": None,
+                                              "customdata": [ziel, 5]}]}}
+    f += 0 if gewaehlte_gegenpartei(ueber_custom, tabelle) == ziel else 1
+
+    # ... und ein Name, den es NICHT MEHR GIBT, faellt zurueck statt zu
+    # werfen. Das ist der Fall nach einem Wechsel der Ebene oder der
+    # Strategieauswahl (#53).
+    veraltet = {"selection": {"points": [{"y": "Gibt es nicht mehr"}]}}
+    if gewaehlte_gegenpartei(veraltet, tabelle) != tabelle.index[0]:
+        print("    FEHLER — veralteter Name faellt nicht auf die staerkste zurueck")
+        f += 1
+    for kaputt in ({}, {"selection": {}}, {"selection": {"points": []}}, None):
+        try:
+            gewaehlte_gegenpartei(kaputt, tabelle)
+        except Exception as ex:
+            print(f"    FEHLER — {kaputt!r}: {type(ex).__name__}")
+            f += 1
+    if not f:
+        print("    OK — Treffer, Ersatzweg, veralteter Name und Schrott")
+
+    # (b) DER BALKEN ist proportional und nie leer bei einem echten Wert.
+    f += 0 if beitragsbalken(1.0, 1.0) == "\u2588" * BALKEN_BREITE else 1
+    f += 0 if len(beitragsbalken(0.5, 1.0)) == BALKEN_BREITE // 2 else 1
+    if beitragsbalken(0.0001, 1.0) == "":
+        print("    FEHLER — winziger Beitrag ergibt einen leeren Balken; das "
+              "sieht aus wie ein Fehlwert (#46)")
+        f += 1
+    for wert, maximum in ((0.0, 1.0), (0.5, 0.0), (None, 1.0), ("x", 1.0)):
+        if beitragsbalken(wert, maximum) != "":
+            print(f"    FEHLER — beitragsbalken({wert!r}, {maximum!r}) "
+                  "liefert einen Balken")
+            f += 1
+    print(f"    OK — Balken proportional, Grenzfaelle leer, nie laenger "
+          f"als {BALKEN_BREITE}")
+
+    # (c) DIE TABELLE traegt deutsche Zahlen — keine zweite Formatierungs-
+    # quelle neben `modules/formats.py`.
+    gegen = tabelle.index[0]
+    anzeige = _drilldown_tabelle(bestaende, bezug, gegen, EBENE_TITEL)
+    if anzeige is None:
+        print("    FEHLER — keine Drilldown-Tabelle")
+        return f + 1
+    prozentspalten = [bezug, gegen, "gemeinsam"]
+    for spalte in prozentspalten:
+        werte = [w for w in anzeige[spalte] if w != "–"]
+        if any("." in w for w in werte):
+            print(f"    FEHLER — Spalte {spalte!r} enthaelt Dezimalpunkte: "
+                  f"{[w for w in werte if '.' in w][:3]}")
+            f += 1
+        if not all(w.endswith("%") for w in werte):
+            print(f"    FEHLER — Spalte {spalte!r} ohne Prozentzeichen")
+            f += 1
+    if not f:
+        print(f"    OK — {len(anzeige)} Zeilen, deutsche Notation in "
+              f"{len(prozentspalten)} Spalten")
+
+    # (d) Auf jeder Ebene eine brauchbare Tabelle, ohne Absturz.
+    for ebene in EBENEN:
+        t = _drilldown_tabelle(bestaende, bezug, gegen, ebene)
+        if t is None or t.empty:
+            print(f"    FEHLER — Ebene {ebene}: keine Tabelle")
+            f += 1
+    print(f"    OK — alle {len(EBENEN)} Ebenen liefern eine Tabelle")
+    return f
+
+
 def main():
     print("Pruefstein: Strategievergleich\n")
     fehler = 0
     for schritt in (schritt1_rendite, schritt2_zusage_kachel,
                     schritt3_abdeckung, schritt4_figur, schritt5_apptest,
                     schritt6_umschalter, schritt7_figuren,
-                    schritt8_apptest_bestand):
+                    schritt8_apptest_bestand, schritt9_drilldown):
         fehler += schritt()
         print()
     if fehler:
