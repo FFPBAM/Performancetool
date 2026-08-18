@@ -1,8 +1,14 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 17.08.2026 (zweite Runde) · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · vollständig auf GitHub · **getesteter Stand `7f3a1b2`**
-(22 von 22 Suiten grün), danach nur Doku-Commits
+**Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
+**Nicht gemergt** · **23 von 23 Suiten grün**, `pyflakes` bei null.
+
+> ⚠️ **Der dritte Tab ist committet, aber NOCH NICHT GEPUSHT** (Stand
+> 18.08.2026). Drei Commits liegen lokal vor `origin/verbesserungen`. Die
+> Sichtprüfung hat stattgefunden — Philip: *„sieht gut aus"*, und die Namen
+> stehen auf seinen Wunsch immer am Punkt. **Weil ein Push sofort in die
+> laufende App der Kollegen geht**, wartet er auf ein ausdrückliches Wort.
+> Die genaue Zahl liefert `git status -sb`.
 
 > ### ⚠️ Zuerst lesen: Dieser Branch IST die laufende App
 >
@@ -61,6 +67,160 @@ wo wir stehen, was offen ist und wie es weitergeht. Fachliche Tiefe steht in
 > Tages heraus: **die Doku nannte einen falschen Deploy-Branch** (siehe Kasten
 > oben). **Offen ist damit nur noch der Merge** — er ändert am Betrieb nichts,
 > weil die Cloud ohnehin auf `verbesserungen` läuft, räumt aber die Historie.
+
+> **Stand 18.08.2026 — ein dritter Tab: der Strategievergleich.**
+> Neu ist eine **Risiko-Rendite-Punktwolke** über alle 19 Strategien:
+> Rendite p.a. gegen Volatilität oder Max Drawdown, Farbe nach Familie,
+> Auswahl über Familien oder einzeln. Der eigentliche Aufwand lag **nicht**
+> in der Darstellung, sondern in einer einzigen fachlichen Frage — dem
+> **Zeitraum**. Details unten unter „Der dritte Tab".
+
+---
+
+### Der dritte Tab: der Strategievergleich (18.08.2026)
+
+Die beiden bestehenden Ansichten zeigen **immer eine** Strategie (plus
+optional ein Vergleichsportfolio). Die Frage, die im Kundengespräch als
+nächstes kommt — *„und wo steht diese Strategie im Vergleich zu unseren
+anderen?"* — konnte das Werkzeug nicht beantworten. Jetzt gibt es dafür ein
+drittes Segment in der Navigation.
+
+**Gezeigt wird eine Punktwolke:** je Strategie ein Punkt, Y = Rendite p.a.
+nach Kosten, X = **Volatilität oder Max Drawdown** (Umschalter wie bei der
+Heatmap), Farbe = Familie, Auswahl über Familien-Mehrfachfeld oder einzeln.
+
+**Ausdrücklich keine Effizienzlinie nach Markowitz** (Philip, 18.08.2026).
+Die Ansicht *positioniert*, sie *optimiert nicht*. Eine Effizienzlinie
+bräuchte eine Kovarianzmatrix und die Annahme, dass man beliebig zwischen den
+Strategien mischen kann — und sie suggeriert das dann auch. Ein Kunde bekommt
+**eine** Vermögensverwaltung, keinen Mix aus dreien (§10.9).
+
+#### Der ganze Aufwand steckte in einer Frage: dem Zeitraum
+
+Die 19 Strategien haben zwischen **1,7 und 17,6 Jahren** Historie. Eine
+Punktwolke „je Strategie seit Auflage" zeigt deshalb nicht, welche besser
+ist, sondern **wann sie aufgelegt wurde**: Die alten Reihen tragen
+Finanzkrise, Corona und 2022 mit, die jungen nur den Aufschwung seit 2023.
+Am 18.08.2026 gemessen:
+
+| Strategie | Historie | CAGR seit Auflage | CAGR letzte 3 J | Rang |
+|---|---:|---:|---:|---|
+| cVV dynamic | 7,8 J | 7,56 % | 7,42 % | **4 → 14** |
+| cVV ausgewogen | 17,6 J | 5,25 % | 9,02 % | **11 → 5** |
+| ETF_Wachstum | 10,6 J | 4,15 % | 8,93 % | 15 → 6 |
+| Offensiv | 17,6 J | 6,13 % | 7,43 % | 7 → 12 |
+
+Beim **Max Drawdown ist es schärfer**, weil er ein Einzelereignis ist und
+nicht mit der Zeit skaliert — ein langer Track Record wird dort *bestraft*:
+cVV konservativ zeigt −14,02 % seit Auflage und −3,67 % über drei Jahre.
+
+**Festgelegt (Philip, 18.08.2026):** gemeinsamer Zeitraum. Wer ihn nicht
+vollständig abdeckt, wird **nicht gezeichnet**, sondern unter dem Chart
+namentlich mit seiner Historienlänge genannt:
+
+> *Nicht gezeigt, weil die Historie den Zeitraum nicht abdeckt: Pro (2,9 J),
+> Pro Dividende (1,7 J), Comdirect_30 (2,4 J), Comdirect_70 (2,4 J),
+> Comdirect_100 (2,4 J).*
+
+**„Seit Auflage" gibt es hier deshalb nicht.** An seiner Stelle steht der
+**längste gemeinsame Zeitraum der Auswahl** — er folgt der jüngsten
+gewählten Reihe:
+
+| Auswahl | gemeinsamer Zeitraum |
+|---|---:|
+| nur die CVV-Familie | 7,8 Jahre *(cVV dynamic ab 10/2018)* |
+| CVV + comdirect | 2,4 Jahre |
+| alle 19 | **1,7 Jahre** *(Pro Dividende ab 10/2024)* |
+
+Die letzte Zeile ist der Grund, warum die Ansicht mit **„3 Jahre"** startet
+und nicht mit dem gemeinsamen Zeitraum: Über 1,7 Jahre lässt sich über Risiko
+nichts sagen, und es wäre das Erste, was der Berater sieht. Bei „3 Jahre"
+sind es 14 von 19 Strategien, bei „10 Jahre" nur noch 7.
+
+#### Gebaut werden musste weniger, als es aussah
+
+Die Abdeckungsregel **stand schon**: `analytics.risiko_perioden` setzt sie
+seit dem 14.08.2026 um (`if start < indexbeginn: continue` — *„Historie deckt
+die Periode nicht ab"*), und `test_risiko` Schritt 3 nagelt sie fest. Sie
+rechnet auch Volatilität und Max Drawdown je Zeitraum bereits.
+
+**Neu ist genau eine Größe: die Rendite p.a.** Sie kam als Spalte `rendite`
+in dieselbe Funktion und in dieselbe Schleife — aus **derselben Indexreihe**
+wie der Drawdown, damit die beiden Achsen nicht auf zwei Reihen rechnen
+können. Auch der gemeinsame Zeitraum braucht keine zweite Rechnung: Die
+Ansicht schneidet die Reihen zu und liest dann `risiko_perioden(...)` mit
+„Seit Auflage" — *seit Auflage einer zugeschnittenen Reihe* **ist** der Wert
+über das Fenster.
+
+**Beweise.**
+
+| Gemessen | Ergebnis |
+|---|---|
+| Testsuiten | **23 von 23 grün**, kein Schritt übersprungen |
+| `pyflakes` über 41 Dateien | **null** |
+| `ui_dump` Performance + Portfolioanalyse vorher/nachher | **zeichengleich** |
+| Punktwolke gegen Kennzahlen-Kachel, 19 Strategien × 3 Kennzahlen | größte Abweichung **0,000e+00** |
+| dasselbe über das gemeinsame Fenster | **0,000e+00** |
+| Broschüren-Pfad | `risiko_perioden` hat **zwei** Verbraucher (`risiko_ansicht`, `strategievergleich`), keiner im Export |
+
+Der Beweis, dass die bestehenden Tabellen die neue Spalte nicht sehen, ist
+`ui_dump`: `_perioden_tabelle(reihen, spalten)` wählt ihre Spalten
+ausdrücklich aus, und beide Dumps sind zeichengleich.
+
+**Die Gegenprobe zum Prüfstein.** Für eine neue Ansicht gibt es keinen alten
+Stand, auf dem ein Test rot wäre. Ersatzweise stellt Schritt 3 die **naive
+Fassung** nach — rechnen, was im Fenster liegt, ohne die Abdeckung zu prüfen
+— und verlangt, dass sie für alle fünf bekannten Fälle **eine Zahl** liefert.
+Täte sie das nicht, prüfte der Schritt nichts.
+
+**Der Anker von Schritt 1** ist derselbe, an dem Audit-Befund B3 hängt: Eine
+Reihe ohne Marktbewegung muss **exakt** den Honorarsatz p.a. kosten. Beim
+Schreiben ist dabei aufgefallen, dass das für **jede Länge** gilt und nicht
+nur für 365 Tage — die Annualisierung hebt die Tageszahl wieder auf
+(`((1−d)^n)^(365/n) = (1−d)^365 = 1−f`). Der Test prüft jetzt drei Längen;
+dass die Tageszahl selbst stimmt, sichert ein eigener Teilschritt gegen die
+geschlossene Form.
+
+**Zwei eigene Fehler, beide durch Messen gefunden statt durch Nachdenken:**
+Die Vorbelegung stand zuerst auf dem gemeinsamen Zeitraum — erst der erste
+AppTest zeigte, dass das 1,7 Jahre sind. Und die Erwartung im NaN-Grenzfall
+war von Hand falsch gerechnet; richtig ist die schönere Invariante oben.
+
+**Die Namen stehen immer am Punkt** (Philip, 18.08.2026). Eine erste Fassung
+ließ sie ab 13 Punkten in den Hover wandern, damit sie einander nicht
+überdecken — im Kundengespräch wird aber auf den Bildschirm gezeigt und nicht
+mit der Maus darüber gefahren. Zurückgebaut; ein Testschritt hält die
+Entscheidung fest, damit sie niemand aus Rücksicht auf die Lesbarkeit wieder
+einbaut. Zusätzlich `cliponaxis=False`, sonst verliert ausgerechnet der
+äußerste Punkt seine Beschriftung.
+
+**Die Überdeckung ist nachgemessen** und kleiner als befürchtet — gezählt
+wurden Namenspaare, deren Rechtecke sich bei 760 × 430 px Zeichenfläche
+überschneiden:
+
+| Fall | Punkte | kollidierende Paare | betroffene Namen |
+|---|---:|---:|---:|
+| **3 Jahre** (Vorbelegung) | 14 | **2** | 4 |
+| 5 Jahre | 12 | 3 | 5 |
+| 1 Jahr (alle 19) | 19 | **6** | 6 |
+| 10 Jahre | 7 | 1 | 2 |
+
+Betroffen sind fast immer dieselben: die dicht beieinander liegenden
+defensiven Reihen und `Schweiz_substanzorientiert` mit 26 Zeichen. Falls es
+am Bildschirm stört, ist der Hebel **kürzere Anzeigenamen**, nicht das
+Ausblenden.
+
+**Offen ist die Sichtprüfung** — und zwar bevor gepusht wird (#60). Zu
+beurteilen sind vor allem:
+
+- Liest sich der Satz über die ausgelassenen Strategien für einen Berater
+  verständlich?
+- Ist „Längster gemeinsamer Zeitraum" als Bezeichnung klar?
+- Light- und Dark-Mode, beide Achsen, alle Zeiträume.
+
+**Ohne die App ansehen:** Es liegt eine gerenderte HTML-Vorschau mit sechs
+Fällen (beide Achsen, mit und ohne Namen, drei Zeiträume) im Scratchpad der
+Sitzung — `fig.write_html`, kein Kaleido nötig.
 
 ---
 
@@ -402,7 +562,8 @@ Browser, die Richtigkeit der Quelldaten aus dem Vorsystem.
 | **Toter Code** | ~1.900 Zeilen: `performance.py`, `macrobond_upload.py`, `generate_pf_pdf`, Platzhalter-Dateien. |
 | **Konfiguration getrennt** | Broschüren-Bauplan in `modules/vorlagen_config.py` (550 Zeilen, importfrei). |
 | **Thema-Familie** | Als letzte auf `_folien_config` umgestellt, mit neuem `modus="dupliziert"`. |
-| **Tests** | **22 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Tests** | **23 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
+| **Dritter Tab** | *(18.08.)* **Strategievergleich**: Risiko-Rendite-Punktwolke über alle 19 Strategien, X-Achse umschaltbar zwischen Volatilität und Max Drawdown, Farbe nach Familie. Die eigentliche Arbeit war der **Zeitraum** — ungleiche Historien von 1,7 bis 17,6 Jahren verschieben die Rangfolge um bis zu zehn Plätze. Wer den gewählten Zeitraum nicht abdeckt, wird genannt statt gezeichnet. Details oben. |
 | **Kollegen-Feedback** | *(17.08.)* Einzeltitel ohne Scrollbalken, Fälligkeiten je Anleihe. Dazu zwei Befunde beim Nachmessen: still fehlendes Rentengewicht im Fälligkeits-Chart (bis 46,54 PP) und „Anzahl Titel" bei 38 von 38 Dateien um 1 zu hoch. Der vierte Punkt — deutsche Monatsnamen im Kalender — wurde gebaut und wieder **zurückgebaut**; er ist nicht im Branch. Details oben. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
@@ -1134,6 +1295,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |
 | `test_monatsrenditen.py` | **nichts** (Schritte 1–4 nur numpy + pandas); Schritte 5–11 **+ streamlit** | Die Heatmap, elf Schritte. Schritt 1 rechnet `_ist_voller_monat` gegen 13 Grenzfälle nach, Schritt 2 die Verkettung Zeile → Jahresspalte, Schritt 3 die geometrische Differenz gegen das von Hand gerechnete Beispiel (+9,7506 % statt +10,00 PP), Schritt 5 die Ø-Zeile, Schritt 6 misst **jeden** angebrochenen Monat der 19 echten Reihen gegen die Rohdaten und prüft den Zeitraum-Zuschnitt an beiden Rändern, **Schritt 7 die Bandbreite** (arithmetisches Mittel gegen von Hand gerechnete Werte, Je-Monat-Toleranz, festes Fenster, Invariante `Tief ≤ Mittel ≤ Hoch` über alle Strategien), **Schritt 8 die FIGUR statt der Daten** — Achsentyp, Kategorienreihenfolge, Spaltenzahl, Koordinatentypen der Annotationen; das ist die Prüfung, durch deren Fehlen der Renderfehler schlüpfte —, **Schritt 9 die Zeitraum-Ableitung** (sieben gerechnete Fälle plus die Zusage, dass die älteste Jahreszeile keine Lücke hat), Schritt 10 die Kachelhöhe, Schritt 11 fährt die Oberfläche hoch (beide Ansichten, alle Zeiträume, „Seit Auflage mit jungem Vergleichsportfolio") |
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16. **Neu am 14.08.2026: Schritt 6** prüft die *Voraussetzung* der 365-Konvention an den echten Daten (kalendertäglich, lückenlos, Werktaganteil rund 5/7) — eine Handelstag-Lieferung würde 365 Zeilen zu 1,40 Jahren machen und √365 falsch. **Schritt 7** prüft den Zeitraum-Hinweis der beiden Tabellen gegen beide Aufrufformen, drei leere Eingaben und einen Schaltjahr-Rand |
+| `test_strategievergleich.py` *(neu 18.08.2026)* | Schritte 1+4 numpy/pandas, 2+3 zusätzlich die echten CSVs, 5 **+ streamlit** | Die Risiko-Rendite-Punktwolke des dritten Tabs. Schritt 1 die neue Spalte `rendite` gegen den Anker „eine Reihe ohne Marktbewegung kostet exakt den Satz" (derselbe wie bei B3), dazu die geschlossene Form und vier Grenzfälle; **Schritt 2 die Zusage**, dass die Punktwolke dieselbe Zahl zeigt wie die Kennzahlen-Kachel — 19 Strategien × 3 Kennzahlen, einmal über die ganze Reihe und einmal über das gemeinsame Fenster; **Schritt 3 die Abdeckung** mit namentlicher Festlegung der fünf bekannten Fälle **und der Gegenprobe gegen eine naive Fassung**; Schritt 4 die **Figur** statt der Daten (#54: Achsentypen, Punktzahl, Spuren je Familie, Drawdown als Betrag, **jeder Punkt trägt seinen Namen** — auch bei 27, und nicht abgeschnitten am Rand); Schritt 5 acht Bedienpfade per AppTest |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -1158,6 +1320,7 @@ python tests/test_kalenderjahre.py
 python tests/test_monatsrenditen.py
 python tests/test_risiko.py
 python tests/test_portfolioanalyse.py
+python tests/test_strategievergleich.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
@@ -1494,7 +1657,10 @@ Bewährt in der letzten Sitzung und bitte beibehalten:
   `python tests/ui_dump.py nachher.json` → vergleichen. Zieht alle
   Kennzahlen, Captions, Markdown-Blöcke und Tabellen ab. Erfasst die
   Standard-Ansicht, nicht die Bedienpfade — dafür stehen die AppTest-Suiten
-  daneben.
+  daneben. **Alle drei Ansichten** sind erfasst: ohne Argument die
+  Performance, sonst `portfolio` oder `vergleich` *(18.08.2026 — diesmal am
+  Tag des Baus und nicht erst beim ersten Umbau; genau das war der Fehler bei
+  der Portfolioanalyse)*.
 - **Ein Commit je Thema**, deutsche Commit-Nachricht mit Begründung.
 - **Was das Auge findet, findet kein Test.** Beide Fehler der Sitzung vom
   07.08.2026 kamen aus Philips Sichtprüfung. Broschüren stichprobenartig in

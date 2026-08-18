@@ -210,6 +210,17 @@ prüfte statt gegen eine Schwelle (#47).
   Fälligkeit — sie fielen still heraus. Wo ein Teilaggregat neben seiner
   Gesamtgröße steht, gehört die **Differenz benannt** (§10.9, dieselbe Klasse
   wie #46/B6). Prüfstein: `tests/test_portfolioanalyse.py`, Schritt 3.
+- **Ein Vergleich ist nur so ehrlich wie sein gemeinsamer Zeitraum** (#61,
+  18.08.2026). Sobald mehrere Strategien NEBENEINANDER stehen, verspricht die
+  Achsenbeschriftung eine gemeinsame Grundlage — und die Historien halten das
+  nicht: Sie reichen von 1,7 bis 17,6 Jahren. Gemessen verschiebt das die
+  Rangfolge um bis zu zehn Plätze (cVV dynamic: Rang 4 seit Auflage, Rang 14
+  über drei gemeinsame Jahre). Beim **Max Drawdown** ist es schärfer, weil er
+  ein Einzelereignis ist und mit der Länge der Historie wächst — ein langer
+  Track Record wird dort bestraft. Deshalb: gemeinsames Fenster, und wer es
+  nicht abdeckt, wird **genannt statt gezeichnet** (`strategievergleich.py`,
+  Prüfstein `tests/test_strategievergleich.py` Schritt 3). Die Regel dafür
+  musste nicht gebaut werden — `analytics.risiko_perioden` hatte sie schon.
 - **Die Spalte „Anleihenanteil / Liquidität" trägt zwei Bedeutungen.** Wo eine
   Strategie keine Anleihen hält, steht dort die **Liquiditätsgrenze**: `cVV
   dynamic` „max. 10 %", Pro und Pro Dividende „max. 15 %". Die Bank-Webseite
@@ -231,6 +242,8 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht** |
 | `modules/formats.py` | **alle** Zahlen-, Prozent- und Datumsformate + Fehlwert `–`; streamlit-frei, gilt für Tool *und* Broschüre |
 | `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
+| `modules/risiko_ansicht.py` | Heatmap und Risiko-Block **innerhalb** der Performance-Ansicht |
+| `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander im Risiko-Rendite-Raum |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.
 `vorlagen_config.py` hat bewusst **keine Importe** — das bitte so lassen.
@@ -268,6 +281,7 @@ python tests/test_kalenderjahre.py           # Schritte 1+2 nur pandas, 3 + pptx
 python tests/test_monatsrenditen.py          # Schritte 1-4 nur numpy + pandas
 python tests/test_risiko.py                  # Schritte 1-2+4 nur numpy + pandas
 python tests/test_portfolioanalyse.py        # Schritte 1-5 pandas, 6 + streamlit
+python tests/test_strategievergleich.py      # Schritte 1+4 numpy/pandas, 5 + streamlit
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
@@ -278,6 +292,7 @@ Dazu ein Werkzeug, kein Test — für den Beweis nach einem UI-Umbau:
 ```
 python tests/ui_dump.py vorher.json     # umbauen, dann nachher.json, vergleichen
 python tests/ui_dump.py vorher_pf.json portfolio   # zweite Ansicht (17.08.2026)
+python tests/ui_dump.py vorher_sv.json vergleich   # dritte Ansicht (18.08.2026)
 ```
 
 Tests bewusst **ohne pytest** — sie sollen in der eingeschränkten

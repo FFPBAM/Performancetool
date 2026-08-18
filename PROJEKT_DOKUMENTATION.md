@@ -2634,15 +2634,79 @@ Typen.
 
 ---
 
+### #61 — Ein Vergleich ist nur so ehrlich wie sein gemeinsamer Zeitraum (NEU 18.08.2026) ⭐
+
+Eine Einzelansicht darf „seit Auflage" rechnen — dort steht die Zahl allein,
+und das Auflagedatum steht daneben. Sobald aber **mehrere Reihen
+nebeneinander** stehen, verspricht die gemeinsame Achse eine gemeinsame
+Grundlage. Halten die Historien das nicht, misst die Grafik etwas anderes,
+als ihre Beschriftung sagt.
+
+Gemessen an den 19 Strategien (Historien von **1,7 bis 17,6 Jahren**):
+
+| Strategie | Historie | Rang „seit Auflage" | Rang „3 gemeinsame Jahre" |
+|---|---:|---:|---:|
+| cVV dynamic | 7,8 J | 4 | **14** |
+| cVV ausgewogen | 17,6 J | 11 | **5** |
+| ETF_Wachstum | 10,6 J | 15 | **6** |
+| Offensiv | 17,6 J | 7 | **12** |
+
+Die Punktwolke hätte also nicht gezeigt, welche Strategie besser ist, sondern
+**wann sie aufgelegt wurde**: Die alten Reihen tragen Finanzkrise, Corona und
+2022 mit, die jungen nur den Aufschwung seit 2023.
+
+**Beim Max Drawdown ist es schärfer als bei der Volatilität**, und das ist der
+Teil, der leicht übersehen wird: Volatilität ist ein annualisiertes Streumaß
+und über verschieden lange Fenster wenigstens grob vergleichbar. Der Max
+Drawdown ist ein **Einzelereignis** — er kann mit der Länge der Historie nur
+wachsen. Wer länger dabei ist, sieht schlechter aus:
+
+| | seit Auflage | über 3 Jahre |
+|---|---:|---:|
+| cVV konservativ, Max Drawdown | −14,02 % | −3,67 % |
+
+**Die Konsequenz:** gemeinsames Fenster, und wer es nicht vollständig abdeckt,
+wird **nicht gezeichnet, sondern genannt** — mit seiner tatsächlichen
+Historienlänge. Dieselbe Klasse wie #51 (ein Rumpfjahr ist kein Jahresbalken)
+und #59 (ein Aggregat muss sagen, was es nicht enthält), nur in einem
+Streudiagramm statt in einem Säulen-Chart oder einer Kachel.
+
+**Und die Vorbelegung gehört dazu.** „Längster gemeinsamer Zeitraum" klingt
+nach der besten Vorgabe und ist es nicht: Über alle 19 Strategien sind das
+**1,7 Jahre**, weil die jüngste Reihe das Fenster bestimmt. Über 1,7 Jahre
+lässt sich über Risiko nichts sagen — und es wäre das Erste, was der Berater
+sieht. Die Ansicht startet deshalb mit „3 Jahre" (14 von 19 Strategien).
+Aufgefallen ist das nicht beim Nachdenken, sondern **beim ersten AppTest**.
+
+**Was NICHT gebaut werden musste:** Die Abdeckungsregel gab es schon —
+`analytics.risiko_perioden` lässt eine nicht gedeckte Periode seit dem
+14.08.2026 leer, statt gekürzt zu rechnen. Es lohnt sich, vor dem Bauen zu
+suchen, ob die eigene Zusage anderswo schon eine Funktion hat: Hier fehlte am
+Ende **eine einzige Größe** (die Rendite p.a.), und die kam in dieselbe
+Funktion und dieselbe Schleife — aus **derselben Indexreihe** wie der
+Drawdown, damit die beiden Achsen eines Punktes nicht auf zwei verschiedenen
+Reihen rechnen können.
+
+**Nebenbefund zur Mathematik, den erst der Prüfstein gebracht hat:** Eine
+Reihe ohne Marktbewegung kostet **exakt** den Honorarsatz p.a. — und zwar
+unabhängig davon, wie lang sie ist. Die Annualisierung hebt die Tageszahl
+wieder auf: `((1−d)^n)^(365/n) = (1−d)^365 = 1−f`. Der Anker aus B3 ist also
+allgemeiner, als er in `test_kosten_mathematik` formuliert war. Dass die
+Tageszahl selbst stimmt, muss ein **eigener** Fall prüfen (eine wachsende
+Reihe gegen die geschlossene Form) — der Nulltag-Anker kann es nicht.
+
 ## 1. Projektübersicht
 
-Streamlit-App für Fürst Fugger Privatbank mit 2 Ansichten (seit 07.07.2026
-per `st.segmented_control` oben auf der Seite navigiert, davor `st.tabs`).
+Streamlit-App für Fürst Fugger Privatbank mit **3 Ansichten** (seit
+07.07.2026 per `st.segmented_control` oben auf der Seite navigiert, davor
+`st.tabs`; die dritte kam am 18.08.2026 dazu und war dadurch ein
+Listeneintrag — der alte Tab-Bug von #18 kann nicht zurückkehren).
 
 | Ansicht | Datei | Zeilen (ca.) | Zweck |
 |---|---|---|---|
 | 📈 Performance | `streamlit_app.py` | ~1.090 | Historische Performance, Kennzahlen (inkl. Sharpe), Charts, PDF+Glossar, Konsistenz-Caption |
 | 📊 Portfolioanalyse | `modules/portfolioanalyse.py` | ~900 | Strukturanalyse: Ringe, Tabellen, Anleihen-Detail (Duration/Rendite aus Titeln), **PPTX-Export** (familiengesteuerte Vorlagenwahl) |
+| 📐 Strategievergleich | `modules/strategievergleich.py` | ~370 | *(NEU 18.08.2026)* Alle Strategien nebeneinander im Risiko-Rendite-Raum; Zeitraum-Ehrlichkeit statt „seit Auflage" (#61). Rechnet nichts selbst — liest `analytics.risiko_perioden` |
 | (Berechnungen) | `modules/analytics.py` | — | **Single Source of Truth** für Performance-Mathematik (CAGR, Vola, Sharpe, Drawdown, Perioden-Renditen); genutzt von App UND PPTX-Export |
 | (gemeinsam) | `modules/shared.py` | ~300 | Konstanten, Login, Formatierung, Font-Setup, Corporate-Palette, CSV-Loading-Helpers |
 | (PPTX generisch) | `modules/pptx_helpers.py` | — | Shape/Text/Table/Slide-Manipulation (inkl. `ensure_table_capacity`, `fit_shape_to_table`, `_reorder_slides`) |
@@ -3716,6 +3780,60 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 – Dritter Tab: der Strategievergleich (Risiko-Rendite-Punktwolke)
+
+**Neu:** ein drittes Segment in der Navigation. Jede Strategie ist ein Punkt —
+Y = Rendite p.a. nach Kosten, X = **Volatilität oder Max Drawdown**
+(Umschalter wie bei der Heatmap), Farbe = Familie, Auswahl über
+Familien-Mehrfachfeld oder einzeln. **Ausdrücklich keine Effizienzlinie nach
+Markowitz** (Philip): Die Ansicht positioniert, sie optimiert nicht — ein
+Kunde bekommt eine Vermögensverwaltung, keinen Mix aus dreien (§10.9).
+
+**Der Aufwand lag im Zeitraum, nicht in der Darstellung.** Historien von 1,7
+bis 17,6 Jahren verschieben die Rangfolge um bis zu zehn Plätze (cVV dynamic
+4 → 14, cVV ausgewogen 11 → 5). Festgelegt: gemeinsames Fenster, und wer es
+nicht abdeckt, wird namentlich genannt statt gezeichnet. „Seit Auflage" gibt
+es hier deshalb nicht — an seiner Stelle steht der **längste gemeinsame
+Zeitraum der Auswahl**. Transferwissen **#61**.
+
+**Gebaut werden musste eine einzige Größe:** die Spalte `rendite` in
+`analytics.risiko_perioden`. Volatilität, Max Drawdown **und die
+Abdeckungsregel** standen dort seit dem 14.08.2026 schon. Rendite und
+Drawdown kommen aus **derselben Indexreihe**, damit die beiden Achsen eines
+Punktes nicht auseinanderlaufen können.
+
+**Dateien:** `modules/strategievergleich.py` (neu),
+`tests/test_strategievergleich.py` (neu), `modules/analytics.py` (+18/−4),
+`streamlit_app.py` (drittes Segment, `elif`-Zweig, Honorarsatz-Warnung),
+`modules/portfolioanalyse.py` (**nur** eine Namenszuweisung
+`familie_fuer_strategie` — acht Kommentarzeilen und eine Zeile Code, kein
+Verhalten), `tests/ui_dump.py` (dritte Ansicht).
+
+**Beweise:** 23 von 23 Suiten grün ohne übersprungenen Schritt, `pyflakes`
+über 41 Dateien bei null, `ui_dump` für Performance und Portfolioanalyse
+vorher/nachher **zeichengleich**, Punktwolke gegen Kennzahlen-Kachel über 19
+Strategien × 3 Kennzahlen mit größter Abweichung **0,000e+00** (ebenso über
+das gemeinsame Fenster). Der Broschüren-Pfad ist unberührt: `risiko_perioden`
+hat genau zwei Verbraucher, `risiko_ansicht` und `strategievergleich`, keiner
+davon im Export.
+
+**Zwei eigene Fehler, beide durch Messen gefunden.** Die Vorbelegung stand auf
+dem gemeinsamen Zeitraum — der erste AppTest zeigte, dass das über alle 19
+Strategien **1,7 Jahre** sind; sie steht jetzt auf „3 Jahre". Und die
+Erwartung eines Grenzfalls im Prüfstein war von Hand falsch gerechnet;
+richtig ist die allgemeinere Invariante aus #61.
+
+**Nachgezogen am selben Tag (Philip):** Die Strategienamen stehen **immer**
+am Punkt. Die erste Fassung ließ sie ab 13 Punkten in den Hover wandern; im
+Kundengespräch wird auf den Bildschirm gezeigt, nicht mit der Maus darüber
+gefahren. Die Konstante `NAMEN_BIS` ist entfallen, ein Testschritt hält die
+Entscheidung fest, und `cliponaxis=False` verhindert, dass der äußerste Punkt
+seine Beschriftung an der Zeichenfläche verliert. Die Überdeckung wurde
+nachgemessen: bei der Vorbelegung 2 kollidierende Namenspaare von 14 Punkten,
+im schlimmsten Fall (alle 19 über 1 Jahr) sechs.
+
+**Offen: die Sichtprüfung**, ausdrücklich vor dem Push (#60).
 
 ### 17.08.2026 (abends) – Datumsauswahl zurückgebaut, zwei falsche Doku-Sätze korrigiert
 
