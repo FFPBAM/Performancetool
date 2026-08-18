@@ -26,6 +26,7 @@ from modules.download_helfer import download_bereich
 # Der Fehlwert kommt aus formats.py — dieselbe Quelle wie fuer Tool und
 # Broschuere. Ein "–" von Hand hinzuschreiben liefe irgendwann auseinander.
 from modules.formats import EMPTY_VALUE
+from modules.bestandsanalytik import calc_liquidity
 # historie_beschneiden liegt seit 14.08.2026 in analytics.py (Berechnungsregel,
 # von Broschuere UND Heatmap gebraucht). Der Re-Export haelt Alt-Importe heil.
 from modules.analytics import historie_beschneiden   # noqa: F401
@@ -127,9 +128,13 @@ def duration_info_aus_bestand(df: pd.DataFrame) -> dict:
 # ---------------------------------------------------------------------------
 # Berechnungen
 # ---------------------------------------------------------------------------
-def calc_liquidity(df: pd.DataFrame) -> float:
-    total_weight = df["Gewicht"].sum()
-    return max(0.0, 1.0 - total_weight)
+# calc_liquidity IST UMGEZOGEN nach modules/bestandsanalytik.py (18.08.2026)
+# und wird oben importiert. Sie wird inzwischen an drei Stellen gebraucht —
+# Ringe, Broschüre und der neue Exposure-Vergleich —, und der dritte Ort darf
+# Streamlit nicht hereinziehen. Eine zweite Kopie wäre genau die Krankheit
+# aus Backlog B/E/F: formelgleich, bis sie es eines Tages nicht mehr ist.
+# Der Name bleibt hier verfügbar, die drei Aufrufstellen unten sind
+# unverändert.
 
 
 def build_allocation(df: pd.DataFrame, group_col: str, sonstige_threshold: float = SONSTIGE_THRESHOLD) -> pd.DataFrame:
