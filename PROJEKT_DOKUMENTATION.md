@@ -2634,6 +2634,59 @@ Typen.
 
 ---
 
+### #69 — Eine Spalte, die ihre Quelle nicht nennt, lässt sich trotzdem belegen (NEU 18.08.2026) ⭐
+
+Die Sharpe Ratio des Werkzeugs rechnet gegen einen risikofreien Zins, der als
+Spalte `Risiko freier Zins` aus den Performance-CSVs kommt (`modules/shared.py`,
+`build_portfolio_timeseries`). **Der Spaltenname nennt keine Quelle** — keine
+Laufzeit, keinen Referenzsatz, keinen Lieferanten. Der Hinweistext der Kachel
+gab die Größe deshalb dreimal als „risikofreier Zins" wieder, ohne je zu sagen,
+welcher.
+
+Philip hat sie benannt: der **3-Monats-Euribor**. Das ist Hauswissen, und es
+stimmt — aber **#68** vom selben Tag sagt, dass eine Aussage über eine
+ungelesene Quelle geraten ist, auch wenn sie stimmt. **Hier war die Quelle
+lesbar**, nur nicht dort, wo man zuerst hinsieht: nicht im Spaltennamen,
+sondern **in den Werten selbst**.
+
+Eine Zinsreihe trägt eine Signatur. Gemessen an
+`Muster ausgewogen cVV_…_260721_0912.CSV` (17,6 Jahre Historie, Spalte 8):
+
+| | Wert in den Daten | 3M-Euribor |
+|---|---:|---:|
+| 30.12.2008 | 2,928 % | ~2,93 % |
+| 01.07.2015 | −0,014 % | ~−0,01 % |
+| 01.07.2021 | −0,540 % | ~−0,54 % |
+| **Tief 14.12.2021** | **−0,605 %** | Allzeittief |
+| **Hoch 19.10.2023** | **4,002 %** | Hoch Okt. 2023 |
+
+**Tief und Hoch sind der eigentliche Beweis, nicht die Stichproben in der
+Mitte** — sie unterscheiden die Laufzeit. 1M erreichte im Oktober 2023 rund
+3,86 %, 6M rund 4,2 %, der €STR verläuft anders. Nur der 3-Monats-Euribor
+trifft −0,605 und 4,002.
+
+**Die Lehre ist die Gegenbewegung zu #68.** Dort war die Quelle nicht lesbar,
+und die richtige Antwort war, genau das zu sagen. Hier war sie lesbar — man
+musste nur aufhören, den *Namen* der Spalte zu befragen, und die *Werte*
+fragen. Wer eine Herkunftsangabe in die Oberfläche schreibt, hat damit meist
+ein Mittel, sie zu prüfen: **Zeitreihen haben Extremwerte, und Extremwerte
+sind Fingerabdrücke.**
+
+Zwei Nachsätze, beide aus dieser Änderung:
+
+- **Gefragt war „das soll auch erwähnt werden".** Der Hinweistext hat die
+  Euribor-Angabe deshalb *zusätzlich* bekommen; der Satz, der die Kennzahl in
+  Alltagssprache übersetzt („Misst die Mehrrendite … pro Risikoeinheit"), blieb
+  stehen. **Ein Zusatz, der beim Einbauen einen bestehenden Satz verdrängt, ist
+  eine stille Streichung** — und niemand hat sie bestellt.
+- **Die interne Abkürzung `rf` stand im Hinweistext.** Im Code ist sie überall
+  richtig; in der Oberfläche wird sie nirgends eingeführt. Beides hält jetzt
+  `tests/test_kennzahlen_hinweise.py` fest — Schritt 1 den abgestimmten
+  Wortlaut, Schritt 2 die Zusage dahinter (Euribor genannt, kein `rf`), damit
+  sie den Umbau eines Satzes überlebt.
+
+---
+
 ### #68 — Ein Werkzeug, das die Quelle nicht lesen kann, darf ihr Ergebnis nicht behaupten (NEU 18.08.2026) ⭐
 
 Am 18.08.2026 kam der Verdacht, die Rentenfarbe sei auf der Webseite der Bank
@@ -4112,6 +4165,26 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 (Nachtrag 5) – Zwei Hinweistexte im Performance-Reiter
+
+Gemeldet: Der Calmar-Hinweis war ein halber Satz („Je höher, desto besser die
+risikoadjustierte Rendite" — ohne Verb und ohne Bezug), und der Sharpe-Hinweis
+nannte den risikofreien Zins dreimal, ohne zu sagen, WELCHER es ist.
+
+BELEGT STATT BEHAUPTET: Die CSV-Spalte `Risiko freier Zins` nennt keine Quelle.
+Die Zuordnung zum 3-Monats-Euribor wurde an den Werten gemessen — Tief −0,605 %
+am 14.12.2021, Hoch 4,002 % am 19.10.2023, die Extremwerte genau dieser
+Laufzeit (1M rund 3,86 %, 6M rund 4,2 %). Transferwissen **#69**.
+
+GEÄNDERT: zwei Zeilen in `streamlit_app.py` (`display_metrics`), sonst nichts.
+Der Deutungssatz des Sharpe-Hinweises blieb stehen und bekam die Euribor-Angabe
+angehängt; die interne Abkürzung `rf` ist raus. Die sichtbare Zeile
+„Ø Risikofreier Zins p.a." unter den Kacheln bleibt unverändert (so
+entschieden). Der Export-Pfad ist nicht betroffen.
+
+NEUER PRÜFSTEIN `tests/test_kennzahlen_hinweise.py` — ohne jedes Paket, über
+den Syntaxbaum. Gegen den alten Stand **rot** mit vier benannten Abweichungen.
 
 ### 18.08.2026 (Nachtrag 4) – Rentenfarbe: nicht verifizierbar, und das war die Antwort
 

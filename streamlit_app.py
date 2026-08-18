@@ -304,11 +304,11 @@ def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar
     with r2[0]:
         st.metric("Calmar Ratio",
                   f"{calmar:.2f}".replace(".",",") if calmar else "–",
-                  help="CAGR / |Max Drawdown|. Je höher, desto besser die risikoadjustierte Rendite.")
+                  help="CAGR / |Max Drawdown|. Je höher der Wert, desto besser ist die risikoadjustierte Rendite.")
     with r2[1]:
         st.metric("Sharpe Ratio",
                   f"{sharpe:.2f}".replace(".",",") if sharpe is not None else "–",
-                  help="Sharpe Ratio nach Sharpe (1994): Mittelwert der täglichen Überrenditen (Portfolio − rf) geteilt durch deren Standardabweichung, anschließend × √365 annualisiert. Misst die Überrendite über den risikofreien Zins pro Risikoeinheit.")
+                  help="Sharpe Ratio nach Sharpe (1994): Mittelwert der täglichen Überrenditen (Portfolio − risikofreier Zins) geteilt durch deren Standardabweichung, anschließend × √365 annualisiert. Misst die Mehrrendite über den risikofreien Zins pro Risikoeinheit; als risikofreier Zins dient der 3-Monats-Euribor.")
     if use_volume and endwert:
         with r2[2]:
             st.metric("Endwert", fmt_eur_de(endwert),

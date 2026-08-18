@@ -1,8 +1,34 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **27 von 27 Suiten grün**, `pyflakes` bei null ·
-**alles gepusht, DRACOON steht auf demselben Stand.**
+**Nicht gemergt** · **28 von 28 Suiten grün**, `pyflakes` bei null ·
+**committet, aber NICHT gepusht — und DRACOON hängt hinterher.**
+
+> ### Für Philip: was diese Sitzung geändert hat, und was noch aussteht
+>
+> **Geändert wurden zwei Sätze** hinter den Fragezeichen der Kennzahlen-Kacheln
+> im Performance-Reiter (`display_metrics` in `streamlit_app.py`, zwei Zeilen):
+> der Calmar-Hinweis ist ein vollständiger Satz geworden, und der
+> Sharpe-Hinweis nennt jetzt den **3-Monats-Euribor** beim Namen. Details im
+> Abschnitt „Zwei Hinweistexte im Performance-Reiter" weiter unten,
+> Transferwissen **#69**. Neuer Prüfstein:
+> `tests/test_kennzahlen_hinweise.py` (28. Suite).
+>
+> **Zwei Dinge sind offen und brauchen eine Entscheidung:**
+>
+> 1. **Nicht gepusht.** Der Branch ist die laufende App — der Push geht sofort
+>    an die Kollegen. Er wartet bewusst auf ein Ja.
+> 2. **DRACOON (`H:`) ist nicht nachgezogen.** Das Laufwerk war in dieser
+>    Sitzung **gar nicht eingebunden** (`Test-Path H:\` → False, keine
+>    Netzverbindungen). Der Abgleich nach `H:\Entwicklung\Forschung_Claude\`
+>    `Performancetool` steht deshalb noch aus; er setzt ohnehin den Push
+>    voraus (Reihenfolge unter „Sessionende — H: nachziehen").
+>
+> **Die Arbeitskopie auf `C:` war zu Sitzungsbeginn kein Git-Checkout** —
+> `.git`, `.gitignore`, `.streamlit/` und `.venv` fehlten. Inhaltlich war sie
+> deckungsgleich mit `origin/verbesserungen` (202 Dateien verglichen, 0
+> inhaltliche Abweichungen), es fehlte nur die Historie. Wiederhergestellt
+> ohne Verlust; `.venv` und `.streamlit/secrets.toml` sind neu angelegt.
 
 > **Der dritte Tab ist live und abgenommen** — Stufe 1 bis 3 plus die
 > Nachbesserungen aus dem Gegentest (18.08.2026). Philip an der laufenden
@@ -910,6 +936,35 @@ auseinandergezogen, für eine Vermutung, die sich als falsch erwies.
 Als Transferwissen **#68** festgehalten, zusammen mit dem Umkehrschluss:
 Wäre der Verdacht richtig gewesen, hätte dieselbe Gegenüberstellung ihn in
 einem Schritt bewiesen.
+
+---
+
+### Zwei Hinweistexte im Performance-Reiter (18.08.2026)
+
+Zwei Fragezeichen-Texte der Kennzahlen-Kacheln waren unpräzise. Der
+Calmar-Hinweis endete auf einen halben Satz; der Sharpe-Hinweis nannte den
+risikofreien Zins dreimal, ohne zu sagen, welcher gemeint ist — im
+Kundengespräch ist genau das die Rückfrage.
+
+| | vorher | jetzt |
+|---|---|---|
+| Calmar | „Je höher, desto besser die risikoadjustierte Rendite." | „Je höher der Wert, desto besser **ist** die risikoadjustierte Rendite." |
+| Sharpe | „(Portfolio − **rf**) … Misst die Überrendite …" | „(Portfolio − **risikofreier Zins**) … als risikofreier Zins dient der **3-Monats-Euribor**." |
+
+**Die Euribor-Angabe ist gemessen, nicht übernommen.** Die CSV-Spalte heißt
+schlicht `Risiko freier Zins` und nennt keine Quelle. Belegt hat es die Reihe
+selbst: Tief **−0,605 % am 14.12.2021**, Hoch **4,002 % am 19.10.2023** — die
+Extremwerte des 3-Monats-Euribor. Die Laufzeit ist damit unterscheidbar (1M
+rund 3,86 %, 6M rund 4,2 %). Steht als Transferwissen **#69**.
+
+**Nicht geändert:** die sichtbare Zeile „Ø Risikofreier Zins p.a. (Zeitraum)"
+unter den Kacheln und der Hinweis des Kontrollkästchens — so entschieden.
+
+| Gemessen | Ergebnis |
+|---|---|
+| Neuer Prüfstein gegen den alten Stand | **rot**, vier benannte Abweichungen |
+| Diff in `streamlit_app.py` | **2 Zeilen**, Zeilenenden unverändert (1150 CRLF) |
+| Export-Pfad | nicht berührt — `display_metrics` ist reine Oberfläche |
 
 ---
 
