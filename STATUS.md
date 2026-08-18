@@ -3,9 +3,11 @@
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **24 von 24 Suiten grün**, `pyflakes` bei null.
 
-> **Der dritte Tab ist gepusht und damit live** (18.08.2026, `fa5e85c`).
-> Die Sichtprüfung fand davor statt — Philip: *„sieht gut aus"*, und die
-> Strategienamen stehen auf seinen Wunsch immer am Punkt statt im Hover.
+> **Der dritte Tab ist gepusht und damit live** — Stufe 1 und Stufe 2
+> (18.08.2026, zuletzt `e21014a`). Beide Runden wurden vor dem Push an
+> einer gerenderten HTML-Vorschau gesichtet; aus beiden kam eine Korrektur,
+> die kein Test gefunden hatte: die Strategienamen gehören immer an den
+> Punkt, und der linke Rand der Balken-Charts darf nicht festgenagelt sein.
 > **Was noch offen ist: die App nach dem Deploy ansehen** (siehe den
 > Kasten direkt darunter) und `H:` nachziehen.
 
