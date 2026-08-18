@@ -3,11 +3,20 @@
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **25 von 25 Suiten grün**, `pyflakes` bei null.
 
-> **Der dritte Tab ist gepusht und damit live** — Stufe 1 und Stufe 2
-> (18.08.2026, zuletzt `e21014a`). Beide Runden wurden vor dem Push an
-> einer gerenderten HTML-Vorschau gesichtet; aus beiden kam eine Korrektur,
-> die kein Test gefunden hatte: die Strategienamen gehören immer an den
-> Punkt, und der linke Rand der Balken-Charts darf nicht festgenagelt sein.
+> **Der dritte Tab ist gepusht und damit live** — Stufe 1 bis 3
+> (18.08.2026, zuletzt `6e548f0`). Jede Runde wurde vor dem Push gesichtet,
+> und **aus jeder kam eine Korrektur, die kein Test gefunden hatte**: die
+> Strategienamen gehören immer an den Punkt, der linke Rand der
+> Balken-Charts darf nicht festgenagelt sein, und das Rot der
+> Bedienelemente war nie eine Entscheidung.
+>
+> **Stufe 3 ist die einzige, deren Ergebnis der Testlauf nicht beurteilen
+> kann.** `ui_dump` sieht keine Farben und keine Schriften. Beim Ansehen
+> deshalb ausdrücklich prüfen: sind die **Streamlit-Icons** noch heil (die
+> Schrift kommt jetzt aus dem Theme statt aus einem CSS-Block, #1), wirken
+> die Bedienelemente noch **bedienbar**, und stimmt beides in **hell UND
+> dunkel**?
+>
 > **Was noch offen ist: die App nach dem Deploy ansehen** (siehe den
 > Kasten direkt darunter) und `H:` nachziehen.
 
