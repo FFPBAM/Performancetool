@@ -2634,6 +2634,53 @@ Typen.
 
 ---
 
+### #63 — Ein nicht gelesener Standard sieht aus wie eine Festlegung (NEU 18.08.2026) ⭐
+
+`.streamlit/config.toml` ist die einzige Datei dieses Projekts, deren Fehler
+sich **nicht bemerkbar machen**. Wird sie nicht gelesen oder fehlt ein
+Abschnitt, sieht die Anwendung aus wie eine Anwendung ohne Konfiguration —
+also **normal**. Dasselbe ist hier zweimal passiert:
+
+| Wann | Was | Wie lange unbemerkt |
+|---|---|---|
+| bis 07.08.2026 | Ordner hieß `streamlit/` statt `.streamlit/`, `toolbarMode` wirkte nie (#23) | Monate |
+| bis 18.08.2026 | **gar kein `[theme]`** — die App lief mit Streamlits Akzentfarbe `#FF4B4B` | seit Projektbeginn |
+
+Das zweite fiel nur auf, weil jemand **hingesehen** hat: Philip bemerkte, dass
+die Auswahl-Chips im Strategievergleich rot leuchten. Ein grelles Korallenrot
+auf Chips, Kontrollkästchen, Fokusrahmen und Umschaltern — in einem Werkzeug
+für eine Privatbank, dessen Palette Fuggerblau und Fuggergold ist.
+
+**Die Lehre für den Test ist die eigentliche.** Ein Prüfstein auf den INHALT
+der Konfigurationsdatei hätte beide Fälle **nicht** gefunden: Die Datei war ja
+richtig, sie wurde nur nicht gelesen. Zu prüfen ist deshalb die WIRKUNG:
+
+```python
+config.get_where_defined("theme.primaryColor")   # -> .streamlit/config.toml
+                                                 #    und nicht "<default>"
+```
+
+Dieselbe Klasse wie #50 (*ein Versprechen im Kommentar ist kein Prüfstein*)
+und #55 (*was inline steht, ist für keinen Prüfstein erreichbar*): Es genügt
+nicht, dass etwas dasteht — es muss ankommen.
+
+**Zwei Folgeregeln:**
+
+1. **Wo eine Vorgabe wie eine Entscheidung aussieht, gehört die Entscheidung
+   aufgeschrieben.** Der Akzent steht jetzt als `THEME_AKZENT_HELL` /
+   `THEME_AKZENT_DUNKEL` in `shared.py`, und der Prüfstein hält die
+   Konfiguration dagegen — sonst entstehen zwei Fassungen derselben Farbe.
+2. **Streamlits Standardrot namentlich ausschließen.** Wer das Theme entfernt,
+   bekommt `#FF4B4B` zurück, ohne dass es nach einem Fehler aussieht. Der
+   Prüfstein nennt die Farbe deshalb beim Namen.
+
+**Nebenbefund zur Formatierung:** `st.column_config` formatiert seine Zahlen
+selbst — englisch oder nach der Locale des **Browsers**. In einem Werkzeug mit
+genau einer Formatierungsquelle (`modules/formats.py`) ist das eine zweite,
+unkontrollierte. Der Beitragsbalken des Drilldowns ist deshalb aus Text
+gebaut: auf jedem Rechner derselbe, ohne CSS, und auf Proportionalität
+prüfbar.
+
 ### #62 — Ein Vergleichsmaß ist nur so aussagekräftig wie seine Ebene (NEU 18.08.2026) ⭐
 
 Wer zwei Portfolios vergleicht, wählt dabei immer eine **Ebene** — Einzeltitel,
@@ -3833,6 +3880,59 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 (Stufe 3) – Theme fürs ganze Werkzeug, Drilldown, Designsprache
+
+Aus Philips Sichtprüfung: „das Rot leuchtet" an den Auswahl-Chips, und der
+Wunsch nach einem Drilldown auf die gemeinsamen Einzeltitel.
+
+**DAS ROT WAR NIE EINE ENTSCHEIDUNG.** `.streamlit/config.toml` hatte keinen
+`[theme]`-Abschnitt; die App lief seit jeher mit Streamlits Standardakzent
+`#FF4B4B` — auf Chips, Kontrollkästchen, Fokusrahmen, aktiven Segmenten und
+Links, in allen drei Ansichten. Jetzt Fuggerblau `#003460` (hell) und
+Hellblau `#7FABC8` (dunkel), `baseRadius = "small"`, und die Schrift kommt
+über `theme.font` statt über einen CSS-Block mit `!important`. `theme.base`
+bleibt ungesetzt, damit hell und dunkel beide brauchbar bleiben.
+Transferwissen **#63**.
+
+**Neuer Prüfstein `tests/test_theme.py`**, und er prüft nicht den Inhalt der
+Datei, sondern ob **Streamlit sie liest**: `config.get_where_defined` muss auf
+`.streamlit/config.toml` zeigen und nicht auf `<default>`. Ein Inhaltstest
+hätte den Fehler von #23 nicht gefunden — die Datei war richtig, sie wurde
+nur ignoriert.
+
+**DRILLDOWN.** Ein Klick auf einen Balken der Überschneidung öffnet die
+Aufstellung: welche Titel, mit welchem Gewicht in beiden Depots, und der
+gemeinsame Anteil als Balken. Ohne Klick steht die stärkste Überschneidung da
+— es gibt keinen leeren Zustand. Die Zusage: Die Summe der Einzelbeiträge ist
+exakt die Überschneidung der Übersicht, über **855 Paar-Ebenen-Kombinationen**
+gemessen, größte Abweichung **1,1e−16**.
+
+Der Beitragsbalken ist **Text und keine `ProgressColumn`**: Streamlits
+Spaltenformate formatieren ihre Zahlen selbst, englisch oder nach der
+Browser-Locale — das wäre eine zweite Formatierungsquelle neben
+`modules/formats.py`.
+
+**Zwei eingeplante Fallen, beide gemessen:** Das Keep-Alive stürzt am Chart
+mit `on_select` **nicht** ab (vier Läufe samt Ansichtswechsel geprüft),
+`sv_ue_chart` muss also *nicht* in `_KEEPALIVE_SPERRE`. Und die Auswahl wird
+über den **Namen** aufgelöst, nicht über den Index — nach einem Ebenenwechsel
+zeigte derselbe Balkenindex sonst auf eine andere Strategie (#53).
+
+**DESIGNSPRACHE:** drei einzelne Captions zu einem Hinweisblock, kurzer
+Achsentitel, nur der Prozentwert am Balken, Honorar-Hinweis in den `help` des
+Zeitraum-Feldes, das Kontrollkästchen „Tabelle anzeigen" der Überschneidung
+entfällt (der Drilldown ist die Tabelle). Der **Wortlaut der Vorbehalte ist
+unverändert** — er wurde ausdrücklich als verständlich abgenommen.
+
+**Beweise:** 25 von 25 Suiten grün, `pyflakes` über 44 Dateien null,
+`ui_dump` für Performance und Portfolioanalyse mit **genau einer** geänderten
+Zeile — dem entfernten `<style>`-Block. Der Export-Pfad ist unberührt.
+
+**Was hier nicht bewiesen werden kann:** `ui_dump` sieht keine Farben und
+keine Schriften. Ob die Streamlit-Icons den Wechsel auf `theme.font`
+überstehen und ob die Bedienelemente noch bedienbar wirken, kann allein die
+Sichtprüfung sagen — in hell und dunkel.
 
 ### 18.08.2026 (Stufe 2) – Überschneidung und Exposure im Strategievergleich
 

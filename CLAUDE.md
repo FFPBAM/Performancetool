@@ -210,6 +210,24 @@ prüfte statt gegen eine Schwelle (#47).
   Fälligkeit — sie fielen still heraus. Wo ein Teilaggregat neben seiner
   Gesamtgröße steht, gehört die **Differenz benannt** (§10.9, dieselbe Klasse
   wie #46/B6). Prüfstein: `tests/test_portfolioanalyse.py`, Schritt 3.
+- **Ein nicht gelesener Standard sieht aus wie eine Festlegung** (#63,
+  18.08.2026). `.streamlit/config.toml` ist die einzige Datei hier, deren
+  Fehler sich **nicht bemerkbar machen** — wird sie ignoriert, sieht die App
+  aus wie eine App ohne Konfiguration. Zweimal passiert: der fehlende Punkt im
+  Ordnernamen (#23) und ein **komplett fehlendes `[theme]`**, wodurch die App
+  seit Projektbeginn mit Streamlits Akzentfarbe `#FF4B4B` lief. Ein Test auf
+  den DATEIINHALT findet das nicht — geprüft wird die **Wirkung**:
+  `config.get_where_defined("theme.primaryColor")` muss auf die Datei zeigen
+  und nicht auf `<default>` (`tests/test_theme.py`, Schritt 2). Die Farben
+  stehen als `THEME_AKZENT_HELL`/`-DUNKEL` in `shared.py`, damit es keine
+  zwei Fassungen gibt.
+- **Zahlenformate kommen aus `formats.py` — auch in Tabellen** (18.08.2026).
+  `st.column_config` (NumberColumn, ProgressColumn) formatiert selbst,
+  englisch oder nach der Locale des **Browsers**. Das wäre eine zweite,
+  unkontrollierte Quelle. Werte deshalb als fertige Zeichenketten übergeben;
+  wo ein Balken gebraucht wird, ist er aus Text gebaut
+  (`strategievergleich.beitragsbalken`) — auf jedem Rechner derselbe, ohne
+  CSS und auf Proportionalität prüfbar.
 - **Ein Vergleichsmaß ist nur so aussagekräftig wie seine Ebene** (#62,
   18.08.2026). Überschneidung, Ähnlichkeit, Abweichung — jedes solche Maß
   hängt an der gewählten Ebene, und gröbere Kategorien liefern zwangsläufig
@@ -302,6 +320,7 @@ python tests/test_risiko.py                  # Schritte 1-2+4 nur numpy + pandas
 python tests/test_portfolioanalyse.py        # Schritte 1-5 pandas, 6 + streamlit
 python tests/test_strategievergleich.py      # Schritte 1+4 numpy/pandas, 5 + streamlit
 python tests/test_bestandsanalytik.py        # Schritt 1 ohne jedes Paket
+python tests/test_theme.py                   # Schritt 1 ohne jedes Paket
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx

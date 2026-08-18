@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **24 von 24 Suiten grün**, `pyflakes` bei null.
+**Nicht gemergt** · **25 von 25 Suiten grün**, `pyflakes` bei null.
 
 > **Der dritte Tab ist gepusht und damit live** — Stufe 1 und Stufe 2
 > (18.08.2026, zuletzt `e21014a`). Beide Runden wurden vor dem Push an
@@ -349,6 +349,124 @@ trägt eine Unschärfe, die niemand begründen kann (#58).
 
 ---
 
+### Stufe 3: ein Theme fürs Haus und der Drilldown (18.08.2026)
+
+Philip hat beim Ansehen zwei Dinge angemerkt, und die erste ging tiefer, als
+sie klang.
+
+#### Das Rot war nie eine Entscheidung
+
+Gemeint waren die Auswahl-Chips im Strategievergleich. Die Ursache lag aber
+nicht im Tab: **`.streamlit/config.toml` hatte gar keinen `[theme]`-Abschnitt.**
+Die App lief damit seit jeher mit Streamlits Standard-Akzentfarbe
+**`#FF4B4B`** — einem grellen Korallenrot auf Chips, Kontrollkästchen,
+Fokusrahmen, aktiven Segmenten und Links, **in allen drei Ansichten**. In
+einem Werkzeug, dessen Palette Fuggerblau und Fuggergold ist, war das nie
+beabsichtigt. Es ist nur niemandem als *Entscheidung* aufgefallen — **ein
+Standard sieht aus wie eine Festlegung**.
+
+| | vorher | jetzt |
+|---|---|---|
+| Akzent hell | `#FF4B4B` (Streamlit) | **`#003460`** Fuggerblau |
+| Akzent dunkel | `#FF4B4B` | **`#7FABC8`** Hellblau |
+| Ecken | Streamlit-Vorgabe | `baseRadius = "small"` |
+| Schrift | CSS-Block mit `!important`, nur Hauptbereich | `theme.font`, auch Sidebar |
+
+**Hell und Dunkel bleiben beide.** Streamlit 1.61 kennt getrennte
+`[theme.light]`- und `[theme.dark]`-Abschnitte; `base` wird bewusst **nicht**
+gesetzt, sonst wäre eine der beiden Fassungen erzwungen.
+
+**Der CSS-Hack ist weg.** Er schrieb Segoe UI per `!important` auf den
+Hauptbereich — ausdrücklich nur dort, weil ein globaler Font-Override die
+Streamlit-Icons zerstört (#1). `theme.font` ist der dafür vorgesehene Weg,
+kennt das Problem nicht und erreicht auch die Sidebar. **Ob die Icons heil
+bleiben, kann nur die Sichtprüfung sagen** — geht es schief, kommt der Hack
+zurück und nur die Farbe bleibt aus dem Theme.
+
+#### Ein Prüfstein, den es seit #23 hätte geben müssen
+
+Diese Konfiguration ist die einzige Datei des Projekts, deren Fehler sich
+**nicht bemerkbar machen**: Wird sie nicht gelesen, sieht die App aus wie eine
+App ohne Konfiguration — also normal. Genau so war `toolbarMode` monatelang
+wirkungslos, weil der Ordner den Punkt nicht hatte.
+
+`tests/test_theme.py` prüft deshalb nicht den *Inhalt* der Datei, sondern ob
+**Streamlit sie wirklich liest**: `config.get_where_defined("theme.primaryColor")`
+muss auf `.streamlit/config.toml` zeigen und nicht auf `<default>`. Ein Test
+auf den Dateiinhalt hätte den Fehler von 2026 nicht gefunden.
+
+Dazu: die Farben stimmen mit `shared.py` überein (keine handgetippten
+Zwillinge), `theme.base` ist nicht gesetzt, hell und dunkel tragen
+verschiedene Akzente, es gibt keinen Ordner `streamlit` ohne Punkt, und im
+Quelltext steht kein `font-family`-CSS mehr.
+
+#### Der Drilldown: welche Titel sich überschneiden
+
+Ein **Klick auf einen Balken** öffnet die Aufstellung darunter — der Chart ist
+damit selbst die Navigation, ohne ein weiteres Auswahlfeld. Ohne Klick steht
+die stärkste Überschneidung da; einen leeren Zustand gibt es nicht.
+
+**Die Zusage:** Die Summe der Einzelbeiträge ist **exakt** die Überschneidung
+aus der Übersicht. Über **855 Paar-Ebenen-Kombinationen** gemessen, größte
+Abweichung **1,1e−16**.
+
+| Wertpapier | Gattung | cVV ausgewogen | cVV defensiv plus | gemeinsam | |
+|---|---|---:|---:|---:|---|
+| XETRA Gold | Edelmetalle | 7,54 % | 7,64 % | **7,54 %** | ████████████ |
+| Bayer IHS 4,625 % 26.05.33 | Renten | 4,08 % | 4,06 % | 4,06 % | ██████ |
+
+**Kein „Top 5"** — die fünf größten tragen nur 33 % der Überschneidung.
+
+**Der Balken ist Text, keine `ProgressColumn`.** Streamlits Spaltenformate
+formatieren ihre Zahlen selbst, englisch oder nach der Locale des *Browsers* —
+das wäre eine zweite Formatierungsquelle neben `modules/formats.py`, und genau
+eine Quelle ist hier Hausregel. Ein Textbalken ist auf jedem Rechner derselbe,
+braucht kein CSS und lässt sich auf **Proportionalität prüfen**. Bezugsgröße
+ist der größte Beitrag der Tabelle, nicht 1,0 — bei Titelgewichten um vier
+Prozent wären sonst alle Balken gleich unsichtbar.
+
+#### Die Designsprache: weniger Elemente, gleiche Aussage
+
+| Heute | Vorher |
+|---|---|
+| **ein** Hinweisblock unter der Überschneidung | drei einzelne Captions — sie lasen sich wie Kleingedrucktes |
+| Achsentitel „gemeinsames Depotgewicht" | ein ganzer Satz an der Achse |
+| Balken tragen nur den Prozentwert | zusätzlich die Titelzahl, bei 18 Balken unruhig |
+| Honorar-Hinweis im `help` des Zeitraum-Feldes | vierte Caption unter der Punktwolke |
+| Drilldown ersetzt „Tabelle anzeigen" | ein Kontrollkästchen für eine zweite Tabelle |
+
+Der Wortlaut der Vorbehalte ist **unverändert** — Philip hat ihn ausdrücklich
+als verständlich abgenommen; geändert hat sich nur, wie ruhig er dasteht.
+
+#### Zwei Fallen, die eingeplant waren, und wie sie ausgingen
+
+- **Das Keep-Alive** (#19): Ein Chart mit `key=` und `on_select` legt einen
+  Widget-Zustand an, und für Trigger-artige Widgets ist ein Re-Assign
+  verboten. **Gemessen über vier Läufe** samt Ansichtswechsel: **kein
+  Absturz.** `sv_ue_chart` muss also *nicht* in `_KEEPALIVE_SPERRE` — das
+  steht hier, damit es niemand vorsorglich einträgt.
+- **Die Auswahl über den Namen, nicht den Index** (#53): Wechselt die Ebene,
+  zeigt derselbe Balkenindex auf eine andere Strategie. Ein Name, den es nicht
+  mehr gibt, fällt auf die stärkste Überschneidung zurück. Festgenagelt gegen
+  Treffer, Ersatzweg über `customdata`, veralteten Namen und Schrott-Eingaben.
+
+#### Beweise
+
+| Gemessen | Ergebnis |
+|---|---|
+| Testsuiten | **25 von 25 grün**, kein Schritt übersprungen |
+| `pyflakes` über 44 Dateien | **null** |
+| Drilldown-Zusage | 855 Kombinationen, größte Abweichung **1,1e−16** |
+| `ui_dump` Performance / Portfolioanalyse | **genau eine** Zeile: der entfernte `<style>`-Block. Sonst nichts |
+| Export-Pfad | weder `bestandsanalytik` noch `strategievergleich` noch die Theme-Konstanten erreichen ihn |
+
+**Was `ui_dump` hier NICHT beweist:** Es sieht keine Farben und keine
+Schriften. Bei einer Designänderung sagt es nur, dass der Text derselbe blieb
+— das Aussehen kann allein die Sichtprüfung beurteilen, und zwar **in hell und
+dunkel**.
+
+---
+
 ## So starten wir beim nächsten Mal
 
 Diese drei Zeilen im Chat genügen (stehen auch in `Start.txt` zum Kopieren):
@@ -690,6 +808,8 @@ Browser, die Richtigkeit der Quelldaten aus dem Vorsystem.
 | **Tests** | **23 Suiten** unter `tests/` plus das Werkzeug `ui_dump.py` — vorher gab es keine einzige. |
 | **Dritter Tab** | *(18.08.)* **Strategievergleich**: Risiko-Rendite-Punktwolke über alle 19 Strategien, X-Achse umschaltbar zwischen Volatilität und Max Drawdown, Farbe nach Familie. Die eigentliche Arbeit war der **Zeitraum** — ungleiche Historien von 1,7 bis 17,6 Jahren verschieben die Rangfolge um bis zu zehn Plätze. Wer den gewählten Zeitraum nicht abdeckt, wird genannt statt gezeichnet. Details oben. |
 | **Stufe 2 desselben Tabs** | *(18.08.)* **Überschneidung** (Σ min der Gewichte, fünf Ebenen, Fokus auf eine Bezugsstrategie) und **Exposure** (gestapelte 100-%-Balken über Gattung, Region, Währung, Segment-innerhalb-Gattung). Neues streamlit-freies Modul `bestandsanalytik.py`; `calc_liquidity` dorthin umgezogen. Broschüren bewiesen unverändert. |
+| **Ein Theme fürs ganze Werkzeug** | *(18.08.)* Die App lief seit jeher mit Streamlits Standard-Akzent **#FF4B4B**, weil `.streamlit/config.toml` keinen `[theme]`-Abschnitt hatte. Jetzt Fuggerblau (hell) und Hellblau (dunkel), ruhigere Ecken, Schrift über das Theme statt über einen CSS-Hack. Neuer Prüfstein `test_theme.py`. |
+| **Drilldown auf die Einzeltitel** | *(18.08.)* Klick auf einen Balken der Überschneidung öffnet die Aufstellung: welche Titel, mit welchem Gewicht in beiden Depots. Die Beiträge summieren sich exakt zur Übersicht (855 Kombinationen, 1,1e−16). |
 | **Kollegen-Feedback** | *(17.08.)* Einzeltitel ohne Scrollbalken, Fälligkeiten je Anleihe. Dazu zwei Befunde beim Nachmessen: still fehlendes Rentengewicht im Fälligkeits-Chart (bis 46,54 PP) und „Anzahl Titel" bei 38 von 38 Dateien um 1 zu hoch. Der vierte Punkt — deutsche Monatsnamen im Kalender — wurde gebaut und wieder **zurückgebaut**; er ist nicht im Branch. Details oben. |
 | **Legende „Musterdepot"** | *(10.08.)* Der Code schrieb die Vorlagen-Legende auf „Referenzportfolio" um. Zurückgenommen — die Vorlage sagt überall „Musterdepot". Alle 15 Wertentwicklungs-Folien. |
 | **Ein Name fürs Tool** | *(10.08.)* Login, Browser-Tab und Kopfzeile trugen drei verschiedene Namen. Jetzt überall „Performance & Portfolioanalyse \| Fürst Fugger Privatbank" aus `shared.APP_TITLE`. |
@@ -1423,6 +1543,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16. **Neu am 14.08.2026: Schritt 6** prüft die *Voraussetzung* der 365-Konvention an den echten Daten (kalendertäglich, lückenlos, Werktaganteil rund 5/7) — eine Handelstag-Lieferung würde 365 Zeilen zu 1,40 Jahren machen und √365 falsch. **Schritt 7** prüft den Zeitraum-Hinweis der beiden Tabellen gegen beide Aufrufformen, drei leere Eingaben und einen Schaltjahr-Rand |
 | `test_strategievergleich.py` *(neu 18.08.2026)* | Schritte 1+4 numpy/pandas, 2+3 zusätzlich die echten CSVs, 5 **+ streamlit** | Die Risiko-Rendite-Punktwolke des dritten Tabs. Schritt 1 die neue Spalte `rendite` gegen den Anker „eine Reihe ohne Marktbewegung kostet exakt den Satz" (derselbe wie bei B3), dazu die geschlossene Form und vier Grenzfälle; **Schritt 2 die Zusage**, dass die Punktwolke dieselbe Zahl zeigt wie die Kennzahlen-Kachel — 19 Strategien × 3 Kennzahlen, einmal über die ganze Reihe und einmal über das gemeinsame Fenster; **Schritt 3 die Abdeckung** mit namentlicher Festlegung der fünf bekannten Fälle **und der Gegenprobe gegen eine naive Fassung**; Schritt 4 die **Figur** statt der Daten (#54: Achsentypen, Punktzahl, Spuren je Familie, Drawdown als Betrag, **jeder Punkt trägt seinen Namen** — auch bei 27, und nicht abgeschnitten am Rand); Schritt 5 acht Bedienpfade per AppTest |
 | `test_bestandsanalytik.py` *(neu 18.08.2026)* | Schritt 1 nur numpy/pandas, 2+3 lesen die echten CSVs | Die Bestands-Mathematik. Schritt 1 `ueberlappung` gegen von Hand gerechnete Fälle und Grenzfälle (leer, None, ein Titel, doppelter Schlüssel, NaN-Gewicht), **Schritt 2 die Zusage** „Kategoriegewichte + Liquidität == 1" über 19 Strategien × 4 Ebenen **plus die Gegenprobe** gegen eine naive Fassung mit `dropna=False`, Schritt 3 Symmetrie und Selbstüberschneidung über alle 171 Paare, drei namentlich festgelegte Paare und die Ungleichung „die feine Ebene liegt nie über einer gröberen" |
+| `test_theme.py` *(neu 18.08.2026)* | Schritt 1 ohne jedes Paket, 2–4 **+ streamlit** | Die Oberflächen-Konfiguration — die einzige Datei, deren Fehler sich **nicht bemerkbar machen**. **Schritt 2 ist der eigentliche:** `config.get_where_defined` muss auf `.streamlit/config.toml` zeigen und nicht auf `<default>`; ein Test auf den Dateiinhalt hätte den Fehler von #23 nicht gefunden. Dazu: Punkt im Ordnernamen, kein Zwilling ohne Punkt, gültiges TOML, Farben identisch mit `shared.py`, kein Streamlit-Rot mehr, `theme.base` nicht gesetzt (hell und dunkel bleiben beide), kein `font-family`-CSS mehr im Quelltext |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 
@@ -1449,6 +1570,7 @@ python tests/test_risiko.py
 python tests/test_portfolioanalyse.py
 python tests/test_strategievergleich.py
 python tests/test_bestandsanalytik.py
+python tests/test_theme.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
