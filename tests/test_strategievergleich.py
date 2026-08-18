@@ -25,6 +25,18 @@ keine Mathematik, sondern Ehrlichkeit:
   7. Die Figuren von Ueberschneidung und Exposure (#54)
   8. Die Oberflaeche der beiden neuen Abschnitte (AppTest)
   9. Der Drilldown: Auswahl-Aufloesung, Beitragsbalken, deutsche Zahlen
+ 10. Die Auswahlfelder koennen nicht ungueltig werden (Kennungs-Keys)
+
+SCHRITT 10 GIBT ES WEGEN EINES GEMELDETEN FEHLERS: Nach dem Reduzieren der
+Strategieauswahl auf zwei stand im Feld "Bezugsstrategie" weiter eine
+Strategie, die es nicht mehr gab - und der Abschnitt zeigte keine Daten. Der
+Schutz davor raeumte den session_state-Schluessel auf und verliess sich
+darauf, dass er geloescht bleibt. AppTest kann das nicht nachstellen (drei
+Bedienwege probiert), die echte App hat es widerlegt.
+
+Geprueft wird deshalb nicht das Verhalten, sondern die REGEL - und die liegt
+in zwei streamlit-freien Funktionen, seit der Schluessel eine Kennung der
+Optionsmenge traegt.
 
 SCHRITT 6 SIEHT AUS WIE KOSMETIK UND IST KEINE. Der Umschalter war zuerst ein
 `st.radio`; die Heatmap benutzt fuer dieselbe Aufgabe `st.segmented_control`.
@@ -1091,13 +1103,117 @@ def schritt9_drilldown():
     return f
 
 
+def schritt10_auswahlfelder():
+    print("Schritt 10 — die Auswahlfelder koennen nicht ungueltig werden")
+    sym = _symbole("modules.strategievergleich",
+                   ["auswahl_kennung", "auswahl_uebernehmen"],
+                   pakete=())
+    if sym is None:
+        return 0
+    if sym is False:
+        return 1
+    auswahl_kennung = sym["auswahl_kennung"]
+    auswahl_uebernehmen = sym["auswahl_uebernehmen"]
+
+    f = 0
+
+    # (a) DIE KENNUNG haengt an der MENGE, nicht an der Reihenfolge. Die
+    # Reihenfolge folgt der Auswahl des Beraters und kann sich aendern, ohne
+    # dass sich die Menge aendert — dann soll das Feld stehen bleiben.
+    a = ["cVV konservativ", "cVV defensiv", "Pro"]
+    if auswahl_kennung(a) != auswahl_kennung(list(reversed(a))):
+        print("    FEHLER — Umsortieren ergibt eine andere Kennung")
+        f += 1
+    if auswahl_kennung(a) == auswahl_kennung(a[:2]):
+        print("    FEHLER — verschiedene Mengen ergeben dieselbe Kennung")
+        f += 1
+    if auswahl_kennung(a) == auswahl_kennung(a + ["Offensiv"]):
+        print("    FEHLER — eine zusaetzliche Option aendert die Kennung nicht")
+        f += 1
+    if not auswahl_kennung([]):
+        print("    FEHLER — leere Menge ohne Kennung")
+        f += 1
+    if not f:
+        print("    OK — Kennung folgt der Menge, nicht der Reihenfolge")
+
+    # (b) DIE UEBERNAHME: der bisherige Wert bleibt, wenn es ihn noch gibt.
+    faelle = [
+        ("noch dabei",        "cVV defensiv", a,                    "cVV defensiv"),
+        ("weggefallen",       "cVV defensiv", ["Pro", "Pro Div."],  "Pro"),
+        ("kein Vorwert",      None,           a,                    a[0]),
+        ("Vorwert unbekannt", "Gibt es nicht", a,                   a[0]),
+        ("keine Optionen",    "Pro",          [],                   None),
+    ]
+    for bez, vorher, optionen, soll in faelle:
+        ist = auswahl_uebernehmen(vorher, optionen)
+        if ist != soll:
+            print(f"    FEHLER — {bez}: {ist!r} statt {soll!r}")
+            f += 1
+    print("    OK — bisherige Wahl bleibt, sonst rueckt die erste nach")
+
+    # (c) DIE ZUSAGE, und sie ist der eigentliche Punkt: Was auch immer im
+    # Feld stand — der uebernommene Wert liegt IMMER in den Optionen. Genau
+    # das war beim gemeldeten Fehler verletzt.
+    reihen = _echte_reihen()
+    if reihen is None:
+        return f
+    namen = [r[0] for r in reihen]
+    import itertools
+    import random
+    wuerfel = random.Random(20260818)     # fester Keim: reproduzierbar
+    verletzt = 0
+    geprueft = 0
+    # Jede Zweierkombination plus 200 zufaellige Teilmengen — der gemeldete
+    # Fall (19 -> 2) ist darunter, und die zufaelligen decken die Wege ab,
+    # die niemand von Hand durchspielt.
+    mengen = [list(paar) for paar in itertools.combinations(namen, 2)]
+    for _ in range(200):
+        k = wuerfel.randint(1, len(namen))
+        mengen.append(wuerfel.sample(namen, k))
+    for optionen in mengen:
+        for vorher in (None, namen[0], namen[-1], "Gibt es nicht mehr"):
+            wert = auswahl_uebernehmen(vorher, optionen)
+            geprueft += 1
+            if wert not in optionen:
+                verletzt += 1
+                if verletzt == 1:
+                    print(f"    FEHLER — {vorher!r} bei {len(optionen)} "
+                          f"Optionen ergibt {wert!r}, das nicht dabei ist")
+    if verletzt:
+        print(f"    FEHLER — {verletzt} von {geprueft} Faellen liefern einen "
+              "ungueltigen Wert")
+        f += 1
+    else:
+        print(f"    OK — {geprueft} Faelle ueber {len(mengen)} Teilmengen: "
+              "der Wert liegt immer in den Optionen")
+
+    # (d) UND DIE UEBERNAHME GREIFT AUCH WIRKLICH: Bei einer Verkleinerung,
+    # die den bisherigen Wert enthaelt, darf er NICHT wechseln. Ohne diese
+    # Pruefung waere (c) auch mit "nimm immer den ersten" erfuellt.
+    behalten = 0
+    for optionen in mengen:
+        if len(optionen) < 2:
+            continue
+        vorher = optionen[-1]
+        if auswahl_uebernehmen(vorher, optionen) != vorher:
+            print(f"    FEHLER — {vorher!r} ist dabei, wird aber nicht behalten")
+            f += 1
+            break
+        behalten += 1
+    else:
+        print(f"    OK — in {behalten} Faellen bleibt ein noch gueltiger Wert "
+              "stehen (kein blindes Zuruecksetzen)")
+    return f
+
+
 def main():
     print("Pruefstein: Strategievergleich\n")
     fehler = 0
     for schritt in (schritt1_rendite, schritt2_zusage_kachel,
                     schritt3_abdeckung, schritt4_figur, schritt5_apptest,
                     schritt6_umschalter, schritt7_figuren,
-                    schritt8_apptest_bestand, schritt9_drilldown):
+                    schritt8_apptest_bestand, schritt9_drilldown,
+                    schritt10_auswahlfelder):
         fehler += schritt()
         print()
     if fehler:
