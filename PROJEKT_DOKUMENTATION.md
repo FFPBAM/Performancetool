@@ -2634,6 +2634,50 @@ Typen.
 
 ---
 
+### #64 — Wer ein Risiko prüft und nichts findet, hat zwei mögliche Ergebnisse (NEU 18.08.2026, aus einem Ausfall) ⭐
+
+Am 18.08.2026 hat der Überschneidungs-Chart des Strategievergleichs die
+laufende Cloud-App angehalten: `StreamlitValueAssignmentNotAllowedError`. Er
+lief mit `on_select="rerun"` und war damit ein Widget, ohne in
+`_KEEPALIVE_SPERRE` zu stehen (#19).
+
+**Das Bemerkenswerte ist nicht der Fehler, sondern dass er benannt war.** Die
+Falle stand als Risiko im Plan („falls es wirft, gehört der Key hierher"),
+wurde mit einem AppTest über vier Läufe samt Ansichtswechsel geprüft, meldete
+**„kein Absturz"** — und dieses Ergebnis wurde als *Beleg* in Commit-Nachricht
+und Dokumentation geschrieben: der Key müsse nicht gesperrt werden.
+
+**Nachgestellt: AppTest reproduziert diese Klasse nicht.** Vier Varianten,
+keine löst den Fehler aus, der in der Cloud sofort kommt.
+
+Damit gab es die ganze Zeit zwei mögliche Erklärungen für das grüne Ergebnis:
+
+| | Erklärung | Konsequenz |
+|---|---|---|
+| A | Das Risiko besteht nicht | Key nicht sperren, weitermachen |
+| B | **Der Test erreicht das Risiko nicht** | anderes Prüfmittel suchen |
+
+Gewählt wurde A, ohne B auszuschließen. Genau das ist der Fehler — und er ist
+verführerisch, weil ein grüner Lauf sich wie eine Antwort anfühlt.
+
+**Woran man B erkennt, bevor es weh tut:** Ein Test, der ein Risiko
+ausschließen soll, braucht eine **Gegenprobe** — man baut den Fehler
+absichtlich ein und verlangt, dass der Test anschlägt. Genau das ist in
+diesem Projekt seit dem 14.08.2026 Standard (`_ist_voller_monat` gegen die
+naive Fassung, die naive Fassung in `test_bestandsanalytik`), und genau das
+wurde hier vergessen. Eine Gegenprobe hätte sofort gezeigt, dass der AppTest
+den Fehler auch dann nicht meldet, wenn er da ist.
+
+**Die zweite Lehre: Wo ein Verhaltenstest nicht hinkommt, prüft man die REGEL
+statt das Verhalten.** Die Sperrliste ist eine Behauptung über den Quelltext
+und lässt sich am Syntaxbaum halten — `tests/test_keepalive.py` sammelt jedes
+Widget mit `key=`, dessen Zustand nicht geschrieben werden darf, und prüft es
+gegen die Liste. Das ist unabhängig von der Testumgebung, läuft ohne jedes
+Paket und ist gegen den Ausfall-Stand rot.
+
+Dieselbe Familie wie #54 (*ein Test auf das Diagramm-Objekt ist kein Test auf
+das Diagramm*): Beide Male prüfte etwas Grünes die falsche Ebene.
+
 ### #63 — Ein nicht gelesener Standard sieht aus wie eine Festlegung (NEU 18.08.2026) ⭐
 
 `.streamlit/config.toml` ist die einzige Datei dieses Projekts, deren Fehler
@@ -3913,11 +3957,13 @@ Spaltenformate formatieren ihre Zahlen selbst, englisch oder nach der
 Browser-Locale — das wäre eine zweite Formatierungsquelle neben
 `modules/formats.py`.
 
-**Zwei eingeplante Fallen, beide gemessen:** Das Keep-Alive stürzt am Chart
-mit `on_select` **nicht** ab (vier Läufe samt Ansichtswechsel geprüft),
-`sv_ue_chart` muss also *nicht* in `_KEEPALIVE_SPERRE`. Und die Auswahl wird
-über den **Namen** aufgelöst, nicht über den Index — nach einem Ebenenwechsel
-zeigte derselbe Balkenindex sonst auf eine andere Strategie (#53).
+**Zwei eingeplante Fallen — bei einer ging die Prüfung schief.** Der
+AppTest meldete, das Keep-Alive stürze am Chart mit `on_select` nicht ab;
+kurz nach dem Push stand die App. Korrektur und Aufarbeitung stehen im
+nächsten Changelog-Eintrag und als Transferwissen **#64**. Die zweite Falle
+hielt: Die Auswahl wird über den **Namen** aufgelöst, nicht über den Index —
+nach einem Ebenenwechsel zeigte derselbe Balkenindex sonst auf eine andere
+Strategie (#53).
 
 **DESIGNSPRACHE:** drei einzelne Captions zu einem Hinweisblock, kurzer
 Achsentitel, nur der Prozentwert am Balken, Honorar-Hinweis in den `help` des

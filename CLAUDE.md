@@ -49,12 +49,24 @@ prüfte statt gegen eine Schwelle (#47).
   erlaubt. Prüfstein: `tests/test_keine_piktogramme.py`.
 - **`chart.replace_data()` ist verseucht** (#12, vier Bugs). Immer
   `replace_chart_data_safe()`, Ringe über `replace_chart_data`.
-- **Neuer `st.button(key=…)` → Key in `_KEEPALIVE_SPERRE`** (oben in
+- **Jedes Trigger-Widget mit `key=` → Key in `_KEEPALIVE_SPERRE`** (oben in
   `streamlit_app.py`). Sonst stürzt die Seite ab: Das Keep-Alive schreibt
-  alle session_state-Keys zurück, und für Button-Keys ist das verboten. Die
-  Zuweisung selbst wirft nichts — erst das spätere `st.button()`, weshalb der
-  Traceback auf den Button zeigt statt auf die Ursache und das `try/except`
-  im Keep-Alive **nicht** hilft (#19, korrigiert 11.08.2026).
+  alle session_state-Keys zurück, und für diese Widgets ist das verboten. Die
+  Zuweisung selbst wirft nichts — erst das spätere Anlegen des Widgets,
+  weshalb der Traceback dorthin zeigt statt auf die Ursache und das
+  `try/except` im Keep-Alive **nicht** hilft (#19, korrigiert 11.08.2026).
+  **Nicht nur Buttons** (18.08.2026, nach einem Ausfall): Auch ein
+  `st.plotly_chart(key=…, on_select="rerun")` ist ein Widget — genau das hat
+  die laufende App angehalten. Prüfstein `tests/test_keepalive.py` hält die
+  Regel am Syntaxbaum; er läuft ohne jedes Paket.
+- **Wer ein Risiko prüft und nichts findet, hat zwei mögliche Ergebnisse**
+  (#64, 18.08.2026): Das Risiko besteht nicht — oder **der Test erreicht es
+  nicht**. Beim Chart oben wurde A gewählt, ohne B auszuschließen, und das
+  grüne AppTest-Ergebnis wanderte als Beleg in die Doku. Ein Test, der ein
+  Risiko ausschließen soll, braucht deshalb eine **Gegenprobe**: den Fehler
+  absichtlich einbauen und verlangen, dass es anschlägt. Und wo ein
+  Verhaltenstest nicht hinkommt, prüft man die **Regel** statt das Verhalten
+  (Syntaxbaum statt AppTest).
 - **Datumsfelder zurücksetzen nur über Counter-Keys** (#4, Lösung A):
   `st.session_state["p_sd"] = …` wirft bei aktivem Widget. Ein neuer Key
   (`p_sd_0` → `p_sd_1`) erzeugt ein frisches Widget mit seinem Default.
@@ -321,6 +333,7 @@ python tests/test_portfolioanalyse.py        # Schritte 1-5 pandas, 6 + streamli
 python tests/test_strategievergleich.py      # Schritte 1+4 numpy/pandas, 5 + streamlit
 python tests/test_bestandsanalytik.py        # Schritt 1 ohne jedes Paket
 python tests/test_theme.py                   # Schritt 1 ohne jedes Paket
+python tests/test_keepalive.py               # ohne jedes Paket
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx

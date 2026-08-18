@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **25 von 25 Suiten grün**, `pyflakes` bei null.
+**Nicht gemergt** · **26 von 26 Suiten grün**, `pyflakes` bei null.
 
 > **Der dritte Tab ist gepusht und damit live** — Stufe 1 bis 3
 > (18.08.2026, zuletzt `6e548f0`). Jede Runde wurde vor dem Push gesichtet,
@@ -451,9 +451,10 @@ als verständlich abgenommen; geändert hat sich nur, wie ruhig er dasteht.
 
 - **Das Keep-Alive** (#19): Ein Chart mit `key=` und `on_select` legt einen
   Widget-Zustand an, und für Trigger-artige Widgets ist ein Re-Assign
-  verboten. **Gemessen über vier Läufe** samt Ansichtswechsel: **kein
-  Absturz.** `sv_ue_chart` muss also *nicht* in `_KEEPALIVE_SPERRE` — das
-  steht hier, damit es niemand vorsorglich einträgt.
+  verboten. **Hier stand, ein AppTest über vier Läufe habe „kein Absturz"
+  ergeben, `sv_ue_chart` müsse also nicht in `_KEEPALIVE_SPERRE`.**
+  ~~Das war falsch~~ — und der Satz hat die laufende App angehalten. Siehe
+  „Der Ausfall vom 18.08.2026" weiter unten.
 - **Die Auswahl über den Namen, nicht den Index** (#53): Wechselt die Ebene,
   zeigt derselbe Balkenindex auf eine andere Strategie. Ein Name, den es nicht
   mehr gibt, fällt auf die stärkste Überschneidung zurück. Festgenagelt gegen
@@ -473,6 +474,66 @@ als verständlich abgenommen; geändert hat sich nur, wie ruhig er dasteht.
 Schriften. Bei einer Designänderung sagt es nur, dass der Text derselbe blieb
 — das Aussehen kann allein die Sichtprüfung beurteilen, und zwar **in hell und
 dunkel**.
+
+---
+
+### Der Ausfall vom 18.08.2026 — und warum ein grüner Test ihn deckte
+
+Kurz nach dem Push von Stufe 3 stand der Tab Strategievergleich in der Cloud:
+
+```
+StreamlitValueAssignmentNotAllowedError
+  streamlit_app.py:1129  -> zeige_strategievergleich(...)
+  strategievergleich.py  -> st.plotly_chart(key="sv_ue_chart",
+                                            on_select="rerun")
+```
+
+**Die Ursache war bekannt, benannt und geprüft.** Der Überschneidungs-Chart
+wurde durch `on_select="rerun"` vom Bild zum **Widget**; das Keep-Alive
+re-assigniert am Skriptanfang alle `session_state`-Keys, und für
+Trigger-artige Widgets ist genau das verboten (#19). Der Key gehörte in
+`_KEEPALIVE_SPERRE`. Er stand nicht drin.
+
+**Warum nicht:** Die Falle war im Plan als Risiko notiert. Zur Prüfung lief
+ein AppTest über vier Läufe samt Ansichtswechsel — er meldete **„kein
+Absturz"**, und dieses Ergebnis wurde als Beleg in Commit-Nachricht, STATUS
+und Projektdokumentation geschrieben, mitsamt dem Satz, der Key müsse *nicht*
+gesperrt werden.
+
+**Nachgestellt: AppTest reproduziert diese Klasse nicht.** Vier Varianten
+probiert — Ansicht über `session_state` gesetzt, Navigation bedient, Ansicht
+gewechselt und zurück, Bedienelement im Tab angefasst. **Keine** löst den
+Fehler aus, der in der Cloud sofort kommt. Der Zustand, den das Keep-Alive
+dafür braucht, entsteht in der Testumgebung nicht auf demselben Weg.
+
+**Die Lehre ist nicht „mehr testen", sondern die richtige Art zu testen.**
+Ein Verhaltenstest kann diese Regel nicht absichern. Die Regel selbst
+dagegen ist statisch prüfbar, und genau das tut jetzt
+`tests/test_keepalive.py`: Er liest den **Syntaxbaum** von `streamlit_app.py`
+und aller Module, sammelt jedes Widget, dessen Zustand nicht geschrieben
+werden darf — Buttons, Download-Buttons, Charts mit `on_select` —, und hält
+deren Keys gegen die Sperrliste.
+
+Gegen den Stand, der die App angehalten hat, ist er **rot** und nennt Datei,
+Zeile, Widget und Grund:
+
+```
+FEHLER — 'sv_ue_chart' fehlt in _KEEPALIVE_SPERRE
+         (plotly_chart, modules\strategievergleich.py:843).
+         Die App stuerzt beim zweiten Rendern dieses Widgets ab (#19).
+```
+
+Er prüft außerdem, dass kein Eintrag der Liste **verwaist** ist (am
+11.08.2026 standen dort zwei Keys längst ersetzter Schaltflächen) und dass
+kein Trigger-Widget einen **berechneten** Key trägt — ein `key=f"knopf_{x}"`
+ließe sich gegen keine Liste halten und wäre dieselbe Falle noch einmal.
+
+**Der eigentliche Fehler war nicht der fehlende Listeneintrag, sondern der
+Schluss daraus.** Ein grüner Testlauf belegt, was der Test prüft — nicht,
+dass die Falle nicht existiert. Wer ein *Risiko* prüft und nichts findet, hat
+zwei mögliche Ergebnisse: Das Risiko besteht nicht, oder der Test erreicht es
+nicht. Diese beiden auseinanderzuhalten ist Arbeit, und sie wurde hier nicht
+gemacht. Steht als Transferwissen **#64**.
 
 ---
 
@@ -1552,6 +1613,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16. **Neu am 14.08.2026: Schritt 6** prüft die *Voraussetzung* der 365-Konvention an den echten Daten (kalendertäglich, lückenlos, Werktaganteil rund 5/7) — eine Handelstag-Lieferung würde 365 Zeilen zu 1,40 Jahren machen und √365 falsch. **Schritt 7** prüft den Zeitraum-Hinweis der beiden Tabellen gegen beide Aufrufformen, drei leere Eingaben und einen Schaltjahr-Rand |
 | `test_strategievergleich.py` *(neu 18.08.2026)* | Schritte 1+4 numpy/pandas, 2+3 zusätzlich die echten CSVs, 5 **+ streamlit** | Die Risiko-Rendite-Punktwolke des dritten Tabs. Schritt 1 die neue Spalte `rendite` gegen den Anker „eine Reihe ohne Marktbewegung kostet exakt den Satz" (derselbe wie bei B3), dazu die geschlossene Form und vier Grenzfälle; **Schritt 2 die Zusage**, dass die Punktwolke dieselbe Zahl zeigt wie die Kennzahlen-Kachel — 19 Strategien × 3 Kennzahlen, einmal über die ganze Reihe und einmal über das gemeinsame Fenster; **Schritt 3 die Abdeckung** mit namentlicher Festlegung der fünf bekannten Fälle **und der Gegenprobe gegen eine naive Fassung**; Schritt 4 die **Figur** statt der Daten (#54: Achsentypen, Punktzahl, Spuren je Familie, Drawdown als Betrag, **jeder Punkt trägt seinen Namen** — auch bei 27, und nicht abgeschnitten am Rand); Schritt 5 acht Bedienpfade per AppTest |
 | `test_bestandsanalytik.py` *(neu 18.08.2026)* | Schritt 1 nur numpy/pandas, 2+3 lesen die echten CSVs | Die Bestands-Mathematik. Schritt 1 `ueberlappung` gegen von Hand gerechnete Fälle und Grenzfälle (leer, None, ein Titel, doppelter Schlüssel, NaN-Gewicht), **Schritt 2 die Zusage** „Kategoriegewichte + Liquidität == 1" über 19 Strategien × 4 Ebenen **plus die Gegenprobe** gegen eine naive Fassung mit `dropna=False`, Schritt 3 Symmetrie und Selbstüberschneidung über alle 171 Paare, drei namentlich festgelegte Paare und die Ungleichung „die feine Ebene liegt nie über einer gröberen" |
+| `test_keepalive.py` *(neu 18.08.2026, nach dem Ausfall)* | **nichts** | Jedes Widget mit `key=`, dessen Zustand nicht geschrieben werden darf (Buttons, Download-Buttons, Charts mit `on_select`), muss in `_KEEPALIVE_SPERRE` stehen — geprüft am **Syntaxbaum**, weil AppTest diese Klasse nachweislich nicht reproduziert. Dazu: kein verwaister Eintrag in der Liste, kein berechneter Key an einem Trigger-Widget. Gegen den Stand, der am 18.08.2026 die App anhielt, ist er rot |
 | `test_theme.py` *(neu 18.08.2026)* | Schritt 1 ohne jedes Paket, 2–4 **+ streamlit** | Die Oberflächen-Konfiguration — die einzige Datei, deren Fehler sich **nicht bemerkbar machen**. **Schritt 2 ist der eigentliche:** `config.get_where_defined` muss auf `.streamlit/config.toml` zeigen und nicht auf `<default>`; ein Test auf den Dateiinhalt hätte den Fehler von #23 nicht gefunden. Dazu: Punkt im Ordnernamen, kein Zwilling ohne Punkt, gültiges TOML, Farben identisch mit `shared.py`, kein Streamlit-Rot mehr, `theme.base` nicht gesetzt (hell und dunkel bleiben beide), kein `font-family`-CSS mehr im Quelltext |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
@@ -1580,6 +1642,7 @@ python tests/test_portfolioanalyse.py
 python tests/test_strategievergleich.py
 python tests/test_bestandsanalytik.py
 python tests/test_theme.py
+python tests/test_keepalive.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```
