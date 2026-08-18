@@ -693,6 +693,16 @@ def _familie_fuer_strategie(name_mapping, display_name):
         return ""
 
 
+# Öffentlicher Name für modulfremde Aufrufer (18.08.2026): das Modul
+# "strategievergleich" färbt die Punktwolke nach Familie. Der Unterstrich-Name
+# BLEIBT — drei Prüfsteine und die Doku in "vorlagen_config.py" sprechen ihn
+# bereits so an, eine Umbenennung wären acht Änderungen ohne Gewinn.
+# Weitergereicht wird per ZUWEISUNG, dasselbe Muster wie "shared.fmt_date_de":
+# So sieht man das Durchreichen, und pyflakes hält den Namen für benutzt
+# (es kennt kein noqa).
+familie_fuer_strategie = _familie_fuer_strategie
+
+
 def _vorlage_fuer_familie(familie):
     """Familie → (template_path|None, template_config|None).
 

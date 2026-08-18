@@ -54,11 +54,15 @@ from modules.analytics import (
     has_benchmark,
     historie_beschneiden,
 )
-from modules.portfolioanalyse import render_portfolioanalyse
+from modules.portfolioanalyse import (
+    familie_fuer_strategie, render_portfolioanalyse,
+)
 from modules.risiko_ansicht import (
     zeige_drawdown_tabelle, zeige_monatsheatmap, zeige_risiko_ueberblick,
     zeitraum_fuer_heatmap,
 )
+from modules.strategievergleich import zeige_strategievergleich
+from modules.vorlagen_config import VORLAGEN_FAMILIEN
 
 
 # ==========================================================================
@@ -470,6 +474,10 @@ if perf_daten_fehler is None:
 # es gibt also nie den Zustand "keine Ansicht gewählt".
 _VIEW_PERF = "Performance"
 _VIEW_PF = "Portfolioanalyse"
+# Dritte Ansicht (18.08.2026). Sie wird ANGEHAENGT und nicht dazwischen
+# geschoben: Die Reihenfolge der ersten beiden Segmente sitzt bei den
+# Kollegen in der Hand, und ein Umsortieren waere eine Aenderung ohne Gewinn.
+_VIEW_VGL = "Strategievergleich"
 if "nav_view" not in st.session_state:
     st.session_state["nav_view"] = _VIEW_PERF
 # Datenstand neben die Ansichtsumschaltung (11.08.2026): Er stand bisher nur
@@ -477,7 +485,8 @@ if "nav_view" not in st.session_state:
 # der Stichtag eine der ersten Fragen — er gehört nach oben.
 _nav_l, _nav_r = st.columns([3, 2])
 with _nav_l:
-    ansicht = st.segmented_control("Ansicht", [_VIEW_PERF, _VIEW_PF],
+    ansicht = st.segmented_control("Ansicht",
+                                   [_VIEW_PERF, _VIEW_PF, _VIEW_VGL],
                                    key="nav_view", required=True,
                                    label_visibility="collapsed")
 with _nav_r:
@@ -1057,6 +1066,47 @@ if ansicht == _VIEW_PERF:
     )
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {fmt_date_de(maxd)}")
     st.markdown("**Ansprechpartner:** PBAM")
+
+
+# ===========================================================================
+# ANSICHT 3: STRATEGIEVERGLEICH  (NEU 18.08.2026)
+# ===========================================================================
+# Bewusst VOR der Portfolioanalyse im Quelltext, damit deren `else` der
+# Auffangzweig bleibt: Ein unbekannter Wert in `nav_view` landet dann wie
+# bisher auf der Portfolioanalyse und nicht auf einer leeren Seite.
+#
+# Die Ansicht braucht KEINE eigene Datenbereitstellung — die Zeitreihen aller
+# Strategien liegen seit dem Navigations-Umbau zentral bereit (siehe oben).
+elif ansicht == _VIEW_VGL:
+    if perf_daten_fehler:
+        st.error(perf_daten_fehler)
+    else:
+        _reihen_vgl = []
+        for _name in dn_ordered:
+            _df = data.get(d2c.get(_name))
+            if _df is None or len(_df) < 2:
+                continue
+            _reihen_vgl.append((_name, _df,
+                                float(_df["fee_default"].iloc[0]),
+                                familie_fuer_strategie(name_mapping, _name)))
+
+        # DERSELBE SCHUTZ WIE IN DER PERFORMANCE-ANSICHT (Audit-Befund B6).
+        # Fehlt einer Strategie der Honorarsatz, faellt der Loader still auf
+        # 0,0 zurueck — ihr Punkt laege dann zu HOCH, und zwar unter einer
+        # Achse, die "nach Kosten" sagt. Hier waere das sogar heimtueckischer
+        # als drueben: In der Punktwolke steht kein Eingabefeld daneben, in
+        # dem man die 0,00 % sehen koennte.
+        _ohne_satz = strategien_ohne_honorarsatz(
+            [(_name, _df) for _name, _df, _, _ in _reihen_vgl])
+        if _ohne_satz:
+            st.error(
+                "**Kein Honorarsatz hinterlegt für " + ", ".join(_ohne_satz)
+                + ".** Im Honorarsatz-Mapping fehlt eine Zeile zu dieser "
+                "Strategie. Ihr Punkt wird deshalb **brutto** gerechnet und "
+                "liegt zu hoch, obwohl die Achse „nach Kosten“ sagt. Bitte "
+                "das Mapping ergänzen.")
+
+        zeige_strategievergleich(_reihen_vgl, tuple(VORLAGEN_FAMILIEN))
 
 
 # ===========================================================================

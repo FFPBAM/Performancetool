@@ -1137,8 +1137,9 @@ def risiko_perioden(timeseries_df: pd.DataFrame, fee_dec: float = 0.0) -> pd.Dat
     Rechnung darf nicht zweimal existieren.
 
     Returns:
-        DataFrame, index=RISIKO_PERIODEN, Spalten "vola", "max_dd",
-        "sharpe", "te" (Tracking Error) und "ir" (Information Ratio).
+        DataFrame, index=RISIKO_PERIODEN, Spalten "rendite" (CAGR nach
+        Kosten), "vola", "max_dd", "sharpe", "te" (Tracking Error) und
+        "ir" (Information Ratio).
         Die letzten beiden bleiben leer, wenn keine echte Benchmark
         vorliegt — `has_benchmark` entscheidet, nicht `notna` (#41).
         Fehlwert ist durchgehend `np.nan`, nie 0.0 und nie None — die
@@ -1153,7 +1154,7 @@ def risiko_perioden(timeseries_df: pd.DataFrame, fee_dec: float = 0.0) -> pd.Dat
     `build_rolling_table`: Der Startzeitpunkt muss vom synthetischen
     Indexbeginn (erster Tag minus einen Tag) gedeckt sein.
     """
-    spalten = ["vola", "max_dd", "sharpe", "te", "ir"]
+    spalten = ["rendite", "vola", "max_dd", "sharpe", "te", "ir"]
     ergebnis = pd.DataFrame(np.nan, index=list(RISIKO_PERIODEN),
                             columns=spalten, dtype=float)
     if timeseries_df is None or len(timeseries_df) == 0:
@@ -1183,9 +1184,22 @@ def risiko_perioden(timeseries_df: pd.DataFrame, fee_dec: float = 0.0) -> pd.Dat
         netto = calc_daily_returns_after_fee(rp, fee_dec)
         rbm = (sub["ret_bm"].fillna(0.0).to_numpy(dtype=float)
                if hat_bm else None)
+        # EINE Indexreihe fuer Rendite UND Drawdown. Zwei getrennte Aufrufe
+        # waeren formelgleich - und genau das ist die Gefahr (Backlog B):
+        # Wer spaeter den einen anfasst, vergisst den anderen, und die
+        # Punktwolke zeigte Rendite und Risiko aus zwei verschiedenen Reihen.
+        idx_nach = make_index_after_fee(rp, fee_dec, 100.0)
         werte = {
+            # n_days = len(rp), also die ZEILENZAHL - dieselbe Konvention wie
+            # in `compute_performance_data`. Sie traegt, weil die Reihen
+            # kalendertaeglich und lueckenlos sind; test_risiko Schritt 6
+            # misst genau diese Voraussetzung. Eine eigene Konvention hier
+            # haette bedeutet, dass die Punktwolke eine andere Rendite zeigt
+            # als die Kennzahlen-Kachel derselben Strategie - schlimmer als
+            # jede Lehrbuch-Ungenauigkeit (#52).
+            "rendite": calc_cagr(idx_nach, len(rp)),
             "vola":   calc_vola(netto),
-            "max_dd": calc_max_drawdown(make_index_after_fee(rp, fee_dec, 100.0)),
+            "max_dd": calc_max_drawdown(idx_nach),
             "sharpe": (calc_sharpe_excess(netto, sub["rf"])
                        if "rf" in sub.columns and sub["rf"].notna().any() else None),
             "te":     tracking_error(netto, rbm) if hat_bm else None,
