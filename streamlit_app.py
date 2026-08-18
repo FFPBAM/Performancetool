@@ -389,7 +389,19 @@ if not check_login(): st.stop()
 # 11.08.2026: "reset_sd"/"reset_ed" entfallen — die beiden alten
 # Zurücksetzen-Schaltflächen sind durch die Zeitraum-Schnellwahl ersetzt.
 # Neu: "p_zeit_reset" (Zurücksetzen im eigenen Zeitraum).
-_KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl", "p_zeit_reset"}
+# 18.08.2026: "sv_ue_chart" dazu — der Ueberschneidungs-Chart im
+# Strategievergleich laeuft mit `on_select="rerun"` und ist damit ein WIDGET,
+# nicht nur eine Zeichnung. Sein Zustand darf nicht re-assigniert werden.
+#
+# DIESE ZEILE FEHLTE UND HAT DIE LAUFENDE APP ANGEHALTEN. Sie war eingeplant
+# ("falls es wirft, gehoert der Key hierher"), und ein AppTest ueber vier
+# Laeufe meldete "kein Absturz" — in der Cloud kam
+# StreamlitValueAssignmentNotAllowedError. Warum der AppTest es nicht sah,
+# steht in tests/test_bedienung.py bei Schritt 1c; die Kurzfassung: Er hat
+# die Ansicht ueber session_state gesetzt statt sie zu bedienen, und der
+# Chart wurde deshalb nie zweimal MIT vorhandenem Zustand gerendert.
+_KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl", "p_zeit_reset",
+                     "sv_ue_chart"}
 for _k in list(st.session_state.keys()):
     if _k in _KEEPALIVE_SPERRE:
         continue
