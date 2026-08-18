@@ -2634,6 +2634,67 @@ Typen.
 
 ---
 
+### #68 — Ein Werkzeug, das die Quelle nicht lesen kann, darf ihr Ergebnis nicht behaupten (NEU 18.08.2026) ⭐
+
+Am 18.08.2026 kam der Verdacht, die Rentenfarbe sei auf der Webseite der Bank
+**dunkler** als im Werkzeug, mit einer klaren Bitte: über die Seite
+verifizieren. **Das ging nicht** — zwei Versuche, beide ergebnislos. Der Grund
+ist technisch und wird sich wiederholen:
+
+- Das Abrufwerkzeug wandelt eine Seite in **Text** um. CSS, SVG und Skripte
+  fallen dabei weg — und genau dort steht eine Farbe.
+- Die Ringe der Seite entstehen erst **im Browser** aus Daten. Ein gezielter
+  zweiter Versuch nach Diagrammdateien fand nur Fotos und das Logo.
+
+**Die Versuchung war, die Broschürenfarbe als „gegen die Webseite geprüft" zu
+melden.** Sie war ja richtig — das Ergebnis hätte gestimmt. Trotzdem wäre es
+falsch gewesen, und der Schaden entsteht nicht heute: In der Doku stünde dann
+„gegen die Webseite verifiziert", obwohl niemand hineingesehen hat. Beim
+nächsten Mal, wenn die Seite tatsächlich abweicht, glaubt man dieser Zeile.
+
+Das ist dieselbe Familie wie **#63** (ein nicht gelesener Standard sieht aus
+wie eine Festlegung) und **#64** (wer ein Risiko prüft und nichts findet, hat
+zwei mögliche Ergebnisse): **Die Aussage über die Prüfung wird stärker als die
+Prüfung selbst.** Ein bestätigtes Ergebnis aus einer ungelesenen Quelle ist
+geraten, auch wenn es stimmt.
+
+**„Weiß ich nicht" ist aber ebenfalls keine brauchbare Antwort.** Wer nicht
+messen kann, legt das Messbare daneben und macht die Frage dadurch
+entscheidbar. Hier: alle Farben der sechs Vorlagen ausgezählt, mit Helligkeit.
+
+| Farbe | Vorkommen | Helligkeit | wofür |
+|---|---:|---:|---|
+| `#14355C` | 21x | 49 | Aktien |
+| **`#66A4CE`** | **20x** | **154** | **Renten** |
+| `#BB9256` | 19x | 150 | Edelmetalle |
+| `#9FD0EF` | 15x | 200 | Liquidität |
+| `#386FA7` | 2x | 103 | Corporates, USD |
+| `#5F8CA1` | 2x | 132 | Prod. Gewerbe und Industrie |
+
+Damit war der einzige ernsthafte Kandidat für „dunkler" benannt: `#386FA7` —
+deutlich dunkler, aber in keiner Vorlage je für Renten benutzt. Dazu eine
+Vergleichsseite mit vier Ringen, gleiche Anteile, Aktien, Edelmetalle und
+Liquidität überall gleich, **nur die Renten wechselten**. Philip hat daraufhin
+in der Broschüre nachgesehen und `#66A4CE` bestätigt; **am Code wurde nichts
+geändert.**
+
+**Die Regel, kurz:**
+
+1. **Sagen, dass die Quelle nicht lesbar war — und technisch genau warum.**
+   Ohne das „warum" versucht es beim nächsten Mal jemand wieder und verliert
+   dieselbe halbe Stunde.
+2. **Die vorhandene Evidenz vollständig zeigen, einschließlich dessen, was
+   gegen die eigene Position spricht.** `#386FA7` gehörte genannt, gerade
+   weil er die Vermutung gestützt hätte.
+3. **Nichts auf Verdacht ändern.** Eine Farbänderung hätte hier den Prüfstein
+   rot gemacht und Broschüre und Werkzeug auseinandergezogen — für eine
+   Vermutung, die sich als falsch erwies.
+
+Der Umkehrschluss trägt genauso: Wäre der Verdacht **richtig** gewesen, hätte
+dieselbe Gegenüberstellung ihn in einem Schritt bewiesen. Sie kostet wenige
+Minuten und beantwortet beide Ausgänge — deshalb lohnt sie sich, bevor man
+weiß, welcher davon eintritt.
+
 ### #67 — Eine Festlegung, die an zwei Stellen gilt, braucht einen Ort, den beide erreichen (NEU 18.08.2026) ⭐
 
 Die Farben der Assetklassen sind im Corporate Design fest vergeben und hängen
@@ -4051,6 +4112,33 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 (Nachtrag 4) – Rentenfarbe: nicht verifizierbar, und das war die Antwort
+
+Nachfrage aus der Sichtprüfung: Die Renten wirkten auf der Webseite der Bank
+DUNKLER als im Werkzeug, Bitte um Verifikation über die Seite.
+
+VERIFIKATION NICHT MÖGLICH, und genau das wurde gemeldet. Das Abrufwerkzeug
+wandelt eine Seite in Text um und wirft CSS, SVG und Skripte weg; die Ringe
+entstehen erst im Browser; ein zweiter, gezielter Versuch nach Diagrammdateien
+fand nur Fotos und das Logo. Transferwissen **#68**.
+
+STATT ZU RATEN wurden alle Farben der sechs Vorlagen ausgezählt — `#66A4CE`
+20x, einziger ernsthafter Kandidat für „dunkler" wäre `#386FA7` (2x, nur
+Corporates und USD) — und als Vergleichsseite mit vier Ringen nebeneinander
+gelegt, bei der nur die Rentenfarbe wechselte.
+
+ERGEBNIS: Philip hat in der Broschüre nachgesehen und `#66A4CE` bestätigt.
+**Keine Codeänderung.** `ASSET_FARBEN` bleibt, wie es aus den Vorlagen
+abgelesen ist.
+
+AUSSERDEM an dem Tag: DRACOON (`H:`) nachgezogen, Sprung über 10 Commits,
+vorher auf Vorlauf geprüft (reiner Fast-Forward). Die dokumentierten
+Geisterdateien noch einmal beobachtet — dieselbe Datei war innerhalb einer
+Minute da, weg und wieder da. Der Hinweiskasten zur parallelen Arbeit in
+`STATUS.md` nennt keinen Commit-Hash mehr, sondern
+`git log HEAD..origin/verbesserungen`: Ein Hash ist nach jedem Push einen
+Stand alt.
 
 ### 18.08.2026 (Nachtrag 3) – Die Gattungsfarben liegen fest, jetzt auch im Tool
 

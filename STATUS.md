@@ -907,6 +907,10 @@ Der Grundsatz stand vorher schon im Modul und im Prüfstein — die Palette
 zu ändern hätte den Prüfstein rot gemacht und Broschüre und Werkzeug
 auseinandergezogen, für eine Vermutung, die sich als falsch erwies.
 
+Als Transferwissen **#68** festgehalten, zusammen mit dem Umkehrschluss:
+Wäre der Verdacht richtig gewesen, hätte dieselbe Gegenüberstellung ihn in
+einem Schritt bewiesen.
+
 ---
 
 ## So starten wir beim nächsten Mal
