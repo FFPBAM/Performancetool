@@ -408,8 +408,15 @@ bevor man sie löscht (#47).
 ## Git
 
 - **Gearbeitet wird in `C:\Entwicklung\Performancetool`** (seit 10.08.2026).
-  DRACOON (`H:\…`) ist nur Ablage und wird am Sessionende nachgezogen —
-  Ablauf in `STATUS.md`. Wahrheit ist GitHub, Branch `verbesserungen`.
+  DRACOON ist nur Ablage und wird am Sessionende nachgezogen — Ablauf in
+  `STATUS.md`. Wahrheit ist GitHub, Branch `verbesserungen`.
+  **Der DRACOON-Pfad ist rechnerabhängig und NICHT überall `H:`** (18.08.2026):
+  Bei Philip ist es das Netzlaufwerk `H:\Entwicklung\Forschung_Claude\…`, auf
+  anderen Rechnern hängt der Client dieselbe Ablage ins Benutzerprofil
+  (`%USERPROFILE%\DRACOON\<Mandanten-ID>\Entwicklung\Forschung_Claude\…`).
+  Aus `Test-Path H:\` → `False` folgt deshalb **nicht**, dass die Ablage fehlt
+  — genau dieser Schluss wurde einmal gezogen. Den Pfad **suchen statt
+  annehmen**: `Get-ChildItem "$env:USERPROFILE\DRACOON" -Directory`.
 - Auf einem Branch arbeiten, `main` nie direkt anfassen.
 - Ein Commit je Thema, **deutsche** Nachricht mit Begründung und Messwerten.
 - Vor dem Push: alle Tests grün.

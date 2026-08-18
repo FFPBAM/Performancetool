@@ -18,11 +18,19 @@
 >
 > 1. **Nicht gepusht.** Der Branch ist die laufende App — der Push geht sofort
 >    an die Kollegen. Er wartet bewusst auf ein Ja.
-> 2. **DRACOON (`H:`) ist nicht nachgezogen.** Das Laufwerk war in dieser
->    Sitzung **gar nicht eingebunden** (`Test-Path H:\` → False, keine
->    Netzverbindungen). Der Abgleich nach `H:\Entwicklung\Forschung_Claude\`
->    `Performancetool` steht deshalb noch aus; er setzt ohnehin den Push
->    voraus (Reihenfolge unter „Sessionende — H: nachziehen").
+> 2. **DRACOON ist nicht nachgezogen.** Der Abgleich steht noch aus; er setzt
+>    ohnehin den Push voraus (Reihenfolge unter „Sessionende — DRACOON
+>    nachziehen"). Geprüft ist die Ablage: Sie liegt auf `verbesserungen` bei
+>    `09a6d1b`, **ohne Vorlauf und ohne Rückstand** — der Reset wird ein
+>    reiner Fast-Forward.
+>
+>    **Achtung, der Pfad ist rechnerabhängig.** Bei Philip ist DRACOON das
+>    Netzlaufwerk `H:`; auf diesem Rechner hängt der Client die Ablage ins
+>    Benutzerprofil (`%USERPROFILE%\DRACOON\<ID>\Entwicklung\`
+>    `Forschung_Claude\Performancetool`). In dieser Sitzung wurde daraus erst
+>    fälschlich „DRACOON ist nicht erreichbar" geschlossen, weil `H:` hier
+>    nicht existiert. **Gemessen war das richtig, geschlossen war es falsch** —
+>    dieselbe Klasse wie #64.
 >
 > **Die Arbeitskopie auf `C:` war zu Sitzungsbeginn kein Git-Checkout** —
 > `.git`, `.gitignore`, `.streamlit/` und `.venv` fehlten. Inhaltlich war sie
@@ -1020,13 +1028,30 @@ später waren sie weg. Genau davor warnt `CLAUDE.md` („DRACOON legt
 kurzlebige Dateien an") — deshalb beim Commit **Dateien explizit nennen**,
 nie `git add -A`.
 
-**Sessionende — H: nachziehen** (Reihenfolge wichtig, erst pushen):
+**Sessionende — DRACOON nachziehen** (Reihenfolge wichtig, erst pushen):
 
 ```
 cd C:\Entwicklung\Performancetool
 git push origin verbesserungen
-cd H:\Entwicklung\Forschung_Claude\Performancetool
+cd <DRACOON-Ablage>
+git log --oneline origin/verbesserungen..HEAD    # muss LEER sein
 git fetch origin && git reset --hard origin/verbesserungen
+```
+
+**`<DRACOON-Ablage>` ist rechnerabhängig — der Buchstabe `H:` gilt nicht
+überall.** Der DRACOON-Client bindet dieselbe Ablage unterschiedlich ein:
+
+| Rechner | Pfad |
+|---|---|
+| Philip | `H:\Entwicklung\Forschung_Claude\Performancetool` |
+| Michael (18.08.2026) | `%USERPROFILE%\DRACOON\<Mandanten-ID>\Entwicklung\Forschung_Claude\Performancetool` |
+
+Wer das nicht weiß, misst `Test-Path H:\` → `False` und schließt daraus, die
+Ablage sei nicht erreichbar. Genau das ist am 18.08.2026 passiert. Der Pfad
+gehört deshalb **gesucht statt angenommen**:
+
+```
+Get-ChildItem "$env:USERPROFILE\DRACOON" -Directory
 ```
 
 `git reset --hard` auf H: ist unkritisch, **solange dort nicht gearbeitet
