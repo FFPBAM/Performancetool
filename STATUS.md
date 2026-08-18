@@ -1,7 +1,7 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **26 von 26 Suiten grün**, `pyflakes` bei null.
+**Nicht gemergt** · **27 von 27 Suiten grün**, `pyflakes` bei null.
 
 > **Der dritte Tab ist live und abgenommen** — Stufe 1 bis 3 plus die
 > Nachbesserungen aus dem Gegentest (18.08.2026). Philip an der laufenden
@@ -751,6 +751,118 @@ Funktionen fehlen dort, und `_symbole` meldet sie namentlich (#65).
 | `pyflakes` über 44 Dateien | **null** |
 | `ui_dump` **alle drei** Ansichten | **zeichengleich** |
 | Zusage über 371 Teilmengen | 1484 Fälle, **keine Verletzung** |
+
+---
+
+### Die Gattungsfarben liegen fest — jetzt auch im Tool (18.08.2026)
+
+Gemeldet: In der Allokation nach Gattung bekam die **größte** Gattung immer
+Fuggerblau. Tatsächlich sind die Farben der Assetklassen im Corporate Design
+fest vergeben — so auf der Webseite der Bank und so in der Broschüre.
+
+**Der Fehler war schon einmal da, an anderer Stelle.** Der Kommentar in
+`chart_dynamik.py` beschreibt ihn seit dem 10.07.2026 wörtlich:
+
+> *Die `<c:dPt>`-Farben der Vorlage hängen am INDEX, nicht am Namen. […] nach
+> dem Befüllen steht AKTIEN auf idx 0 und erbt Gold.*
+
+Dort wurde er mit `ring_segmentfarben` und der Tabelle `ASSET_FARBEN` gelöst.
+**Die Streamlit-Seite konnte sie nicht erreichen** — sie lag in einem Modul
+des Export-Pfads.
+
+#### Was gemessen wurde, bevor etwas geändert wurde
+
+| Gemessen | Ergebnis |
+|---|---|
+| Ring-Segmente in **gebauten** Broschüren | **54 von 54 richtig** — die Broschüre war nie betroffen |
+| Ring-Charts in den Vorlagen | **22**, Zuordnung positionsunabhängig belegt |
+| Gegenprobe am alten Tool-Stand | *cVV defensiv*: **Aktien trug Gold** `#C3A069`, Renten Fuggerblau |
+
+Die kanonische Tabelle, aus den Vorlagen abgelesen und nicht erfunden:
+
+| Kategorie | Farbe | |
+|---|---|---|
+| AKTIEN | `#14355C` | dunkelblau |
+| RENTEN | `#66A4CE` | hellblau |
+| EDELMETALLE | `#BB9256` | gold |
+| LIQUIDITÄT | `#9FD0EF` | helleres blau |
+| SONSTIGE | `#808080` | grau |
+
+*(FFPB und Thema führen für LIQUIDITÄT `#D1E9F8`. `ASSET_FARBEN` normalisiert
+seit 10.07.2026 auf `#9FD0EF`; die Abweichung steht im Prüfstein namentlich
+als anerkannte Ausnahme.)*
+
+#### Warum die Regel an der DIMENSION hängt und nicht an der Kategorie
+
+Die Klassifizierung arbeitet mit Teilzeichenketten und trifft deshalb auch
+Werte, die gar keine Gattungen sind. An den echten Daten gemessen:
+
+| Wert | Dimension | klassifiziert als |
+|---|---|---|
+| `Rentenfonds` | **Segment** | RENTEN |
+| `Immobilien-Aktien/Fonds` | **Segment** | AKTIEN |
+
+Eine Regel „färbe jede Kategorie, die wie eine Assetklasse aussieht" würde
+Assetklassen-Farben in die Segment-Ringe bluten lassen. Im Export löst das
+`_ist_assetklassen_ring` (alle Kategorien müssen Assetklassen sein), im Tool
+der bekannte Spaltenname. **Beide Prüfsteine halten diese Begründung fest** —
+fällt die Klassifizierung eines Tages anders aus, ist der Grund für die
+Dimensionsregel weg und gehört neu geprüft.
+
+#### Umfang: nur die Gattung (Philip)
+
+Region, Segment und Währung behalten die Palette — wie in der Broschüre. Die
+Vorlagen führen dort zwar ebenfalls eindeutige Farben (**26 Kategorien, keine
+mit zwei Farben**), decken aber nur einen Teil der echten Daten ab:
+
+| Dimension | in den Vorlagen | in den Daten |
+|---|---:|---:|
+| Gattung | 5 | 4 — vollständig |
+| Region | 7 | 10 |
+| Währung | 4 | 6 |
+| Segment | 11 | 18 |
+
+Dazu eine Kollision: `#D1E4C6` trägt *Emerging Markets* (FFPB) und *Asien*
+(Thema) — beide kommen in den Daten vor. Für eine Ausweitung müssten zwölf
+Farben erfunden werden, und der Kommentar zur Palette sagt ausdrücklich
+*„stammt aus den Vorlagen selbst (nicht erfunden)"*.
+
+#### Neues Modul `modules/farben.py` — streamlit-frei
+
+Die Zuordnung wird von **beiden** Seiten gebraucht. Sie liegt jetzt an einem
+Ort, den Export und Oberfläche erreichen, ohne dass der Export Streamlit
+hereinzieht: `ASSET_FARBEN`, die Gruppen und `klassifiziere_gattung` sind
+dorthin umgezogen, `chart_dynamik` und `pptx_slides` reichen die alten Namen
+per Zuweisung weiter.
+
+**Zwei Schreibweisen, und das ist kein Versehen:** OOXML will
+`srgbClr val="14355C"` **ohne** Doppelkreuz, Plotly `#14355C` **mit**. Ein
+`#` im XML fällt nicht auf — die Datei bleibt gültig, PowerPoint zeigt
+irgendetwas. Der Prüfstein hält deshalb fest, dass in `ASSET_FARBEN` keine
+Raute steht.
+
+#### Der Prüfstein hängt die Konstante ans Artefakt
+
+`tests/test_farben.py` öffnet **alle sechs Vorlagen**, liest die tatsächlichen
+`<c:dPt>`-Farben und hält sie gegen die Tabelle: **62 Segmente, alle stimmen.**
+Ein Test, der nur die Konstante gegen sich selbst prüft, würde jede
+Verschiebung mitmachen.
+
+**Gegenprobe:** Gegen den gemeldeten Stand ist Schritt 3 rot und nennt den
+Fehler wörtlich — *„cVV defensiv: Aktien hat #C3A069, erwartet #14355C"*.
+
+#### Beweise
+
+| Gemessen | Ergebnis |
+|---|---|
+| Testsuiten | **27 von 27 grün**, kein Schritt übersprungen |
+| `pyflakes` über 45 Dateien | **null** |
+| **Broschüren vorher/nachher** | **2056 ZIP-Einträge, 0 Abweichungen** |
+| `ui_dump` alle drei Ansichten | **zeichengleich** |
+| `ASSET_FARBEN` gegen die Vorlagen | 62 Segmente, alle stimmen |
+
+Der Broschüren-Vergleich war Pflicht: `ASSET_FARBEN` und `classify_gattung`
+liegen **im Export-Pfad**.
 
 ---
 
@@ -1830,6 +1942,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_risiko.py` | **nichts** (Schritte 1–2+4); Schritt 3 nutzt zusätzlich die echten CSVs, Schritt 5 **+ streamlit** | Schritt 1 ist der Konsistenz-Beweis: letzter Punkt der rollierenden Vola == `calc_vola` derselben 365 Tage. Schritt 3 prüft, dass nicht abgedeckte Perioden **leer** bleiben statt gekürzt zu rechnen, Schritt 4 Tracking Error und Information Ratio — inklusive des 1e-12-Guards (#47): identische Reihen ergeben TE 0 und IR „–", nicht 1e16. **Neu am 14.08.2026: Schritt 6** prüft die *Voraussetzung* der 365-Konvention an den echten Daten (kalendertäglich, lückenlos, Werktaganteil rund 5/7) — eine Handelstag-Lieferung würde 365 Zeilen zu 1,40 Jahren machen und √365 falsch. **Schritt 7** prüft den Zeitraum-Hinweis der beiden Tabellen gegen beide Aufrufformen, drei leere Eingaben und einen Schaltjahr-Rand |
 | `test_strategievergleich.py` *(neu 18.08.2026)* | Schritte 1+4 numpy/pandas, 2+3 zusätzlich die echten CSVs, 5 **+ streamlit** | Die Risiko-Rendite-Punktwolke des dritten Tabs. Schritt 1 die neue Spalte `rendite` gegen den Anker „eine Reihe ohne Marktbewegung kostet exakt den Satz" (derselbe wie bei B3), dazu die geschlossene Form und vier Grenzfälle; **Schritt 2 die Zusage**, dass die Punktwolke dieselbe Zahl zeigt wie die Kennzahlen-Kachel — 19 Strategien × 3 Kennzahlen, einmal über die ganze Reihe und einmal über das gemeinsame Fenster; **Schritt 3 die Abdeckung** mit namentlicher Festlegung der fünf bekannten Fälle **und der Gegenprobe gegen eine naive Fassung**; Schritt 4 die **Figur** statt der Daten (#54: Achsentypen, Punktzahl, Spuren je Familie, Drawdown als Betrag, **jeder Punkt trägt seinen Namen** — auch bei 27, und nicht abgeschnitten am Rand); Schritt 5 acht Bedienpfade per AppTest |
 | `test_bestandsanalytik.py` *(neu 18.08.2026)* | Schritt 1 nur numpy/pandas, 2+3 lesen die echten CSVs | Die Bestands-Mathematik. Schritt 1 `ueberlappung` gegen von Hand gerechnete Fälle und Grenzfälle (leer, None, ein Titel, doppelter Schlüssel, NaN-Gewicht), **Schritt 2 die Zusage** „Kategoriegewichte + Liquidität == 1" über 19 Strategien × 4 Ebenen **plus die Gegenprobe** gegen eine naive Fassung mit `dropna=False`, Schritt 3 Symmetrie und Selbstüberschneidung über alle 171 Paare, drei namentlich festgelegte Paare und die Ungleichung „die feine Ebene liegt nie über einer gröberen" |
+| `test_farben.py` *(neu 18.08.2026)* | Schritt 1 **+ lxml**, Schritt 2 **nichts**, 3+4 die echten Bestände | Die festen Assetklassen-Farben. **Schritt 1 hängt die Konstante ans Artefakt:** alle sechs Vorlagen öffnen, die `dPt`-Farben auslesen und gegen `ASSET_FARBEN` halten (62 Segmente); die bekannte Liquiditäts-Abweichung steht namentlich als Ausnahme. Schritt 2 hält fest, dass `Rentenfonds` als RENTEN und `Immobilien-Aktien/Fonds` als AKTIEN klassifizieren — die **Begründung** für die Dimensionsregel. **Schritt 3 die Zusage:** dieselbe Gattung, dieselbe Farbe, über 19 Strategien und bei umgedrehter Reihenfolge. Schritt 4: Region, Segment und Währung bleiben bei der Palette |
 | `test_keepalive.py` *(neu 18.08.2026, nach dem Ausfall)* | **nichts** | Jedes Widget mit `key=`, dessen Zustand nicht geschrieben werden darf (Buttons, Download-Buttons, Charts mit `on_select`), muss in `_KEEPALIVE_SPERRE` stehen — geprüft am **Syntaxbaum**, weil AppTest diese Klasse nachweislich nicht reproduziert. Dazu: kein verwaister Eintrag in der Liste, kein berechneter Key an einem Trigger-Widget. Gegen den Stand, der am 18.08.2026 die App anhielt, ist er rot |
 | `test_theme.py` *(neu 18.08.2026)* | Schritt 1 ohne jedes Paket, 2–4 **+ streamlit** | Die Oberflächen-Konfiguration — die einzige Datei, deren Fehler sich **nicht bemerkbar machen**. **Schritt 2 ist der eigentliche:** `config.get_where_defined` muss auf `.streamlit/config.toml` zeigen und nicht auf `<default>`; ein Test auf den Dateiinhalt hätte den Fehler von #23 nicht gefunden. Dazu: Punkt im Ordnernamen, kein Zwilling ohne Punkt, gültiges TOML, Farben identisch mit `shared.py`, kein Streamlit-Rot mehr, `theme.base` nicht gesetzt (hell und dunkel bleiben beide), kein `font-family`-CSS mehr im Quelltext |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
@@ -1860,6 +1973,7 @@ python tests/test_strategievergleich.py
 python tests/test_bestandsanalytik.py
 python tests/test_theme.py
 python tests/test_keepalive.py
+python tests/test_farben.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
 ```

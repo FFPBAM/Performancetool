@@ -59,6 +59,15 @@ prüfte statt gegen eine Schwelle (#47).
   `st.plotly_chart(key=…, on_select="rerun")` ist ein Widget — genau das hat
   die laufende App angehalten. Prüfstein `tests/test_keepalive.py` hält die
   Regel am Syntaxbaum; er läuft ohne jedes Paket.
+- **Die Farben der Assetklassen hängen an der KATEGORIE, nicht an der
+  Größe** (#67, 18.08.2026). Aktien dunkelblau, Renten hellblau, Edelmetalle
+  gold — festgelegt im Corporate Design, abgelesen aus den Vorlagen, nicht
+  erfunden. Die eine Quelle ist `modules/farben.py`; Broschüre und Tool
+  greifen darauf zu. **Die Regel gilt nur auf der DIMENSION Gattung**: Die
+  Klassifizierung arbeitet mit Teilzeichenketten und liest `Rentenfonds` (ein
+  *Segment*) als RENTEN, `Immobilien-Aktien/Fonds` als AKTIEN — eine
+  kategoriebasierte Regel färbte damit Segment-Ringe mit. Und: **OOXML will
+  die Farbe ohne `#`, Plotly mit** — ein `#` im XML fällt nicht auf.
 - **Ein Auswahlfeld, dessen Optionen von einer anderen Auswahl abhängen,
   bekommt einen Schlüssel mit Kennung der Optionsmenge** (#66, 18.08.2026).
   Sonst zeigt es einen Wert, den es nicht mehr gibt. Den Wert nachträglich
@@ -308,6 +317,7 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht** |
 | `modules/formats.py` | **alle** Zahlen-, Prozent- und Datumsformate + Fehlwert `–`; streamlit-frei, gilt für Tool *und* Broschüre |
 | `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
+| `modules/farben.py` | die **festen Assetklassen-Farben** und ihre Klassifizierung — **streamlit- und lxml-frei**, weil Broschüre *und* Oberfläche sie brauchen |
 | `modules/risiko_ansicht.py` | Heatmap und Risiko-Block **innerhalb** der Performance-Ansicht |
 | `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander — Punktwolke, Überschneidung, Exposure |
 | `modules/bestandsanalytik.py` | Mathematik auf dem **Bestand** (Gewicht je Kategorie, Überschneidung, Liquidität) — **streamlit-frei**, Gegenstück zu `analytics.py` |
@@ -352,6 +362,7 @@ python tests/test_strategievergleich.py      # Schritte 1+4 numpy/pandas, 5 + st
 python tests/test_bestandsanalytik.py        # Schritt 1 ohne jedes Paket
 python tests/test_theme.py                   # Schritt 1 ohne jedes Paket
 python tests/test_keepalive.py               # ohne jedes Paket
+python tests/test_farben.py                  # Schritt 2 ohne jedes Paket
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx

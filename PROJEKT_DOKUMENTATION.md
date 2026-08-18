@@ -2634,6 +2634,50 @@ Typen.
 
 ---
 
+### #67 — Eine Festlegung, die an zwei Stellen gilt, braucht einen Ort, den beide erreichen (NEU 18.08.2026) ⭐
+
+Die Farben der Assetklassen sind im Corporate Design fest vergeben und hängen
+an der **Kategorie**, nicht an ihrer Größe. Am 10.07.2026 wurde genau das für
+die Broschüre gelöst: Die `<c:dPt>`-Farben einer PowerPoint-Vorlage hängen am
+INDEX, nach dem Befüllen stand AKTIEN auf Position 0 und erbte Gold. Die
+Lösung heißt `ring_segmentfarben` und die Tabelle `ASSET_FARBEN`.
+
+**Am 18.08.2026 trat derselbe Fehler im Tool auf** — die größte Gattung bekam
+immer Fuggerblau, bei einer defensiven Strategie trug *Aktien* dadurch Gold.
+Nicht, weil jemand die Lehre vergessen hätte, sondern weil die Lösung **in
+einem Modul des Export-Pfads lag** und die Oberfläche sie nicht erreichte.
+
+**Der Fehler ist also nicht die falsche Farbe, sondern der Ort der Wahrheit.**
+Wer eine Festlegung an einer Stelle pflegt, während eine zweite Stelle
+dieselbe Frage beantworten muss, bekommt zwei Antworten — irgendwann. Das ist
+dieselbe Familie wie Backlog B/E/F (dieselbe Formel an zwei Orten), nur eine
+Ebene abstrakter: Hier war die Formel gar nicht dupliziert, sie war schlicht
+**unerreichbar**.
+
+Behoben mit `modules/farben.py`, das weder Streamlit noch lxml hereinzieht und
+damit von beiden Seiten erreichbar ist.
+
+**Zwei Dinge, die man dabei richtig machen muss:**
+
+1. **Die Regel gehört an die DIMENSION, nicht an die Kategorie.** Die
+   Klassifizierung arbeitet mit Teilzeichenketten und trifft auch Werte, die
+   gar keine Gattungen sind: `Rentenfonds` (ein *Segment*) wird als RENTEN
+   gelesen, `Immobilien-Aktien/Fonds` als AKTIEN. Eine Regel „färbe alles, was
+   wie eine Assetklasse aussieht" färbt Segment-Ringe in Assetklassen-Farben.
+   Beide Prüfsteine halten diese Klassifizierung **ausdrücklich** fest — sie
+   ist die Begründung für die Dimensionsregel, nicht bloß eine Eigenschaft.
+
+2. **Dieselbe Farbe braucht je Ziel eine andere Schreibweise.** OOXML will
+   `val="14355C"` ohne Doppelkreuz, Plotly `#14355C` mit. Ein `#` im XML
+   fällt nicht auf: Die Datei bleibt gültig und PowerPoint zeigt irgendetwas.
+   Die Tabelle führt deshalb die rohe Form, und eine Funktion liefert die
+   Anzeigeform — nicht umgekehrt.
+
+**Und die Prüfung hängt die Konstante ans ARTEFAKT.** `tests/test_farben.py`
+öffnet die sechs Vorlagen, liest die tatsächlichen Farben und hält sie
+dagegen (62 Segmente). Ein Test, der die Konstante nur gegen sich selbst
+prüft, macht jede Verschiebung mit — er beweist Konsistenz, nicht Richtigkeit.
+
 ### #66 — Ein Widget, das seinen Wert nicht verlieren darf, bekommt einen Schlüssel, der ihn nicht behalten kann (NEU 18.08.2026) ⭐
 
 Ein Auswahlfeld, dessen **Optionen von einer anderen Auswahl abhängen**, kann
@@ -4007,6 +4051,48 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 (Nachtrag 3) – Die Gattungsfarben liegen fest, jetzt auch im Tool
+
+Gemeldet aus dem Gegentest: In der Allokation nach Gattung bekam die GRÖSSTE
+Gattung immer Fuggerblau. Die Farben der Assetklassen sind im Corporate
+Design aber fest vergeben.
+
+DERSELBE FEHLER WAR AM 10.07.2026 SCHON EINMAL DA, in der Broschüre, und dort
+gelöst (`ring_segmentfarben`, `ASSET_FARBEN`). Die Streamlit-Seite konnte die
+Lösung nur nicht erreichen — sie lag in einem Modul des Export-Pfads.
+Transferwissen **#67**.
+
+VOR DER ÄNDERUNG GEMESSEN: In den gebauten Broschüren 54 von 54 Ring-Segmenten
+richtig gefärbt (die Broschüre war nie betroffen). In den Vorlagen 22
+Ring-Charts mit positionsunabhängiger Zuordnung. Am alten Tool-Stand:
+*cVV defensiv* zeigte Aktien in Gold `#C3A069`.
+
+NEUES MODUL `modules/farben.py`, streamlit-frei: `ASSET_FARBEN`, die Gruppen
+und `klassifiziere_gattung` sind dorthin umgezogen; `chart_dynamik` und
+`pptx_slides` reichen die alten Namen per Zuweisung weiter. Zwei
+Schreibweisen bleiben getrennt — OOXML ohne, Plotly mit Doppelkreuz.
+
+DIE REGEL HÄNGT AN DER DIMENSION, nicht an der Kategorie: `Rentenfonds` (ein
+Segment) klassifiziert als RENTEN, `Immobilien-Aktien/Fonds` als AKTIEN. Eine
+kategoriebasierte Regel würde Segment-Ringe mitfärben. Umfang deshalb nur die
+Gattung (Entscheidung Philip); Region, Segment und Währung behalten die
+Palette wie in der Broschüre — für eine Ausweitung müssten zwölf Farben
+erfunden werden, und `#D1E4C6` trägt in zwei Vorlagen verschiedene Regionen.
+
+Die Liquidität bekommt auf der Gattungs-Achse ihre kanonische Farbe statt des
+gedämpften Grau: Dort IST sie eine Assetklasse. Auf den anderen Achsen bleibt
+sie grau.
+
+PRÜFSTEIN `tests/test_farben.py` hängt die Konstante ans Artefakt — alle sechs
+Vorlagen öffnen, die `dPt`-Farben auslesen, gegen `ASSET_FARBEN` halten (62
+Segmente). Gegen den gemeldeten Stand ist er rot: *„cVV defensiv: Aktien hat
+#C3A069, erwartet #14355C"*.
+
+BEWEISE: 27 von 27 Suiten grün, `pyflakes` über 45 Dateien null, Broschüren
+vorher/nachher **2056 ZIP-Einträge, 0 Abweichungen** (Pflicht, weil die
+umgezogenen Namen im Export-Pfad liegen), `ui_dump` für alle drei Ansichten
+zeichengleich.
 
 ### 18.08.2026 (Nachtrag 2) – Die Bezugsstrategie blieb stehen
 
