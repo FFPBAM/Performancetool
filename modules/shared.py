@@ -42,6 +42,21 @@ FFPB_BLUE2    = "#4A7FAA"   # Mittelblau (vorher #2C5F8A)
 FFPB_SAND     = "#D4BD8A"   # Sand (neu)
 FFPB_LIGHT    = "#7FABC8"   # Hellblau (vorher #A8CBE8)
 
+# ── Theme der Oberfläche (NEU 18.08.2026) ───────────────────────────────────
+# Diese drei Werte stehen HIER und nicht nur in `.streamlit/config.toml`,
+# damit ein Prüfstein die Konfiguration gegen sie halten kann. Die Datei war
+# schon einmal monatelang wirkungslos (Ordner ohne Punkt, #23) — und eine
+# nicht gelesene Konfiguration sieht genauso aus wie eine Vorgabe.
+#
+# Bis zum 18.08.2026 gab es gar kein Theme: Die App lief mit Streamlits
+# Standard-Akzent #FF4B4B, einem grellen Korallenrot, das Auswahl-Chips,
+# Kontrollkästchen, Fokusrahmen und aktive Segmente einfärbte. In einem
+# Werkzeug mit Fuggerblau und Fuggergold war das nie beabsichtigt — es ist
+# nur niemandem als ENTSCHEIDUNG aufgefallen.
+THEME_AKZENT_HELL   = FFPB_DARK    # Fuggerblau
+THEME_AKZENT_DUNKEL = FFPB_LIGHT   # Hellblau — dunkles Blau verschwände dort
+THEME_SCHRIFT = "Segoe UI, Tahoma, Geneva, Verdana, sans-serif"
+
 # Erweiterte Corporate-Palette (für PDF-Linien-Charts, Reihenfolge wie Portfolioanalyse RING_COLORS)
 FFPB_PALETTE = [
     "#003460", "#C3A069", "#4A7FAA", "#D4BD8A", "#7FABC8",

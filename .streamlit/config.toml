@@ -6,7 +6,57 @@
 # dann nicht. Genau das war von Anfang an der Fall (repariert 07.08.2026);
 # der Punkt geht beim Anlegen ueber die GitHub-Weboberflaeche leicht
 # verloren, siehe Transferwissen #23.
+#
+# Seit 18.08.2026 haelt tests/test_theme.py diese Datei fest: Punkt im
+# Ordnernamen, gueltiges TOML, und die Farben stimmen mit modules/shared.py
+# ueberein. Eine nicht gelesene Konfiguration sieht sonst genauso aus wie
+# eine Vorgabe — das ist der Grund, warum es damals monatelang niemandem
+# aufgefallen ist.
 
 [client]
 # Schlanke Toolbar (kein "Deploy"-Button, kein Quellcode-Menue fuer Berater).
 toolbarMode = "minimal"
+
+
+# ---------------------------------------------------------------------------
+# THEME (NEU 18.08.2026)
+# ---------------------------------------------------------------------------
+# Bis hierher gab es KEIN Theme. Die App lief deshalb mit Streamlits
+# Standard-Akzentfarbe #FF4B4B, einem grellen Korallenrot — es faerbte die
+# Auswahl-Chips der Mehrfachfelder, Kontrollkaestchen, Fokusrahmen, das
+# aktive Segment der Umschalter und die Links, und zwar in ALLEN drei
+# Ansichten. In einem Werkzeug, dessen Palette Fuggerblau und Fuggergold ist,
+# war das nie beabsichtigt; es ist nur niemandem als ENTSCHEIDUNG
+# aufgefallen, weil ein Standard wie eine Festlegung aussieht.
+# Gemeldet von Philip am 18.08.2026 an den Auswahl-Chips des
+# Strategievergleichs.
+#
+# DIE FARBEN STEHEN IN modules/shared.py (THEME_AKZENT_HELL/-DUNKEL,
+# THEME_SCHRIFT) und sind hier nur eingetragen. Wer sie aendert, aendert sie
+# DORT — sonst laufen die beiden Fassungen auseinander, und der Pruefstein
+# schlaegt an.
+
+[theme]
+# Fuggerblau. Ruhig, eindeutig als Bedienelement lesbar, die Ankerfarbe des
+# Hauses.
+primaryColor = "#003460"
+
+# Weniger Rundung wirkt ruhiger als Streamlits Vorgabe — edel und schlicht
+# ist der Auftrag, nicht verspielt.
+baseRadius = "small"
+
+# Segoe UI ueber das THEME statt ueber einen CSS-Block. Bis zum 18.08.2026
+# stand dafuer ein <style>-Block mit !important in streamlit_app.py, bewusst
+# nur auf den Hauptbereich beschraenkt: Ein globaler Font-Override zerstoert
+# die Streamlit-Icons (Transferwissen #1). theme.font ist der dafuer
+# vorgesehene Weg und kennt das Problem nicht — deshalb konnte der Hack weg.
+font = "Segoe UI, Tahoma, Geneva, Verdana, sans-serif"
+
+# `base` wird BEWUSST NICHT GESETZT. Es wuerde eine der beiden Fassungen
+# erzwingen; so folgt die App weiter der Einstellung des Nutzers, und Hell
+# wie Dunkel bleiben beide brauchbar.
+
+[theme.dark]
+# Im Dunkelmodus verschwaende das dunkle Fuggerblau im Hintergrund. Hellblau
+# aus derselben Familie traegt dort den Akzent.
+primaryColor = "#7FABC8"

@@ -352,28 +352,18 @@ def display_drawdown_metrics(label, mddv, mddd, mdde, uv, rd, rdate, mddur, dds,
 # ==========================================================================
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-# Schriftart nur im Hauptbereich (Sidebar und System-Icons bleiben unberührt)
-st.markdown("""
-<style>
-    /* Nur der Hauptinhalt – NICHT Sidebar, NICHT Toolbar-Icons */
-    [data-testid="stMainBlockContainer"] h1,
-    [data-testid="stMainBlockContainer"] h2,
-    [data-testid="stMainBlockContainer"] h3,
-    [data-testid="stMainBlockContainer"] h4,
-    [data-testid="stMainBlockContainer"] h5,
-    [data-testid="stMainBlockContainer"] h6,
-    [data-testid="stMainBlockContainer"] p,
-    [data-testid="stMainBlockContainer"] div.stMarkdown,
-    [data-testid="stMainBlockContainer"] .stMetricLabel,
-    [data-testid="stMainBlockContainer"] .stMetricValue,
-    [data-testid="stMainBlockContainer"] .stCaption,
-    [data-testid="stMainBlockContainer"] label,
-    [data-testid="stMainBlockContainer"] input,
-    [data-testid="stMainBlockContainer"] textarea {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+# SCHRIFTART: kommt seit 18.08.2026 aus dem THEME, nicht mehr von hier.
+#
+# An dieser Stelle stand ein <style>-Block, der 'Segoe UI' per !important auf
+# die Elemente des Hauptbereichs schrieb - ausdruecklich NUR dort, weil ein
+# globaler Font-Override die Streamlit-Icons zerstoert (Transferwissen #1).
+# Die Sidebar blieb deshalb bei der Standardschrift.
+#
+# `.streamlit/config.toml` setzt jetzt `theme.font`. Das ist der dafuer
+# vorgesehene Weg, wirkt auf die ganze Anwendung einschliesslich Sidebar und
+# ruehrt die Icons nicht an - der Hack und seine Einschraenkung entfallen
+# beide. Wer ihn zurueckholen will, findet ihn in der Historie dieses
+# Commits.
 
 if not check_login(): st.stop()
 
