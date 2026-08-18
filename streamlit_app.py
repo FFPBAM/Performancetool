@@ -22,7 +22,7 @@ import plotly.graph_objects as go
 from modules.shared import (
     APP_TITLE,
     FFPB_DARK, FFPB_GOLD, FFPB_LIGHT, FFPB_BLUE2, FFPB_SAND, FFPB_PALETTE,
-    DATA_FOLDER, EXCLUDE_SUBSTRINGS,
+    DATA_FOLDER, DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
     load_anlagekriterien, zeige_anlagekriterien,
     check_login, fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping, load_name_mapping,
@@ -55,7 +55,8 @@ from modules.analytics import (
     historie_beschneiden,
 )
 from modules.portfolioanalyse import (
-    familie_fuer_strategie, render_portfolioanalyse,
+    build_pf_data, familie_fuer_strategie, load_pf_csvs,
+    render_portfolioanalyse,
 )
 from modules.risiko_ansicht import (
     zeige_drawdown_tabelle, zeige_monatsheatmap, zeige_risiko_ueberblick,
@@ -1106,7 +1107,38 @@ elif ansicht == _VIEW_VGL:
                 "liegt zu hoch, obwohl die Achse „nach Kosten“ sagt. Bitte "
                 "das Mapping ergänzen.")
 
-        zeige_strategievergleich(_reihen_vgl, tuple(VORLAGEN_FAMILIEN))
+        # BESTANDSDATEN NUR HIER, nicht zentral (18.08.2026): Die beiden
+        # anderen Ansichten brauchen sie nicht, und die Portfolioanalyse holt
+        # sie ohnehin selbst. `build_pf_data` traegt `@st.cache_data`, ein
+        # zweiter Aufruf mit derselben Dateiliste kostet also nichts.
+        #
+        # FAELLT DAS AUS, FAELLT NUR DER UNTERE TEIL DER ANSICHT AUS. Die
+        # Punktwolke haengt an den Zeitreihen und ist davon unberuehrt --
+        # deshalb hier ein weiches `None` statt einer Fehlermeldung, die die
+        # ganze Ansicht abschaltet.
+        _bestaende = None
+        _pf_stichtag = None
+        try:
+            _tag_pf = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
+            _pf_dateien = load_pf_csvs(DATA_FOLDER_PF, _tag_pf)
+            if _pf_dateien:
+                _pf_daten = build_pf_data(_pf_dateien)
+                # Dieselben Anzeigenamen wie oben: Die Spalte "Portfolio Name"
+                # ist in Daten/ und Daten_PF/ identisch, deshalb traegt
+                # dasselbe Mapping beide Seiten.
+                _pf_namen, _pf_d2c, _ = build_name_lookups(
+                    name_mapping, set(_pf_daten.keys()))
+                _bestaende = {n: _pf_daten[_pf_d2c[n]] for n in _pf_namen}
+                for _df_pf in _bestaende.values():
+                    if "Auswertungsdatum" in _df_pf.columns and len(_df_pf):
+                        _pf_stichtag = _df_pf["Auswertungsdatum"].dropna().max()
+                        break
+        except Exception as _ex:
+            st.caption(f"Bestandsdaten nicht lesbar: {type(_ex).__name__}")
+
+        zeige_strategievergleich(_reihen_vgl, tuple(VORLAGEN_FAMILIEN),
+                                 bestaende=_bestaende,
+                                 auswertungsdatum=_pf_stichtag)
 
 
 # ===========================================================================

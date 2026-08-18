@@ -21,6 +21,17 @@ keine Mathematik, sondern Ehrlichkeit:
      UND der Gegenprobe gegen eine naive Fassung
   4. Die FIGUR statt der Daten (#54)
   5. Die Oberflaeche faehrt hoch (AppTest)
+  6. Der X-Achsen-Umschalter ist ein segmented_control (per AST)
+  7. Die Figuren von Ueberschneidung und Exposure (#54)
+  8. Die Oberflaeche der beiden neuen Abschnitte (AppTest)
+
+SCHRITT 6 SIEHT AUS WIE KOSMETIK UND IST KEINE. Der Umschalter war zuerst ein
+`st.radio`; die Heatmap benutzt fuer dieselbe Aufgabe `st.segmented_control`.
+Zwei Bauformen fuer dasselbe sehen ungleichmaessig aus (Philip, 18.08.2026) —
+und `required=True` ist der Grund, warum der Baustein hier ueberhaupt traegt:
+Ohne ihn laesst sich das aktive Segment abwaehlen, und es gaebe den Zustand
+"keine X-Achse gewaehlt". Der Schritt liest deshalb den SYNTAXBAUM und nicht
+den Text, damit ein Kommentar ihn nicht beruhigen kann.
 
 WARUM SCHRITT 1 MIT NULLTAGEN ANFAENGT: Eine Reihe ohne Marktbewegung muss
 EXAKT den Honorarsatz p.a. kosten — und zwar unabhaengig davon, wie lang sie
@@ -504,11 +515,269 @@ def schritt5_apptest():
     return f
 
 
+def schritt6_umschalter():
+    print("Schritt 6 — der X-Achsen-Umschalter ist ein segmented_control")
+    import ast
+    quelle = os.path.join(WURZEL, "modules", "strategievergleich.py")
+    with open(quelle, encoding="utf-8") as fh:
+        baum = ast.parse(fh.read())
+
+    f = 0
+    gefunden = []
+    for knoten in ast.walk(baum):
+        if not isinstance(knoten, ast.Call):
+            continue
+        ziel = getattr(knoten.func, "attr", None)
+        if ziel not in ("radio", "segmented_control"):
+            continue
+        schluessel = None
+        required = False
+        for kw in knoten.keywords:
+            if kw.arg == "key" and isinstance(kw.value, ast.Constant):
+                schluessel = kw.value.value
+            if kw.arg == "required" and isinstance(kw.value, ast.Constant):
+                required = bool(kw.value.value)
+        gefunden.append((ziel, schluessel, required))
+
+    if any(z == "radio" for z, _, _ in gefunden):
+        print(f"    FEHLER — es gibt wieder ein st.radio: {gefunden}")
+        f += 1
+    else:
+        print("    OK — kein st.radio mehr im Modul")
+
+    treffer = [g for g in gefunden if g[1] == "sv_xachse"]
+    if not treffer:
+        print("    FEHLER — kein Umschalter mit key='sv_xachse' gefunden")
+        f += 1
+    elif treffer[0][0] != "segmented_control":
+        print(f"    FEHLER — sv_xachse ist ein {treffer[0][0]}")
+        f += 1
+    elif not treffer[0][2]:
+        print("    FEHLER — sv_xachse ohne required=True: das aktive Segment "
+              "liesse sich abwaehlen")
+        f += 1
+    else:
+        print("    OK — sv_xachse ist ein segmented_control mit required=True")
+    return f
+
+
+def _bestaende_fuer_test():
+    """Die echten Bestaende, oder None wenn etwas fehlt."""
+    try:
+        from modules.shared import (DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
+                                    build_name_lookups, detect_newest_date_tag,
+                                    load_name_mapping)
+        from modules.portfolioanalyse import build_pf_data, load_pf_csvs
+    except Exception as ex:
+        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+        return None
+    dateien = load_pf_csvs(
+        DATA_FOLDER_PF, detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS))
+    if not dateien:
+        print("    UEBERSPRUNGEN — keine Bestandsdateien")
+        return None
+    roh = build_pf_data(dateien)
+    namen, d2c, _ = build_name_lookups(load_name_mapping(), set(roh.keys()))
+    return {n: roh[d2c[n]] for n in namen}
+
+
+def schritt7_figuren():
+    print("Schritt 7 — die Figuren von Ueberschneidung und Exposure (#54)")
+    try:
+        from modules.strategievergleich import (
+            ACHSE_SEGMENT, EBENEN, EXPOSURE_ACHSEN, REST_FARBEN,
+            exposure_figur, exposure_tabelle, ueberschneidung_figur,
+            ueberschneidung_tabelle,
+        )
+    except Exception as ex:
+        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+        return 0
+    bestaende = _bestaende_fuer_test()
+    if bestaende is None:
+        return 0
+
+    f = 0
+    bezug = list(bestaende)[0]
+
+    # --- Ueberschneidung ---
+    for ebene, spalte in EBENEN.items():
+        tab = ueberschneidung_tabelle(bestaende, bezug, spalte)
+        fig = ueberschneidung_figur(tab, bezug, ebene)
+        if fig is None:
+            print(f"    FEHLER — {ebene}: keine Figur")
+            f += 1
+            continue
+        if len(tab) != len(bestaende) - 1:
+            print(f"    FEHLER — {ebene}: {len(tab)} Zeilen statt "
+                  f"{len(bestaende) - 1}")
+            f += 1
+        if len(fig.data[0].x) != len(tab):
+            print(f"    FEHLER — {ebene}: Balkenzahl != Zeilenzahl")
+            f += 1
+        # ACHSENTYPEN GESETZT statt geraten
+        if fig.layout.xaxis.type != "linear" or fig.layout.yaxis.type != "category":
+            print(f"    FEHLER — {ebene}: Achsentypen "
+                  f"{fig.layout.xaxis.type!r}/{fig.layout.yaxis.type!r}")
+            f += 1
+        # GROESSTE OBEN. Plotly zeichnet den ersten Eintrag unten, deshalb
+        # muss categoryarray umgedreht sein — sonst steht die Liste auf dem
+        # Kopf, ohne dass es jemandem auffaellt (der Heatmap-Fehler vom 14.08.).
+        if list(fig.layout.yaxis.categoryarray) != list(reversed(list(tab.index))):
+            print(f"    FEHLER — {ebene}: Reihenfolge der y-Achse")
+            f += 1
+        if list(tab["anteil"]) != sorted(tab["anteil"], reverse=True):
+            print(f"    FEHLER — {ebene}: nicht absteigend sortiert")
+            f += 1
+    print("    OK — Ueberschneidung: 5 Ebenen, Achsentypen, Reihenfolge, Sortierung")
+
+    # Die Bezugsstrategie darf NICHT gegen sich selbst auftauchen.
+    tab = ueberschneidung_tabelle(bestaende, bezug, "WKN")
+    if bezug in tab.index:
+        print("    FEHLER — die Bezugsstrategie steht in ihrer eigenen Liste")
+        f += 1
+    else:
+        print("    OK — die Bezugsstrategie steht nicht in ihrer eigenen Liste")
+
+    # --- Exposure ---
+    for achse in EXPOSURE_ACHSEN:
+        gattung = "Aktien" if achse == ACHSE_SEGMENT else None
+        tab = exposure_tabelle(bestaende, achse, gattung)
+        fig = exposure_figur(tab, achse)
+        if fig is None:
+            print(f"    FEHLER — Exposure {achse}: keine Figur")
+            f += 1
+            continue
+        # JEDE ZEILE SUMMIERT AUF 100 % — inklusive Liquiditaet. Das ist die
+        # Zusage des Abschnitts; ohne sie behauptet der Balken eine
+        # Vollinvestition, die es nicht gibt (#59).
+        summen = tab.sum(axis=1)
+        if float((summen - 1.0).abs().max()) > 1e-9:
+            print(f"    FEHLER — Exposure {achse}: Zeilensumme != 1")
+            f += 1
+        if fig.layout.barmode != "stack":
+            print(f"    FEHLER — Exposure {achse}: barmode {fig.layout.barmode!r}")
+            f += 1
+        if fig.layout.xaxis.type != "linear" or fig.layout.yaxis.type != "category":
+            print(f"    FEHLER — Exposure {achse}: Achsentypen falsch")
+            f += 1
+        if len(fig.data) != len(tab.columns):
+            print(f"    FEHLER — Exposure {achse}: {len(fig.data)} Spuren, "
+                  f"{len(tab.columns)} Spalten")
+            f += 1
+        for spur in fig.data:
+            if len(spur.x) != len(tab):
+                print(f"    FEHLER — Exposure {achse}: Spur {spur.name} zu kurz")
+                f += 1
+                break
+    print(f"    OK — Exposure: {len(EXPOSURE_ACHSEN)} Achsen, jede Zeile 100 %, "
+          "gestapelt, Achsentypen gesetzt")
+
+    # Die Sammelposten tragen ihre eigenen Farben und nicht die der Palette —
+    # sonst sieht Liquiditaet aus wie eine Anlagekategorie.
+    tab = exposure_tabelle(bestaende, "Gattung")
+    fig = exposure_figur(tab, "Gattung")
+    for spur in fig.data:
+        if spur.name in REST_FARBEN and spur.marker.color != REST_FARBEN[spur.name]:
+            print(f"    FEHLER — {spur.name} traegt nicht seine Sammelfarbe")
+            f += 1
+    print("    OK — die Sammelposten tragen gedaempfte eigene Farben")
+
+    # DER MARKTRISIKOWERT DARF NICHT ZURUECKKOMMEN (Philip, 18.08.2026). Er
+    # war gebaut und ist wieder ausgebaut worden: Das Haus legt ihn im Asset
+    # Management selbst fest, im Beratungswerkzeug saehe er neben gemessenen
+    # Groessen aus wie eine Beobachtung. Der Schritt haelt die Entscheidung
+    # fest, damit sie niemand aus Versehen rueckgaengig macht - die Spalte
+    # liegt schliesslich weiter in den Daten.
+    if any("risiko" in a.lower() for a in EXPOSURE_ACHSEN):
+        print(f"    FEHLER — Marktrisikowert wieder in EXPOSURE_ACHSEN: "
+              f"{EXPOSURE_ACHSEN}")
+        f += 1
+    else:
+        print("    OK — der Marktrisikowert ist nicht unter den Achsen")
+
+    # Leere Eingaben -> keine Figur, damit die Ansicht einen Satz zeigen kann.
+    if (ueberschneidung_figur(ueberschneidung_tabelle({}, "x", "WKN"), "x", "WKN")
+            is not None):
+        print("    FEHLER — leere Ueberschneidung liefert eine Figur")
+        f += 1
+    elif exposure_figur(exposure_tabelle({}, "Gattung"), "Gattung") is not None:
+        print("    FEHLER — leeres Exposure liefert eine Figur")
+        f += 1
+    else:
+        print("    OK — ohne Bestaende gibt es keine Figur")
+    return f
+
+
+def schritt8_apptest_bestand():
+    print("Schritt 8 — die Oberflaeche der beiden neuen Abschnitte (AppTest)")
+    import importlib.util
+    if importlib.util.find_spec("streamlit.testing.v1") is None:
+        print("    UEBERSPRUNGEN — streamlit.testing nicht verfuegbar")
+        return 0
+    from streamlit.testing.v1 import AppTest
+    from modules.strategievergleich import EBENEN, EXPOSURE_ACHSEN
+
+    f = 0
+
+    def _lauf(bez, **zustand):
+        nonlocal f
+        at = AppTest.from_file(os.path.join(WURZEL, "streamlit_app.py"),
+                               default_timeout=400)
+        at.secrets["passwords"] = {"t": "t"}
+        at.session_state["logged_in"] = True
+        at.session_state["username"] = "t"
+        at.session_state["nav_view"] = "Strategievergleich"
+        for k, v in zustand.items():
+            at.session_state[k] = v
+        at.run()
+        if at.exception:
+            for e in at.exception:
+                print(f"    FEHLER — {bez}: {str(e.value)[:200]}")
+            f += 1
+            return None
+        return at
+
+    at = _lauf("Vorbelegung")
+    if at is not None:
+        ueberschriften = [s.value for s in at.subheader]
+        for erwartet in ("Überschneidung der Strategien", "Exposure im Vergleich"):
+            if erwartet not in ueberschriften:
+                print(f"    FEHLER — Überschrift fehlt: {erwartet}")
+                f += 1
+        if f == 0:
+            print("    OK — beide Abschnitte erscheinen")
+
+    for ebene in EBENEN:
+        if _lauf(f"Ebene {ebene}", sv_ue_ebene=ebene) is not None:
+            print(f"    OK — Ebene {ebene}")
+
+    for achse in EXPOSURE_ACHSEN:
+        if _lauf(f"Exposure {achse}", sv_ex_achse=achse) is not None:
+            print(f"    OK — Exposure {achse}")
+
+    if _lauf("Segment innerhalb Renten", sv_ex_achse="Segment",
+             sv_ex_gattung="Renten") is not None:
+        print("    OK — Segment innerhalb Renten")
+
+    # EINE Strategie: die Ueberschneidung braucht zwei und muss das sagen,
+    # statt eine leere Flaeche zu zeigen.
+    at = _lauf("nur eine Strategie", sv_familien=[])
+    if at is not None:
+        print("    OK — leere Familienauswahl")
+
+    if _lauf("beide Tabellen eingeblendet", sv_ue_tabelle=True,
+             sv_ex_tabelle=True) is not None:
+        print("    OK — beide Tabellen eingeblendet")
+    return f
+
+
 def main():
-    print("Pruefstein: Strategievergleich (Risiko-Rendite-Punktwolke)\n")
+    print("Pruefstein: Strategievergleich\n")
     fehler = 0
     for schritt in (schritt1_rendite, schritt2_zusage_kachel,
-                    schritt3_abdeckung, schritt4_figur, schritt5_apptest):
+                    schritt3_abdeckung, schritt4_figur, schritt5_apptest,
+                    schritt6_umschalter, schritt7_figuren,
+                    schritt8_apptest_bestand):
         fehler += schritt()
         print()
     if fehler:

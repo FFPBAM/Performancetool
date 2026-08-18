@@ -84,7 +84,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from modules.analytics import RISIKO_PERIODEN, risiko_perioden
-from modules.formats import fmt_pct
+from modules.bestandsanalytik import (
+    GEWICHT_SPALTE, calc_liquidity, gemeinsame_schluessel,
+    gewichte_je_kategorie,
+    kategorien_vereinigt, ueberlappung,
+)
+from modules.formats import fmt_date_de, fmt_pct
 from modules.shared import FFPB_PALETTE
 
 # ── Die beiden Risikomaße auf der X-Achse ──────────────────────────────────
@@ -103,6 +108,58 @@ _X_SPALTE = {X_VOLA: "vola", X_DRAWDOWN: "max_dd"}
 # ersetzt, siehe Modul-Docstring.
 GEMEINSAM = "Längster gemeinsamer Zeitraum"
 PERIODEN = tuple(p for p in RISIKO_PERIODEN if p != "Seit Auflage") + (GEMEINSAM,)
+
+
+# ── Ebenen der Überschneidung ──────────────────────────────────────
+# Anzeigename -> Spalte in den Bestandsdaten. Dieselbe Rechnung auf gröberer
+# Ebene liefert zwangsläufig höhere Werte (siehe `bestandsanalytik`), deshalb
+# steht die gewählte Ebene immer im Titel und in der Caption.
+EBENE_TITEL = "Einzeltitel (WKN)"
+EBENEN = {
+    EBENE_TITEL: "WKN",
+    "Gattung":   "Gattung",
+    "Region":    "Region",
+    "Segment":   "Segment",
+    "Währung":   "Währung",
+}
+
+# ── Achsen des Exposure-Vergleichs ───────────────────────────────
+# "Segment" steht bewusst am Ende und wird anders behandelt als die anderen:
+# Die Spalte trägt ZWEI Bedeutungen. Aktien tragen dort Branchen
+# ("Informationstechnologie"), Renten Schuldnerklassen ("Corporates",
+# "Financials"). Am 18.08.2026 gemessen: "Financials" sind 23 Renten-, "Banken,
+# Versicherer, Finanzdienstl." 42 Aktienpositionen — flach nebeneinander sähen
+# sie aus wie zwei Branchen, dabei ist es dasselbe Kreditrisiko in zwei Formen.
+# Deshalb IMMER innerhalb einer Gattung (Festlegung Philip, 18.08.2026).
+ACHSE_SEGMENT = "Segment"
+EXPOSURE_ACHSEN = ("Gattung", "Region", "Währung", ACHSE_SEGMENT)
+
+# DER MARKTRISIKOWERT FEHLT HIER BEWUSST (Philip, 18.08.2026) — er war
+# gebaut und ist wieder ausgebaut worden. Die Spalte liegt in den
+# Bestandsdaten und ließe sich je Strategie aufteilen; sie taugt aber nicht
+# für das Kundengespräch, weil das Haus sie im Asset Management SELBST
+# festlegt. Eine Kennzahl, die man vergibt, sieht neben gemessenen Größen
+# aus wie eine Beobachtung — und wäre damit dieselbe Art Fehler wie ein
+# Fehlwert, der wie ein Messwert aussieht (#46/B6), nur eine Ebene höher.
+# Wer sie doch will, klärt vorher, welche Frage sie beantworten soll.
+
+# Die drei Sammelposten am Ende jedes Balkens. Sie sind KEINE Kategorien der
+# Daten, sondern die ehrliche Antwort auf "was fehlt zu 100 %" (#59) — und sie
+# bekommen deshalb gedämpfte Farben statt einer aus der Palette.
+REST_LIQUIDITAET = "Liquidität"
+REST_OHNE_ANGABE = "ohne Angabe"
+REST_ANDERE_GATTUNG = "übrige Gattungen"
+REST_FARBEN = {
+    REST_LIQUIDITAET:    "#B9C2CC",
+    REST_OHNE_ANGABE:    "#D8D2C6",
+    REST_ANDERE_GATTUNG: "#E4E4E4",
+}
+
+# Unterhalb dieses Gewichts gilt ein Rest als Rundungsrauschen und wird nicht
+# als eigenes Segment gezeichnet. 0,05 Prozentpunkte — die Gewichte kommen mit
+# drei Nachkommastellen aus dem Vorsystem, ein echter Posten ist immer größer.
+REST_SCHWELLE = 0.0005
+
 
 def gemeinsamer_beginn(reihen):
     """Frühester Tag, den ALLE übergebenen Reihen abdecken; None bei leer.
@@ -302,8 +359,223 @@ def _tabelle_zum_anzeigen(tabelle, x_groesse):
     })
 
 
-def zeige_strategievergleich(reihen_alle, familien_reihenfolge=()):
-    """Die Ansicht. `reihen_alle` ist (label, ts_df, fee_dec, familie) je Strategie."""
+# ===========================================================================
+# ABSCHNITT 2: UEBERSCHNEIDUNG
+# ===========================================================================
+
+def ueberschneidung_tabelle(bestaende, bezug, spalte):
+    """Wie stark ueberschneidet sich `bezug` mit jedem anderen Bestand?
+
+    Args:
+        bestaende: {Anzeigename: Bestands-DataFrame}
+        bezug: Anzeigename der Bezugsstrategie
+        spalte: Spaltenname der Ebene (aus EBENEN)
+
+    Returns:
+        DataFrame, index = die uebrigen Strategien, absteigend nach "anteil";
+        Spalten "anteil" (dezimal) und "schluessel" (Anzahl gemeinsamer Titel
+        bzw. Kategorien). Leer, wenn `bezug` fehlt.
+
+    KEINE EIGENE MATHEMATIK - beides kommt aus `bestandsanalytik`.
+    """
+    if bezug not in bestaende:
+        return pd.DataFrame(columns=["anteil", "schluessel"])
+    a = gewichte_je_kategorie(bestaende[bezug], spalte)
+    zeilen = {}
+    for name, df in bestaende.items():
+        if name == bezug:
+            continue
+        b = gewichte_je_kategorie(df, spalte)
+        zeilen[name] = {"anteil": ueberlappung(a, b),
+                        "schluessel": gemeinsame_schluessel(a, b)}
+    if not zeilen:
+        return pd.DataFrame(columns=["anteil", "schluessel"])
+    return (pd.DataFrame.from_dict(zeilen, orient="index")
+            .sort_values("anteil", ascending=False))
+
+
+def _balkenhoehe(anzahl):
+    """Hoehe der Balken-Charts - mitwachsend, aber gedeckelt."""
+    return int(min(760, max(220, 120 + anzahl * 30)))
+
+
+def ueberschneidung_figur(tabelle, bezug, ebene):
+    """Waagerechte Balken, groesste Ueberschneidung oben; None wenn leer.
+
+    ACHSENTYPEN WERDEN GESETZT, nicht geraten (#54) - die y-Achse traegt
+    Strategienamen und muss "category" sein, sonst entscheidet Plotly anhand
+    der Werte. Bei Namen wie "Comdirect_100" ist das kein theoretisches
+    Risiko.
+
+    Die Reihenfolge wird ausdruecklich gesetzt (`categoryorder="array"`): Bei
+    waagerechten Balken zeichnet Plotly den ERSTEN Eintrag unten, die Tabelle
+    kommt aber absteigend herein. Genau diese Umkehrung hat am 14.08.2026 die
+    Heatmap ein halbes Jahr lang verkehrt herum gezeigt.
+    """
+    if tabelle is None or tabelle.empty:
+        return None
+    namen = list(tabelle.index)
+    werte = (tabelle["anteil"] * 100.0).tolist()
+    schluessel = tabelle["schluessel"].tolist()
+    einheit = "Titel" if ebene == EBENE_TITEL else "Kategorien"
+
+    fig = go.Figure(go.Bar(
+        x=werte, y=namen, orientation="h",
+        marker=dict(color=FFPB_PALETTE[0]),
+        text=[f"{w:.1f} %".replace(".", ",") + f"  ({k} {einheit})"
+              for w, k in zip(werte, schluessel)],
+        textposition="outside", cliponaxis=False,
+        customdata=schluessel,
+        hovertemplate=("<b>%{y}</b><br>Überschneidung: %{x:.2f} %<br>"
+                       "gemeinsam: %{customdata} " + einheit + "<extra></extra>"),
+    ))
+    fig.update_layout(
+        height=_balkenhoehe(len(namen)),
+        xaxis=dict(type="linear", ticksuffix=" %",
+                   title=f"Anteil des Depotgewichts, den {bezug} mit der "
+                         "jeweiligen Strategie teilt",
+                   range=[0, max(100.0, (max(werte) * 1.25) if werte else 0.0)]),
+        yaxis=dict(type="category", categoryorder="array",
+                   categoryarray=list(reversed(namen)), title=None),
+        separators=",.", margin=dict(l=10, t=30),
+        showlegend=False,
+    )
+    return fig
+
+
+# ===========================================================================
+# ABSCHNITT 3: EXPOSURE
+# ===========================================================================
+
+def exposure_tabelle(bestaende, spalte, nur_gattung=None):
+    """Gewicht je Kategorie und Strategie - jede Zeile summiert auf 1,0.
+
+    Args:
+        bestaende: {Anzeigename: Bestands-DataFrame}
+        spalte: Kategoriespalte
+        nur_gattung: bei "Segment" die Gattung, auf die eingeschraenkt wird
+
+    Returns:
+        DataFrame, index = Strategie, Spalten = Kategorien in fester
+        Reihenfolge, dahinter die Sammelposten. Werte dezimal.
+
+    JEDE ZEILE SUMMIERT AUF 1,0, UND DAS IST DER EIGENTLICHE PUNKT. Die
+    Titelgewichte allein ergeben nur 89,8 bis 98,2 % (ueber alle 19 gemessen);
+    ein Balken, der bei 94 % endet und trotzdem wie ein volles Depot aussieht,
+    behauptet eine Vollinvestition, die es nicht gibt. Die Differenz wird
+    deshalb BENANNT statt weggelassen (#59, dieselbe Klasse wie das still
+    fehlende Rentengewicht im Faelligkeits-Chart):
+
+        Liquiditaet        1 minus Summe der Titelgewichte
+        ohne Angabe        Titel, die in dieser Spalte nichts stehen haben
+        uebrige Gattungen  bei "Segment": alles ausserhalb der Gattung
+
+    DIE KATEGORIEN SIND UEBER ALLE STRATEGIEN FEST (`kategorien_vereinigt`).
+    Eine je Strategie gebildete "Sonstige"-Gruppe - wie sie
+    `portfolioanalyse.build_allocation` fuer die Ringe baut - waere hier
+    falsch: Dieselbe Region stuende bei der einen Strategie als eigener Balken
+    und waere bei der naechsten unsichtbar.
+    """
+    if not bestaende:
+        return pd.DataFrame()
+
+    if nur_gattung is not None:
+        gefiltert = {}
+        for name, df in bestaende.items():
+            if "Gattung" in df.columns:
+                maske = df["Gattung"].astype(str).str.strip() == nur_gattung
+                gefiltert[name] = df[maske]
+            else:
+                gefiltert[name] = df.iloc[0:0]
+    else:
+        gefiltert = dict(bestaende)
+
+    kategorien = kategorien_vereinigt(gefiltert, spalte)
+
+    zeilen = {}
+    for name, df_voll in bestaende.items():
+        df_teil = gefiltert[name]
+        gewichte = gewichte_je_kategorie(df_teil, spalte)
+        zeile = {k: float(gewichte.get(k, 0.0)) for k in kategorien}
+
+        gesamt_titel = float(df_voll[GEWICHT_SPALTE].sum())
+        teil_titel = float(df_teil[GEWICHT_SPALTE].sum()) if len(df_teil) else 0.0
+        zugeordnet = sum(zeile.values())
+
+        # Reihenfolge der Sammelposten ist die Reihenfolge im Balken.
+        if nur_gattung is not None:
+            zeile[REST_ANDERE_GATTUNG] = max(0.0, gesamt_titel - teil_titel)
+        zeile[REST_OHNE_ANGABE] = max(0.0, teil_titel - zugeordnet)
+        zeile[REST_LIQUIDITAET] = calc_liquidity(df_voll)
+        zeilen[name] = zeile
+
+    tabelle = pd.DataFrame.from_dict(zeilen, orient="index")
+    # Sammelposten unter der Schwelle fallen weg - sonst truege die Legende
+    # Eintraege, die niemand sieht.
+    for rest in (REST_ANDERE_GATTUNG, REST_OHNE_ANGABE, REST_LIQUIDITAET):
+        if rest in tabelle.columns and tabelle[rest].max() < REST_SCHWELLE:
+            tabelle = tabelle.drop(columns=[rest])
+    return tabelle
+
+
+def exposure_figur(tabelle, achse):
+    """Gestapelte 100-%-Balken, eine Zeile je Strategie; None wenn leer.
+
+    Wie bei der Ueberschneidung wird die Kategorienreihenfolge der y-Achse
+    ausdruecklich gesetzt, damit die erste Strategie oben steht (#54).
+    """
+    if tabelle is None or tabelle.empty:
+        return None
+    namen = list(tabelle.index)
+    fig = go.Figure()
+    farb_index = 0
+    for spalte in tabelle.columns:
+        if spalte in REST_FARBEN:
+            farbe = REST_FARBEN[spalte]
+            beschriftung = str(spalte)
+        else:
+            farbe = FFPB_PALETTE[farb_index % len(FFPB_PALETTE)]
+            farb_index += 1
+            beschriftung = str(spalte)
+        werte = (tabelle[spalte] * 100.0).tolist()
+        fig.add_trace(go.Bar(
+            x=werte, y=namen, orientation="h", name=beschriftung,
+            marker=dict(color=farbe),
+            hovertemplate=("<b>%{y}</b><br>" + beschriftung
+                           + ": %{x:.2f} %<extra></extra>"),
+        ))
+    fig.update_layout(
+        barmode="stack",
+        height=_balkenhoehe(len(namen)),
+        xaxis=dict(type="linear", ticksuffix=" %", range=[0, 100],
+                   title="Anteil am Depot"),
+        yaxis=dict(type="category", categoryorder="array",
+                   categoryarray=list(reversed(namen)), title=None),
+        separators=",.", margin=dict(l=10, t=30),
+        legend=dict(orientation="h", yanchor="top", y=-0.12, x=0),
+    )
+    return fig
+
+
+def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
+                             bestaende=None, auswertungsdatum=None):
+    """Die Ansicht mit ihren drei Abschnitten.
+
+    Args:
+        reihen_alle: (label, ts_df, fee_dec, familie) je Strategie
+        familien_reihenfolge: kanonische Reihenfolge der Familien
+        bestaende: {label: Bestands-DataFrame} aus `Daten_PF`, oder None
+        auswertungsdatum: Stichtag der Bestandsdaten
+
+    ZWEI DATENQUELLEN, UND DAS MUSS MAN SEHEN: Die Punktwolke rechnet auf den
+    Zeitreihen und zeigt einen ZEITRAUM. Ueberschneidung und Exposure rechnen
+    auf den Einzeltiteln und zeigen einen STICHTAG. Beide Abschnitte nennen
+    ihr Auswertungsdatum deshalb ausdruecklich.
+
+    FEHLEN DIE BESTANDSDATEN, FAELLT NUR DER UNTERE TEIL AUS. Die Punktwolke
+    haengt an einer anderen Quelle und darf nicht mit verschwinden - ein
+    fehlender Ordner ist kein Grund, eine funktionierende Ansicht abzuschalten.
+    """
     st.subheader("Strategien im Risiko-Rendite-Vergleich")
 
     if not reihen_alle:
@@ -351,8 +623,21 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=()):
                                index=PERIODEN.index("3 Jahre"),
                                key="sv_periode")
     with spalte_x:
-        x_groesse = st.radio("Risikomaß auf der X-Achse", X_ACHSEN,
-                             horizontal=True, key="sv_xachse")
+        # segmented_control statt radio (18.08.2026, Philip): Die Heatmap
+        # schaltet ihre zwei Ansichten genauso um, und zwei Bauformen für
+        # dieselbe Aufgabe sehen ungleichmäßig aus.
+        #
+        # required=True ist dabei nicht Kosmetik, sondern der Grund, warum
+        # dieser Baustein hier überhaupt trägt: Ohne ihn lässt sich das
+        # aktive Segment abwählen, und es gäbe den Zustand „keine X-Achse
+        # gewählt" — denselben Fehler hat `p_zeitraum` schon einmal gehabt.
+        if "sv_xachse" not in st.session_state:
+            st.session_state["sv_xachse"] = X_VOLA
+        x_groesse = st.segmented_control(
+            "Risikomaß auf der X-Achse", list(X_ACHSEN), key="sv_xachse",
+            required=True,
+            help=(f"„{X_VOLA}“ fragt, wie ruhig der Weg war — {X_DRAWDOWN} "
+                  "fragt, wie weh der schlimmste Moment tat."))
 
     reihen = [r for r in reihen_alle if r[0] in wahl]
     if not reihen:
@@ -384,3 +669,165 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=()):
     if fig is not None and st.checkbox("Tabelle anzeigen", key="sv_tabelle"):
         st.dataframe(_tabelle_zum_anzeigen(tabelle, x_groesse),
                      width="stretch", height="content", hide_index=True)
+
+    # ---- Abschnitt 2 und 3: die Bestandsdaten ----
+    if bestaende:
+        gewaehlt = {n: bestaende[n] for n in wahl if n in bestaende}
+        _zeige_ueberschneidung(gewaehlt, auswertungsdatum)
+        _zeige_exposure(gewaehlt, auswertungsdatum)
+    else:
+        st.markdown("---")
+        st.caption("Überschneidung und Exposure brauchen die Bestandsdaten "
+                   "aus dem Ordner Daten_PF. Für diesen Datenstand sind sie "
+                   "nicht geladen; die Punktwolke oben ist davon unberührt.")
+
+
+def _stichtag_text(auswertungsdatum):
+    """Nennt den Stichtag der Bestandsdaten — oder sagt, dass er fehlt."""
+    if auswertungsdatum is None:
+        return "Bestand zum letzten gelieferten Stichtag."
+    return f"Bestand zum {fmt_date_de(auswertungsdatum)}."
+
+
+def _waehle_gueltig(schluessel, optionen, beschriftung, hilfe=None):
+    """Auswahlfeld, das einen ungueltig gewordenen Wert vorher aufraeumt.
+
+    Die Strategieauswahl oben veraendert die Optionen dieser Felder. Bleibt
+    im session_state ein Wert stehen, den es nicht mehr gibt, wirft Streamlit
+    beim Anlegen des Widgets. Der Key wird deshalb VOR dem Rendern geleert -
+    das ist erlaubt, solange das Widget in diesem Lauf noch nicht existiert
+    (#4: nach dem Anlegen wuerde dieselbe Zuweisung werfen).
+    """
+    if st.session_state.get(schluessel) not in optionen:
+        st.session_state.pop(schluessel, None)
+    return st.selectbox(beschriftung, optionen, key=schluessel, help=hilfe)
+
+
+def _zeige_ueberschneidung(bestaende, auswertungsdatum):
+    """Abschnitt 2 - wie viel halten zwei Strategien gemeinsam?"""
+    st.markdown("---")
+    st.subheader("Überschneidung der Strategien")
+
+    if len(bestaende) < 2:
+        st.info("Für eine Überschneidung braucht es mindestens zwei "
+                "gewählte Strategien.")
+        return
+
+    namen = list(bestaende)
+    links, rechts = st.columns(2)
+    with links:
+        bezug = _waehle_gueltig(
+            "sv_ue_bezug", namen, "Bezugsstrategie",
+            "Gegen diese Strategie werden alle anderen verglichen.")
+    with rechts:
+        ebene = _waehle_gueltig(
+            "sv_ue_ebene", list(EBENEN), "Ebene",
+            "Auf welcher Ebene gilt etwas als gemeinsam gehalten.")
+
+    tabelle = ueberschneidung_tabelle(bestaende, bezug, EBENEN[ebene])
+    fig = ueberschneidung_figur(tabelle, bezug, ebene)
+    if fig is None:
+        st.caption("Keine Vergleichsstrategie vorhanden.")
+        return
+
+    st.plotly_chart(fig, config={"displayModeBar": False}, key="sv_ue_chart")
+
+    # Die oberste Zeile in Klartext - die Zahl allein beantwortet die Frage
+    # des Beraters noch nicht.
+    oben = tabelle.iloc[0]
+    einheit = "Titel" if ebene == EBENE_TITEL else "Kategorien"
+    st.markdown(
+        f"**{bezug}** und **{tabelle.index[0]}** halten zu "
+        f"**{fmt_pct(oben['anteil'])}** des Depotgewichts dasselbe "
+        f"({int(oben['schluessel'])} gemeinsame {einheit}) — das ist die "
+        "größte Überschneidung der Auswahl.")
+
+    st.caption(_stichtag_text(auswertungsdatum)
+               + f" Gerechnet wird als Summe des jeweils kleineren Gewichts "
+                 f"je {einheit[:-1] if einheit.endswith('n') else einheit} "
+                 "— die Gegengröße zur Active Share.")
+    st.caption("Die Zahlen verschiedener EBENEN sind nicht vergleichbar: "
+               "Je gröber die Ebene, desto höher fällt sie zwangsläufig aus. "
+               "Dasselbe Paar liest sich auf Titelebene als 20,5 % und auf "
+               "Gattungsebene als 73,8 %.")
+    st.caption("100 % sind nicht erreichbar: Die Titelgewichte machen je nach "
+               "Strategie nur 90 bis 98 % aus, der Rest ist Liquidität und "
+               "zählt hier nicht mit.")
+
+    if st.checkbox("Tabelle anzeigen", key="sv_ue_tabelle"):
+        anzeige = pd.DataFrame({
+            "Strategie": list(tabelle.index),
+            "Überschneidung": [fmt_pct(v) for v in tabelle["anteil"]],
+            f"gemeinsame {einheit}": [int(v) for v in tabelle["schluessel"]],
+        })
+        st.dataframe(anzeige, width="stretch", height="content",
+                     hide_index=True)
+
+
+def _zeige_exposure(bestaende, auswertungsdatum):
+    """Abschnitt 3 - die Aufteilung aller gewaehlten Strategien nebeneinander."""
+    st.markdown("---")
+    st.subheader("Exposure im Vergleich")
+
+    if not bestaende:
+        return
+
+    links, rechts = st.columns(2)
+    with links:
+        achse = _waehle_gueltig(
+            "sv_ex_achse", list(EXPOSURE_ACHSEN), "Aufteilung nach",
+            "Jeder Balken ist eine Strategie und summiert sich auf 100 %.")
+
+    nur_gattung = None
+    if achse == ACHSE_SEGMENT:
+        gattungen = kategorien_vereinigt(bestaende, "Gattung")
+        if not gattungen:
+            st.caption("Keine Gattungen in den Bestandsdaten.")
+            return
+        with rechts:
+            nur_gattung = _waehle_gueltig(
+                "sv_ex_gattung", gattungen, "innerhalb der Gattung",
+                "Segment wird nur innerhalb einer Gattung gezeigt — die "
+                "Spalte trägt für Aktien und Renten verschiedene "
+                "Bedeutungen.")
+
+    tabelle = exposure_tabelle(bestaende, achse, nur_gattung)
+    fig = exposure_figur(tabelle, achse)
+    if fig is None:
+        st.caption("Für die gewählte Aufteilung liegen keine Daten vor.")
+        return
+
+    st.plotly_chart(fig, config={"displayModeBar": False}, key="sv_ex_chart")
+
+    st.caption(_stichtag_text(auswertungsdatum)
+               + " Jeder Balken summiert sich auf 100 % — die Liquidität "
+                 "ist als eigenes Segment ausgewiesen und nicht weggelassen.")
+
+    if achse == ACHSE_SEGMENT:
+        st.caption(f"Gezeigt wird das Segment **innerhalb** der Gattung "
+                   f"{nur_gattung}; der Rest des Depots steht als "
+                   f"„{REST_ANDERE_GATTUNG}“ daneben. Grund: Die Spalte trägt "
+                   "zwei Bedeutungen — Aktien tragen Branchen, Renten "
+                   "Schuldnerklassen. „Financials“ sind Anleihen von Banken, "
+                   "„Banken, Versicherer, Finanzdienstl.“ sind deren Aktien.")
+
+    if achse == "Region":
+        st.caption("Vorbehalt: Es gibt kein Look-through in Fonds und ETFs. "
+                   "„Europa“ sind ausschließlich Fonds, ETFs und Zertifikate, "
+                   "„Europa ohne Deutschland“ ausschließlich Einzeltitel. Der "
+                   "ausgewiesene Deutschland-Anteil ist damit eher zu niedrig, "
+                   "weil das Deutschland-Gewicht innerhalb der Europa-ETFs "
+                   "nicht sichtbar wird.")
+
+    if achse in (ACHSE_SEGMENT, "Region"):
+        st.caption("Bei den ETF-Strategien stehen nur 8 bzw. 9 Positionen im "
+                   "Bestand. Ihre Aufteilung zeigt deshalb die Fondsstruktur "
+                   "und nicht das Marktexposure.")
+
+    if st.checkbox("Tabelle anzeigen", key="sv_ex_tabelle"):
+        anzeige = tabelle.copy()
+        for spalte in anzeige.columns:
+            anzeige[spalte] = [fmt_pct(v) for v in anzeige[spalte]]
+        anzeige.insert(0, "Strategie", list(tabelle.index))
+        st.dataframe(anzeige, width="stretch", height="content",
+                     hide_index=True)
