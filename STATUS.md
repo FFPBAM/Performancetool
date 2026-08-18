@@ -3,9 +3,14 @@
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **26 von 26 Suiten grün**, `pyflakes` bei null.
 
-> **Der dritte Tab ist live und abgenommen** — Stufe 1 bis 3, zuletzt
-> `10bd482` (18.08.2026). Philip an der laufenden App: *„Tab läuft wieder,
-> Icons und Dunkelmodus sind in Ordnung."*
+> **Der dritte Tab ist live und abgenommen** — Stufe 1 bis 3 plus die
+> Nachbesserungen aus dem Gegentest (18.08.2026). Philip an der laufenden
+> App: *„Tab läuft wieder, Icons und Dunkelmodus sind in Ordnung."*
+>
+> *Hier steht bewusst **kein** Commit-Hash mehr: Ein Commit kann seinen
+> eigenen nicht enthalten, also wäre die Angabe nach jedem Push einen Stand
+> alt — dieselbe Drift, vor der die Kopfzeile weiter oben warnt. Den
+> aktuellen Stand liefert `git log --oneline -1 origin/verbesserungen`.*
 >
 > Damit ist die einzige Frage beantwortet, die kein Testlauf beantworten
 > konnte: **Die Font-Falle #1 hat sich nicht verwirklicht.** `theme.font`
