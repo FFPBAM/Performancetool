@@ -575,6 +575,99 @@ gemacht. Steht als Transferwissen **#64**.
 
 ---
 
+### Die Legende überdeckte den Achsentitel (18.08.2026, aus dem Gegentest)
+
+Gemeldet: Im Exposure-Vergleich mit nur zwei Strategien (*Pro*, *Pro
+Dividende*) und der Aufteilung **Segment innerhalb Aktien** verschwand die
+Achsenbeschriftung „Anteil am Depot" unter der Legende.
+
+**Nachgemessen, vorher und nachher:**
+
+| | Strat. | Segm. | Höhe | unterer Rand | Zeichenfläche | Legende hängt an |
+|---|---:|---:|---:|---:|---:|---|
+| vorher | 2 | 11 | 220 px | **nicht gesetzt** (80) | 110 px | 13 px unter der Fläche |
+| jetzt | 2 | 11 | 292 px | **174 px** | 88 px | am Rand der **Figur** |
+
+**Zwei Ursachen wirkten zusammen:**
+
+1. **`y = −0,12` war relativ zur Zeichenfläche.** Bei 110 px sind das 13 px,
+   bei 760 px wären es 91. Der Abstand schrumpfte also genau dann, wenn er am
+   meisten gebraucht wurde — bei *wenigen* Strategien.
+2. **Die Legende wuchs nach unten, ohne dass jemand Platz reservierte.** Elf
+   lange Beschriftungen brauchen vier Zeilen; der Achsentitel saß im selben
+   Band.
+
+Dazu ein struktureller Mangel: **`_balkenhoehe` kannte nur die Zahl der
+Balken.** Die Zahl der Segmente bestimmt den Platzbedarf mit, ging aber
+nirgends ein. Dieselbe Klasse wie der abgeschnittene linke Rand vom Vormittag
+(`margin=dict(l=10)`): ein fester Wert gegen eine Automatik.
+
+#### Aus der Schätzung wurde eine Rechnung
+
+Die naheliegende Lösung — „schätze, wie viele Legendeneinträge in eine Zeile
+passen" — wäre eine Annahme über Zeichenbreiten und damit genau das, was
+`CLAUDE.md` seit dem 17.08. verbietet. Zwei Plotly-Bausteine machen sie
+überflüssig:
+
+| Baustein | Wirkung |
+|---|---|
+| `entrywidthmode="fraction"`, `entrywidth=1/3` | **genau drei** Einträge je Zeile → Zeilenzahl `ceil(n/3)`, exakt |
+| `legend.yref="container"`, `y=0` | Legende hängt am Rand der **Figur** → Ursache 1 entfällt |
+
+```
+zeilen = ceil(segmente / 3)
+unten  = 58 (Achse) + 12 (Abstand) + zeilen × 26 (Legende)
+höhe   = 30 (oben) + balken × balkenhöhe + unten
+```
+
+Die **12 px Abstand** sind ausdrücklich drin: Ohne sie ginge die Rechnung zwar
+auf, aber bei vier Legendenzeilen blieben acht Pixel zwischen Achsentitel und
+Legende — und ein Abstand, der sich gerade so ausgeht, ist keiner.
+
+**Die eine verbleibende Pixelannahme wird benannt statt versteckt:** die Höhe
+einer Legendenzeile. Sie ist beherrschbar, weil die Schriftgröße der Legende
+ausdrücklich gesetzt wird — anders als bei `st.dataframe`, wo die Zeilenhöhe
+Streamlit gehört (17.08.2026).
+
+**Feste Höhe je Balken** (Philip): 44 px, mit Deckel nach dem Vorbild der
+Heatmap (`_zeilenhoehe`). Zwei Strategien ergeben jetzt ein flaches Bild statt
+zweier fetter Klötze; bei 19 greift der Deckel und die Balken schrumpfen auf
+36,8 px. Beide Balken-Charts nutzen dieselbe Rechnung — die Überschneidung hat
+keine Legende, also `zeilen = 0`.
+
+#### Der Prüfstein hätte sich beinahe selbst übersprungen
+
+**Die Gegenprobe war zuerst wertlos.** Gegen den gemeldeten Stand gehalten,
+meldete der neue Schritt 7 **BESTANDEN** — weil die geprüften Funktionen dort
+noch nicht existierten, der Import fehlschlug und `except Exception` daraus
+ein „ÜBERSPRUNGEN" machte.
+
+Das ist #64 von demselben Tag, eine Ebene tiefer: **Ein Test, der sich beim
+Fehlen seines Prüfgegenstands still zurückzieht, ist schlimmer als keiner —
+er sieht aus wie ein Beweis.**
+
+Behoben für **alle acht** betroffenen Stellen in zwei Prüfsteinen. Der neue
+Helfer `_symbole` unterscheidet sauber:
+
+| Fall | Verhalten | Warum |
+|---|---|---|
+| ein **Paket** fehlt | überspringen | Hausregel — die Suiten sollen in der eingeschränkten Firmenumgebung laufen |
+| ein **Symbol** fehlt | **FEHLER** | das ist ein gebrochener Vertrag, kein Umgebungsproblem |
+
+Gegen den gemeldeten Stand meldet Schritt 7 jetzt namentlich, welche neun
+Namen fehlen — und schlägt fehl.
+
+#### Beweise
+
+| Gemessen | Ergebnis |
+|---|---|
+| Testsuiten | **26 von 26 grün**, kein Schritt übersprungen |
+| `pyflakes` über 44 Dateien | **null** |
+| `ui_dump` **alle drei** Ansichten | **zeichengleich** — es ändert sich nur Geometrie, kein Text |
+| Gegenprobe Schritt 7 | gegen den gemeldeten Stand **rot**, mit Namen der fehlenden Symbole |
+
+---
+
 ## So starten wir beim nächsten Mal
 
 Diese drei Zeilen im Chat genügen (stehen auch in `Start.txt` zum Kopieren):

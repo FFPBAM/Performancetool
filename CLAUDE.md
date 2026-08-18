@@ -59,6 +59,15 @@ prüfte statt gegen eine Schwelle (#47).
   `st.plotly_chart(key=…, on_select="rerun")` ist ein Widget — genau das hat
   die laufende App angehalten. Prüfstein `tests/test_keepalive.py` hält die
   Regel am Syntaxbaum; er läuft ohne jedes Paket.
+- **Ein Test, der seinen Prüfgegenstand nicht findet, muss scheitern**
+  (#65, 18.08.2026). Die Suiten überspringen bei fehlendem **Paket** — das
+  ist richtig und Hausregel. Sie dürfen aber nicht überspringen, wenn ein
+  **Symbol** fehlt: Das ist ein gebrochener Vertrag, kein Umgebungsproblem.
+  Ein `except Exception` um den Import behandelt beides gleich und macht aus
+  dem einen Schutz eine Tarnkappe für das andere. Muster:
+  `_symbole(modul, namen, pakete)` in `tests/test_strategievergleich.py` —
+  erst die Pakete prüfen (ggf. überspringen), dann die Namen holen (fehlt
+  einer: FEHLER mit Namensnennung).
 - **Wer ein Risiko prüft und nichts findet, hat zwei mögliche Ergebnisse**
   (#64, 18.08.2026): Das Risiko besteht nicht — oder **der Test erreicht es
   nicht**. Beim Chart oben wurde A gewählt, ohne B auszuschließen, und das

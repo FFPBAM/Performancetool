@@ -2634,6 +2634,41 @@ Typen.
 
 ---
 
+### #65 — Ein Test, der seinen Prüfgegenstand nicht findet, muss scheitern (NEU 18.08.2026) ⭐
+
+Die Suiten dieses Projekts überspringen ihre schweren Schritte, wenn ein Paket
+fehlt — das ist Hausregel, weil sie in der eingeschränkten Firmenumgebung
+laufen sollen. Umgesetzt war das als „fange jede Ausnahme beim Import ab und
+melde ÜBERSPRUNGEN".
+
+**Damit übersprang ein Schritt auch dann, wenn die geprüfte FUNKTION fehlte.**
+Aufgefallen an der Gegenprobe zum Legenden-Fehler: Der neue Schritt 7 wurde
+gegen den alten Modulstand gehalten und meldete **BESTANDEN** — er hätte
+anschlagen müssen, konnte aber nicht einmal importieren, was er prüfen sollte.
+
+Ein fehlendes **Paket** ist ein Umgebungsproblem. Ein fehlendes **Symbol** ist
+ein gebrochener Vertrag. Beides gleich zu behandeln macht aus dem einen
+Schutz eine Tarnkappe für das andere:
+
+| Fall | richtig | war |
+|---|---|---|
+| `import streamlit` scheitert | überspringen | überspringen ✓ |
+| `from modules.x import y` findet `y` nicht | **FEHLER** | überspringen ✗ |
+
+**Die Lehre ist dieselbe wie bei #64, eine Ebene tiefer.** Dort war ein grüner
+Lauf kein Beweis, weil der Test das Risiko nicht erreichte; hier ist er kein
+Beweis, weil der Test seinen Gegenstand nicht findet. Beide Male meldet etwas
+Erfolg, das nichts geprüft hat — und beide Male fällt es nur auf, wenn man den
+Test **absichtlich gegen einen kaputten Stand hält**.
+
+Umgesetzt als `_symbole(modul, namen, pakete)` in
+`tests/test_strategievergleich.py`: Erst wird geprüft, ob die *Pakete* da
+sind (dann ggf. überspringen), dann werden die *Namen* geholt — und ein
+fehlender Name ist ein Fehler mit Namensnennung.
+
+**Wer eine Suite mit Überspringen schreibt, prüft danach genau eine Frage:**
+Was passiert, wenn der Prüfgegenstand selbst fehlt?
+
 ### #64 — Wer ein Risiko prüft und nichts findet, hat zwei mögliche Ergebnisse (NEU 18.08.2026, aus einem Ausfall) ⭐
 
 Am 18.08.2026 hat der Überschneidungs-Chart des Strategievergleichs die
@@ -3924,6 +3959,38 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 18.08.2026 (Nachtrag) – Legende überdeckte den Achsentitel; Prüfsteine schärfer
+
+Aus dem Gegentest: Im Exposure-Vergleich mit zwei Strategien und "Segment
+innerhalb Aktien" verschwand die Achsenbeschriftung unter der Legende.
+
+URSACHEN, nachgemessen: Das Legenden-`y` war relativ zur ZEICHENFLÄCHE
+(−0,12 von 110 px = 13 px, bei 760 px wären es 91 — der Abstand schrumpfte
+also genau dann, wenn er gebraucht wurde), und der untere Rand war nie für
+die Legende reserviert. Dazu kannte `_balkenhoehe` nur die Zahl der Balken,
+nicht die der Segmente.
+
+BEHOBEN durch eine Rechnung statt einer Schätzung: `entrywidthmode="fraction"`
+mit `entrywidth=1/3` erzwingt genau drei Einträge je Zeile, die Zeilenzahl ist
+damit `ceil(n/3)` und nicht geraten; `legend.yref="container"` verankert die
+Legende am Rand der Figur. Der untere Rand ist
+`58 + 12 + zeilen × 26`. Dazu feste Höhe je Balken (44 px) mit Deckel nach
+dem Vorbild der Heatmap — zwei Strategien ergeben jetzt ein flaches Bild
+statt zweier fetter Klötze.
+
+DIE GEGENPROBE WAR ZUERST WERTLOS und hat dabei einen zweiten Fehler
+aufgedeckt: Gegen den gemeldeten Stand meldete der neue Schritt BESTANDEN,
+weil die geprüften Funktionen dort noch nicht existierten und `except
+Exception` daraus ein ÜBERSPRUNGEN machte. Ein Test, der seinen
+Prüfgegenstand nicht findet, muss scheitern — Transferwissen **#65**.
+Behoben für alle acht betroffenen Stellen: `_symbole` unterscheidet jetzt
+zwischen fehlendem Paket (überspringen) und fehlendem Symbol (Fehler mit
+Namensnennung).
+
+BEWEISE: 26 von 26 Suiten grün, `pyflakes` über 44 Dateien null, `ui_dump`
+für **alle drei** Ansichten zeichengleich — es ändert sich nur Geometrie,
+kein Text.
 
 ### 18.08.2026 (Stufe 3) – Theme fürs ganze Werkzeug, Drilldown, Designsprache
 
