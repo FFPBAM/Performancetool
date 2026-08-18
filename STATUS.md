@@ -3,12 +3,11 @@
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **23 von 23 Suiten grün**, `pyflakes` bei null.
 
-> ⚠️ **Der dritte Tab ist committet, aber NOCH NICHT GEPUSHT** (Stand
-> 18.08.2026). Drei Commits liegen lokal vor `origin/verbesserungen`. Die
-> Sichtprüfung hat stattgefunden — Philip: *„sieht gut aus"*, und die Namen
-> stehen auf seinen Wunsch immer am Punkt. **Weil ein Push sofort in die
-> laufende App der Kollegen geht**, wartet er auf ein ausdrückliches Wort.
-> Die genaue Zahl liefert `git status -sb`.
+> **Der dritte Tab ist gepusht und damit live** (18.08.2026, `fa5e85c`).
+> Die Sichtprüfung fand davor statt — Philip: *„sieht gut aus"*, und die
+> Strategienamen stehen auf seinen Wunsch immer am Punkt statt im Hover.
+> **Was noch offen ist: die App nach dem Deploy ansehen** (siehe den
+> Kasten direkt darunter) und `H:` nachziehen.
 
 > ### ⚠️ Zuerst lesen: Dieser Branch IST die laufende App
 >
