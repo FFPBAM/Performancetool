@@ -3,22 +3,48 @@
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **26 von 26 Suiten grün**, `pyflakes` bei null.
 
-> **Der dritte Tab ist gepusht und damit live** — Stufe 1 bis 3
-> (18.08.2026, zuletzt `6e548f0`). Jede Runde wurde vor dem Push gesichtet,
-> und **aus jeder kam eine Korrektur, die kein Test gefunden hatte**: die
-> Strategienamen gehören immer an den Punkt, der linke Rand der
-> Balken-Charts darf nicht festgenagelt sein, und das Rot der
-> Bedienelemente war nie eine Entscheidung.
+> **Der dritte Tab ist live und abgenommen** — Stufe 1 bis 3, zuletzt
+> `10bd482` (18.08.2026). Philip an der laufenden App: *„Tab läuft wieder,
+> Icons und Dunkelmodus sind in Ordnung."*
 >
-> **Stufe 3 ist die einzige, deren Ergebnis der Testlauf nicht beurteilen
-> kann.** `ui_dump` sieht keine Farben und keine Schriften. Beim Ansehen
-> deshalb ausdrücklich prüfen: sind die **Streamlit-Icons** noch heil (die
-> Schrift kommt jetzt aus dem Theme statt aus einem CSS-Block, #1), wirken
-> die Bedienelemente noch **bedienbar**, und stimmt beides in **hell UND
-> dunkel**?
+> Damit ist die einzige Frage beantwortet, die kein Testlauf beantworten
+> konnte: **Die Font-Falle #1 hat sich nicht verwirklicht.** `theme.font`
+> trägt, die Streamlit-Icons bleiben heil, und der CSS-Hack in
+> `streamlit_app.py` kann entfallen bleiben. Akzentfarbe und Dunkelmodus
+> ebenfalls in Ordnung.
 >
-> **Was noch offen ist: die App nach dem Deploy ansehen** (siehe den
-> Kasten direkt darunter) und `H:` nachziehen.
+> **Aus jeder der drei Sichtprüfungen kam eine Korrektur, die kein Test
+> gefunden hatte** — Namen am Punkt, abgeschnittener linker Rand, das rote
+> Akzent —, dazu der schwarze Beitragsbalken und der Ausfall vom selben Tag.
+> Fünf Funde aus dem Auge, alle bei grünem Testlauf. Das ist kein Zufall
+> mehr, sondern die Arbeitsteilung: Die Vorschau vor dem Push bleibt.
+>
+> **Offen ist nur noch der Merge**, und der wartet auf die Rückmeldung der
+> Kollegen (Philip, 18.08.2026).
+
+> ### Achtung: möglicherweise arbeitet jemand parallel am selben Branch
+>
+> **Hinweis Philip, 18.08.2026:** Ein Kollege will das Streamlit-Thema
+> eventuell noch am selben Nachmittag mit einem eigenen Claude-Terminal
+> angehen.
+>
+> Das ist keine Kleinigkeit, weil `verbesserungen` **die laufende App ist**:
+> Zwei Terminals, die dieselbe Datei anfassen und pushen, überschreiben sich
+> gegenseitig direkt im Betrieb. Vor der Arbeit deshalb **immer**
+>
+> ```
+> git fetch origin && git status -sb
+> ```
+>
+> und bei `behind` erst ziehen. Wer nach einer Pause weiterarbeitet, macht
+> das erneut — der eigene Stand kann in der Zwischenzeit alt geworden sein.
+> Kommt es doch zu einem Konflikt: **nicht** mit `--force` drüber, sondern
+> den fremden Stand ansehen und zusammenführen. Die Historie dieses Branches
+> ist die einzige Aufzeichnung darüber, warum das Werkzeug so aussieht, wie
+> es aussieht.
+>
+> Für die nächste Sitzung heißt das: `git log --oneline origin/verbesserungen`
+> zeigt, ob seit dem 18.08.2026 (`10bd482`) fremde Commits dazugekommen sind.
 
 > ### ⚠️ Zuerst lesen: Dieser Branch IST die laufende App
 >
@@ -474,6 +500,18 @@ als verständlich abgenommen; geändert hat sich nur, wie ruhig er dasteht.
 Schriften. Bei einer Designänderung sagt es nur, dass der Text derselbe blieb
 — das Aussehen kann allein die Sichtprüfung beurteilen, und zwar **in hell und
 dunkel**.
+
+**Die Sichtprüfung hat stattgefunden und ist in Ordnung** (Philip,
+18.08.2026): *„Tab läuft wieder, Icons und Dunkelmodus sind in Ordnung."*
+Damit ist die riskanteste Annahme dieser Runde bestätigt: **`theme.font`
+zerstört die Streamlit-Icons nicht.** Der CSS-Hack aus `streamlit_app.py`
+bleibt entfallen — er war seit 07.07.2026 nur deshalb auf den Hauptbereich
+beschränkt, und die Einschränkung ist damit gegenstandslos. Auch die
+Akzentfarbe wirkt am Bildschirm wie beabsichtigt.
+
+**Was aus dem Auge kam und aus keinem Test:** der schwarze Beitragsbalken im
+Drilldown (entfernt, siehe Changelog) — der fünfte solche Fund dieser
+Sitzung.
 
 ---
 
