@@ -91,6 +91,45 @@ KURZ_UNTER_3J = {
 }
 
 
+def _symbole(modulname, namen, pakete=("streamlit",)):
+    """Holt Namen aus einem EIGENEN Modul. Returns dict, None oder False.
+
+        dict   alles da
+        None   ein PAKET fehlt -> der Schritt wird uebersprungen
+        False  ein SYMBOL fehlt -> der Schritt ist FEHLGESCHLAGEN
+
+    WARUM DIE UNTERSCHEIDUNG (18.08.2026, teuer gelernt): Die Schritte hier
+    fingen bisher jede Ausnahme beim Import ab und meldeten UEBERSPRUNGEN.
+    Fuer ein fehlendes Paket ist das richtig und Hausregel — die Suiten
+    sollen in der eingeschraenkten Firmenumgebung laufen. Fuer ein fehlendes
+    SYMBOL ist es falsch: Das ist ein gebrochener Vertrag.
+
+    Aufgefallen ist es an der Gegenprobe zum Legenden-Fehler. Der neue
+    Schritt 7 wurde gegen den alten Modulstand gehalten und meldete
+    BESTANDEN — weil die geprueften Funktionen dort noch nicht existierten
+    und der Schritt sich deshalb selbst uebersprang. Ein Test, der sich beim
+    Fehlen seines Pruefgegenstands still zurueckzieht, ist schlimmer als
+    keiner: Er sieht aus wie ein Beweis. Dieselbe Familie wie #64.
+    """
+    import importlib
+    import importlib.util
+    for paket in pakete:
+        if importlib.util.find_spec(paket) is None:
+            print(f"    UEBERSPRUNGEN — {paket} nicht installiert")
+            return None
+    try:
+        modul = importlib.import_module(modulname)
+    except ImportError as ex:
+        print(f"    UEBERSPRUNGEN — {modulname} nicht ladbar: {ex}")
+        return None
+    fehlend = [n for n in namen if not hasattr(modul, n)]
+    if fehlend:
+        print(f"    FEHLER — {modulname} kennt diese Namen nicht: {fehlend}. "
+              "Der Schritt kann nicht pruefen, was er pruefen soll.")
+        return False
+    return {n: getattr(modul, n) for n in namen}
+
+
 def _nah(bezeichnung, ist, soll, toleranz=TOLERANZ):
     if ist is None or (isinstance(ist, float) and np.isnan(ist)):
         print(f"    FEHLER — {bezeichnung}: Fehlwert statt {soll}")
@@ -210,11 +249,14 @@ def schritt2_zusage_kachel():
     reihen = _echte_reihen()
     if reihen is None:
         return 0
-    try:
-        from modules.strategievergleich import GEMEINSAM, kennzahlen_je_strategie
-    except Exception as ex:
-        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+    sym = _symbole("modules.strategievergleich",
+                   ["GEMEINSAM", "kennzahlen_je_strategie"])
+    if sym is None:
         return 0
+    if sym is False:
+        return 1
+    GEMEINSAM = sym["GEMEINSAM"]
+    kennzahlen_je_strategie = sym["kennzahlen_je_strategie"]
 
     f = 0
     # (a) Ueber die GANZE Reihe: die Kachel der Performance-Ansicht rechnet
@@ -274,13 +316,16 @@ def schritt3_abdeckung():
     reihen = _echte_reihen()
     if reihen is None:
         return 0
-    try:
-        from modules.strategievergleich import (GEMEINSAM,
-                                                kennzahlen_je_strategie,
-                                                nicht_gezeigt_text)
-    except Exception as ex:
-        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+    sym = _symbole("modules.strategievergleich",
+                   ["GEMEINSAM", "kennzahlen_je_strategie",
+                    "nicht_gezeigt_text"])
+    if sym is None:
         return 0
+    if sym is False:
+        return 1
+    GEMEINSAM = sym["GEMEINSAM"]
+    kennzahlen_je_strategie = sym["kennzahlen_je_strategie"]
+    nicht_gezeigt_text = sym["nicht_gezeigt_text"]
 
     f = 0
     tabelle = kennzahlen_je_strategie(reihen, "3 Jahre")
@@ -353,12 +398,14 @@ def schritt3_abdeckung():
 
 def schritt4_figur():
     print("Schritt 4 — die FIGUR, nicht die Daten (#54)")
-    try:
-        from modules.strategievergleich import (X_ACHSEN, X_DRAWDOWN,
-                                                X_VOLA, punktwolke_figur)
-    except Exception as ex:
-        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+    sym = _symbole("modules.strategievergleich",
+                   ["X_ACHSEN", "X_DRAWDOWN", "X_VOLA", "punktwolke_figur"])
+    if sym is None:
         return 0
+    if sym is False:
+        return 1
+    X_ACHSEN, X_DRAWDOWN = sym["X_ACHSEN"], sym["X_DRAWDOWN"]
+    X_VOLA, punktwolke_figur = sym["X_VOLA"], sym["punktwolke_figur"]
 
     f = 0
     tabelle = pd.DataFrame(
@@ -584,15 +631,31 @@ def _bestaende_fuer_test():
 
 def schritt7_figuren():
     print("Schritt 7 — die Figuren von Ueberschneidung und Exposure (#54)")
-    try:
-        from modules.strategievergleich import (
-            ACHSE_SEGMENT, EBENEN, EXPOSURE_ACHSEN, REST_FARBEN,
-            exposure_figur, exposure_tabelle, ueberschneidung_figur,
-            ueberschneidung_tabelle,
-        )
-    except Exception as ex:
-        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+    _namen = ["ACHSE_SEGMENT", "ACHSE_UNTEN_PX", "BALKEN_HOEHE_PX",
+              "EBENEN", "EBENE_TITEL", "EXPOSURE_ACHSEN",
+              "LEGENDE_ABSTAND_PX", "LEGENDE_JE_ZEILE", "LEGENDE_ZEILE_PX",
+              "RAND_OBEN_PX", "REST_FARBEN", "balken_geometrie",
+              "balkenhoehe_je_zeile", "exposure_figur", "exposure_tabelle",
+              "legendenzeilen", "ueberschneidung_figur",
+              "ueberschneidung_tabelle"]
+    sym = _symbole("modules.strategievergleich", _namen)
+    if sym is None:
         return 0
+    if sym is False:
+        return 1
+    ACHSE_SEGMENT = sym["ACHSE_SEGMENT"]
+    ACHSE_UNTEN_PX, BALKEN_HOEHE_PX = sym["ACHSE_UNTEN_PX"], sym["BALKEN_HOEHE_PX"]
+    EBENEN, EXPOSURE_ACHSEN = sym["EBENEN"], sym["EXPOSURE_ACHSEN"]
+    LEGENDE_ABSTAND_PX = sym["LEGENDE_ABSTAND_PX"]
+    LEGENDE_JE_ZEILE, LEGENDE_ZEILE_PX = sym["LEGENDE_JE_ZEILE"], sym["LEGENDE_ZEILE_PX"]
+    RAND_OBEN_PX, REST_FARBEN = sym["RAND_OBEN_PX"], sym["REST_FARBEN"]
+    balken_geometrie = sym["balken_geometrie"]
+    balkenhoehe_je_zeile = sym["balkenhoehe_je_zeile"]
+    exposure_figur, exposure_tabelle = sym["exposure_figur"], sym["exposure_tabelle"]
+    legendenzeilen = sym["legendenzeilen"]
+    ueberschneidung_figur = sym["ueberschneidung_figur"]
+    ueberschneidung_tabelle = sym["ueberschneidung_tabelle"]
+    EBENE_TITEL_LOKAL = sym["EBENE_TITEL"]
     bestaende = _bestaende_fuer_test()
     if bestaende is None:
         return 0
@@ -707,6 +770,144 @@ def schritt7_figuren():
     else:
         print("    OK — der Marktrisikowert ist nicht unter den Achsen")
 
+    # --- GEOMETRIE (18.08.2026, nach einem gemeldeten Fehler) ---
+    #
+    # Gemeldet: Bei zwei Strategien und "Segment innerhalb Aktien" ueberdeckte
+    # die Legende die Achsenbeschriftung "Anteil am Depot". Ursachen waren ein
+    # Legenden-y RELATIV ZUR ZEICHENFLAECHE (das schrumpfte bei kurzen Charts)
+    # und ein unterer Rand, der nie fuer die Legende reserviert wurde.
+    #
+    # Geprueft wird deshalb die RECHNUNG, nicht das Bild (#54): Wie viel Platz
+    # reserviert die Figur, und haengt die Legende am Rand der FIGUR?
+
+    # (j) Die Zeilenzahl der Legende ist exakt, nicht geschaetzt.
+    for eintraege, soll in ((0, 0), (1, 1), (3, 1), (4, 2), (11, 4), (15, 5)):
+        if legendenzeilen(eintraege) != soll:
+            print(f"    FEHLER — {eintraege} Eintraege ergeben "
+                  f"{legendenzeilen(eintraege)} Zeilen statt {soll}")
+            f += 1
+    print(f"    OK — Legendenzeilen = aufgerundet durch {LEGENDE_JE_ZEILE}")
+
+    # (k) Der untere Rand waechst mit der Zahl der Segmente. DAS ist der
+    # behobene Fehler: Vorher war er gar nicht gesetzt.
+    ohne = balken_geometrie(2, 0)[1]
+    mit_wenig = balken_geometrie(2, 3)[1]
+    mit_viel = balken_geometrie(2, 11)[1]
+    if not (ohne < mit_wenig < mit_viel):
+        print(f"    FEHLER — unterer Rand waechst nicht mit der Segmentzahl: "
+              f"{ohne} / {mit_wenig} / {mit_viel}")
+        f += 1
+    elif ohne != ACHSE_UNTEN_PX:
+        print(f"    FEHLER — ohne Legende sollte der Rand {ACHSE_UNTEN_PX} "
+              f"sein, ist {ohne}")
+        f += 1
+    else:
+        soll = ACHSE_UNTEN_PX + LEGENDE_ABSTAND_PX + 4 * LEGENDE_ZEILE_PX
+        if mit_viel != soll:
+            print(f"    FEHLER — 11 Segmente ergeben {mit_viel} statt {soll}")
+            f += 1
+        else:
+            print(f"    OK — unterer Rand {ohne} ohne Legende, {mit_viel} bei "
+                  "elf Segmenten (vier Zeilen)")
+
+    # (l) Feste Hoehe je Balken, bis der Deckel greift.
+    for anzahl in (1, 2, 5, 15):
+        if abs(balkenhoehe_je_zeile(anzahl) - BALKEN_HOEHE_PX) > 1e-9:
+            print(f"    FEHLER — bei {anzahl} Balken ist die Hoehe je Balken "
+                  f"{balkenhoehe_je_zeile(anzahl)} statt {BALKEN_HOEHE_PX}")
+            f += 1
+    if balkenhoehe_je_zeile(19) >= BALKEN_HOEHE_PX:
+        print("    FEHLER — bei 19 Balken greift der Deckel nicht")
+        f += 1
+    if balkenhoehe_je_zeile(200) < 20:
+        print("    FEHLER — der Boden haelt nicht, Balken werden unlesbar")
+        f += 1
+    print(f"    OK — {BALKEN_HOEHE_PX} px je Balken, Deckel greift ab 16")
+
+    # (m) Die Hoehe geht auf: oben + Zeichenflaeche + unten.
+    for balken, eintraege in ((2, 11), (5, 4), (19, 15), (1, 0)):
+        hoehe, unten = balken_geometrie(balken, eintraege)
+        soll = round(RAND_OBEN_PX + balken * balkenhoehe_je_zeile(balken)
+                     + unten)
+        if hoehe != soll:
+            print(f"    FEHLER — {balken}/{eintraege}: Hoehe {hoehe} statt {soll}")
+            f += 1
+    print("    OK — Hoehe = oben + Balken + unten")
+
+    # (n) AN DER ECHTEN FIGUR, ueber alle Achsen und Auswahlgroessen: Der
+    # reservierte Rand muss zur Zahl der gezeichneten Spuren passen, und die
+    # Legende muss am Rand der FIGUR haengen.
+    namen_alle = list(bestaende)
+    for achse in EXPOSURE_ACHSEN:
+        gattung = "Aktien" if achse == ACHSE_SEGMENT else None
+        for k in (2, 5, len(namen_alle)):
+            aus = {n: bestaende[n] for n in namen_alle[:k]}
+            tab = exposure_tabelle(aus, achse, gattung)
+            fig = exposure_figur(tab, achse)
+            if fig is None:
+                continue
+            soll_h, soll_u = balken_geometrie(len(tab), len(tab.columns))
+            if fig.layout.margin.b != soll_u:
+                print(f"    FEHLER — {achse}/{k}: margin.b {fig.layout.margin.b} "
+                      f"statt {soll_u}")
+                f += 1
+            if fig.layout.height != soll_h:
+                print(f"    FEHLER — {achse}/{k}: Hoehe {fig.layout.height} "
+                      f"statt {soll_h}")
+                f += 1
+            if fig.layout.margin.t != RAND_OBEN_PX:
+                print(f"    FEHLER — {achse}/{k}: margin.t falsch")
+                f += 1
+            # DIE LEGENDE HAENGT AN DER FIGUR, NICHT AN DER ZEICHENFLAECHE.
+            # Mit Paper-Bezug schrumpfte der Abstand genau dann, wenn er
+            # gebraucht wurde — bei wenigen Strategien.
+            if fig.layout.legend.yref != "container" or fig.layout.legend.y != 0:
+                print(f"    FEHLER — {achse}/{k}: Legende haengt an "
+                      f"{fig.layout.legend.yref!r} bei y={fig.layout.legend.y}")
+                f += 1
+            # OHNE feste Eintragsbreite waere die Zeilenzahl wieder geraten.
+            if (fig.layout.legend.entrywidthmode != "fraction"
+                    or abs(fig.layout.legend.entrywidth
+                           - 1.0 / LEGENDE_JE_ZEILE) > 1e-9):
+                print(f"    FEHLER — {achse}/{k}: Eintragsbreite nicht fest")
+                f += 1
+    print(f"    OK — {len(EXPOSURE_ACHSEN)} Achsen x 3 Auswahlgroessen: Rand, "
+          "Hoehe und Legendenverankerung stimmen")
+
+    # (o) Der GEMELDETE FALL namentlich, damit er nicht still zurueckkommt.
+    zwei = {n: bestaende[n] for n in ("Pro", "Pro Dividende")
+            if n in bestaende}
+    if len(zwei) == 2:
+        tab = exposure_tabelle(zwei, ACHSE_SEGMENT, "Aktien")
+        fig = exposure_figur(tab, ACHSE_SEGMENT)
+        zeilen = legendenzeilen(len(tab.columns))
+        if zeilen < 2:
+            print(f"    FEHLER — der gemeldete Fall hat nur {zeilen} "
+                  "Legendenzeile(n); pruefte er je den Fehler?")
+            f += 1
+        elif fig.layout.margin.b <= ACHSE_UNTEN_PX:
+            print(f"    FEHLER — Pro/Pro Dividende, Segment/Aktien: unterer "
+                  f"Rand {fig.layout.margin.b} laesst der Legende keinen Platz")
+            f += 1
+        else:
+            print(f"    OK — der gemeldete Fall: {len(tab.columns)} Segmente, "
+                  f"{zeilen} Legendenzeilen, unterer Rand {fig.layout.margin.b} px")
+    else:
+        print("    UEBERSPRUNGEN — Pro / Pro Dividende nicht im Bestand")
+
+    # (p) Auch die Ueberschneidung rechnet mit derselben Formel — dort ohne
+    # Legende, also nur der Achsentitel-Platz.
+    tab_ue = ueberschneidung_tabelle(bestaende, bezug, "WKN")
+    fig_ue = ueberschneidung_figur(tab_ue, bezug, EBENE_TITEL_LOKAL)
+    soll_h, soll_u = balken_geometrie(len(tab_ue), 0)
+    if fig_ue.layout.margin.b != soll_u or fig_ue.layout.height != soll_h:
+        print(f"    FEHLER — Ueberschneidung: {fig_ue.layout.height}/"
+              f"{fig_ue.layout.margin.b} statt {soll_h}/{soll_u}")
+        f += 1
+    else:
+        print(f"    OK — Ueberschneidung nutzt dieselbe Rechnung "
+              f"({soll_h} px, unten {soll_u})")
+
     # Leere Eingaben -> keine Figur, damit die Ansicht einen Satz zeigen kann.
     if (ueberschneidung_figur(ueberschneidung_tabelle({}, "x", "WKN"), "x", "WKN")
             is not None):
@@ -785,14 +986,17 @@ def schritt8_apptest_bestand():
 
 def schritt9_drilldown():
     print("Schritt 9 — der Drilldown: Auswahl, Balken, deutsche Zahlen")
-    try:
-        from modules.strategievergleich import (
-            EBENEN, EBENE_TITEL, gewaehlte_gegenpartei,
-            ueberschneidung_tabelle, _drilldown_tabelle,
-        )
-    except Exception as ex:
-        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+    sym = _symbole("modules.strategievergleich",
+                   ["EBENEN", "EBENE_TITEL", "gewaehlte_gegenpartei",
+                    "ueberschneidung_tabelle", "_drilldown_tabelle"])
+    if sym is None:
         return 0
+    if sym is False:
+        return 1
+    EBENEN, EBENE_TITEL = sym["EBENEN"], sym["EBENE_TITEL"]
+    gewaehlte_gegenpartei = sym["gewaehlte_gegenpartei"]
+    ueberschneidung_tabelle = sym["ueberschneidung_tabelle"]
+    _drilldown_tabelle = sym["_drilldown_tabelle"]
     bestaende = _bestaende_fuer_test()
     if bestaende is None:
         return 0
