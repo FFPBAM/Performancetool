@@ -332,7 +332,22 @@ bevor man sie löscht (#47).
 - Commit-Nachrichten über `git commit -F <datei>`, nicht `-m` mit
   PowerShell-Here-String: eingebettete Anführungszeichen zerlegen sonst die
   Argumentgrenzen und git liest die Nachricht als Pathspecs (10.08.2026).
-- Zeilenenden: LF ist Repo-Konvention.
+- **Zeilenenden: LF ist Repo-Konvention — aber nur in der Ablage.** Git
+  speichert überall LF (`git ls-files --eol` zeigt für jede Datei `i/lf`),
+  `core.autocrlf` steht auf `true`. Der **Arbeitsbaum ist dagegen gemischt**:
+  am 18.08.2026 gemessen **25 Dateien CRLF und 16 LF**, je nachdem, ob eine
+  Datei zuletzt ausgecheckt oder direkt geschrieben wurde.
+
+  Wer eine Datei bearbeitet, **behält deren vorhandene Zeilenenden bei** —
+  sonst zeigt `git diff` die ganze Datei als geändert statt der drei Zeilen,
+  die man wirklich angefasst hat, und die Änderung wird unprüfbar. Vorgehen:
+  die Datei mit `newline=""` lesen, am gelesenen Text erkennen, ob sie
+  Windows-Zeilenenden trägt, und die Suchtexte vor dem Ersetzen darauf
+  umstellen. Am Commit ändert das nichts — Git normalisiert ohnehin auf LF;
+  es geht allein um einen lesbaren Diff.
+
+  Kostete am 18.08.2026 zwei fehlgeschlagene Bearbeitungen: Die Suchtexte
+  trugen reine Zeilenumbrüche und trafen in einer CRLF-Datei nicht.
 
 ---
 
