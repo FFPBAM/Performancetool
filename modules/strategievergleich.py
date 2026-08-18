@@ -78,6 +78,8 @@ DREI HAUSREGELN, wie in `risiko_ansicht.py`:
    Satz, der sie beim Namen nennt.
 """
 
+import hashlib
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -830,18 +832,82 @@ def _stichtag_text(auswertungsdatum):
     return f"Bestand zum {fmt_date_de(auswertungsdatum)}."
 
 
-def _waehle_gueltig(schluessel, optionen, beschriftung, hilfe=None):
-    """Auswahlfeld, das einen ungueltig gewordenen Wert vorher aufraeumt.
+def auswahl_kennung(optionen):
+    """Kurze, stabile Kennung einer Optionsmenge.
 
-    Die Strategieauswahl oben veraendert die Optionen dieser Felder. Bleibt
-    im session_state ein Wert stehen, den es nicht mehr gibt, wirft Streamlit
-    beim Anlegen des Widgets. Der Key wird deshalb VOR dem Rendern geleert -
-    das ist erlaubt, solange das Widget in diesem Lauf noch nicht existiert
-    (#4: nach dem Anlegen wuerde dieselbe Zuweisung werfen).
+    Sie wird an den Widget-Schluessel gehaengt: Aendert sich die Menge, ist
+    der Schluessel ein anderer, und Streamlit legt ein NEUES Widget an - eines,
+    das gar keinen alten Wert tragen kann.
+
+    SORTIERT, damit blosses Umsortieren keine neue Kennung ergibt. Die
+    Reihenfolge der Strategien folgt der Auswahl des Beraters; sie kann sich
+    aendern, ohne dass sich die MENGE aendert, und dann soll das Feld stehen
+    bleiben.
+
+    Leere Menge -> "leer", damit auch dieser Fall einen Schluessel hat.
     """
-    if st.session_state.get(schluessel) not in optionen:
-        st.session_state.pop(schluessel, None)
-    return st.selectbox(beschriftung, optionen, key=schluessel, help=hilfe)
+    if not optionen:
+        return "leer"
+    roh = "|".join(str(o) for o in sorted(optionen, key=str))
+    return hashlib.blake2s(roh.encode("utf-8"), digest_size=4).hexdigest()
+
+
+def auswahl_uebernehmen(vorher, optionen):
+    """Welcher Wert soll im neuen Auswahlfeld stehen?
+
+    Der bisherige, wenn es ihn noch gibt - sonst der erste. `None` bei leerer
+    Optionsmenge.
+
+    ENTSCHIEDEN (Philip, 18.08.2026): Wer von 19 Strategien auf die fuenf
+    cVV-Reihen reduziert und "cVV konservativ" behaelt, soll seinen Bezug
+    nicht verlieren. Wer ihn wegnimmt, bekommt sofort etwas Gueltiges statt
+    einer leeren Ansicht.
+    """
+    if not optionen:
+        return None
+    return vorher if vorher in optionen else optionen[0]
+
+
+def _waehle_gueltig(basis, optionen, beschriftung, hilfe=None):
+    """Auswahlfeld, dessen Wert nicht ungueltig werden KANN.
+
+    DER VORGAENGER RAEUMTE AUF UND HAT NICHT GETRAGEN. Er las den Wert aus
+    dem session_state, verglich ihn mit den Optionen und loeschte den
+    Schluessel, wenn er nicht mehr passte. Am 18.08.2026 gemeldet: Nach dem
+    Reduzieren der Strategieauswahl auf zwei stand im Feld "Bezugsstrategie"
+    weiter "cVV konservativ", und der Abschnitt zeigte keine Daten.
+
+    Der Fehler war nicht die Bedingung, sondern die ANNAHME dahinter - dass
+    ein geloeschter Schluessel geloescht bleibt. Ueber Streamlits
+    Widget-Zustand laesst sich das von aussen nicht zusichern, und AppTest
+    kann es nicht nachstellen: Drei Bedienwege probiert, in der Testumgebung
+    griff der alte Schutz jedes Mal. Dieselbe Feststellung wie beim
+    Keep-Alive am selben Vormittag (#64).
+
+    JETZT STRUKTURELL: Der Widget-Schluessel traegt eine Kennung der
+    Optionsmenge. Aendert sich die Menge, ist es ein anderes Widget, und ein
+    Widget ohne Vorgeschichte kann keinen alten Wert zeigen. Dasselbe Muster
+    wie beim Strategien-Mehrfachfeld darueber (#4, Loesung A).
+
+    `index` UND NICHT eine Zuweisung an den session_state: `index` wirkt nur
+    bei der ERSTEN Instanziierung eines Schluessels - also genau dann, wenn
+    die Optionsmenge neu ist. Bei unveraenderten Optionen bleibt die Wahl des
+    Beraters unangetastet. Und es wird nie ein Widget-Schluessel zugewiesen,
+    womit die Falle aus #4 gar nicht erst auftreten kann.
+
+    Der Merker (`<basis>_zuletzt`) ist ein GEWOEHNLICHER Schluessel und kein
+    Widget-Schluessel. Das Keep-Alive darf ihn re-assignieren, und genau das
+    soll es: Er ueberlebt damit den Ansichtswechsel.
+    """
+    if not optionen:
+        return None
+    merker = f"{basis}_zuletzt"
+    start = auswahl_uebernehmen(st.session_state.get(merker), optionen)
+    wahl = st.selectbox(beschriftung, optionen,
+                        index=optionen.index(start),
+                        key=f"{basis}_{auswahl_kennung(optionen)}", help=hilfe)
+    st.session_state[merker] = wahl
+    return wahl
 
 
 def gewaehlte_gegenpartei(auswahl, tabelle):
