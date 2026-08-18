@@ -1,7 +1,8 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **27 von 27 Suiten grün**, `pyflakes` bei null.
+**Nicht gemergt** · **27 von 27 Suiten grün**, `pyflakes` bei null ·
+**alles gepusht, DRACOON steht auf demselben Stand.**
 
 > **Der dritte Tab ist live und abgenommen** — Stufe 1 bis 3 plus die
 > Nachbesserungen aus dem Gegentest (18.08.2026). Philip an der laufenden
@@ -48,8 +49,10 @@
 > ist die einzige Aufzeichnung darüber, warum das Werkzeug so aussieht, wie
 > es aussieht.
 >
-> Für die nächste Sitzung heißt das: `git log --oneline origin/verbesserungen`
-> zeigt, ob seit dem 18.08.2026 (`10bd482`) fremde Commits dazugekommen sind.
+> Für die nächste Sitzung heißt das:
+> `git fetch origin && git log --oneline HEAD..origin/verbesserungen`
+> zeigt sofort, ob fremde Commits dazugekommen sind — **ohne dass hier ein
+> Hash stehen muss**, der nach jedem Push ohnehin einen Stand alt wäre.
 
 > ### ⚠️ Zuerst lesen: Dieser Branch IST die laufende App
 >
@@ -864,6 +867,46 @@ Fehler wörtlich — *„cVV defensiv: Aktien hat #C3A069, erwartet #14355C"*.
 Der Broschüren-Vergleich war Pflicht: `ASSET_FARBEN` und `classify_gattung`
 liegen **im Export-Pfad**.
 
+#### Nachfrage zur Rentenfarbe: nicht verifizierbar — und das war die Antwort
+
+Nach der Sichtprüfung kam der Verdacht, die Renten seien auf der Webseite der
+Bank **dunkler** als im Werkzeug, mit der Bitte, das über die Seite zu
+verifizieren. **Das ging nicht.** Die brauchbare Antwort war, genau das zu
+sagen, statt eine plausible Zahl zu liefern.
+
+Warum es nicht ging, als technischer Merksatz für das nächste Mal: Das
+Abrufwerkzeug wandelt eine Seite in **Text** um und wirft dabei CSS, SVG und
+Skripte weg. Die Ringe unter „Aktuelle Struktur" entstehen erst im Browser;
+ein gezielter zweiter Versuch nach Diagrammdateien fand **nur Fotos und das
+Logo**. Eine Farbe, die in keiner abrufbaren Datei steht, ist so nicht
+messbar — und ein Werkzeug, das die Quelle nicht lesen kann, darf ihr
+Ergebnis nicht behaupten.
+
+Geliefert wurde stattdessen das, was die Frage trotzdem entscheidbar macht:
+**alle** Farben der sechs Vorlagen ausgezählt, mit Helligkeit.
+
+| Farbe | Vorkommen | Helligkeit | wofür |
+|---|---:|---:|---|
+| `#14355C` | 21x | 49 | Aktien |
+| **`#66A4CE`** | **20x** | **154** | **Renten** |
+| `#BB9256` | 19x | 150 | Edelmetalle |
+| `#9FD0EF` | 15x | 200 | Liquidität |
+| `#386FA7` | 2x | 103 | Corporates, USD |
+| `#5F8CA1` | 2x | 132 | Prod. Gewerbe und Industrie |
+
+Damit war der einzige ernsthafte Kandidat für „dunkler" benannt: `#386FA7`,
+deutlich dunkler — aber in keiner Vorlage je für Renten benutzt. Dazu eine
+Vergleichsseite mit vier Ringen, gleiche Anteile, Aktien, Edelmetalle und
+Liquidität überall gleich, **nur die Renten wechselten**.
+
+**Ergebnis:** Philip hat in der Broschüre nachgesehen und `#66A4CE`
+bestätigt. **Am Code wurde nichts geändert.**
+
+Der Grundsatz stand vorher schon im Modul und im Prüfstein — die Palette
+*„stammt aus den Vorlagen selbst (nicht erfunden)"*. Eine Farbe auf Verdacht
+zu ändern hätte den Prüfstein rot gemacht und Broschüre und Werkzeug
+auseinandergezogen, für eine Vermutung, die sich als falsch erwies.
+
 ---
 
 ## So starten wir beim nächsten Mal
@@ -930,6 +973,19 @@ git fetch origin && git reset --hard origin/verbesserungen
 `git reset --hard` auf H: ist unkritisch, **solange dort nicht gearbeitet
 wird** — die Kopie soll ja nur spiegeln. Wer doch etwas auf H: geändert hat:
 vorher `git status` dort ansehen.
+
+**Am 18.08.2026 durchgeführt.** Der Sprung ging über **10 Commits** — auf H:
+lag noch der Stand vor der Legenden-Geometrie, nicht nur die Farbarbeit des
+Tages fehlte. Auf Vorlauf geprüft wurde trotzdem
+(`git log origin/verbesserungen..HEAD` muss leer sein), weil ein Kollege
+parallel arbeiten könnte; er war leer, also reiner Fast-Forward.
+
+**Die Geisterdateien sind dabei noch einmal beobachtet worden**, dreimal
+hintereinander: `test_monatsrenditen.py` lag unversioniert im
+Wurzelverzeichnis, war beim gezielten Nachsehen Sekunden später verschwunden
+und stand nach dem Reset wieder da. Wer so etwas auf H: findet, muss es also
+**nicht** retten — und die Regel „Dateien beim Commit explizit nennen"
+bleibt begründet.
 
 **Falls Git auf H: „dubious ownership" meldet:** einmalig
 

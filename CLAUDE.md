@@ -68,6 +68,12 @@ prüfte statt gegen eine Schwelle (#47).
   *Segment*) als RENTEN, `Immobilien-Aktien/Fonds` als AKTIEN — eine
   kategoriebasierte Regel färbte damit Segment-Ringe mit. Und: **OOXML will
   die Farbe ohne `#`, Plotly mit** — ein `#` im XML fällt nicht auf.
+  **Die Werte nie auf Verdacht ändern:** Sie sind aus den Vorlagen
+  abgelesen, `tests/test_farben.py` hält sie dort fest, und die Webseite
+  der Bank taugt nicht als Gegenprobe — ihre Ringe entstehen erst im
+  Browser, das Abrufwerkzeug sieht nur Text (18.08.2026 zweimal versucht).
+  Quelle ist die Broschüre. Wer einen Verdacht hat, zählt die Farben der
+  Vorlagen aus und legt die Kandidaten nebeneinander.
 - **Ein Auswahlfeld, dessen Optionen von einer anderen Auswahl abhängen,
   bekommt einen Schlüssel mit Kennung der Optionsmenge** (#66, 18.08.2026).
   Sonst zeigt es einen Wert, den es nicht mehr gibt. Den Wert nachträglich
@@ -410,6 +416,8 @@ bevor man sie löscht (#47).
 - Netzlaufwerk-Eigenheit: DRACOON legt kurzlebige Dateien an (`__init__.py`,
   `py.typed` erscheinen und verschwinden von selbst) — `git add -A` kann
   daran scheitern. **Dateien immer explizit nennen**, auch auf C:.
+  Am 18.08.2026 erneut beobachtet: dieselbe Datei war innerhalb einer
+  Minute da, weg und wieder da. Nichts davon ist zu retten.
 - Commit-Nachrichten über `git commit -F <datei>`, nicht `-m` mit
   PowerShell-Here-String: eingebettete Anführungszeichen zerlegen sonst die
   Argumentgrenzen und git liest die Nachricht als Pathspecs (10.08.2026).
