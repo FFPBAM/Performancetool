@@ -769,39 +769,21 @@ def gewaehlte_gegenpartei(auswahl, tabelle):
     return tabelle.index[0]
 
 
-# Der Beitragsbalken. Zwoelf Bausteine sind genug, um Groessenverhaeltnisse
-# zu sehen, und schmal genug, dass die Spalte nicht dominiert.
-BALKEN_BREITE = 12
-BALKEN_ZEICHEN = "\u2588"
-
-
-def beitragsbalken(wert, maximum, breite=BALKEN_BREITE):
-    """Ein Balken aus Textbausteinen, laenge proportional zu `wert`.
-
-    WARUM AUS TEXT UND NICHT MIT `st.column_config.ProgressColumn`:
-    Die Spaltenformate von Streamlit formatieren ihre Zahlen selbst — je nach
-    Einstellung englisch ("7.54%") oder nach der Locale des BROWSERS. Beides
-    waere eine zweite Formatierungsquelle neben `modules/formats.py`, und
-    genau eine Quelle fuer Zahlenformate ist in diesem Projekt Hausregel. Ein
-    Textbalken ist dagegen auf jedem Rechner derselbe, braucht kein CSS
-    (Hausregel 1) und laesst sich auf Proportionalitaet PRUEFEN.
-
-    Bezugsgroesse ist der GROESSTE Beitrag der Tabelle und nicht 1,0: Bei
-    Titelgewichten um vier Prozent waeren sonst alle Balken gleich unsichtbar.
-    Der Balken zeigt also Verhaeltnisse INNERHALB des Paares, nicht absolute
-    Groessen — die stehen als Zahl daneben.
-
-    Ein Wert groesser als null bekommt mindestens einen Baustein: Eine leere
-    Zelle wuerde wie ein Fehlwert aussehen, und ein Beitrag von 0,3 % ist
-    keiner (#46).
-    """
-    try:
-        w, m = float(wert), float(maximum)
-    except (TypeError, ValueError):
-        return ""
-    if not (w > 0) or not (m > 0):
-        return ""
-    return BALKEN_ZEICHEN * max(1, min(breite, round(w / m * breite)))
+# EIN BEITRAGSBALKEN STAND HIER UND IST WIEDER WEG (Philip, 18.08.2026).
+#
+# Die Tabelle trug rechts eine Spalte mit einem Balken aus Blockzeichen,
+# proportional zum groessten Beitrag. Die Idee war, Groessenverhaeltnisse
+# sichtbar zu machen, ohne eine zweite Zahlenformatierung einzufuehren
+# (`st.column_config` formatiert englisch oder nach Browser-Locale).
+#
+# Am Bildschirm las sich das Ergebnis nicht als Balken, sondern als
+# schwarzer Klotz — Philip: "was ist das? Der kann auch weg." Und er hat
+# recht: Ein Block aus U+2588 ist kein Diagramm, sondern eine Textur. Die
+# Zahlen daneben sagen dasselbe, ruhiger und ohne Erklaerungsbedarf.
+#
+# Wer Groessenverhaeltnisse doch zeigen will, faengt nicht wieder bei
+# Textzeichen an: Die Tabelle ist absteigend sortiert, und darueber steht das
+# Chart, das genau dafuer da ist.
 
 
 def _drilldown_tabelle(bestaende, bezug, gegen, ebene):
@@ -815,7 +797,6 @@ def _drilldown_tabelle(bestaende, bezug, gegen, ebene):
     if roh.empty:
         return None
 
-    hoechster = float(roh["gemeinsam"].max())
     spalten = {}
     if ebene == EBENE_TITEL:
         spalten["Wertpapier"] = list(roh["bezeichnung"])
@@ -826,7 +807,6 @@ def _drilldown_tabelle(bestaende, bezug, gegen, ebene):
     spalten[bezug] = [fmt_pct(v) for v in roh["gewicht_a"]]
     spalten[gegen] = [fmt_pct(v) for v in roh["gewicht_b"]]
     spalten["gemeinsam"] = [fmt_pct(v) for v in roh["gemeinsam"]]
-    spalten[""] = [beitragsbalken(v, hoechster) for v in roh["gemeinsam"]]
     return pd.DataFrame(spalten)
 
 

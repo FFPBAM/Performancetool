@@ -787,9 +787,8 @@ def schritt9_drilldown():
     print("Schritt 9 — der Drilldown: Auswahl, Balken, deutsche Zahlen")
     try:
         from modules.strategievergleich import (
-            BALKEN_BREITE, EBENEN, EBENE_TITEL, beitragsbalken,
-            gewaehlte_gegenpartei, ueberschneidung_tabelle,
-            _drilldown_tabelle,
+            EBENEN, EBENE_TITEL, gewaehlte_gegenpartei,
+            ueberschneidung_tabelle, _drilldown_tabelle,
         )
     except Exception as ex:
         print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
@@ -836,20 +835,26 @@ def schritt9_drilldown():
     if not f:
         print("    OK — Treffer, Ersatzweg, veralteter Name und Schrott")
 
-    # (b) DER BALKEN ist proportional und nie leer bei einem echten Wert.
-    f += 0 if beitragsbalken(1.0, 1.0) == "\u2588" * BALKEN_BREITE else 1
-    f += 0 if len(beitragsbalken(0.5, 1.0)) == BALKEN_BREITE // 2 else 1
-    if beitragsbalken(0.0001, 1.0) == "":
-        print("    FEHLER — winziger Beitrag ergibt einen leeren Balken; das "
-              "sieht aus wie ein Fehlwert (#46)")
+    # (b) KEIN BEITRAGSBALKEN MEHR (Philip, 18.08.2026). Die Tabelle trug
+    # rechts eine Spalte aus Blockzeichen; am Bildschirm las sie sich als
+    # schwarzer Klotz statt als Groessenverhaeltnis. Der Schritt haelt die
+    # Entscheidung fest — die Sortierung und das Chart darueber zeigen die
+    # Verhaeltnisse, eine Textur braucht es dafuer nicht.
+    gegen_pruef = tabelle.index[0]
+    probe = _drilldown_tabelle(bestaende, bezug, gegen_pruef, EBENE_TITEL)
+    if probe is None:
+        print("    FEHLER — keine Drilldown-Tabelle")
+        return f + 1
+    if "" in probe.columns:
+        print("    FEHLER — es gibt wieder eine namenlose Balkenspalte")
         f += 1
-    for wert, maximum in ((0.0, 1.0), (0.5, 0.0), (None, 1.0), ("x", 1.0)):
-        if beitragsbalken(wert, maximum) != "":
-            print(f"    FEHLER — beitragsbalken({wert!r}, {maximum!r}) "
-                  "liefert einen Balken")
-            f += 1
-    print(f"    OK — Balken proportional, Grenzfaelle leer, nie laenger "
-          f"als {BALKEN_BREITE}")
+    bloecke = [c for c in probe.columns
+               if any("\u2588" in str(v) for v in probe[c])]
+    if bloecke:
+        print(f"    FEHLER — Blockzeichen in den Spalten {bloecke}")
+        f += 1
+    if not bloecke and "" not in probe.columns:
+        print("    OK — keine Balkenspalte, keine Blockzeichen")
 
     # (c) DIE TABELLE traegt deutsche Zahlen — keine zweite Formatierungs-
     # quelle neben `modules/formats.py`.
