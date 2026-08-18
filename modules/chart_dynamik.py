@@ -1328,13 +1328,16 @@ def _hat_dateax(chart):
 #   BB9256 gold       · 808080 grau
 # ─────────────────────────────────────────────────────────────────────────
 
-ASSET_FARBEN = {
-    "AKTIEN":       "14355C",   # dunkelblau
-    "RENTEN":       "66A4CE",   # hellblau
-    "EDELMETALLE":  "BB9256",   # gold
-    "LIQUIDITÄT":   "9FD0EF",   # noch helleres blau
-    "SONSTIGE":     "808080",   # grau
-}
+# UMGEZOGEN nach modules/farben.py (18.08.2026). Die Tabelle wird seit
+# heute auch von der Oberflaeche gebraucht - dort bekam im Ring "Allokation
+# nach Gattung" die GROESSTE Gattung immer Fuggerblau, weil die Farben nach
+# Position vergeben wurden. Genau derselbe Fehler wie hier am 10.07.2026,
+# nur an anderer Stelle; die Loesung von damals war nur nicht erreichbar,
+# weil sie in einem Modul des Export-Pfads lag.
+#
+# `farben.py` zieht weder Streamlit noch lxml herein, ist also von beiden
+# Seiten erreichbar. Werte weiterhin OHNE Doppelkreuz - so will es OOXML.
+from modules.farben import ASSET_FARBEN, KERNKLASSEN  # noqa: E402
 
 # Schriftfarbe der Prozent-Labels: IMMER Schwarz, unabhängig vom Segment.
 # (Anforderung 10.07.2026 — die Zuordnung Label→Segment läuft über Position
@@ -1343,7 +1346,7 @@ ASSET_FARBEN = {
 # _LEADER_RADIAL_STUB, _LEADER_MIN_STUB stehen jetzt im CONFIG-Block ganz oben.
 
 
-_KERNKLASSEN = {"AKTIEN", "RENTEN", "EDELMETALLE", "LIQUIDITÄT"}
+_KERNKLASSEN = KERNKLASSEN
 _FILL_TAGS = ("noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill")
 
 

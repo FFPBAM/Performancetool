@@ -259,11 +259,14 @@ PowerPoint nachzuziehen wären — inklusive jeder künftigen Vorlage."""
 
 
 # ─── Asset-Gruppen (Reihenfolge in Tabelle + Ring) ──────────────────────────
-GROUP_AKTIEN = "AKTIEN"
-GROUP_RENTEN = "RENTEN"
-GROUP_EDELMETALLE = "EDELMETALLE"
-GROUP_LIQUIDITAET = "LIQUIDITÄT"
-GROUP_SONSTIGE = "SONSTIGE"
+# UMGEZOGEN nach modules/farben.py (18.08.2026): Die Gruppen und ihre
+# Klassifizierung haengen an den festen Assetklassen-Farben und werden seit
+# heute auch von der Oberflaeche gebraucht. Hier weitergereicht, damit die
+# Aufrufstellen unveraendert bleiben.
+from modules.farben import (  # noqa: E402
+    GROUP_AKTIEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET, GROUP_RENTEN,
+    GROUP_SONSTIGE, klassifiziere_gattung,
+)
 
 GROUP_ORDER = [GROUP_AKTIEN, GROUP_RENTEN, GROUP_EDELMETALLE, GROUP_LIQUIDITAET, GROUP_SONSTIGE]
 """Standard-Reihenfolge der Asset-Gruppen für Tabellen und Allokations-Ring."""
@@ -702,33 +705,12 @@ def safe_marktrisikowert(value) -> str:
         return s if s else "-"
 
 
-def classify_gattung(gattung) -> str:
-    """Ordnet eine Gattung einer der 5 Hauptgruppen zu.
-
-    Heuristik:
-    - "aktie" / "equity" → AKTIEN
-    - "rente" / "anleihe" / "bond" → RENTEN
-    - "edelmetall" / "gold" / "silber" → EDELMETALLE
-    - "liquid" / "cash" → LIQUIDITÄT
-    - sonst → SONSTIGE
-    """
-    if gattung is None:
-        return GROUP_SONSTIGE
-    try:
-        if pd.isna(gattung):
-            return GROUP_SONSTIGE
-    except (TypeError, ValueError):
-        pass
-    g = str(gattung).lower()
-    if "aktie" in g or "equity" in g:
-        return GROUP_AKTIEN
-    if "rente" in g or "anleihe" in g or "bond" in g:
-        return GROUP_RENTEN
-    if "edelmetall" in g or "gold" in g or "silber" in g:
-        return GROUP_EDELMETALLE
-    if "liquid" in g or "cash" in g:
-        return GROUP_LIQUIDITAET
-    return GROUP_SONSTIGE
+# UMGEZOGEN nach modules/farben.py (18.08.2026), unveraendert. Der Name
+# bleibt hier verfuegbar: acht Aufrufstellen in diesem Modul sprechen ihn so
+# an. Weitergereicht per ZUWEISUNG - dasselbe Muster wie
+# `shared.fmt_date_de`, damit das Durchreichen sichtbar ist und pyflakes den
+# Namen fuer benutzt haelt (es kennt kein noqa).
+classify_gattung = klassifiziere_gattung
 
 
 def group_portfolio_positions(df: pd.DataFrame) -> dict:
