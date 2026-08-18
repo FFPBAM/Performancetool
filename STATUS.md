@@ -15,11 +15,15 @@
 > `tests/test_kennzahlen_hinweise.py` (28. Suite).
 >
 > **Gepusht — der Branch ist die laufende App, die Änderung ist also live.**
-> Die Sichtprüfung am Bildschirm ist damit **nicht** vorweggenommen: Sie
-> wurde bewusst übersprungen (Michael, 18.08.2026), weil es um zwei Sätze in
-> einem Tooltip geht und nicht um Geometrie. Der Sharpe-Hinweis ist länger
-> geworden — falls er im Tooltip unschön umbricht, ist das ein Wort und kein
-> Umbau.
+>
+> **➜ Das eine, worum ich dich bitte:** Zieh im Performance-Reiter einmal die
+> Fragezeichen von *Calmar Ratio* und *Sharpe Ratio* auf und sieh nach, ob der
+> Sharpe-Text **sauber umbricht**. Er ist von 232 auf 297 Zeichen gewachsen.
+> Die Sichtprüfung wurde bewusst übersprungen (Michael, 18.08.2026) — es geht
+> um zwei Sätze in einem Tooltip und nicht um Geometrie —, aber übersprungen
+> heißt übersprungen und nicht erledigt (#60). Fällt sie unschön aus, ist es
+> ein Wort und kein Umbau. Steht auch in `Start.txt` und unter
+> „Offene Punkte".
 >
 > **DRACOON ist nachgezogen**, am Ende über den dokumentierten Weg
 > (`git fetch origin` + `reset --hard origin/verbesserungen`). **Achtung, der
@@ -992,17 +996,30 @@ Diese drei Zeilen im Chat genügen (stehen auch in `Start.txt` zum Kopieren):
    ist gar nicht installiert und wird für push/pull auch nicht gebraucht).
    Angemeldet als `FFPBAM`, Schreibrechte auf `FFPBAM/Performancetool`.
 2. **Stand holen:** `git fetch origin && git status -sb`
-3. **Testumgebung:** `.venv` liegt im Projekt und übersteht den Neustart.
-   Falls sie doch fehlt, steht das Anlegen weiter unten.
+3. **Testumgebung:** `.venv` liegt im Projekt und übersteht den Neustart —
+   **aber nur auf dem Rechner, auf dem sie angelegt wurde.** `.venv` und
+   `.streamlit\secrets.toml` sind gitignored und kommen **nicht** mit dem
+   Klon. Auf einer anderen Maschine fehlen beide:
+
+   ```
+   python -m venv .venv
+   .venv\Scripts\python.exe -m pip install -r requirements.txt
+   ```
 
 **App lokal ansehen** (nicht nötig zum Arbeiten, aber praktisch):
 
 ```
-.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.headless true
 ```
 
+**`--server.headless true` ist kein Schmuck** (18.08.2026): Beim allerersten
+Start fragt Streamlit auf stdin nach einer E-Mail (Onboarding). Wo kein
+Eingabekanal hängt, bricht es mit **Exit 127** ab — das sieht aus wie ein
+kaputtes Paket und ist keins. Der Schalter überspringt die Frage; die Seite
+danach selbst unter http://localhost:8501 öffnen.
+
 Braucht `.streamlit\secrets.toml` mit einem Testzugang — die Datei ist
-gitignored und muss lokal angelegt werden:
+gitignored und muss lokal angelegt werden (das Repo ist öffentlich):
 
 ```toml
 [passwords]
@@ -2203,6 +2220,14 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 **Es sind noch drei**, alle bei Philip. Punkt 1 (Sichtprüfung) ist am
 17.08.2026 abends **erledigt** und bleibt nur als Beleg stehen. Zwei weitere
 Punkte sind **bewusst zurückgestellt** und stehen darunter.
+
+**NEU 18.08.2026 — Sichtprüfung der beiden Tooltips.** Im Performance-Reiter
+die Fragezeichen von *Calmar Ratio* und *Sharpe Ratio* aufziehen: Bricht der
+Sharpe-Text sauber um? Er ist von 232 auf 297 Zeichen gewachsen. Bewusst
+übersprungen (Michael, 18.08.2026) — und deshalb hier genannt und nicht
+stillschweigend weggelassen. Der Wortlaut selbst ist per
+`tests/test_kennzahlen_hinweise.py` festgenagelt; zu beurteilen ist allein das
+Schriftbild.
 
 0. **NEU 14.08.2026 — die geänderten Zahlen freigeben.** Befund B3 hat die
    Honorarformel korrigiert; jede Nachkosten-Zahl im Werkzeug **und in der

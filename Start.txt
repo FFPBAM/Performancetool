@@ -1,5 +1,5 @@
 START-PROMPT — FFPB Performancetool
-Stand: 17.08.2026 · Branch verbesserungen · 94 Commits vor main
+Stand: 18.08.2026 · Branch verbesserungen · 134 Commits vor main
 
 ==========================================================================
 DIESE DREI ZEILEN IN DEN CHAT KOPIEREN:
@@ -33,19 +33,89 @@ Stuerzt sie mit ImportError ab, ZUERST "Manage app" -> "Reboot app"
 (die Cloud kann ein altes Modul im Speicher behalten), erst danach in
 die Logs sehen. Details in PROJEKT_DOKUMENTATION.md, Transferwissen #11.
 
+Moeglicherweise arbeitet jemand parallel am selben Branch. Deshalb VOR
+der Arbeit und nach jeder laengeren Pause:
+
+    git fetch origin && git status -sb
+    git log --oneline HEAD..origin/verbesserungen     # fremde Commits?
+
+Bei einem Konflikt NICHT mit --force drueber, sondern den fremden Stand
+ansehen und zusammenfuehren.
+
+==========================================================================
+BEIM ERSTEN START AUF EINEM RECHNER — DREI STOLPERSTELLEN
+==========================================================================
+
+Alle drei sind am 18.08.2026 tatsaechlich passiert. Sie kosten je eine
+halbe Stunde, wenn man sie nicht kennt.
+
+1. DIE ARBEITSKOPIE KANN OHNE DIE PUNKT-DATEIEN ANKOMMEN.
+   Genau so lag sie an dem Tag da: alle Projektdateien vorhanden, aber
+   KEIN .git, kein .gitignore, kein .streamlit\. Dann laeuft der Auftakt
+   "git fetch origin" ins Leere ("not a git repository"). Pruefen:
+
+       git -C C:\Entwicklung\Performancetool status
+
+   Meldet das "not a git repository", dann NICHT den Ordner loeschen -
+   die Dateien sind in aller Regel in Ordnung, es fehlt nur die
+   Historie. Reparatur ohne Datenverlust:
+
+       cd C:\Entwicklung\Performancetool
+       git init -b verbesserungen
+       git remote add origin https://github.com/FFPBAM/Performancetool.git
+       git fetch origin
+       git reset --mixed origin/verbesserungen        # NICHT --hard
+       git branch --set-upstream-to=origin/verbesserungen verbesserungen
+       git checkout -- .devcontainer .gitignore .streamlit
+
+   Danach "git status" ansehen: Was dort als geaendert steht, ist echte
+   Abweichung und gehoert geprueft, bevor irgendetwas passiert.
+
+2. .venv UND .streamlit\secrets.toml SIND GITIGNORED.
+   Sie kommen also NICHT mit dem Klon. Auf einem frischen Rechner fehlen
+   beide, und ohne secrets.toml startet die App gar nicht
+   (st.secrets["passwords"], siehe modules/shared.py check_login).
+
+       python -m venv .venv
+       .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+   Und .streamlit\secrets.toml von Hand anlegen (Testzugang, gehoert
+   NIE ins Repo - es ist oeffentlich):
+
+       [passwords]
+       test = "test"
+
+3. DER ERSTE "streamlit run" STIRBT MIT EXIT 127.
+   Streamlit fragt beim allerersten Start auf stdin nach einer E-Mail
+   (Onboarding). Wo kein Eingabekanal haengt, bricht es ab, und es sieht
+   aus wie ein kaputtes Paket. Es ist keins:
+
+       .venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.headless true
+
+   Danach http://localhost:8501 selbst im Browser oeffnen.
+
 ==========================================================================
 WAS OFFEN IST (Details in STATUS.md)
 ==========================================================================
 
-1. SICHTPRUEFUNG der Aenderungen vom 17.08.2026 in der laufenden App —
-   Faelligkeiten je Anleihe, Einzeltitel ohne Scrollbalken, korrigierte
-   Kachel "Anzahl Titel". Prueflisten stehen in STATUS.md.
+1. SICHTPRUEFUNG DER BEIDEN TOOLTIPS (neu 18.08.2026, klein).
+   Im Performance-Reiter auf die Fragezeichen von "Calmar Ratio" und
+   "Sharpe Ratio" zeigen. Der Sharpe-Text ist von 232 auf 297 Zeichen
+   gewachsen - zu beurteilen ist nur, ob er sauber umbricht. Die
+   Sichtpruefung wurde bewusst uebersprungen (Michael, 18.08.2026);
+   faellt sie unschoen aus, ist es ein Wort und kein Umbau.
 
 2. PR MERGEN — https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen
    ACHTUNG: Der Merge aendert am Betrieb nichts, weil die Cloud bereits
    auf verbesserungen laeuft. Er raeumt die Historie auf.
 
-3. Zurueckgestellt (Entscheidung Philip, 12.08.2026): Anlagekriterien
+3. DEPLOY-LOG NACH DEM MERGE ansehen (Manage app -> schwarze Konsole).
+   Die requirements sind nach oben gedeckelt, geprueft wurde lokal unter
+   Python 3.12 - die Cloud laeuft unter 3.14. Das Log ist die einzige
+   Stelle, an der die tatsaechlich installierte Kombination sichtbar
+   wird.
+
+4. Zurueckgestellt (Entscheidung Philip, 12.08.2026): Anlagekriterien
    SCHWEIZ (Werte muessen aus dem Haus kommen) und der
    comdirect-Disclaimer (falsche Kostenregel im Vorlagentext).
 
@@ -53,13 +123,35 @@ WAS OFFEN IST (Details in STATUS.md)
 WICHTIG FUER DIE NAECHSTE SITZUNG
 ==========================================================================
 
-- Gearbeitet wird auf C:, NICHT auf H: (DRACOON). H: wird am Sessionende
-  nachgezogen. Warum: pip dauert dort 20x laenger, und es tauchen
-  Geisterdateien auf.
-- .venv liegt im Projekt und uebersteht den Neustart.
-- 22 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
+- Gearbeitet wird auf C:, NICHT in der DRACOON-Ablage. Die wird am
+  Sessionende nachgezogen. Warum: pip dauert dort 20x laenger, und es
+  tauchen Geisterdateien auf, die von selbst kommen und gehen.
+- DER DRACOON-PFAD IST RECHNERABHAENGIG. Bei Philip ist es das
+  Netzlaufwerk H:\Entwicklung\Forschung_Claude\Performancetool, auf
+  anderen Rechnern haengt der Client dieselbe Ablage ins Benutzerprofil
+  (%USERPROFILE%\DRACOON\<Mandanten-ID>\Entwicklung\...). Aus
+  "Test-Path H:\" -> False folgt also NICHT, dass die Ablage fehlt.
+  Suchen statt annehmen:
+
+      Get-ChildItem "$env:USERPROFILE\DRACOON" -Directory
+
+- In der Ablage scheitert "git reset --hard" beim ersten Versuch ZUR
+  HAELFTE: Arbeitsbaum und Index stehen dann schon auf dem neuen Stand,
+  HEAD nicht. Einmalig dort setzen, dann geht es durch:
+
+      git config windows.appendAtomically false
+
+- 28 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
   .venv\Scripts\python.exe (sonst ueberspringen sie ihre schweren
-  Schritte stillschweigend).
+  Schritte stillschweigend). Zwei davon brauchen ein Ausgabeverzeichnis
+  als Argument: test_export_smoke.py und test_trennstriche.py.
+- pyflakes steht seit dem 12.08.2026 auf NULL Meldungen. Jede neue ist
+  damit ein echtes Signal. Es ist ein reines Entwicklungswerkzeug und
+  steht bewusst nicht in requirements.txt:
+
+      .venv\Scripts\python.exe -m pip install pyflakes
+      git ls-files "*.py" | xargs .venv\Scripts\python.exe -m pyflakes
+
 - Keine Emoji in der Oberflaeche, kein use_container_width. Beides ist
   per Test gesperrt.
 - Der Kalender von st.date_input ist ENGLISCH und bleibt es. Streamlit
