@@ -2,7 +2,7 @@
 
 **Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **28 von 28 Suiten grün**, `pyflakes` bei null ·
-**committet, NICHT gepusht — DRACOON steht auf diesem Commit.**
+**alles gepusht, DRACOON steht auf demselben Stand.**
 
 > ### Für Philip: was diese Sitzung geändert hat, und was noch aussteht
 >
@@ -14,34 +14,23 @@
 > Transferwissen **#69**. Neuer Prüfstein:
 > `tests/test_kennzahlen_hinweise.py` (28. Suite).
 >
-> **Zwei Dinge sind offen und brauchen eine Entscheidung:**
+> **Gepusht — der Branch ist die laufende App, die Änderung ist also live.**
+> Die Sichtprüfung am Bildschirm ist damit **nicht** vorweggenommen: Sie
+> wurde bewusst übersprungen (Michael, 18.08.2026), weil es um zwei Sätze in
+> einem Tooltip geht und nicht um Geometrie. Der Sharpe-Hinweis ist länger
+> geworden — falls er im Tooltip unschön umbricht, ist das ein Wort und kein
+> Umbau.
 >
-> 1. **Nicht gepusht.** Der Branch ist die laufende App — der Push geht sofort
->    an die Kollegen. Er wartet bewusst auf ein Ja.
-> 2. **DRACOON ist nachgezogen — aber direkt von `C:`, nicht über GitHub.**
->    Der dokumentierte Weg (`git fetch origin` + `reset --hard`
->    `origin/verbesserungen`) setzt den Push voraus, und der steht aus. Weil
->    die Ablage den Stand trotzdem tragen soll, kam der Commit aus der
->    lokalen Arbeitskopie:
->
->    ```
->    git fetch C:\Entwicklung\Performancetool verbesserungen
->    git reset --hard FETCH_HEAD
->    ```
->
->    Vorher geprüft: Die Ablage lag auf `verbesserungen` bei `09a6d1b`, **ohne
->    Vorlauf und ohne Rückstand** — reiner Fast-Forward, nichts überschrieben.
->    **Ihr `origin/verbesserungen` zeigt aber weiter auf `09a6d1b`**, weil die
->    Commits noch nicht auf GitHub sind; `git status` meldet dort deshalb einen
->    Vorlauf. Das ist richtig so und löst sich mit dem Push.
->
->    **Achtung, der Pfad ist rechnerabhängig.** Bei Philip ist DRACOON das
->    Netzlaufwerk `H:`; auf diesem Rechner hängt der Client die Ablage ins
->    Benutzerprofil (`%USERPROFILE%\DRACOON\<ID>\Entwicklung\`
->    `Forschung_Claude\Performancetool`). In dieser Sitzung wurde daraus erst
->    fälschlich „DRACOON ist nicht erreichbar" geschlossen, weil `H:` hier
->    nicht existiert. **Gemessen war das richtig, geschlossen war es falsch** —
->    dieselbe Klasse wie #64.
+> **DRACOON ist nachgezogen**, am Ende über den dokumentierten Weg
+> (`git fetch origin` + `reset --hard origin/verbesserungen`). **Achtung, der
+> Pfad ist rechnerabhängig:** Bei Philip ist DRACOON das Netzlaufwerk `H:`;
+> auf diesem Rechner hängt der Client die Ablage ins Benutzerprofil
+> (`%USERPROFILE%\DRACOON\<ID>\Entwicklung\Forschung_Claude\`
+> `Performancetool`). In dieser Sitzung wurde daraus erst fälschlich „DRACOON
+> ist nicht erreichbar" geschlossen, weil `H:` hier nicht existiert.
+> **Gemessen war das richtig, geschlossen war es falsch** — dieselbe Klasse
+> wie #64. Und `reset --hard` scheitert dort beim ersten Versuch **zur
+> Hälfte**; der Ablauf weiter unten nennt den Schalter dagegen.
 >
 > **Die Arbeitskopie auf `C:` war zu Sitzungsbeginn kein Git-Checkout** —
 > `.git`, `.gitignore`, `.streamlit/` und `.venv` fehlten. Inhaltlich war sie
