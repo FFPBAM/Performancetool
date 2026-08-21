@@ -1,5 +1,5 @@
 START-PROMPT — FFPB Performancetool
-Stand: 21.08.2026 · Branch verbesserungen · 136 Commits vor main
+Stand: 21.08.2026 · Branch verbesserungen · Commit-Zahl: siehe unten
 
 ==========================================================================
 DIESE DREI ZEILEN IN DEN CHAT KOPIEREN:
@@ -41,6 +41,14 @@ der Arbeit und nach jeder laengeren Pause:
 
 Bei einem Konflikt NICHT mit --force drueber, sondern den fremden Stand
 ansehen und zusammenfuehren.
+
+HIER STEHT BEWUSST KEINE COMMIT-ZAHL MEHR (21.08.2026). Sie stand in
+dieser Datei dreimal - 94, dann 134, dann 136 - und war nach jedem Push
+wieder einen Stand alt: Ein Commit kann seinen eigenen Stand nicht
+enthalten. Genau diese Drift hat STATUS.md beim Commit-Hash schon
+abgeraeumt. Wer die Zahl braucht, misst sie:
+
+    git rev-list --count origin/main..origin/verbesserungen
 
 ==========================================================================
 BEIM ERSTEN START AUF EINEM RECHNER — DREI STOLPERSTELLEN
