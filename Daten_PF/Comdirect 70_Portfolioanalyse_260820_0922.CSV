@@ -1,0 +1,21 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+19.08.2026;Airbus SE;938914;5,860%;EUR;0,429%;6,985%;-;0%;-;-;Prod. Gew. & Industrie;Europa ohne Deutschland;Aktien;5;Comdirect 70
+19.08.2026;Amazon.com Inc.;906866;4,420%;USD;0,647%;15,842%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 70
+19.08.2026;Apple Inc.;865985;2,959%;USD;0,068%;2,237%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 70
+19.08.2026;Belgien Staat 0,0 % 22.10.31;A287RJ;2,796%;EUR;-0,017%;-0,625%;22.10.2031;0%;5,1726;3,2893%;Staat/ Governments;Europa ohne Deutschland;Renten;3;Comdirect 70
+19.08.2026;Berkshire Hathaway Inc. B;A0YJQ2;6,716%;USD;0,023%;-0,025%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Comdirect 70
+19.08.2026;E.ON Green Bond IHS 3,875 % 12.01.35;A30V8B;2,014%;EUR;-0,014%;-0,730%;12.01.2035;3,8750%;7,2380;3,9850%;Corporates;Deutschland;Renten;3;Comdirect 70
+19.08.2026;Fraport IHS 1,875 % 31.03.28;A3E5F0;2,442%;EUR;0,027%;1,079%;31.03.2028;1,8750%;1,5924;3,2989%;Corporates;Deutschland;Renten;5;Comdirect 70
+19.08.2026;Global Active ESG Equity ETF (Invesco);A2PHJT;7,162%;USD;0,358%;4,936%;-;0%;-;-;Index;Global;Aktien;4;Comdirect 70
+19.08.2026;Heidelberg Materials IHS 3,75 % 31.05.32 ;A30V5U;2,756%;EUR;0,005%;0,125%;31.05.2032;3,7500%;5,2810;3,7022%;Corporates;Deutschland;Renten;3;Comdirect 70
+19.08.2026;Johnson & Johnson;853260;4,352%;USD;0,536%;13,590%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 70
+19.08.2026;Microsoft Corp.;870747;5,311%;USD;0,112%;1,189%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 70
+19.08.2026;Münchener Rückvers.-Ges. AG;843002;5,230%;EUR;-0,225%;-4,149%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Comdirect 70
+19.08.2026;NVIDIA Corp.;918422;4,941%;USD;1,079%;17,489%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 70
+19.08.2026;RCI Banque IHS 4,875 % 02.10.29;A3LNYD;2,042%;EUR;0,016%;0,711%;02.10.2029;4,8750%;2,8601;3,7749%;Financials;Europa ohne Deutschland;Renten;3;Comdirect 70
+19.08.2026;Rheinmetall AG;703000;2,537%;EUR;-0,767%;-23,237%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Comdirect 70
+19.08.2026;Shell PLC;A3C99G;4,926%;GBP;1,141%;29,069%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Europa ohne Deutschland;Aktien;5;Comdirect 70
+19.08.2026;VW Green Bond IHS 3,875 % 10.09.30;A383ET;2,745%;EUR;0,009%;0,298%;10.09.2030;3,8750%;3,7107;3,8266%;Corporates;Deutschland;Renten;3;Comdirect 70
+19.08.2026;Walmart Inc.;860853;4,658%;USD;0,335%;3,820%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 70
+19.08.2026;XETRA Gold;A0S9GB;12,795%;EUR;0,869%;2,758%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Comdirect 70
+;;;;;;;;;;;;;;;

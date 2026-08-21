@@ -1,0 +1,27 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+19.08.2026;Allianz SE;840400;3,585%;EUR;0,219%;6,366%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Muster offensiv cVV
+19.08.2026;Alphabet Inc. A;A14Y6F;4,390%;USD;0,500%;10,914%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;Amazon.com Inc.;906866;4,155%;USD;0,625%;15,842%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;Arista Networks Inc.;A40V33;3,565%;USD;1,670%;43,123%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;Booking Holdings Inc.;A2JEXP;3,680%;USD;0,191%;6,689%;-;0%;-;-;Dienstleistungen;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;Deutsche Börse AG;581005;3,359%;EUR;0,759%;26,767%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Muster offensiv cVV
+19.08.2026;Eli Lilly and Company;858560;4,339%;USD;0,730%;20,214%;-;0%;-;-;Chemie,Pharma;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;Euro Stoxx Banks ETF (iShares);628930;2,939%;EUR;-0,096%;-3,209%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Europa;Aktien;5;Muster offensiv cVV
+19.08.2026;European Dividend ETF (Franklin);A2DTF2;3,776%;EUR;0,240%;6,071%;-;0%;-;-;Index;Europa;Aktien;3;Muster offensiv cVV
+19.08.2026;Future of Defence UCITS ETF (HanETF);A3EB9T;5,464%;USD;1,091%;23,442%;-;0%;-;-;Index;Global;Aktien;5;Muster offensiv cVV
+19.08.2026;Intuitive Surgical Inc.;888024;1,911%;USD;-0,837%;-29,368%;-;0%;-;-;Prod. Gew. & Industrie;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;Japan Equity Active ETF (GS);A4135A;5,060%;JPY;0,214%;4,288%;-;0%;-;-;Index;Japan;Aktien;4;Muster offensiv cVV
+19.08.2026;Linde plc;A3D7VW;3,768%;USD;0,527%;14,218%;-;0%;-;-;Chemie,Pharma;Europa ohne Deutschland;Aktien;5;Muster offensiv cVV
+19.08.2026;McDonalds Corp.;856958;2,640%;USD;-0,637%;-18,623%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;Microsoft Corp.;870747;4,430%;USD;0,214%;1,287%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;MSCI World Healthcare ETF (Xtrackers);A113FD;3,483%;EUR;0,316%;9,982%;-;0%;-;-;Chemie,Pharma;Global;Aktien;4;Muster offensiv cVV
+19.08.2026;Münchener Rückvers.-Ges. AG;843002;3,836%;EUR;-0,182%;-4,146%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Muster offensiv cVV
+19.08.2026;Rheinmetall AG;703000;3,948%;EUR;0,018%;-4,000%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Muster offensiv cVV
+19.08.2026;Samsung Electronics Co. Ltd. (GDRs);896360;3,625%;EUR;-0,383%;-13,080%;-;0%;-;-;Elektro;Asien;Aktien;5;Muster offensiv cVV
+19.08.2026;Semiconductor ETF (VanEck);A2QC5J;4,475%;EUR;4,107%;68,991%;-;0%;-;-;Nachhaltigkeit;Global;Aktien;6;Muster offensiv cVV
+19.08.2026;Siemens AG;723610;3,934%;EUR;0,651%;18,315%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Muster offensiv cVV
+19.08.2026;Siemens Energy AG;ENER6Y;2,669%;EUR;-0,278%;-9,276%;-;0%;-;-;Versorger;Deutschland;Aktien;5;Muster offensiv cVV
+19.08.2026;SLB Ltd.;853390;3,187%;EUR;-0,160%;-4,547%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;VISA Inc.;A0NC7B;3,548%;USD;0,170%;5,273%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Muster offensiv cVV
+19.08.2026;XETRA Gold;A0S9GB;6,179%;EUR;0,191%;2,758%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Muster offensiv cVV
+;;;;;;;;;;;;;;;
