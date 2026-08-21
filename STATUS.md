@@ -1,7 +1,8 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 21.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **29 von 29 Suiten grün**, `pyflakes` bei null.
+**Nicht gemergt** · **29 von 29 Suiten grün**, `pyflakes` bei null ·
+**gepusht — DRACOON steht noch auf dem alten Stand.**
 
 > ### Für Philip: was diese Sitzung geändert hat, und was noch aussteht
 >
@@ -19,10 +20,13 @@
 > Transferwissen **#70**. Neuer Prüfstein: `tests/test_ytd_kachel.py`
 > (29. Suite).
 >
-> **➜ Worum ich dich bitte (Sichtprüfung, noch offen):** Steht das
-> 4er-Raster sauber? Bricht das Label um, wenn es einmal `YTD 2025` heißt?
-> Und die Gegenprobe: Schalter „Wertentwicklung rollierend" an — Kachel und
-> YTD-Zeile müssen **dieselbe** Zahl zeigen.
+> **Sichtprüfung bestanden und gepusht** (Philip, 21.08.2026, an der lokal
+> laufenden App). Der Branch ist die laufende App — die Kachel ist damit
+> live. **Nicht vergessen:** nach dem Push die Cloud-App ansehen (#11).
+>
+> **➜ Was für dich offen bleibt:** der Merge nach `main` (ändert am Betrieb
+> nichts, räumt die Historie) und danach das Deploy-Log. Beides steht in
+> `Start.txt` unter „Was offen ist".
 >
 > ---
 >
