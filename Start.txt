@@ -1,5 +1,5 @@
 START-PROMPT — FFPB Performancetool
-Stand: 18.08.2026 · Branch verbesserungen · 134 Commits vor main
+Stand: 21.08.2026 · Branch verbesserungen · 136 Commits vor main
 
 ==========================================================================
 DIESE DREI ZEILEN IN DEN CHAT KOPIEREN:
@@ -98,24 +98,17 @@ halbe Stunde, wenn man sie nicht kennt.
 WAS OFFEN IST (Details in STATUS.md)
 ==========================================================================
 
-1. SICHTPRUEFUNG DER BEIDEN TOOLTIPS (neu 18.08.2026, klein).
-   Im Performance-Reiter auf die Fragezeichen von "Calmar Ratio" und
-   "Sharpe Ratio" zeigen. Der Sharpe-Text ist von 232 auf 297 Zeichen
-   gewachsen - zu beurteilen ist nur, ob er sauber umbricht. Die
-   Sichtpruefung wurde bewusst uebersprungen (Michael, 18.08.2026);
-   faellt sie unschoen aus, ist es ein Wort und kein Umbau.
-
-2. PR MERGEN — https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen
+1. PR MERGEN — https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen
    ACHTUNG: Der Merge aendert am Betrieb nichts, weil die Cloud bereits
    auf verbesserungen laeuft. Er raeumt die Historie auf.
 
-3. DEPLOY-LOG NACH DEM MERGE ansehen (Manage app -> schwarze Konsole).
+2. DEPLOY-LOG NACH DEM MERGE ansehen (Manage app -> schwarze Konsole).
    Die requirements sind nach oben gedeckelt, geprueft wurde lokal unter
    Python 3.12 - die Cloud laeuft unter 3.14. Das Log ist die einzige
    Stelle, an der die tatsaechlich installierte Kombination sichtbar
    wird.
 
-4. Zurueckgestellt (Entscheidung Philip, 12.08.2026): Anlagekriterien
+3. Zurueckgestellt (Entscheidung Philip, 12.08.2026): Anlagekriterien
    SCHWEIZ (Werte muessen aus dem Haus kommen) und der
    comdirect-Disclaimer (falsche Kostenregel im Vorlagentext).
 
@@ -141,7 +134,7 @@ WICHTIG FUER DIE NAECHSTE SITZUNG
 
       git config windows.appendAtomically false
 
-- 28 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
+- 29 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
   .venv\Scripts\python.exe (sonst ueberspringen sie ihre schweren
   Schritte stillschweigend). Zwei davon brauchen ein Ausgabeverzeichnis
   als Argument: test_export_smoke.py und test_trennstriche.py.
