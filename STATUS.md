@@ -1034,7 +1034,7 @@ für ihre YTD-Zeile bekommt. Sie kann gar nicht abweichen.
 | Kachel gegen YTD-Zeile der Tabelle, 19 Strategien | **19 von 19 zeichengleich** |
 | Gegenprobe: Start auf `01.01.` gedreht | **6 von 6 fallen auf** (1,136 % → 1,158 %) |
 | `ui_dump` vorher/nachher | **4 Zeilen** eingefügt, sonst zeichengleich |
-| `streamlit_app.py` | 1204 CRLF, keine gemischten Zeilenenden |
+| `streamlit_app.py` | 1200 CRLF, keine gemischten Zeilenenden |
 
 #### Drei Entscheidungen, die nicht im Code stehen
 
