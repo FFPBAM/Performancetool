@@ -274,11 +274,15 @@ def show_benchmark_composition(dn, bt, dn2=None, bt2=None):
     if dn2 and bt2 and str(bt2).strip() and str(bt2).strip().lower() not in ("","nan","haben keine benchmark"):
         st.caption(f"**Zusammensetzung Benchmark {dn2}:** {bt2}")
 
-def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar, sharpe, rf_pa, mwst_suffix=""):
-    """Kennzahlen in zwei Reihen:
-       Reihe 1: Auflagedatum | CAGR | Vola
+def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar, sharpe, rf_pa, mwst_suffix="",
+                    ytd=None, ytd_jahr=None):
+    """Kennzahlen in zwei Reihen à vier Kacheln:
+       Reihe 1: Auflagedatum | YTD | CAGR | Vola
        Reihe 2: Calmar | Sharpe | (Endwert wenn Volumen)
        Ø Risikofreier Zins p.a. (Zeitraum) als Caption unter den Kacheln.
+
+       ytd/ytd_jahr sind Keyword-Argumente mit Default, damit die beiden
+       Aufrufstellen ihre übrigen Werte weiter positional übergeben können.
     """
     # Der Kostenhinweis steht EINMAL über der Kachelreihe (11.08.2026).
     # Vorher trug ihn jede einzelne Kachel — „⌀ Rendite p.a. (nach Kosten
@@ -287,20 +291,42 @@ def display_metrics(label, cagr, vola, endwert, use_volume, auflagedatum, calmar
     nk = f"nach Kosten{mwst_suffix}"
     st.markdown(f"**{label}** · {nk}")
     # Reihe 1
-    r1 = st.columns(3)
+    r1 = st.columns(4)
     with r1[0]:
         st.metric("Auflage der Strategie", fmt_date_de(auflagedatum),
                   help="Erster verfügbarer Datenpunkt der Strategie im "
                        "Portfoliomanagement-System.")
     with r1[1]:
+        # YTD (21.08.2026). Woher der Wert kommt, steht an der Rechenstelle
+        # (_ytd_aus im Kennzahlen-Block); hier geht es nur um die Anzeige.
+        #
+        # Die Jahreszahl steht NUR im Label, wenn sich die Kachel nicht auf
+        # das laufende Jahr bezieht — sonst wäre "YTD 2026" eine Dopplung.
+        # Der Vergleich hängt am Ende der ausgewerteten Reihe und nicht
+        # daran, ob jemand am Filter gedreht hat: Eine Strategie, deren Daten
+        # früher enden, braucht die Jahreszahl genauso, ohne dass irgendwo
+        # ein Zeitraum verstellt wäre.
+        _ytd_label = (f"YTD {ytd_jahr}"
+                      if ytd_jahr and ytd_jahr < pd.Timestamp.today().year
+                      else "YTD")
+        _ytd_jahr_text = f"im Kalenderjahr {ytd_jahr}" if ytd_jahr else "im Kalenderjahr"
+        st.metric(_ytd_label,
+                  fmt_pct_de(ytd) if ytd is not None else "–",
+                  help=f"Wertentwicklung {_ytd_jahr_text} {nk}, "
+                       "gerechnet ab dem Schlussstand des Vorjahres (31.12.). "
+                       "Der Wert folgt dem eingestellten Zeitraum; bezieht er "
+                       "sich nicht auf das laufende Jahr, nennt die Kachel "
+                       "das Jahr. Deckt der Zeitraum den Jahresanfang nicht "
+                       "ab, steht hier „–\".")
+    with r1[2]:
         st.metric("⌀ Rendite p.a.", fmt_pct_de(cagr) if cagr else "–",
                   help=f"Annualisierte Rendite {nk} (CAGR): "
                        f"(Endwert/Startwert)^(365/Tage) − 1.")
-    with r1[2]:
+    with r1[3]:
         st.metric("Volatilität p.a.", fmt_pct_de(vola) if vola else "–",
                   help="Annualisierte Schwankungsbreite: Standardabweichung der Tagesrenditen × √365.")
     # Reihe 2
-    r2 = st.columns(3)
+    r2 = st.columns(4)
     with r2[0]:
         st.metric("Calmar Ratio",
                   f"{calmar:.2f}".replace(".",",") if calmar else "–",
@@ -861,6 +887,29 @@ if ansicht == _VIEW_PERF:
     cm1=calc_calmar_ratio(cg1,mddv1)
     sh1=calc_sharpe_excess(draf1, df1["rf"]) if ("rf" in df1.columns and df1["rf"].notna().any()) else None
     rd1,rdt1=calc_drawdown_recovery(ia1_100,xd); dur1,ds1_,de1_=calc_max_drawdown_duration(ia1_100,xd)
+
+    # ── YTD für die Kachelreihe (21.08.2026) ────────────────────────────────
+    # BEWUSST über period_return auf sa1t/sa2t — also exakt die Rechnung und
+    # exakt die Serien, die build_rolling_table unten für ihre YTD-Zeile
+    # bekommt (Aufruf mit sb1t/sa1t). Kachel und Tabelle können damit nicht
+    # auseinanderlaufen; eine zweite eigene YTD-Rechnung wäre genau der
+    # Konventionsbruch, den #22 am 03.07.2026 abgeräumt hat.
+    #
+    # Der Bezugspunkt ist das ENDE des gewählten Zeitraums, nicht "heute"
+    # (Entscheidung Philip, 21.08.2026): Bei Standardeinstellung ist das das
+    # laufende Jahr, bei einer historischen Auswertung das letzte darin
+    # enthaltene. Damit widerspricht die Kachel nie ihren Nachbarn, die alle
+    # auf dem gefilterten Zeitraum rechnen.
+    def _ytd_aus(serie):
+        if serie is None: return None, None
+        e = serie.dropna().index.max()
+        if pd.isna(e): return None, None
+        # period_return liefert None, wenn der 31.12. vor dem Reihenbeginn
+        # liegt — der Zeitraum deckt den Jahresanfang dann nicht ab.
+        return period_return(serie, pd.Timestamp(e.year-1,12,31), e), e.year
+    ytd1,ytdj1 = _ytd_aus(sa1t)
+    ytd2=ytdj2=None
+
     cg2=vo2=ew2=mddv2=mddd2=mdde2=cm2=sh2=rd2=rdt2=dur2=ds2_=de2_=None
     if df2 is not None:
         nd2=len(r2); draf2=calc_daily_returns_after_fee(r2,float(fdec2)); cg2=calc_cagr(ia2,nd2); vo2=calc_vola(draf2)
@@ -870,6 +919,7 @@ if ansicht == _VIEW_PERF:
         cm2=calc_calmar_ratio(cg2,mddv2)
         sh2=calc_sharpe_excess(draf2, df2["rf"]) if ("rf" in df2.columns and df2["rf"].notna().any()) else None
         rd2,rdt2=calc_drawdown_recovery(ia2_100,xd); dur2,ds2_,de2_=calc_max_drawdown_duration(ia2_100,xd)
+        ytd2,ytdj2 = _ytd_aus(sa2t)
 
 
     nk_label = f"nach Kosten{mwst_suffix}"
@@ -897,8 +947,8 @@ if ansicht == _VIEW_PERF:
     # Der Kostenhinweis steht jetzt in display_metrics über jeder Kachelreihe
     # (11.08.2026) — hier wäre er die zweite Klammer in der Klammer.
     st.subheader("Kennzahlen")
-    display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix)
-    if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix)
+    display_metrics(l1,cg1,vo1,ew1,use_volume,ad1,cm1,sh1,rf_pa_1,mwst_suffix,ytd=ytd1,ytd_jahr=ytdj1)
+    if df2 is not None and l2: display_metrics(l2,cg2,vo2,ew2,use_volume,ad2,cm2,sh2,rf_pa_2,mwst_suffix,ytd=ytd2,ytd_jahr=ytdj2)
 
     # ── Anlagekriterien (NEU 10.08.2026) ──────────────────────────────────
     # Eigener Block ZWISCHEN Kennzahlen und Wertentwicklung: erst was die

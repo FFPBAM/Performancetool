@@ -2634,6 +2634,69 @@ Typen.
 
 ---
 
+### #70 — Eine zweite Anzeige derselben Zahl teilt sich die Rechnung, oder sie läuft auseinander (NEU 21.08.2026) ⭐
+
+Am 21.08.2026 sollte die **YTD-Rendite** als Kachel in die Kennzahlen-Reihe
+des Performance-Reiters. Der naheliegende Weg wäre gewesen, sie dort zu
+rechnen, wo die Kachel steht: Renditen des laufenden Jahres greifen, Produkt
+bilden, fertig — zehn Zeilen, keine Abhängigkeit.
+
+**Das wäre die vierte YTD-Rechnung im selben Werkzeug gewesen.** Es gab schon
+drei: die rollierende Tabelle (`build_rolling_table`), die Broschüre
+(`compute_rollierend_data`) und `analytics._perioden_start`. Alle drei rechnen
+seit **#22** ab Vorjahres-Schlussstand und sind bit-identisch — das war
+seinerzeit Arbeit, weil `asof(01.01.)` bei kalendertäglichen Daten den ersten
+Tag des Jahres verliert.
+
+**Eine vierte Rechnung erbt diese Einigkeit nicht. Sie erbt nur die
+Gelegenheit, sie zu verlieren.** Und zwar lautlos: Beide Zahlen sind
+plausibel, beide stehen im selben Reiter, sie unterscheiden sich um zwei
+Basispunkte. Gemessen an den echten Daten:
+
+| | ab `31.12.` (richtig) | ab `01.01.` (die Falle) |
+|---|---:|---:|
+| Comdirect 100 | 1,136 % | 1,158 % |
+| ESG Muster ausgewogen | 1,524 % | 1,543 % |
+| Comdirect 70 | −0,950 % | −0,939 % |
+
+Niemand sieht einer der beiden an, dass sie falsch ist. Auffällig wird es
+erst, wenn ein Berater den Schalter „Wertentwicklung rollierend" aufzieht und
+zwei verschiedene YTD-Werte übereinander stehen — und ab dann trägt **keine**
+der beiden Anzeigen mehr Autorität.
+
+**Die Regel:** Eine neue Anzeige einer Zahl, die es im selben Werkzeug schon
+gibt, bekommt keine eigene Rechnung, sondern **denselben Aufruf auf denselben
+Daten**. Hier war das ein Einzeiler:
+
+```python
+ytd1 = period_return(sa1t, pd.Timestamp(jahr-1, 12, 31), ende)
+```
+
+`period_return` und `sa1t` sind exakt das, was `build_rolling_table` für ihre
+YTD-Zeile bekommt. Die Kachel *kann* nicht abweichen — das ist stärker als
+ein Test, der nachrechnet, dass sie es gerade nicht tut.
+
+**Drei Dinge fallen dabei gratis an**, und alle drei hätte eine eigene
+Rechnung neu lösen müssen:
+
+- Die Konvention aus #22 steckt in der geliehenen Funktion, nicht in neuem Code.
+- Der **Abdeckungs-Guard**: `_asof_value` liefert `None`, wenn der Periodenstart
+  vor dem Reihenbeginn liegt. Deckt der gewählte Zeitraum den Jahresanfang
+  nicht ab, steht „–" statt eines abgeschnittenen Rumpf-YTD, das wie ein
+  volles aussähe (#51).
+- Die Formatierung und das Fehlwert-Zeichen bleiben dieselben.
+
+**Was der Prüfstein dann noch prüft, ist nicht die Zahl, sondern die
+Bauform.** `tests/test_ytd_kachel.py` rechnet die Kachel bewusst *nicht* nach —
+eine zweite Meinung über dieselbe Formel ist keine. Er hält fest, dass es
+**dieselbe** Zahl ist (19 von 19 Strategien, zeichengleich statt gerundet),
+und nagelt statisch fest, dass die Rechnung auf `period_return`/`sa1t` sitzt.
+Wer sie später auf die volle Reihe `_voll1` oder eine eigene Formel umstellt,
+bricht ihn — denn genau dort, und nicht im Ergebnis, beginnt das
+Auseinanderlaufen.
+
+---
+
 ### #69 — Eine Spalte, die ihre Quelle nicht nennt, lässt sich trotzdem belegen (NEU 18.08.2026) ⭐
 
 Die Sharpe Ratio des Werkzeugs rechnet gegen einen risikofreien Zins, der als
@@ -3361,6 +3424,18 @@ hängen.
 - **YTD der rollierenden Tabelle** rechnet seit 03.07. ab
   Vorjahres-Schlussstand (`asof(31.12.)`) — bit-identisch zu Balken-Chart
   und PP-Folie (Transferwissen #22).
+- **Kennzahlen-Kacheln (`display_metrics`): zwei Reihen à vier.**
+  Reihe 1: Auflage der Strategie | YTD | ⌀ Rendite p.a. | Volatilität p.a. —
+  Reihe 2: Calmar | Sharpe | Endwert (nur bei Anlagevolumen). Darunter als
+  Caption der aggregierte risikofreie Zins.
+- **Die YTD-Kachel (21.08.2026) leiht sich die Rechnung der rollierenden
+  Tabelle**: `period_return(sa1t, Timestamp(jahr-1,12,31), ende)` — dieselbe
+  Funktion auf denselben Serien, damit die beiden Anzeigen nicht
+  auseinanderlaufen können (Transferwissen **#70**). Bezugspunkt ist das
+  **Ende des gewählten Zeitraums**, nicht „heute"; die Jahreszahl steht nur
+  dann im Label, wenn es nicht das laufende Jahr ist. Deckt der Zeitraum den
+  Jahresanfang nicht ab, steht „–" statt eines Rumpfwerts. Prüfstein:
+  `tests/test_ytd_kachel.py`.
 - Kennzahlen-Wrapper delegieren an `modules/analytics.py`; UI-spezifische
   Kennzahlen (Euro-Drawdown, Calmar, DD-Dauer, rf-Index) bleiben lokal.
 

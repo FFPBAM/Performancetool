@@ -1,10 +1,36 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 18.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **28 von 28 Suiten grün**, `pyflakes` bei null ·
-**alles gepusht, DRACOON steht auf demselben Stand.**
+**Letzte Sitzung:** 21.08.2026 · **Branch:** `verbesserungen` ·
+**Nicht gemergt** · **29 von 29 Suiten grün**, `pyflakes` bei null.
 
 > ### Für Philip: was diese Sitzung geändert hat, und was noch aussteht
+>
+> **Neu ist eine YTD-Kachel** in der Kennzahlen-Reihe des Performance-Reiters,
+> direkt neben „Auflage der Strategie" (dein Feedback, 21.08.2026). Beide
+> Reihen stehen jetzt auf **vier** Kacheln statt drei.
+>
+> **Die Zahl ist nicht neu gerechnet, sondern geliehen.** Die rollierende
+> Tabelle im selben Reiter hat seit dem 03.07.2026 eine YTD-Zeile, die ab
+> Vorjahres-Schlussstand rechnet und bit-identisch zu Balken-Chart und
+> PP-Folie 8 ist (#22). Die Kachel ruft **dieselbe Funktion auf denselben
+> Serien** auf — `period_return(sa1t, …)`. Damit können die beiden Anzeigen
+> nicht auseinanderlaufen; an 19 von 19 Strategien nachgemessen und
+> zeichengleich. Details unter „Die YTD-Kachel" weiter unten,
+> Transferwissen **#70**. Neuer Prüfstein: `tests/test_ytd_kachel.py`
+> (29. Suite).
+>
+> **➜ Worum ich dich bitte (Sichtprüfung, noch offen):** Steht das
+> 4er-Raster sauber? Bricht das Label um, wenn es einmal `YTD 2025` heißt?
+> Und die Gegenprobe: Schalter „Wertentwicklung rollierend" an — Kachel und
+> YTD-Zeile müssen **dieselbe** Zahl zeigen.
+>
+> ---
+>
+> ### Aus der Sitzung davor (18.08.2026) — erledigt
+>
+> **Die Sichtprüfung der beiden Tooltips ist bestanden** (Philip,
+> 21.08.2026): *„Sichtprüfung passt. Beide Tooltips passen."* Der offene
+> Punkt aus der letzten Sitzung ist damit zu.
 >
 > **Geändert wurden zwei Sätze** hinter den Fragezeichen der Kennzahlen-Kacheln
 > im Performance-Reiter (`display_metrics` in `streamlit_app.py`, zwei Zeilen):
@@ -16,14 +42,11 @@
 >
 > **Gepusht — der Branch ist die laufende App, die Änderung ist also live.**
 >
-> **➜ Das eine, worum ich dich bitte:** Zieh im Performance-Reiter einmal die
-> Fragezeichen von *Calmar Ratio* und *Sharpe Ratio* auf und sieh nach, ob der
-> Sharpe-Text **sauber umbricht**. Er ist von 232 auf 297 Zeichen gewachsen.
-> Die Sichtprüfung wurde bewusst übersprungen (Michael, 18.08.2026) — es geht
-> um zwei Sätze in einem Tooltip und nicht um Geometrie —, aber übersprungen
-> heißt übersprungen und nicht erledigt (#60). Fällt sie unschön aus, ist es
-> ein Wort und kein Umbau. Steht auch in `Start.txt` und unter
-> „Offene Punkte".
+> **Die Sichtprüfung dazu ist erledigt** (Philip, 21.08.2026): Der
+> Sharpe-Text war von 232 auf 297 Zeichen gewachsen und die Prüfung bewusst
+> übersprungen worden (Michael, 18.08.2026) — nachgeholt und **in Ordnung**.
+> Der Fall bleibt trotzdem als Beleg für #60 stehen: übersprungen heißt
+> übersprungen und nicht erledigt. Diesmal ging es gut aus.
 >
 > **DRACOON ist nachgezogen**, am Ende über den dokumentierten Weg
 > (`git fetch origin` + `reset --hard origin/verbesserungen`). **Achtung, der
@@ -977,6 +1000,64 @@ unter den Kacheln und der Hinweis des Kontrollkästchens — so entschieden.
 | Neuer Prüfstein gegen den alten Stand | **rot**, vier benannte Abweichungen |
 | Diff in `streamlit_app.py` | **2 Zeilen**, Zeilenenden unverändert (1150 CRLF) |
 | Export-Pfad | nicht berührt — `display_metrics` ist reine Oberfläche |
+
+---
+
+### Die YTD-Kachel (21.08.2026)
+
+Aus dem Feedback: In der Kennzahlen-Reihe fehlte die **YTD-Rendite**. Sie ist
+im Kundengespräch die erste Rückfrage („und dieses Jahr?"), stand aber nur in
+der rollierenden Tabelle — und die liegt hinter einem Schalter.
+
+Jetzt steht sie als zweite Kachel, direkt neben „Auflage der Strategie"
+(Position: Philip). Beide Reihen stehen dafür auf **vier** Spalten statt drei,
+damit die Kacheln untereinander bleiben.
+
+#### Die Rechnung ist geliehen, nicht neu
+
+Das ist der eigentliche Punkt. Eine zweite eigene YTD-Rechnung wäre der
+Rückschritt gewesen: Seit dem 03.07.2026 rechnen rollierende Tabelle,
+Balken-Chart und PP-Folie 8 **bit-identisch** ab Vorjahres-Schlussstand
+(`asof(31.12.)` statt `asof(01.01.)`, Transferwissen **#22**). Eine vierte
+Rechnung daneben hätte diese Einigkeit wieder aufgelöst.
+
+Die Kachel ruft deshalb `period_return(sa1t, Timestamp(jahr-1,12,31), ende)`
+auf — **dieselbe Funktion auf denselben Serien**, die `build_rolling_table`
+für ihre YTD-Zeile bekommt. Sie kann gar nicht abweichen.
+
+| Gemessen | Ergebnis |
+|---|---|
+| Kachel gegen YTD-Zeile der Tabelle, 19 Strategien | **19 von 19 zeichengleich** |
+| Gegenprobe: Start auf `01.01.` gedreht | **6 von 6 fallen auf** (1,136 % → 1,158 %) |
+| `ui_dump` vorher/nachher | **4 Zeilen** eingefügt, sonst zeichengleich |
+| `streamlit_app.py` | 1204 CRLF, keine gemischten Zeilenenden |
+
+#### Drei Entscheidungen, die nicht im Code stehen
+
+1. **Bezugspunkt ist das Ende des gewählten Zeitraums**, nicht „heute"
+   (Philip). Bei Standardeinstellung ist das das laufende Jahr, bei einer
+   historischen Auswertung das letzte darin enthaltene. Sonst widerspräche
+   die Kachel ihren Nachbarn, die alle auf dem gefilterten Zeitraum rechnen.
+2. **Die Jahreszahl steht nur im Label, wenn es nicht das laufende Jahr ist.**
+   `YTD` bei Standardeinstellung, `YTD 2022` bei einer historischen
+   Auswertung — sonst wäre „YTD 2026" eine Dopplung. Der Vergleich hängt am
+   Ende der Reihe und **nicht** daran, ob jemand am Filter gedreht hat: Eine
+   Strategie, deren Daten früher enden, braucht die Jahreszahl genauso.
+3. **Deckt der Zeitraum den Jahresanfang nicht ab, steht „–"** und keine
+   Zahl. Das kommt gratis aus `_asof_value` und ist wichtiger, als es
+   aussieht: Ein stillschweigend abgeschnittenes Rumpf-YTD sähe wie ein
+   volles aus — dieselbe Fehlerklasse wie das 122-Tage-Rumpfjahr aus #51
+   („Es gibt Daten" ist nicht „der Zeitraum ist abgedeckt").
+
+#### Der Prüfstein sagt die Gleichheit zu, nicht die Zahl
+
+`tests/test_ytd_kachel.py` (29. Suite) rechnet die Kachel **nicht** nach —
+das wäre eine zweite Meinung über dieselbe Formel. Er hält fest, dass es
+**dieselbe** Zahl ist wie in der Tabelle, über alle 19 Strategien und
+zeichengleich statt gerundet. Dazu ein statischer Schritt, der die Bauform
+festnagelt (`period_return` auf `sa1t`): Wer die Kachel später auf die volle
+Reihe `_voll1` oder eine eigene Formel umstellt, bricht ihn — und genau das
+ist der Weg, auf dem die beiden Anzeigen auseinanderlaufen würden.
 
 ---
 
