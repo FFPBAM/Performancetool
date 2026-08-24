@@ -452,6 +452,35 @@ sammelt diese Liste die Fehlermeldungen; der Aufrufer (portfolioanalyse.py)
 zeigt sie nach dem Export als Warnung an."""
 
 
+MELDUNG_KEINE_ZEITREIHE = "keine Performance-Zeitreihe vorhanden"
+"""Gemeinsamer Marker aller Meldungen ueber eine fehlende Zeitreihe.
+
+Als Konstante, damit `tests/test_wertentwicklung_platzhalter.py` den Wortlaut
+nicht abschreiben muss — vor allem aber, damit dieser Fall vom Leerjahr-Fall
+in `_build_we_data` UNTERSCHEIDBAR bleibt. Die beiden sehen auf der Folie
+aehnlich aus und sind fachlich verschieden: dort fehlt ein abgeschlossenes
+Kalenderjahr (die Kennzahlen-Tabelle wird trotzdem befuellt), hier fehlt die
+Reihe ganz und die Folie bleibt vollstaendig auf Vorlagenstand.
+"""
+
+
+def _melde_ohne_zeitreihe(bezeichnung: str, idx: int, folie: str):
+    """Traegt einen stillen Ausfall in LAST_BUILD_ERRORS ein (NEU 24.08.2026).
+
+    EINE Funktion fuer alle drei Aufrufer: Wertentwicklungs-, Performance- und
+    rollierende Folie hatten denselben Fehler in derselben Datei, und getrennt
+    behandelt haette man den zweiten in sechs Monaten neu entdeckt.
+
+    Der Wortlaut folgt dem Leerjahr-Fall (12.08.2026): WER betroffen ist, WAS
+    stattdessen auf der Folie steht, WAS zu tun ist. Ohne den letzten Teil
+    liest sich eine Build-Meldung wie eine Randnotiz.
+    """
+    wer = bezeichnung or f"Portfolio {idx + 1}"
+    LAST_BUILD_ERRORS.append(
+        f"{wer}: {MELDUNG_KEINE_ZEITREIHE} — {folie} zeigt weiter die "
+        f"Beispieldaten der Vorlage. Vor dem Versand pruefen.")
+
+
 def _record_build_error(context: str, exc: Exception):
     import traceback
     LAST_BUILD_ERRORS.append(
@@ -524,26 +553,35 @@ def _append_current_year_bar(perf: dict, ts: pd.DataFrame, fee: float) -> dict:
     return out
 
 
-def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
+def _build_perf_data(performance_inputs, idx: int, bezeichnung: str = "",
+                     melden: bool = True) -> Optional[dict]:
     """
     Helfer: Berechnet performance_data Dict aus performance_inputs[idx].
 
-    Returns None wenn keine Daten oder ungültige Eingabe — dann zeigt die
-    Performance-Folie die Vorlagen-Platzhalter. Berechnungsfehler landen
-    in LAST_BUILD_ERRORS (siehe oben) statt still verschluckt zu werden.
+    Returns None wenn keine Daten — dann zeigt die Performance-Folie die
+    Vorlagen-Platzhalter, und SEIT 24.08.2026 wird das gemeldet (die
+    ausfuehrliche Begruendung steht an `_build_we_data`). Berechnungsfehler
+    landen ebenfalls in LAST_BUILD_ERRORS statt still verschluckt zu werden.
+
+    Args:
+        bezeichnung: Anzeigename der Strategie, nur fuer die Meldung.
+        melden: Ob eine fehlende Zeitreihe gemeldet wird. `False` setzt, wer
+            diese Folie in seiner Vorlage GAR NICHT hat — eine Warnung ueber
+            eine nicht vorhandene Folie ist schlimmer als keine. Die Vorgabe
+            ist bewusst `True`: Schweigen muss man hinschreiben.
 
     02.07.2026 (Punkt 4): hängt optional das laufende Jahr an den
     Balken-Chart an (F9_BAR_INCLUDE_CURRENT_YEAR).
     """
     if not performance_inputs or idx >= len(performance_inputs):
-        return None
+        return None   # Aufrufer ohne performance_inputs meint "keine Folien"
     pi = performance_inputs[idx]
-    if pi is None:
-        return None
-    ts = pi.get("timeseries_df")
-    fee = pi.get("fee_dec", 0.0)
+    ts = pi.get("timeseries_df") if pi is not None else None
     if ts is None or len(ts) == 0:
+        if melden:
+            _melde_ohne_zeitreihe(bezeichnung, idx, "die Performance-Folie")
         return None
+    fee = pi.get("fee_dec", 0.0)
     try:
         perf = compute_performance_data(ts, fee)
         if F9_BAR_INCLUDE_CURRENT_YEAR:
@@ -554,8 +592,8 @@ def _build_perf_data(performance_inputs, idx: int) -> Optional[dict]:
         return None
 
 
-def _build_we_data(performance_inputs, idx: int,
-                   bezeichnung: str = "") -> Optional[dict]:
+def _build_we_data(performance_inputs, idx: int, bezeichnung: str = "",
+                   melden: bool = True) -> Optional[dict]:
     """
     Helfer (NEU Juli 2026): Berechnet das we_data-Dict für die
     Wertentwicklungs-Folie aus performance_inputs[idx].
@@ -571,17 +609,35 @@ def _build_we_data(performance_inputs, idx: int,
             Fehlt er, steht dort die Portfolio-Nummer.
 
     Returns None wenn keine Daten — dann zeigt die Folie Vorlagen-Platzhalter
-    (nur der Titel wird gesetzt).
+    (nur der Titel wird gesetzt). SEIT 24.08.2026 WIRD DAS GEMELDET; zum
+    Schalter `melden` siehe `_build_perf_data`.
     """
     if not performance_inputs or idx >= len(performance_inputs):
         return None
     pi = performance_inputs[idx]
-    if pi is None:
-        return None
-    ts = pi.get("timeseries_df")
-    fee = pi.get("fee_dec", 0.0)
+    ts = pi.get("timeseries_df") if pi is not None else None
     if ts is None or len(ts) == 0:
+        # HIER STAND BIS ZUM 24.08.2026 EIN STILLES `return None`.
+        #
+        # Fehlt einer Strategie die Zeitreihe, waehrend ihr Bestand vorhanden
+        # ist, laesst fill_wertentwicklung_slide die Folie unberuehrt — der
+        # Titel ist zu dem Zeitpunkt aber SCHON gesetzt. Die Folie sieht
+        # deshalb bearbeitet aus, waehrend Kennzahlen-Tabelle, Saeulen- und
+        # Liniendiagramm die BEISPIELDATEN DER VORLAGE tragen. Am 24.08.2026
+        # nachgemessen: comdirect Folie 7 mit 2024: 5,36 % / 2025: 6,24 %,
+        # ESG Folie 17 mit -12,91 / 5,56 / 6,91 / 7,03 % — bytegleich mit der
+        # unveraenderten .pptx, die Nachbarfolien korrekt ersetzt. Es faellt
+        # also nicht auf, und in einer Kundenbroschuere stuenden damit
+        # Fantasiezahlen als Wertentwicklung.
+        #
+        # Dieselbe Klasse wie der comdirect-Disclaimer (Backlog H) und das
+        # fehlende majorTimeUnit (#49): eine Ersetzung, die lautlos ins Leere
+        # laeuft. Pruefstein: tests/test_wertentwicklung_platzhalter.py.
+        if melden:
+            _melde_ohne_zeitreihe(bezeichnung, idx,
+                                  "die Wertentwicklungs-Folie")
         return None
+    fee = pi.get("fee_dec", 0.0)
     try:
         we = compute_wertentwicklung_data(
             ts, fee,
@@ -691,22 +747,32 @@ def _build_vergleich_data(performance_inputs, n_strategien: int):
     serien = [(None, {pos[d]: w for d, w in r.items()}) for r in reihen]
     return kategorien, serien
 
-def _build_rollierend_data(performance_inputs, idx: int) -> Optional[dict]:
+def _build_rollierend_data(performance_inputs, idx: int,
+                           bezeichnung: str = "",
+                           melden: bool = True) -> Optional[dict]:
     """Helfer (NEU 06.07.2026): rollierende Perioden-Renditen für die
     Themen-Broschüren-Tabelle aus performance_inputs[idx].
 
     Nutzt dieselbe Zeitreihe/fee wie die übrigen Folien (Konsistenz).
-    Returns None wenn keine Daten → Folie behält Vorlagen-Platzhalter.
+    Returns None wenn keine Daten → Folie behält Vorlagen-Platzhalter, und
+    SEIT 24.08.2026 wird das gemeldet.
+
+    DER DRITTE ZWILLING (24.08.2026): dieselbe stille Zeile wie in
+    `_build_we_data` und `_build_perf_data`. `fill_rollierend_slide` steigt
+    bei None aus, NACHDEM Titel und Kopfzelle gesetzt sind — und anders als
+    die Performance-Folie steckt die Rolle "rollierend" in der Familie
+    *Thema*, also in einer echten Kundenbroschuere.
     """
     if not performance_inputs or idx >= len(performance_inputs):
         return None
     pi = performance_inputs[idx]
-    if pi is None:
-        return None
-    ts = pi.get("timeseries_df")
-    fee = pi.get("fee_dec", 0.0)
+    ts = pi.get("timeseries_df") if pi is not None else None
     if ts is None or len(ts) == 0:
+        if melden:
+            _melde_ohne_zeitreihe(bezeichnung, idx,
+                                  "die Tabelle der rollierenden Renditen")
         return None
+    fee = pi.get("fee_dec", 0.0)
     try:
         return compute_rollierend_data(ts, fee)
     except Exception as exc:
@@ -906,14 +972,21 @@ def generate_portfolioanalyse_pptx(
 
     for k, (display_name, df, eval_date, _dur) in enumerate(portfolios):
         strategy_name = clean_strategy_name(display_name)
-        perf_data = _build_perf_data(performance_inputs, k)
-        we_data = _build_we_data(performance_inputs, k, display_name)
-        roll_data = _build_rollierend_data(performance_inputs, k)
-        stand = _stand_str(eval_date)
 
         # Folienindizes dieser Strategie ermitteln:
         #  - feste Blöcke: direkt aus der Vorlagen-Konfiguration (1-indexiert)
         #  - sonst: wie bisher über base + offset im vervielfältigten Block
+        #
+        # DIE ZIELE STEHEN SEIT DEM 24.08.2026 VOR DEN _build_*-AUFRUFEN.
+        # Grund: Diese melden jetzt, wenn die Zeitreihe fehlt — und eine
+        # Warnung ueber eine Folie, die es in DIESER Vorlage gar nicht gibt,
+        # waere schlimmer als keine. Wer zwei Wochen lang eine unzutreffende
+        # Zeile ueberliest, ueberliest bald auch die zutreffende. Gemessen:
+        # nur `Vorlage_FFPB` kennt die Rolle "performance", nur
+        # `Vorlage_Thema` die Rolle "rollierend"; comdirect, CVV, ESG und ETF
+        # fuehren allein "anlagevorschlag" und "wertentwicklung".
+        # Nebeneffekt: Die ueberzaehlige Strategie steigt jetzt aus, BEVOR
+        # gerechnet wird — gemeldet ist sie oben bereits.
         if feste_bloecke:
             if k >= len(feste_bloecke):
                 continue
@@ -923,6 +996,15 @@ def generate_portfolioanalyse_pptx(
             base = block_start + B * k
             ziele = [(base + offset, rolle)
                      for offset, rolle in enumerate(reihenfolge)]
+        rollen = {rolle for _i, rolle in ziele}
+
+        perf_data = _build_perf_data(performance_inputs, k, display_name,
+                                     melden="performance" in rollen)
+        we_data = _build_we_data(performance_inputs, k, display_name,
+                                 melden="wertentwicklung" in rollen)
+        roll_data = _build_rollierend_data(performance_inputs, k, display_name,
+                                           melden="rollierend" in rollen)
+        stand = _stand_str(eval_date)
 
         for idx, rolle in ziele:
             opt = dict(rollen_optionen.get(rolle, {}))
@@ -984,7 +1066,15 @@ def generate_portfolioanalyse_pptx(
         idx = pos - 1
         try:
             if rolle == "uebersicht":
-                roll_liste = [_build_rollierend_data(performance_inputs, k)
+                # melden=False: Die Uebersicht ist die ZWEITE Verwendung
+                # derselben Daten. Meldete sie noch einmal, stuende bei den
+                # Themen-Broschueren jede fehlende Zeitreihe doppelt in der
+                # Liste. Der TEILausfall wird stattdessen hier benannt — und
+                # zwar mit Namen, denn genau diese Zeilen der Tabelle behalten
+                # die Werte der Vorlage. Bis zum 24.08.2026 fiel er nur auf,
+                # wenn ALLE Zeitreihen fehlten.
+                roll_liste = [_build_rollierend_data(performance_inputs, k,
+                                                     melden=False)
                               for k in range(len(portfolios))]
                 if not any(roll_liste):
                     _record_build_error(
@@ -992,6 +1082,14 @@ def generate_portfolioanalyse_pptx(
                         ValueError("Keine Performance-Zeitreihen übergeben — "
                                    "Übersichtstabelle behält die Vorlagen-Werte."))
                     continue
+                fehlende = [portfolios[i][0]
+                            for i, r in enumerate(roll_liste) if r is None]
+                if fehlende:
+                    LAST_BUILD_ERRORS.append(
+                        f"{', '.join(fehlende)}: {MELDUNG_KEINE_ZEITREIHE} — "
+                        f"diese Zeile(n) der Uebersichtstabelle auf Folie "
+                        f"{pos} behalten die Werte der Vorlage. Vor dem "
+                        f"Versand pruefen.")
                 _stand = _stand_str(portfolios[0][2]) if portfolios else None
                 fill_uebersicht_slide(prs, idx, roll_liste,
                                        stand_date_str=_stand,
