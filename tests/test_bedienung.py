@@ -18,6 +18,7 @@ Geprueft wird:
 """
 
 import ast
+import glob
 import os
 import re
 import sys
@@ -199,21 +200,32 @@ def pruefe_balken_zeitraum():
     fehler = 0
 
     # a) Quelltext: JEDES Datumsfeld traegt das deutsche Format.
-    quelle = os.path.join(WURZEL, "streamlit_app.py")
-    with open(quelle, encoding="utf-8") as fh:
-        baum = ast.parse(fh.read())
+    #
+    # ERWEITERT am 24.08.2026 auf ALLE Module. Bis dahin sah dieser Block
+    # ausschliesslich in `streamlit_app.py` nach — ein Datumsfeld in einem
+    # Modul waere also ungeprueft geblieben. Zu dem Zeitpunkt gab es dort
+    # keins, die Erweiterung war deshalb sofort gruen; scharf wird sie mit
+    # dem eigenen Zeitraum im Strategievergleich.
+    quellen = [os.path.join(WURZEL, "streamlit_app.py")]
+    quellen += sorted(
+        pfad for pfad in glob.glob(os.path.join(WURZEL, "modules", "*.py"))
+        if os.path.basename(pfad) not in ("__init__.py", "portfolio_builder.py"))
     ohne_format = []
     gefunden = 0
-    for knoten in ast.walk(baum):
-        if not (isinstance(knoten, ast.Call)
-                and isinstance(knoten.func, ast.Attribute)
-                and knoten.func.attr == "date_input"):
-            continue
-        gefunden += 1
-        args = {kw.arg: kw.value for kw in knoten.keywords}
-        fmt = args.get("format")
-        if not (isinstance(fmt, ast.Constant) and fmt.value == "DD.MM.YYYY"):
-            ohne_format.append(f"Zeile {knoten.lineno}")
+    for quelle in quellen:
+        with open(quelle, encoding="utf-8") as fh:
+            baum = ast.parse(fh.read())
+        for knoten in ast.walk(baum):
+            if not (isinstance(knoten, ast.Call)
+                    and isinstance(knoten.func, ast.Attribute)
+                    and knoten.func.attr == "date_input"):
+                continue
+            gefunden += 1
+            args = {kw.arg: kw.value for kw in knoten.keywords}
+            fmt = args.get("format")
+            if not (isinstance(fmt, ast.Constant) and fmt.value == "DD.MM.YYYY"):
+                ohne_format.append(
+                    f"{os.path.basename(quelle)}:{knoten.lineno}")
     if not gefunden:
         print("   FEHLER — kein einziges Datumsfeld gefunden")
         fehler += 1
@@ -222,7 +234,8 @@ def pruefe_balken_zeitraum():
               f"format=\"DD.MM.YYYY\": {ohne_format}")
         fehler += 1
     else:
-        print(f"   OK — {gefunden} Datumsfelder, alle mit deutschem Format")
+        print(f"   OK — {gefunden} Datumsfelder in {len(quellen)} Dateien, "
+              "alle mit deutschem Format")
 
     # b) Der Bedienpfad selbst: faehrt hoch, zeigt beide Felder, wirft nichts.
     at = _app()

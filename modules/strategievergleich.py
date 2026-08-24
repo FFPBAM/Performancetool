@@ -85,7 +85,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from modules.analytics import RISIKO_PERIODEN, risiko_perioden
+from modules.analytics import (RISIKO_PERIODEN, _perioden_start,
+                              deckt_zeitraum_ab, risiko_perioden)
 from modules.bestandsanalytik import (
     GEWICHT_SPALTE, calc_liquidity, gemeinsame_schluessel, gemeinsame_titel,
     gewichte_je_kategorie, kategorien_vereinigt, ueberlappung,
@@ -110,6 +111,20 @@ _X_SPALTE = {X_VOLA: "vola", X_DRAWDOWN: "max_dd"}
 # ersetzt, siehe Modul-Docstring.
 GEMEINSAM = "Längster gemeinsamer Zeitraum"
 PERIODEN = tuple(p for p in RISIKO_PERIODEN if p != "Seit Auflage") + (GEMEINSAM,)
+
+# ── Der frei gewählte Zeitraum (NEU 24.08.2026) ────────────────────────────
+# EIGEN ist eine KENNUNG und bewusst KEIN Eintrag in PERIODEN.
+#
+# Der Grund ist ein Zaun um `analytics._perioden_start`: Die Funktion liest die
+# Jahreszahl aus dem Label (`int(bezeichnung.split()[0])`). Ein Label wie
+# „Eigener Zeitraum“ ergäbe dort einen ValueError mitten in der Rechnung.
+# Statt das mit einem Kommentar zu verbieten, kann es gar nicht passieren:
+# Die Kennung steht nicht in der Auswahlliste, die Kalenderfelder erscheinen
+# über ein eigenes Häkchen daneben — dasselbe Muster wie im Performance-Reiter.
+#
+# Als Nebenwirkung bleibt die Vorbelegung „3 Jahre“ unberührt, und der
+# vorhandene Prüfstein auf den „Nicht gezeigt“-Satz greift weiter.
+EIGEN = "Eigener Zeitraum"
 
 
 # ── Ebenen der Überschneidung ──────────────────────────────────────
@@ -198,12 +213,30 @@ def _zahl(wert, stellen=1):
     return f"{zahl:.{stellen}f}".replace(".", ",")
 
 
-def kennzahlen_je_strategie(reihen, periode):
+def _fenster(reihen, periode, von, bis):
+    """(von, bis) des Zeitfensters — oder None, wenn `risiko_perioden` selbst
+    zuschneidet.
+
+    DIE EINZIGE STELLE, an der sich entscheidet, welcher Weg genommen wird.
+    Solange sie `None` liefert, und NUR dann, wird `.loc[periode]` erreicht —
+    damit kann ein Label, das `_perioden_start` nicht kennt, dort gar nicht
+    ankommen.
+    """
+    if periode == GEMEINSAM:
+        return gemeinsamer_beginn(reihen), None
+    if periode == EIGEN:
+        return (pd.Timestamp(von) if von is not None else None,
+                pd.Timestamp(bis) if bis is not None else None)
+    return None
+
+
+def kennzahlen_je_strategie(reihen, periode, von=None, bis=None):
     """Eine Zeile je Strategie: Rendite, beide Risikomaße, Familie, Abdeckung.
 
     Args:
         reihen: Sequenz von (label, ts_df, fee_dec, familie)
-        periode: ein Eintrag aus PERIODEN
+        periode: ein Eintrag aus PERIODEN oder die Kennung EIGEN
+        von, bis: nur bei EIGEN — die Ränder des gewählten Fensters
 
     Returns:
         DataFrame, index = label, Spalten "rendite", "vola", "max_dd",
@@ -216,19 +249,43 @@ def kennzahlen_je_strategie(reihen, periode):
     Damit gelten die Abdeckungsregel und die CAGR-Konvention in beiden Fällen
     unverändert, statt ein zweites Mal zu entstehen.
     """
-    spalten = ["rendite", "vola", "max_dd", "familie", "jahre", "abgedeckt"]
+    if periode not in RISIKO_PERIODEN and periode not in (GEMEINSAM, EIGEN):
+        # LIEBER LAUT ALS FALSCH: Ein unbekanntes Label liefe sonst in
+        # `risiko_perioden(...).loc[periode]` und käme dort als KeyError
+        # heraus — an einer Stelle, die nichts mit der Ursache zu tun hat.
+        raise ValueError(f"Unbekannter Zeitraum: {periode!r}")
+
+    spalten = ["rendite", "vola", "max_dd", "familie", "jahre", "beginn",
+               "abgedeckt"]
     if not reihen:
         return pd.DataFrame(columns=spalten)
 
-    von = gemeinsamer_beginn(reihen) if periode == GEMEINSAM else None
+    fenster = _fenster(reihen, periode, von, bis)
 
     zeilen = {}
     for label, ts_df, fee_dec, familie in reihen:
-        if periode == GEMEINSAM:
-            teil = ts_df.loc[ts_df.index >= von] if von is not None else ts_df
-            werte = risiko_perioden(teil, fee_dec).loc["Seit Auflage"]
-        else:
+        if fenster is None:
+            # Feste Periode: `risiko_perioden` schneidet selbst zu UND
+            # entscheidet selbst über die Abdeckung.
             werte = risiko_perioden(ts_df, fee_dec).loc[periode]
+        else:
+            f_von, f_bis = fenster
+            teil = ts_df
+            if f_von is not None:
+                teil = teil.loc[teil.index >= f_von]
+            if f_bis is not None:
+                teil = teil.loc[teil.index <= f_bis]
+            # HIER STECKT DER STILLE DATENVERLUST, gegen den
+            # `deckt_zeitraum_ab` gebaut ist: Ohne diese Frage lieferte eine
+            # Strategie, die erst MITTEN im Fenster beginnt, brav eine Zahl —
+            # nur über einen kürzeren Zeitraum als verlangt. In der
+            # Punktwolke stünde sie dann neben Strategien mit voller
+            # Historie, ohne dass irgendetwas darauf hinwiese.
+            if deckt_zeitraum_ab(ts_df, f_von, f_bis):
+                werte = risiko_perioden(teil, fee_dec).loc["Seit Auflage"]
+            else:
+                werte = pd.Series(np.nan, index=["rendite", "vola", "max_dd",
+                                                 "sharpe", "te", "ir"])
         # Abgedeckt heißt: ALLE drei Größen liegen vor. Ein Punkt mit Rendite,
         # aber ohne Risiko hätte keine X-Koordinate — er wäre kein Punkt.
         abgedeckt = bool(pd.notna(werte["rendite"])
@@ -240,6 +297,8 @@ def kennzahlen_je_strategie(reihen, periode):
             "max_dd":    float(werte["max_dd"]) if pd.notna(werte["max_dd"]) else np.nan,
             "familie":   familie or "",
             "jahre":     _jahre(ts_df),
+            "beginn":    (pd.Timestamp(ts_df.index.min())
+                          if ts_df is not None and len(ts_df) else pd.NaT),
             "abgedeckt": abgedeckt,
         }
     return pd.DataFrame.from_dict(zeilen, orient="index")[spalten]
@@ -269,7 +328,67 @@ def xachsen_hinweis(x_groesse: str) -> str:
             "war der Weg.")
 
 
-def zeitraum_text(reihen, periode):
+def zeitraum_grenzen(reihen):
+    """(frühester, spätester) Tag über die gewählten Reihen, als `date`.
+
+    DIE VEREINIGUNG und nicht der Schnitt: Ein Fenster, das nur ein Teil der
+    Auswahl abdeckt, muss WÄHLBAR sein — sonst liefe die Regel „wer den
+    Zeitraum nicht abdeckt, wird namentlich genannt“ ins Leere, weil man
+    einen solchen Zeitraum gar nicht erst einstellen könnte.
+    """
+    raender = [(pd.Timestamp(ts.index.min()), pd.Timestamp(ts.index.max()))
+               for _, ts, _, _ in reihen if ts is not None and len(ts)]
+    if not raender:
+        return None, None
+    return (min(r[0] for r in raender).date(),
+            max(r[1] for r in raender).date())
+
+
+def eigener_zeitraum_vorschlag(reihen, periode):
+    """Vorbelegung der Kalenderfelder aus der aktuellen Schnellwahl.
+
+    Wer das Häkchen setzt, will in aller Regel den gerade gewählten Zeitraum
+    verschieben und nicht bei null anfangen. Der Vorschlag ist deshalb genau
+    der Zeitraum, der eben noch gezeigt wurde.
+
+    KEINE ZWEITE RECHENREGEL: Der Beginn kommt aus `analytics._perioden_start`,
+    also aus derselben Funktion, die auch die festen Perioden schneidet. Das
+    „+ 1 Tag“ übersetzt deren Konvention (`index > start`) in die Konvention
+    der Kalenderfelder (`index >= von`); bei kalendertäglichen, lückenlosen
+    Reihen ist das dasselbe Fenster.
+    """
+    mind, maxd = zeitraum_grenzen(reihen)
+    if maxd is None:
+        return None, None
+    if periode == GEMEINSAM:
+        von = gemeinsamer_beginn(reihen)
+        return ((von.date() if von is not None else mind), maxd)
+    start = _perioden_start(pd.Timestamp(maxd), periode)
+    if start is None:
+        return mind, maxd
+    return max(mind, (start + pd.Timedelta(days=1)).date()), maxd
+
+
+def leer_hinweis(periode) -> str:
+    """Was dasteht, wenn kein einziger Punkt übrig bleibt.
+
+    ZWEI FASSUNGEN, weil eine Anweisung falsch sein kann: Bei einer festen
+    Periode hilft „einen kürzeren wählen“ — die Auswahl reicht weiter zurück
+    als die Historien. Bei einem selbst gewählten Fenster ist genau das die
+    verkehrte Anweisung: Es kann VOR dem Beginn aller Strategien liegen oder
+    zu kurz für eine Kennzahl sein, und in beiden Fällen macht ein noch
+    kürzerer Zeitraum es schlimmer.
+    """
+    if periode == EIGEN:
+        return ("Im gewählten Fenster hat keine der Strategien eine "
+                "vollständige Historie. Entweder beginnt es vor der ältesten "
+                "Auswahl, oder es umfasst zu wenige Tage für eine Kennzahl.")
+    return ("Für den gewählten Zeitraum hat keine der gewählten Strategien "
+            "eine vollständige Historie. Bitte einen kürzeren Zeitraum "
+            "wählen.")
+
+
+def zeitraum_text(reihen, periode, von=None, bis=None):
     """Verortet den gewählten Zeitraum in Klartext — oder "" wenn nichts geht.
 
     Ohne diesen Satz stünde über der Punktwolke nur ein Etikett wie
@@ -280,14 +399,23 @@ def zeitraum_text(reihen, periode):
              if ts is not None and len(ts)]
     if not enden:
         return ""
-    bis = max(enden)
-    if periode == GEMEINSAM:
-        von = gemeinsamer_beginn(reihen)
-        if von is None:
+    letzter = max(enden)
+    if periode == EIGEN:
+        if von is None or bis is None:
             return ""
-        return (f"Gemeinsamer Zeitraum der Auswahl: {von:%d.%m.%Y} bis "
-                f"{bis:%d.%m.%Y} — {_zahl((bis - von).days / 365.25)} Jahre.")
-    return (f"Gezählt wird taggenau ab dem Datenstand {bis:%d.%m.%Y} — "
+        a, b = pd.Timestamp(von), pd.Timestamp(bis)
+        if a > b:
+            return ""
+        return (f"Eigener Zeitraum: {a:%d.%m.%Y} bis {b:%d.%m.%Y} — "
+                f"{_zahl((b - a).days / 365.25)} Jahre.")
+    if periode == GEMEINSAM:
+        anfang = gemeinsamer_beginn(reihen)
+        if anfang is None:
+            return ""
+        return (f"Gemeinsamer Zeitraum der Auswahl: {anfang:%d.%m.%Y} bis "
+                f"{letzter:%d.%m.%Y} — "
+                f"{_zahl((letzter - anfang).days / 365.25)} Jahre.")
+    return (f"Gezählt wird taggenau ab dem Datenstand {letzter:%d.%m.%Y} — "
             f"„{periode}“ meint den Zeitraum bis dorthin.")
 
 
@@ -303,8 +431,17 @@ def nicht_gezeigt_text(tabelle):
     fehlend = tabelle[~tabelle["abgedeckt"].astype(bool)]
     if fehlend.empty:
         return ""
-    teile = [f"{name} ({_zahl(zeile['jahre'])} J)"
-             for name, zeile in fehlend.iterrows()]
+    # Der Beginn steht mit dabei, seit es den eigenen Zeitraum gibt
+    # (24.08.2026): Bei „3 Jahre“ genügt die Länge, um zu verstehen, warum
+    # eine Strategie fehlt. Bei einem frei gewählten Fenster ist die
+    # nützliche Tatsache das ANFANGSDATUM — daran sieht man sofort, wie weit
+    # man den Regler zurückschieben darf.
+    teile = []
+    for name, zeile in fehlend.iterrows():
+        beginn = zeile.get("beginn")
+        wann = (f", ab {pd.Timestamp(beginn):%d.%m.%Y}"
+                if beginn is not None and pd.notna(beginn) else "")
+        teile.append(f"{name} ({_zahl(zeile['jahre'])} J{wann})")
     return ("Nicht gezeigt, weil die Historie den Zeitraum nicht abdeckt: "
             + ", ".join(teile) + ".")
 
@@ -791,7 +928,8 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
     # dieselbe Aufgabe loest. Das Zeitraum-Feld bleibt trotzdem halbbreit;
     # ueber die ganze Seite gezogen sieht ein Dropdown mit sechs Eintraegen
     # aus, als haette es mehr zu sagen, als es hat.
-    with st.columns(2)[0]:
+    spalte_zeit, spalte_frei = st.columns([3, 1], vertical_alignment="bottom")
+    with spalte_zeit:
         # VORBELEGUNG "3 Jahre" und NICHT der gemeinsame Zeitraum, obwohl der
         # zuerst naheliegt: Ueber alle 19 Strategien sind das nur 1,7 Jahre,
         # weil "Pro Dividende" erst im Oktober 2024 aufgelegt wurde (am
@@ -807,18 +945,68 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
                                     "wie in der Broschüre. Das Honorarfeld "
                                     "der Performance-Ansicht wirkt hier "
                                     "nicht.")
+    with spalte_frei:
+        # DASSELBE MUSTER WIE IM PERFORMANCE-REITER (`p_zeit_frei`): ein
+        # Haekchen neben der Schnellwahl, das Kalenderfelder einblendet —
+        # und KEIN weiterer Eintrag im Dropdown. Der Grund steht bei der
+        # Kennung EIGEN oben: So kann ein Label, das `_perioden_start` nicht
+        # lesen kann, dort gar nicht erst ankommen.
+        eigener = st.checkbox(
+            "Eigener Zeitraum", value=False, key="sv_zeit_frei",
+            help="Blendet Kalenderfelder für Start und Ende ein.")
+
     reihen = [r for r in reihen_alle if r[0] in wahl]
     if not reihen:
         st.info("Keine Strategie gewählt — bitte mindestens eine auswählen.")
         return
 
-    tabelle = kennzahlen_je_strategie(reihen, periode)
+    von = bis = None
+    wirksam = periode
+    if eigener:
+        wirksam = EIGEN
+        mind, maxd = zeitraum_grenzen(reihen)
+        sd_vor, ed_vor = eigener_zeitraum_vorschlag(reihen, periode)
+
+        # ZAEHLER-KEYS (#4): `st.session_state["sv_sd"] = ...` wirft bei einem
+        # aktiven Widget eine StreamlitAPIException. Ein NEUER Key erzeugt
+        # dagegen ein neues Widget, das seinen `value=`-Vorgabewert
+        # uebernimmt — so setzt „Zuruecksetzen“ die Felder zurueck.
+        if "sv_zeit_zaehler" not in st.session_state:
+            st.session_state["sv_zeit_zaehler"] = 0
+        n = st.session_state["sv_zeit_zaehler"]
+
+        c1, c2, c3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+        with c1:
+            von = st.date_input("Start", value=sd_vor, min_value=mind,
+                                max_value=maxd, format="DD.MM.YYYY",
+                                key=f"sv_sd_{n}")
+        with c2:
+            bis = st.date_input("Ende", value=ed_vor, min_value=mind,
+                                max_value=maxd, format="DD.MM.YYYY",
+                                key=f"sv_ed_{n}")
+        with c3:
+            if st.button("Zurücksetzen", key="sv_zeit_reset", width="stretch",
+                         help="Setzt Start und Ende auf die Schnellwahl "
+                              "links zurück."):
+                st.session_state["sv_zeit_zaehler"] += 1
+                st.rerun()
+
+        if von and bis and von > bis:
+            # `return` und NICHT `st.stop()`: Diese Ansicht ist eine Funktion
+            # innerhalb der Seite. `st.stop()` risse auch alles darunter weg,
+            # und der Berater saehe eine halb leere Seite statt einer
+            # Meldung, die sagt, was zu tun ist.
+            st.error("Das Startdatum liegt nach dem Enddatum. Bitte den "
+                     "Zeitraum korrigieren.")
+            return
+
+    tabelle = kennzahlen_je_strategie(reihen, wirksam, von=von, bis=bis)
 
     # Die Zeitraum-Caption bleibt BEIM ZEITRAUM-FELD und wandert nicht mit
     # nach unten: Jede Caption steht neben dem Bedienelement, das sie
     # erklaert. Zwei graue Zeilen gesammelt vor der Grafik waeren ein Block,
     # den niemand liest.
-    hinweis = zeitraum_text(reihen, periode)
+    hinweis = zeitraum_text(reihen, wirksam, von=von, bis=bis)
     if hinweis:
         st.caption(hinweis)
 
@@ -853,9 +1041,7 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
     fig = punktwolke_figur(tabelle, x_groesse)
 
     if fig is None:
-        st.warning("Für den gewählten Zeitraum hat keine der gewählten "
-                   "Strategien eine vollständige Historie. Bitte einen "
-                   "kürzeren Zeitraum wählen.")
+        st.warning(leer_hinweis(wirksam))
     else:
         st.plotly_chart(fig, config={"displayModeBar": False}, key="sv_wolke")
 

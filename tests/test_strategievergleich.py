@@ -584,6 +584,10 @@ def schritt5_apptest():
     _lauf("nur eine Familie", sv_familien=["CVV"])
     _lauf("keine Familie gewaehlt", sv_familien=[])
     _lauf("Tabelle eingeblendet", sv_tabelle=True)
+    # Der eigene Zeitraum blendet zwei Kalenderfelder und einen Knopf ein
+    # (24.08.2026). Geprueft wird hier nur, dass die Ansicht dabei steht;
+    # was die Felder BEWIRKEN, misst Schritt 11 streamlit-frei.
+    _lauf("eigener Zeitraum eingeblendet", sv_zeit_frei=True)
     return f
 
 
@@ -1331,6 +1335,242 @@ def schritt10_auswahlfelder():
     return f
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+def schritt11_eigener_zeitraum():
+    """Der frei gewaehlte Zeitraum — und der stille Datenverlust darin.
+
+    Der Kern ist nicht, dass ein Fenster gerechnet werden kann, sondern dass
+    eine Strategie, die es nicht abdeckt, HERAUSFAELLT statt still ueber
+    einen kuerzeren Zeitraum gerechnet zu werden.
+    """
+    print("Schritt 11 — der eigene Zeitraum")
+    sym = _symbole("modules.strategievergleich",
+                   ("EIGEN", "GEMEINSAM", "PERIODEN",
+                    "kennzahlen_je_strategie", "gemeinsamer_beginn",
+                    "nicht_gezeigt_text", "zeitraum_text", "leer_hinweis",
+                    "eigener_zeitraum_vorschlag"))
+    if sym is None:
+        return 0
+    if sym is False:
+        return 1
+    ana = _symbole("modules.analytics",
+                   ("deckt_zeitraum_ab", "ZEITRAUM_RAND_TOLERANZ_TAGE",
+                    "_perioden_start", "RISIKO_PERIODEN"))
+    if ana is None:
+        return 0
+    if ana is False:
+        return 1
+
+    EIGEN = sym["EIGEN"]
+    GEM = sym["GEMEINSAM"]
+    kjs = sym["kennzahlen_je_strategie"]
+    f = 0
+
+    # ── (e) DER ZAUN um `_perioden_start` ────────────────────────────────
+    # `_perioden_start` liest die Zahl aus dem Label (`int(bez.split()[0])`).
+    # Kaeme "Eigener Zeitraum" dort an, gaebe es einen ValueError mitten in
+    # der Rechnung. Der Schutz ist strukturell: die Kennung steht gar nicht
+    # erst in der Auswahlliste.
+    if EIGEN in sym["PERIODEN"]:
+        print(f"    FEHLER — {EIGEN!r} steht in PERIODEN und waere im "
+              "Dropdown waehlbar")
+        f += 1
+    elif not (set(sym["PERIODEN"]) - {GEM}) <= set(ana["RISIKO_PERIODEN"]):
+        print("    FEHLER — PERIODEN enthaelt ein Label, das "
+              "`_perioden_start` nicht kennt")
+        f += 1
+    else:
+        print("    OK — die Kennung steht nicht in der Auswahlliste")
+
+    reihen = _echte_reihen()
+    if reihen is None:
+        return f
+
+    try:
+        kjs(reihen[:2], "Voelliger Unfug")
+    except ValueError:
+        print("    OK — ein unbekannter Zeitraum wirft ValueError")
+    except Exception as ex:
+        print(f"    FEHLER — unbekannter Zeitraum wirft {type(ex).__name__} "
+              "statt ValueError")
+        f += 1
+    else:
+        print("    FEHLER — ein unbekannter Zeitraum laeuft stillschweigend "
+              "durch")
+        f += 1
+
+    # ── (a) KEIN NEUER RECHENWEG ─────────────────────────────────────────
+    # Derselbe Zuschnitt muss dieselben Zahlen liefern wie der vorhandene
+    # gemeinsame Zeitraum. Waere das nicht so, gaebe es die Mathematik nun
+    # zweimal — die Krankheit aus Backlog B/E/F.
+    gem_tab = kjs(reihen, GEM)
+    eig_tab = kjs(reihen, EIGEN, von=sym["gemeinsamer_beginn"](reihen),
+                  bis=None)
+    unterschied = []
+    for name in gem_tab.index:
+        for spalte in ("rendite", "vola", "max_dd"):
+            a, b = gem_tab.loc[name, spalte], eig_tab.loc[name, spalte]
+            if pd.isna(a) and pd.isna(b):
+                continue
+            if pd.isna(a) or pd.isna(b) or abs(float(a) - float(b)) > 0:
+                unterschied.append(f"{name}/{spalte}: {a} gegen {b}")
+    if unterschied:
+        print(f"    FEHLER — eigener Zeitraum rechnet anders als "
+              f"{GEM!r}: {unterschied[:3]}")
+        f += 1
+    else:
+        print(f"    OK — {len(gem_tab)} Strategien x 3 Groessen: "
+              f"zeichengleich mit {GEM!r}")
+
+    # ── (b) DECKUNGSGLEICH MIT EINER FESTEN PERIODE ──────────────────────
+    # Die Reihen sind kalendertaeglich und lueckenlos (test_risiko Schritt 6),
+    # deshalb ist `index >= start + 1 Tag` dasselbe wie `index > start` — und
+    # genau so schneidet `risiko_perioden` die festen Perioden zu.
+    ende = max(pd.Timestamp(ts.index.max()) for _, ts, _, _ in reihen)
+    start3 = ana["_perioden_start"](ende, "3 Jahre") + pd.Timedelta(days=1)
+    fest = kjs(reihen, "3 Jahre")
+    frei = kjs(reihen, EIGEN, von=start3, bis=ende)
+    abweichung = []
+    for name in fest.index:
+        if not bool(fest.loc[name, "abgedeckt"]):
+            continue
+        for spalte in ("rendite", "vola", "max_dd"):
+            a, b = fest.loc[name, spalte], frei.loc[name, spalte]
+            if pd.isna(a) or pd.isna(b) or abs(float(a) - float(b)) > 0:
+                abweichung.append(f"{name}/{spalte}: {a} gegen {b}")
+    if abweichung:
+        print(f"    FEHLER — der eigene Zeitraum trifft '3 Jahre' nicht "
+              f"exakt: {abweichung[:3]}")
+        f += 1
+    else:
+        n = int(fest["abgedeckt"].astype(bool).sum())
+        print(f"    OK — {n} abgedeckte Strategien treffen '3 Jahre' exakt")
+
+    # ── (c) DIE FALLE, NAMENTLICH (#64) ──────────────────────────────────
+    # Wer 2020 als Beginn waehlt, verlangt einen Zeitraum, den fuenf
+    # Strategien nicht haben. Sie muessen HERAUSFALLEN und genannt werden.
+    von2020 = pd.Timestamp("2020-01-01")
+    tab2020 = kjs(reihen, EIGEN, von=von2020, bis=ende)
+    soll_raus = {n for n, ts, _, _ in reihen
+                 if pd.Timestamp(ts.index.min()) > von2020 + pd.Timedelta(days=1)}
+    ist_raus = set(tab2020.index[~tab2020["abgedeckt"].astype(bool)])
+    if not soll_raus:
+        print("    FEHLER — Testfall taugt nicht: 2020 deckt alle ab")
+        f += 1
+    elif ist_raus != soll_raus:
+        print(f"    FEHLER — herausgefallen {sorted(ist_raus)}, erwartet "
+              f"{sorted(soll_raus)}")
+        f += 1
+    else:
+        print(f"    OK — {len(soll_raus)} Strategien fallen heraus: "
+              f"{sorted(soll_raus)}")
+
+    text = sym["nicht_gezeigt_text"](tab2020)
+    ungenannt = [n for n in soll_raus if n not in text]
+    if ungenannt:
+        print(f"    FEHLER — nicht im Hinweis genannt: {ungenannt}")
+        f += 1
+    else:
+        print("    OK — der Hinweis nennt jede davon beim Namen")
+
+    # DIE GEGENPROBE: So haette es eine Fassung OHNE `deckt_zeitraum_ab`
+    # gemacht — zuschneiden und rechnen, was im Fenster liegt. Liefert sie
+    # fuer dieselben Faelle ebenfalls Fehlwerte, prueft (c) gar nichts.
+    naiv_mit_zahl = 0
+    for name, ts, fee, _fam in reihen:
+        if name not in soll_raus:
+            continue
+        teil = ts.loc[(ts.index >= von2020) & (ts.index <= ende)]
+        if len(teil) >= 2:
+            from modules.analytics import risiko_perioden as _rp
+            if pd.notna(_rp(teil, fee).loc["Seit Auflage", "rendite"]):
+                naiv_mit_zahl += 1
+    if naiv_mit_zahl != len(soll_raus):
+        print(f"    FEHLER — die Gegenprobe greift nicht: die naive Fassung "
+              f"liefert nur fuer {naiv_mit_zahl} von {len(soll_raus)} eine Zahl")
+        f += 1
+    else:
+        print(f"    OK — die naive Fassung haette fuer alle {len(soll_raus)} "
+              "eine Zahl geliefert")
+
+    # ── (d) BEIDE RAENDER, GLEICHE TOLERANZ ──────────────────────────────
+    deckt = ana["deckt_zeitraum_ab"]
+    tol = ana["ZEITRAUM_RAND_TOLERANZ_TAGE"]
+    _, ts0, _, _ = reihen[0]
+    mn, mx = pd.Timestamp(ts0.index.min()), pd.Timestamp(ts0.index.max())
+    tag = pd.Timedelta(days=1)
+    raender = [
+        ("von = erster Tag", mn, None, True),
+        ("von = erster Tag - Toleranz", mn - tol * tag, None, True),
+        ("von = erster Tag - Toleranz - 1", mn - (tol + 1) * tag, None, False),
+        ("bis = letzter Tag", None, mx, True),
+        ("bis = letzter Tag + Toleranz", None, mx + tol * tag, True),
+        ("bis = letzter Tag + Toleranz + 1", None, mx + (tol + 1) * tag, False),
+    ]
+    schief = [b for b, v, bi, soll in raender if deckt(ts0, v, bi) is not soll]
+    if schief:
+        print(f"    FEHLER — die Raender verhalten sich ungleich: {schief}")
+        f += 1
+    else:
+        print(f"    OK — beide Raender mit derselben Toleranz ({tol} Tag)")
+
+    # ── (f) Grenzfaelle ──────────────────────────────────────────────────
+    leer = kjs([], EIGEN, von=von2020, bis=ende)
+    if not leer.empty:
+        print("    FEHLER — leere Reihenliste liefert Zeilen")
+        f += 1
+    gleich = kjs(reihen[:3], EIGEN, von=ende, bis=ende)
+    if bool(gleich["abgedeckt"].any()):
+        print("    FEHLER — von == bis liefert eine abgedeckte Strategie")
+        f += 1
+    verdreht = kjs(reihen[:3], EIGEN, von=ende, bis=von2020)
+    if bool(verdreht["abgedeckt"].any()):
+        print("    FEHLER — von > bis liefert eine abgedeckte Strategie")
+        f += 1
+    ohne = kjs(reihen[:3], EIGEN, von=None, bis=None)
+    if not bool(ohne["abgedeckt"].all()):
+        print("    FEHLER — ohne Grenzen ist nicht alles abgedeckt")
+        f += 1
+    print("    OK — leer, von==bis, von>bis und ohne Grenzen verhalten sich")
+
+    # ── Die Textbausteine ────────────────────────────────────────────────
+    t_eigen = sym["zeitraum_text"](reihen, EIGEN, von=von2020, bis=ende)
+    if not t_eigen or "2020" not in t_eigen:
+        print(f"    FEHLER — der Zeitraum-Satz nennt den Beginn nicht: "
+              f"{t_eigen!r}")
+        f += 1
+    else:
+        print("    OK — der Zeitraum-Satz nennt Beginn und Ende")
+
+    h_fest, h_eigen = sym["leer_hinweis"]("3 Jahre"), sym["leer_hinweis"](EIGEN)
+    if not h_fest or not h_eigen or h_fest == h_eigen:
+        print("    FEHLER — `leer_hinweis` unterscheidet die beiden Faelle "
+              "nicht")
+        f += 1
+    elif "kürzer" in h_eigen or "kuerzer" in h_eigen:
+        # Beim eigenen Zeitraum ist "waehle einen kuerzeren" die genau
+        # falsche Anweisung — das Fenster kann zu kurz sein, nicht zu lang.
+        print(f"    FEHLER — der eigene Zeitraum raet zu einem kuerzeren "
+              f"Zeitraum: {h_eigen!r}")
+        f += 1
+    else:
+        print("    OK — `leer_hinweis` sagt beim eigenen Zeitraum etwas "
+              "anderes als bei einer festen Periode")
+
+    v_von, v_bis = sym["eigener_zeitraum_vorschlag"](reihen, "3 Jahre")
+    if v_bis != ende.date() or abs((v_bis - v_von).days - 365 * 3) > 4:
+        print(f"    FEHLER — die Vorbelegung fuer '3 Jahre' ist "
+              f"{v_von} bis {v_bis}")
+        f += 1
+    else:
+        print(f"    OK — die Vorbelegung folgt der Schnellwahl: "
+              f"{v_von} bis {v_bis}")
+
+    return f
+
+
 def main():
     print("Pruefstein: Strategievergleich\n")
     fehler = 0
@@ -1338,7 +1578,8 @@ def main():
                     schritt3_abdeckung, schritt4_figur, schritt5_apptest,
                     schritt6_umschalter, schritt7_figuren,
                     schritt8_apptest_bestand, schritt9_drilldown,
-                    schritt10_auswahlfelder):
+                    schritt10_auswahlfelder,
+                    schritt11_eigener_zeitraum):
         fehler += schritt()
         print()
     if fehler:

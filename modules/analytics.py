@@ -1114,6 +1114,66 @@ def rollierende_vola(daily_returns_after_fee: Sequence[float],
 
 RISIKO_PERIODEN = ("YTD", "1 Jahr", "3 Jahre", "5 Jahre", "10 Jahre", "Seit Auflage")
 
+# ── Der frei gewaehlte Zeitraum (NEU 24.08.2026) ───────────────────────────
+# Toleranz an BEIDEN Raendern eines selbst gewaehlten Fensters.
+#
+# EIN TAG IST KEIN KULANZBAND, sondern genau die Konvention, nach der
+# `risiko_perioden` schon heute entscheidet: Dort gilt eine Periode als
+# abgedeckt, wenn ihr Start vom SYNTHETISCHEN Indexbeginn gedeckt ist —
+# `df.index.min() - 1 Tag`. Der Index beginnt einen Tag vor der ersten
+# Tagesrendite, weil die Reihe dort bei 100 startet. Derselbe Betrag am
+# oberen Rand, damit die Regel an beiden Enden dieselbe ist und niemand
+# raten muss, welches Ende strenger gemeint war.
+#
+# WELCHEN FEHLER DIE TOLERANZ NOCH DURCHLAESST (#58): Die Reihen sind
+# kalendertaeglich und lueckenlos — `test_risiko` Schritt 6 misst genau das.
+# Zwei Tage sind dort also bereits eine echte Luecke und kein Rundungsrand.
+# Wer die Zahl erhoeht, muss sagen koennen, welchen Fehler er dafuer in Kauf
+# nimmt.
+ZEITRAUM_RAND_TOLERANZ_TAGE = 1
+
+
+def deckt_zeitraum_ab(timeseries_df, von=None, bis=None) -> bool:
+    """Deckt die Historie das Fenster an BEIDEN Raendern ab?
+
+    Args:
+        timeseries_df: Zeitreihe einer Strategie (DatetimeIndex)
+        von: Beginn des Fensters, oder None fuer "ab Beginn der Reihe"
+        bis: Ende des Fensters, oder None fuer "bis Ende der Reihe"
+
+    Returns:
+        True, wenn die Reihe das Fenster traegt.
+
+    WOZU DAS UEBERHAUPT GEBRAUCHT WIRD — der stille Fehler, gegen den diese
+    Funktion gebaut ist:
+
+    Ein frei gewaehltes Fenster laesst sich bequem rechnen, indem man die
+    Reihe zuschneidet und dann `risiko_perioden(teil, fee).loc["Seit
+    Auflage"]` nimmt. Das liefert aber auch dann brav eine Zahl, wenn die
+    Strategie erst MITTEN im Fenster beginnt — nur eben ueber einen
+    kuerzeren Zeitraum als angefragt. In der Punktwolke staende sie dann
+    neben Strategien mit voller Historie, ohne dass irgendetwas darauf
+    hinwiese. Genau diese Sorte Fehler faellt keiner Sichtpruefung auf.
+
+    Bei den festen Perioden verhindert `risiko_perioden` das selbst
+    (`if start < indexbeginn: continue`). Beim eigenen Zeitraum gibt es
+    diese Stelle nicht mehr — deshalb hier, und deshalb an BEIDEN Raendern:
+    Ein Fenster, das ueber das Ende der Reihe hinausragt, ist genauso wenig
+    abgedeckt wie eines, das vor ihrem Beginn anfaengt.
+
+    Die nicht abgedeckten Strategien werden anschliessend NAMENTLICH
+    genannt (`nicht_gezeigt_text`) statt stillschweigend weggelassen (#59).
+    """
+    if timeseries_df is None or len(timeseries_df) == 0:
+        return False
+    idx = timeseries_df.index
+    tol = pd.Timedelta(days=ZEITRAUM_RAND_TOLERANZ_TAGE)
+    if von is not None and pd.Timestamp(von) < idx.min() - tol:
+        return False
+    if bis is not None and pd.Timestamp(bis) > idx.max() + tol:
+        return False
+    return True
+
 
 def _perioden_start(end_ts: pd.Timestamp, bezeichnung: str):
     """Startzeitpunkt einer Periode; None steht für "seit Auflage".
