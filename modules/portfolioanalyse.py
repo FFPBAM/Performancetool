@@ -15,7 +15,7 @@ import streamlit as st
 import plotly.graph_objects as go
 
 from modules.shared import (
-    FFPB_GOLD,
+    FFPB_GOLD, FFPB_DARK, HEATMAP_GRUEN, HEATMAP_ROT,
     DATA_FOLDER, DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping,
@@ -26,7 +26,8 @@ from modules.download_helfer import download_bereich
 # Der Fehlwert kommt aus formats.py — dieselbe Quelle wie fuer Tool und
 # Broschuere. Ein "–" von Hand hinzuschreiben liefe irgendwann auseinander.
 from modules.formats import EMPTY_VALUE
-from modules.bestandsanalytik import calc_liquidity
+from modules.bestandsanalytik import (calc_liquidity, gewichte_je_kategorie,
+                                     performancebeitrag_je_kategorie)
 from modules.farben import gattung_farbe
 # historie_beschneiden liegt seit 14.08.2026 in analytics.py (Berechnungsregel,
 # von Broschuere UND Heatmap gebraucht). Der Re-Export haelt Alt-Importe heil.
@@ -601,6 +602,140 @@ def build_top5_bar_chart(top5: pd.DataFrame, title: str) -> go.Figure:
         margin=dict(t=50, b=80, l=50, r=20),
     )
     return fig
+
+
+# ---------------------------------------------------------------------------
+# PERFORMANCEBEITRAG JE SEGMENT (NEU 24.08.2026)
+# ---------------------------------------------------------------------------
+# Eigene Geometrie statt `strategievergleich.balken_geometrie`: Dort haengt
+# die Hoehe zusaetzlich an einer LEGENDE, die dieses Chart nicht hat. Ein
+# Import wuerde die Portfolioanalyse an den Strategievergleich koppeln, ohne
+# dass eine der beiden Ansichten davon etwas haette.
+#
+# DIE SCHULD SEI BENANNT: Die Regel "feste Hoehe je Balken, Raender addiert"
+# steht damit an zwei Orten im Repo. Beim DRITTEN Vorkommen gehoert sie in
+# ein eigenes Modul — vorher waere es eine Abstraktion auf Verdacht.
+BEITRAG_BALKEN_HOEHE_PX = 34
+BEITRAG_RAND_OBEN_PX = 50
+BEITRAG_RAND_UNTEN_PX = 60
+
+# Ab wie vielen Segmenten ein Chart mehr sagt als ein Satz. Bei EINEM Segment
+# waere der Balken zwangslaeufig der einzige und traege keine Aussage — die
+# Gattung und ihr Segment sind dann dasselbe. Gelernt an den zwei fetten
+# Kloetzen, die `BALKEN_HOEHE_PX` im Strategievergleich ausgeloest haben;
+# hier einen Schritt weitergedacht.
+BEITRAG_CHART_AB = 2
+
+
+def beitrag_chart_hoehe(n: int) -> int:
+    """Hoehe in px fuer n Balken — gerechnet, nicht geschaetzt."""
+    return (BEITRAG_RAND_OBEN_PX + BEITRAG_RAND_UNTEN_PX
+            + max(1, int(n)) * BEITRAG_BALKEN_HOEHE_PX)
+
+
+def fmt_pct_vorzeichen(wert, decimals: int = 2) -> str:
+    """Prozent mit ERZWUNGENEM Vorzeichen: 0.0321 -> '+3,21%'.
+
+    `fmt_pct_de` schreibt das Minus, aber kein Plus. Wo Gewinn und Verlust
+    nebeneinanderstehen, ist das Pluszeichen keine Zier: Ohne es liest sich
+    "3,21%" wie ein Betrag und nicht wie ein Beitrag.
+    """
+    if wert is None or (isinstance(wert, float) and np.isnan(wert)):
+        return EMPTY_VALUE
+    text = fmt_pct_de(wert, decimals)
+    return f"+{text}" if float(wert) > 0 else text
+
+
+def build_beitrag_bar_chart(reihe, titel: str):
+    """Waagerechte Balken, groesster Beitrag oben; None wenn leer.
+
+    ACHSENTYPEN WERDEN GESETZT, nicht geraten (#54): Die y-Achse traegt
+    Segmentnamen und muss "category" sein. Bei einem Segment namens "Index"
+    ist das kein theoretisches Risiko.
+
+    Die Reihenfolge wird ausdruecklich gesetzt (`categoryorder="array"` plus
+    `reversed`): Bei waagerechten Balken zeichnet Plotly den ERSTEN Eintrag
+    UNTEN, die Reihe kommt aber absteigend herein. Genau diese Umkehrung hat
+    am 14.08.2026 die Heatmap ein halbes Jahr verkehrt herum gezeigt.
+
+    FARBE NACH VORZEICHEN, nicht nach Rang — mit den Heatmap-Farben, weil
+    dieselbe Aussage im selben Werkzeug nicht zweimal verschieden aussehen
+    darf. Keine Signalfarben (Begruendung in `modules/shared.py`). Die Farbe
+    traegt die Aussage nie allein: an jedem Balken steht die Zahl.
+    """
+    if reihe is None or len(reihe) == 0:
+        return None
+    namen = [str(k) for k in reihe.index]
+    werte = [float(v) * 100.0 for v in reihe.values]
+
+    # Der Platz fuer die aussen liegenden Beschriftungen muss auf BEIDEN
+    # Seiten da sein, sonst wird die Zahl eines negativen Balkens am linken
+    # Rand abgeschnitten. Am Figur-Objekt ist davon nichts zu sehen, erst am
+    # gerenderten Bild (#54).
+    groesster = max(werte)
+    kleinster = min(werte)
+    spanne = max(abs(groesster), abs(kleinster)) or 1.0
+
+    fig = go.Figure(go.Bar(
+        x=werte, y=namen, orientation="h",
+        marker=dict(color=[HEATMAP_GRUEN if w >= 0 else HEATMAP_ROT
+                           for w in werte]),
+        text=[f"{w:+.2f} %".replace(".", ",") for w in werte],
+        textposition="outside", cliponaxis=False,
+        hovertemplate="<b>%{y}</b><br>Beitrag: %{x:.2f} %<extra></extra>",
+    ))
+    fig.update_layout(
+        title=dict(text=f"<b>{titel}</b>",
+                   font=dict(size=13, color=FFPB_DARK)),
+        height=beitrag_chart_hoehe(len(namen)),
+        xaxis=dict(type="linear", ticksuffix=" %",
+                   title="Beitrag zum Ergebnis",
+                   range=[min(0.0, kleinster) - spanne * 0.25,
+                          max(0.0, groesster) + spanne * 0.25]),
+        # automargin=True UND KEIN festes `l` im margin: Beides gehoert
+        # zusammen. Ein festes `l` nagelt den linken Rand fest, und Plotly
+        # kann ihn danach nicht mehr fuer die Beschriftungen aufweiten —
+        # "Banken,Versicherer,Finanzdienstl." ist 33 Zeichen lang.
+        yaxis=dict(type="category", categoryorder="array",
+                   categoryarray=list(reversed(namen)), title=None,
+                   automargin=True),
+        separators=",.",
+        margin=dict(t=BEITRAG_RAND_OBEN_PX, b=BEITRAG_RAND_UNTEN_PX),
+        showlegend=False,
+    )
+    return fig
+
+
+def beitrag_summe_text(reihe, ohne_zuordnung, n_ohne, gattung) -> str:
+    """Der Satz unter dem Chart: was die Summe ist — und was sie NICHT ist.
+
+    WARUM DIE ABGRENZUNG HIER STEHT (am 24.08.2026 an *cVV ausgewogen*
+    gemessen): Die Summe der Beitraege betrug 9,64 %, die YTD-Rendite
+    derselben Strategie 8,65 % — knapp einen Prozentpunkt daneben. Drei
+    Gruende wirken zusammen: Die Aufstellung enthaelt nur, was am Stichtag
+    NOCH im Depot liegt (unterjaehrig verkaufte Positionen fehlen), die
+    Quelle rechnet zeitgewichtet statt Stichtagsgewicht mal
+    Stichtagsperformance, und das Honorar ist nicht abgezogen. Wer die Summe
+    als Wertentwicklung liest, liegt daneben — also sagt der Satz, was sie ist.
+    """
+    summe = float(reihe.sum()) + float(ohne_zuordnung)
+    teile = [f"Innerhalb **{gattung}** summieren sich die Beiträge auf "
+             f"**{fmt_pct_vorzeichen(summe)}**."]
+    teile.append("Gezählt sind die am Stichtag gehaltenen Positionen, vor "
+                 "Honorar — das ist nicht die Wertentwicklung der Strategie.")
+    if n_ohne:
+        teile.append(f"{n_ohne} Position(en) ohne Segment-Angabe sind mit "
+                     f"{fmt_pct_vorzeichen(float(ohne_zuordnung))} enthalten, "
+                     "aber keinem Balken zugeordnet.")
+    return " ".join(teile)
+
+
+def beitrag_einzelsegment_text(name, wert, gattung) -> str:
+    """Der Ersatz fuer ein Chart mit genau einem Balken."""
+    return (f"Innerhalb **{gattung}** gibt es nur ein Segment "
+            f"(**{name}**). Sein Beitrag ist zugleich der Beitrag der ganzen "
+            f"Gattung: **{fmt_pct_vorzeichen(float(wert))}**.")
+
 
 
 # ---------------------------------------------------------------------------
@@ -1257,6 +1392,63 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
             "**Wertpapier-Performance:** Individuelle Wertentwicklung des Wertpapiers seit Jahresbeginn, unabhängig von der Gewichtung. "
             "Beide Werte sind eine Momentaufnahme zum Stichtag. Historische Wertentwicklung ist kein verlässlicher Indikator für zukünftige Ergebnisse."
         )
+
+        # ── Performancebeitrag je Segment (NEU 24.08.2026) ──
+        #
+        # WARUM EINE GATTUNGS-AUSWAHL DAVOR und nicht ein Balken je Segment
+        # ueber alles: Die Spalte "Segment" traegt zwei Bedeutungen — bei
+        # Aktien Branchen, bei Renten Schuldnerklassen (Festlegung Philip,
+        # 18.08.2026). Am 24.08.2026 an *cVV ausgewogen* gemessen steht
+        # "Eisen,Stahl,Rohstoffe" unter Aktien bei -0,159 % und unter
+        # Edelmetallen bei +0,574 %; flach aggregiert kaeme +0,415 % heraus,
+        # eine Zahl, die es in keiner Gattung gibt — mit dem falschen
+        # Vorzeichen. Die Rechnung dazu steht in `bestandsanalytik`.
+        #
+        # ALLE SEGMENTE STATT TOP 5 / FLOP 5: In einem Depot gibt es rund
+        # elf Segmente, davon meist ein bis zwei negative. Eine Top/Flop-Sicht
+        # haette hier ueberwiegend positive Werte in die Flop-Spalte gesetzt
+        # und dabei verschwiegen, was sie weglaesst (#59). Eine Ansicht, die
+        # alles zeigt und deren Summe aufgeht, ist die ehrlichere.
+        if "Segment" in df.columns and "Gattung" in df.columns:
+            gattungen = [str(g) for g in
+                         gewichte_je_kategorie(df, "Gattung")
+                         .sort_values(ascending=False).index]
+            if gattungen:
+                st.markdown("---")
+                st.markdown("**Performancebeitrag je Segment (YTD)**")
+                # KENNUNGS-KEY (#66): Nicht jede Strategie hat jede Gattung —
+                # *Muster Dynamic cVV* fuehrt nur Aktien, *Muster konservativ
+                # cVV* gar keine. Haenge der Key nicht an der Optionsmenge,
+                # bliebe beim Portfoliowechsel eine Auswahl stehen, die es
+                # dort nicht gibt. Vorbild: `sv_strategien_` im
+                # Strategievergleich.
+                merker = f"pf_beitrag_gattung_{suffix}_zuletzt"
+                zuletzt = st.session_state.get(merker)
+                gattung = st.selectbox(
+                    "Gattung", gattungen,
+                    index=gattungen.index(zuletzt) if zuletzt in gattungen else 0,
+                    key=f"pf_beitrag_gattung_{suffix}_" + "|".join(gattungen),
+                    help="Segmente werden innerhalb einer Gattung gelesen: "
+                         "Bei Aktien sind es Branchen, bei Renten "
+                         "Schuldnerklassen. Nebeneinander waeren sie nicht "
+                         "vergleichbar.")
+                st.session_state[merker] = gattung
+
+                reihe, ohne, n_ohne = performancebeitrag_je_kategorie(
+                    df, "Segment", gattung)
+                if len(reihe) >= BEITRAG_CHART_AB:
+                    st.plotly_chart(
+                        build_beitrag_bar_chart(
+                            reihe, f"Beitrag je Segment — {gattung}"),
+                        config={"displayModeBar": False},
+                        key=f"pf_beitrag_chart_{suffix}")
+                    st.caption(beitrag_summe_text(reihe, ohne, n_ohne, gattung))
+                elif len(reihe) == 1:
+                    st.caption(beitrag_einzelsegment_text(
+                        reihe.index[0], reihe.iloc[0], gattung))
+                else:
+                    st.caption(f"Innerhalb **{gattung}** traegt keine Position "
+                               "einen ausgewiesenen Beitrag.")
 
     # ── Anleihen-Detail + Duration ──
     bond_summary = get_bond_summary(df)

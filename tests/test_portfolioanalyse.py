@@ -481,12 +481,228 @@ def schritt6_apptest():
     return 1 if fehler else 0
 
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+def schritt7_beitrag_figur():
+    """Die FIGUR des Beitrags-Charts (#54).
+
+    Nicht "sieht gut aus", sondern die Eigenschaften, deren Fehlen schon
+    einmal etwas kaputt gemacht hat: geratene Achsentypen, die verkehrte
+    Balkenreihenfolge und ein fest genagelter linker Rand, der lange Namen
+    abschneidet.
+    """
+    print("Schritt 7 — die Figur des Beitrags-Charts")
+    try:
+        from modules.portfolioanalyse import (
+            build_beitrag_bar_chart, beitrag_chart_hoehe,
+            BEITRAG_BALKEN_HOEHE_PX,
+        )
+        from modules.bestandsanalytik import performancebeitrag_je_kategorie
+        from modules.shared import HEATMAP_GRUEN, HEATMAP_ROT
+    except ImportError as ex:
+        # Ein fehlendes SYMBOL ist ein Fehler in der Sache, kein
+        # Umgebungsproblem — deshalb FEHLER und nicht UEBERSPRUNGEN (#65).
+        print(f"    FEHLER — ein Symbol fehlt: {ex}")
+        return 1
+
+    f = 0
+    if build_beitrag_bar_chart(pd.Series(dtype=float), "leer") is not None:
+        print("    FEHLER — die leere Reihe liefert eine Figur statt None")
+        f += 1
+    else:
+        print("    OK — die leere Reihe liefert None")
+
+    # *cVV ausgewogen* traegt unter Aktien BEIDE Vorzeichen — der Fall, den
+    # eine einfarbige Fassung nicht unterscheiden koennte.
+    pfade = [x for x in _pf_dateien() if _name(x) == "Muster ausgewogen cVV"]
+    if not pfade:
+        print("    FEHLER — Muster ausgewogen cVV nicht gefunden")
+        return f + 1
+    df = _lade(sorted(pfade)[-1])
+    reihe, _ohne, _n = performancebeitrag_je_kategorie(df, "Segment", "Aktien")
+    if len(reihe) < 2 or not (min(reihe) < 0 < max(reihe)):
+        print(f"    FEHLER — Testfall taugt nicht: {len(reihe)} Segmente")
+        return f + 1
+
+    fig = build_beitrag_bar_chart(reihe, "Test")
+    namen = [str(k) for k in reihe.index]
+
+    pruefungen = [
+        ("x-Achse ist linear", fig.layout.xaxis.type, "linear"),
+        ("y-Achse ist category", fig.layout.yaxis.type, "category"),
+        ("Reihenfolge umgekehrt gesetzt",
+         list(fig.layout.yaxis.categoryarray), list(reversed(namen))),
+        ("cliponaxis ist False", fig.data[0].cliponaxis, False),
+        ("automargin ist an", fig.layout.yaxis.automargin, True),
+        # Der linke Rand DARF NICHT fest sein, sonst kann Plotly ihn nicht
+        # fuer "Banken,Versicherer,Finanzdienstl." (33 Zeichen) aufweiten.
+        ("kein fester linker Rand", fig.layout.margin.l, None),
+        ("keine Legende", fig.layout.showlegend, False),
+        ("deutsche Trennzeichen", fig.layout.separators, ",."),
+        ("ein Balken je Segment", len(fig.data[0].x), len(namen)),
+    ]
+    for bez, ist, soll in pruefungen:
+        if ist != soll:
+            print(f"    FEHLER — {bez}: {ist!r} statt {soll!r}")
+            f += 1
+    if not f:
+        print(f"    OK — {len(pruefungen)} Eigenschaften der Figur stimmen")
+
+    # Farbe folgt dem VORZEICHEN, nicht dem Rang.
+    farben = list(fig.data[0].marker.color)
+    soll_farben = [HEATMAP_GRUEN if float(v) >= 0 else HEATMAP_ROT
+                   for v in reihe.values]
+    if farben != soll_farben:
+        print(f"    FEHLER — Farben folgen nicht dem Vorzeichen: {farben}")
+        f += 1
+    else:
+        print(f"    OK — {soll_farben.count(HEATMAP_ROT)} negative Balken in "
+              "Terrakotta, der Rest in Salbeigruen")
+
+    # Der Platz fuer die aussen liegenden Beschriftungen muss auf BEIDEN
+    # Seiten da sein. Ohne das wird die Zahl des negativsten Balkens am
+    # linken Rand abgeschnitten — am Figur-Objekt unsichtbar, am Bild nicht.
+    von, bis = fig.layout.xaxis.range
+    werte = [float(v) * 100.0 for v in reihe.values]
+    if not (von < min(werte) and bis > max(werte)):
+        print(f"    FEHLER — die Achse laesst keinen Platz aussen: "
+              f"[{von}, {bis}] gegen {min(werte)}..{max(werte)}")
+        f += 1
+    else:
+        print("    OK — die Achse laesst auf beiden Seiten Platz")
+
+    # Die Hoehe waechst mit der Zahl der Balken, und zwar um genau einen
+    # Balken je Balken. Eine feste Hoehe hat im Strategievergleich schon
+    # einmal zwei fette Kloetze erzeugt.
+    if (beitrag_chart_hoehe(9) - beitrag_chart_hoehe(8)
+            != BEITRAG_BALKEN_HOEHE_PX):
+        print("    FEHLER — die Hoehe waechst nicht um einen Balken je Balken")
+        f += 1
+    elif fig.layout.height != beitrag_chart_hoehe(len(namen)):
+        print(f"    FEHLER — Hoehe {fig.layout.height} statt "
+              f"{beitrag_chart_hoehe(len(namen))}")
+        f += 1
+    else:
+        print(f"    OK — Hoehe {fig.layout.height} px fuer {len(namen)} Balken")
+
+    return f
+
+
+def schritt8_beitrag_apptest():
+    """Der Segment-Block an der gerenderten Oberflaeche.
+
+    Der interessante Fall ist NICHT, dass der Block erscheint, sondern der
+    Wechsel zu einer Strategie OHNE Aktien: `cVV konservativ` fuehrt nur
+    Renten und Edelmetalle. Bliebe dort "Aktien" stehen, waere das genau der
+    Fehler, gegen den der Kennungs-Key gebaut ist (#66).
+    """
+    print("Schritt 8 — der Segment-Block in der Oberflaeche")
+    try:
+        from streamlit.testing.v1 import AppTest
+    except ImportError as ex:
+        print(f"    UEBERSPRUNGEN — {ex}")
+        return 0
+
+    UEBERSCHRIFT = "Performancebeitrag je Segment (YTD)"
+
+    def _lauf(strategie, ytd):
+        at = AppTest.from_file(os.path.join(WURZEL, "streamlit_app.py"),
+                               default_timeout=400)
+        at.secrets["passwords"] = {"t": "t"}
+        at.session_state["logged_in"] = True
+        at.session_state["username"] = "t"
+        at.session_state["nav_view"] = "Portfolioanalyse"
+        at.session_state["pf_show_ytd"] = ytd
+        at.run()
+        if at.exception:
+            return at, str(at.exception[0].value)[:200]
+        auswahl = next((x for x in at.selectbox if x.key == "pf_sel_1"), None)
+        if auswahl is None or strategie not in list(auswahl.options):
+            return at, f"{strategie!r} steht nicht zur Auswahl"
+        auswahl.set_value(strategie).run()
+        if at.exception:
+            return at, str(at.exception[0].value)[:200]
+        return at, None
+
+    f = 0
+
+    # (a) Ohne den Haken darf der Block NICHT da sein.
+    at, fehler = _lauf("cVV ausgewogen", False)
+    if fehler:
+        print(f"    FEHLER — ohne Haken: {fehler}")
+        f += 1
+    elif any(UEBERSCHRIFT in m.value for m in at.markdown):
+        print("    FEHLER — der Block erscheint, obwohl der Haken aus ist")
+        f += 1
+    else:
+        print("    OK — ohne den YTD-Haken bleibt der Block weg")
+
+    # (b) Mit Haken erscheint er, und die Gattungen stehen zur Wahl.
+    at, fehler = _lauf("cVV ausgewogen", True)
+    if fehler:
+        print(f"    FEHLER — mit Haken: {fehler}")
+        return f + 1
+    if not any(UEBERSCHRIFT in m.value for m in at.markdown):
+        print("    FEHLER — der Block fehlt, obwohl der Haken gesetzt ist")
+        return f + 1
+    feld = next((x for x in at.selectbox
+                 if x.key.startswith("pf_beitrag_gattung_pf1_")), None)
+    if feld is None:
+        print("    FEHLER — kein Gattungsfeld")
+        return f + 1
+    if set(feld.options) != {"Aktien", "Renten", "Edelmetalle"}:
+        print(f"    FEHLER — Gattungen {list(feld.options)} statt "
+              "Aktien/Renten/Edelmetalle")
+        f += 1
+    else:
+        print(f"    OK — der Block ist da, Gattungen {sorted(feld.options)}")
+
+    # (c) Edelmetalle hat GENAU EIN Segment -> ein Satz statt eines Balkens.
+    feld.set_value("Edelmetalle").run()
+    if at.exception:
+        print(f"    FEHLER — Edelmetalle: {str(at.exception[0].value)[:200]}")
+        f += 1
+    else:
+        satz = [c.value for c in at.caption if "nur ein Segment" in c.value]
+        if not satz:
+            print("    FEHLER — bei einem Segment fehlt der Ersatzsatz")
+            f += 1
+        else:
+            print("    OK — bei einem Segment steht ein Satz statt eines Balkens")
+
+    # (d) DER EIGENTLICHE FALL: eine Strategie ohne Aktien.
+    at, fehler = _lauf("cVV konservativ", True)
+    if fehler:
+        print(f"    FEHLER — cVV konservativ: {fehler}")
+        return f + 1
+    feld = next((x for x in at.selectbox
+                 if x.key.startswith("pf_beitrag_gattung_pf1_")), None)
+    if feld is None:
+        print("    FEHLER — kein Gattungsfeld bei cVV konservativ")
+        return f + 1
+    if "Aktien" in list(feld.options):
+        print(f"    FEHLER — cVV konservativ bietet Aktien an: "
+              f"{list(feld.options)}")
+        f += 1
+    elif feld.value not in list(feld.options):
+        print(f"    FEHLER — gewaehlt ist {feld.value!r}, waehlbar sind "
+              f"{list(feld.options)}")
+        f += 1
+    else:
+        print(f"    OK — cVV konservativ zeigt {sorted(feld.options)}, "
+              f"gewaehlt {feld.value!r}")
+
+    return f
+
+
 def main():
     print("Pruefstein: Portfolioanalyse-Ansicht\n")
     fehler = 0
     for schritt in (schritt1_anzahl_titel, schritt2_faelligkeiten_werte,
                     schritt3_zusage_gewichte, schritt4_sortierung_und_grenzfaelle,
-                    schritt5_tabellenhoehe, schritt6_apptest):
+                    schritt5_tabellenhoehe, schritt6_apptest,
+                    schritt7_beitrag_figur, schritt8_beitrag_apptest):
         fehler += schritt()
         print()
     if fehler:
