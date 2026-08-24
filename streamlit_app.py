@@ -427,7 +427,12 @@ if not check_login(): st.stop()
 # die Ansicht ueber session_state gesetzt statt sie zu bedienen, und der
 # Chart wurde deshalb nie zweimal MIT vorhandenem Zustand gerendert.
 _KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl", "p_zeit_reset",
-                     "sv_ue_chart", "sv_zeit_reset"}
+                     "sv_ue_chart", "sv_zeit_reset",
+                     # Das Segment-Chart der Portfolioanalyse ist seit dem
+                     # 24.08.2026 anklickbar und damit ebenfalls ein Widget.
+                     # Zwei Eintraege, weil der Vergleichsmodus zwei
+                     # Portfolios nebeneinander rendert.
+                     "pf_beitrag_chart_pf1", "pf_beitrag_chart_pf2"}
 for _k in list(st.session_state.keys()):
     if _k in _KEEPALIVE_SPERRE:
         continue

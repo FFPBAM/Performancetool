@@ -27,7 +27,11 @@ from modules.download_helfer import download_bereich
 # Broschuere. Ein "–" von Hand hinzuschreiben liefe irgendwann auseinander.
 from modules.formats import EMPTY_VALUE
 from modules.bestandsanalytik import (calc_liquidity, gewichte_je_kategorie,
-                                     performancebeitrag_je_kategorie)
+                                     performancebeitrag_je_kategorie,
+                                     titel_je_auspraegung)
+# Die Aufloesung eines Chart-Klicks auf einen Namen steht in einem eigenen,
+# importfreien Modul — der Strategievergleich braucht dieselbe (24.08.2026).
+from modules.auswahl import gewaehlter_balkenname
 from modules.farben import gattung_farbe
 # historie_beschneiden liegt seit 14.08.2026 in analytics.py (Berechnungsregel,
 # von Broschuere UND Heatmap gebraucht). Der Re-Export haelt Alt-Importe heil.
@@ -619,12 +623,19 @@ BEITRAG_BALKEN_HOEHE_PX = 34
 BEITRAG_RAND_OBEN_PX = 50
 BEITRAG_RAND_UNTEN_PX = 60
 
-# Ab wie vielen Segmenten ein Chart mehr sagt als ein Satz. Bei EINEM Segment
-# waere der Balken zwangslaeufig der einzige und traege keine Aussage — die
-# Gattung und ihr Segment sind dann dasselbe. Gelernt an den zwei fetten
-# Kloetzen, die `BALKEN_HOEHE_PX` im Strategievergleich ausgeloest haben;
-# hier einen Schritt weitergedacht.
-BEITRAG_CHART_AB = 2
+# Ab wie vielen Segmenten ein Chart gezeichnet wird.
+#
+# BIS ZUM 24.08.2026 STAND HIER 2, mit der Begruendung, ein einzelner Balken
+# sei zwangslaeufig der einzige und trage keine Aussage — die Gattung und ihr
+# Segment seien dann dasselbe. Fuer die ZAHL stimmt das und der erklaerende
+# Satz sagt es weiterhin. Fuer die BEDIENUNG stimmt es nicht: Ohne Balken gibt
+# es nichts anzuklicken, und die Einzeltitel waeren ausgerechnet in den
+# Gattungen unerreichbar, die aus einem Segment bestehen. Gemessen sind das
+# 20 Faelle ueber die 19 Strategien, fast alle "Edelmetalle" (Entscheidung
+# Philip, 24.08.2026).
+#
+# Der Satz ist deshalb kein Ersatz mehr, sondern steht UNTER dem Balken.
+BEITRAG_CHART_AB = 1
 
 
 def beitrag_chart_hoehe(n: int) -> int:
@@ -693,6 +704,10 @@ def build_beitrag_bar_chart(reihe, titel: str):
                            for w in werte]),
         text=[f"{w:+.2f} %".replace(".", ",") for w in werte],
         textposition="outside", cliponaxis=False,
+        # `customdata` traegt den Segmentnamen ein ZWEITES Mal. Der Klick wird
+        # ueber `y` aufgeloest; meldet Plotly die Achse einmal anders zurueck,
+        # ist das hier der Ersatzweg (siehe modules/auswahl.py).
+        customdata=namen,
         hovertemplate="<b>%{y}</b><br>Beitrag: %{x:.2f} %<extra></extra>",
     ))
     fig.update_layout(
@@ -741,11 +756,95 @@ def beitrag_summe_text(reihe, ohne_zuordnung, n_ohne, gattung) -> str:
     return " ".join(teile)
 
 
-def beitrag_einzelsegment_text(name, wert, gattung) -> str:
-    """Der Ersatz fuer ein Chart mit genau einem Balken."""
-    return (f"Innerhalb **{gattung}** gibt es nur ein Segment "
-            f"(**{name}**). Sein Beitrag ist zugleich der Beitrag der ganzen "
-            f"Gattung: **{fmt_pct_vorzeichen(float(wert))}**.")
+def beitrag_titel_tabelle(roh):
+    """Die Einzeltitel eines Segments als ANZEIGEfertige Tabelle.
+
+    Alle Zahlen sind bereits Zeichenketten aus `modules/formats.py` — deutsche
+    Notation, Fehlwert "–", eine einzige Quelle. `st.column_config` waere die
+    naheliegende Alternative und formatiert englisch oder nach der Locale des
+    BROWSERS; dieselbe Broschuere saehe dann auf zwei Rechnern verschieden
+    aus. Festgelegt am 18.08.2026 im Strategievergleich, hier fortgefuehrt.
+
+    KEIN TEXTBALKEN in der letzten Spalte: Der Versuch stand am 18.08.2026
+    schon einmal hier und wurde verworfen — ein Block aus U+2588 liest sich
+    als Textur, nicht als Diagramm. Die Groessenverhaeltnisse zeigt das Chart
+    darueber, dafuer ist es da.
+
+    Returns: DataFrame oder None, wenn es nichts zu zeigen gibt.
+    """
+    if roh is None or len(roh) == 0:
+        return None
+    return pd.DataFrame({
+        "Wertpapier": [str(v) if v == v else EMPTY_VALUE
+                       for v in roh["wertpapier"]],
+        "WKN": [str(v) if v == v else EMPTY_VALUE for v in roh["wkn"]],
+        "Gewicht": [fmt_pct_de(v) for v in roh["gewicht"]],
+        "Beitrag": [fmt_pct_vorzeichen(v) for v in roh["beitrag"]],
+        "Wertpapier-Performance": [fmt_pct_vorzeichen(v)
+                                   for v in roh["wp_performance"]],
+    })
+
+
+def beitrag_drilldown_satz(segment, wert, gattung, anzahl) -> str:
+    """Was der angeklickte Balken sagt — in einem Satz ueber der Aufstellung.
+
+    Ohne ihn muesste man aus der Tabelle erraten, welches Segment gerade offen
+    ist; die Ueberschrift allein sagt es nicht.
+    """
+    n = int(anzahl)
+    # "Titel" ist im Deutschen in beiden Zahlformen gleich — nur das Verb
+    # muss mitgehen, sonst steht da "1 Titel verteilt".
+    schluss = ("einen einzigen Titel" if n == 1
+               else f"verteilt auf {n} Titel")
+    return (f"**{segment}** innerhalb **{gattung}** traegt "
+            f"**{fmt_pct_vorzeichen(float(wert))}** zum Ergebnis bei — "
+            f"{schluss}.")
+
+
+def beitrag_drilldown_caption(anzahl, summe) -> str:
+    """Der Satz unter der Aufstellung: die Zeilen ergeben die Zahl oben.
+
+    DIE SUMME WIRD AUS DEN ANGEZEIGTEN ZEILEN GERECHNET und nicht aus dem
+    Balkenwert uebernommen. Sonst waere die Zusage per Konstruktion wahr und
+    beweise nichts — genau der Fehler, vor dem #58 warnt. Weicht sie eines
+    Tages ab, sieht man es hier und nicht erst im Prueflauf.
+
+    Der Vorbehalt zum Gewicht ist kein Kleingedrucktes: `Gewicht` ist der
+    Anteil am GANZEN Depot, nicht am Segment. Ohne den Hinweis erwartet man
+    in der Spalte 100 %.
+    """
+    n = int(anzahl)
+    zeilen = "Zeile ergibt" if n == 1 else "Zeilen ergeben zusammen"
+    return (f"Die {n} {zeilen} **{fmt_pct_vorzeichen(float(summe))}** — den "
+            f"Balken oben. Das Gewicht ist der Anteil am gesamten Depot, "
+            f"nicht am Segment.")
+
+
+def beitrag_einzelsegment_text(name, wert, gattung,
+                               ohne_zuordnung=0.0, n_ohne=0) -> str:
+    """Der Satz UNTER einem Chart mit genau einem Balken.
+
+    Bis zum 24.08.2026 war er der Ersatz fuer das Chart; seit der Balken auch
+    bei einem Segment steht, erklaert er ihn (siehe `BEITRAG_CHART_AB`).
+
+    DER ZWEIG MIT `n_ohne` IST KEINE ZIER: Der Satz behauptet, der Beitrag des
+    einen Segments sei zugleich der Beitrag der ganzen Gattung. Das gilt nur,
+    solange keine Position der Gattung ohne Segment-Angabe dasteht. Am
+    24.08.2026 traf das auf alle 20 Einsegment-Faelle zu — zugesichert war es
+    nie, und eine stillschweigend falsche Gleichsetzung faellt hier niemandem
+    auf. Der Wortlaut folgt `beitrag_summe_text`, damit beide Captions
+    dieselbe Sprache sprechen.
+    """
+    kern = (f"Innerhalb **{gattung}** gibt es nur ein Segment "
+            f"(**{name}**) mit einem Beitrag von "
+            f"**{fmt_pct_vorzeichen(float(wert))}**.")
+    if not n_ohne:
+        return (f"Innerhalb **{gattung}** gibt es nur ein Segment "
+                f"(**{name}**). Sein Beitrag ist zugleich der Beitrag der "
+                f"ganzen Gattung: **{fmt_pct_vorzeichen(float(wert))}**.")
+    return (f"{kern} Dazu kommen {n_ohne} Position(en) ohne Segment-Angabe "
+            f"mit {fmt_pct_vorzeichen(float(ohne_zuordnung))} — der Beitrag "
+            f"der ganzen Gattung ist deshalb groesser als der des Segments.")
 
 
 
@@ -1447,16 +1546,66 @@ def _render_single_portfolio(label, df, auswertungsdatum, anlagevolumen, use_vol
 
                 reihe, ohne, n_ohne = performancebeitrag_je_kategorie(
                     df, "Segment", gattung)
+                # EINE Verzweigung, nicht zwei: Seit BEITRAG_CHART_AB auf 1
+                # steht, waere ein eigener `elif len(reihe) == 1`-Zweig
+                # unerreichbar — und toter Code liest sich wie eine Regel.
+                # Unterschiedlich ist nur noch die Caption.
                 if len(reihe) >= BEITRAG_CHART_AB:
-                    st.plotly_chart(
-                        build_beitrag_bar_chart(
-                            reihe, f"Beitrag je Segment — {gattung}"),
-                        config={"displayModeBar": False},
-                        key=f"pf_beitrag_chart_{suffix}")
-                    st.caption(beitrag_summe_text(reihe, ohne, n_ohne, gattung))
-                elif len(reihe) == 1:
-                    st.caption(beitrag_einzelsegment_text(
-                        reihe.index[0], reihe.iloc[0], gattung))
+                    fig = build_beitrag_bar_chart(
+                        reihe, f"Beitrag je Segment — {gattung}")
+                    # ZWEI AUSGESCHRIEBENE AUFRUFE STATT EINES KEYS AUS EINER
+                    # f-ZEICHENKETTE — und das ist kein Schoenheitsfehler:
+                    #
+                    # `on_select` macht aus dem Chart ein WIDGET. Sein Key muss
+                    # deshalb in `_KEEPALIVE_SPERRE` stehen, sonst haelt die
+                    # App beim zweiten Rendern an (#19) — genau so geschehen am
+                    # 18.08.2026 in der laufenden Cloud-App.
+                    # `tests/test_keepalive.py` haelt jeden solchen Key gegen
+                    # die Sperrliste und laesst dafuer nur LITERALE zu; ein
+                    # berechneter Key liesse sich gegen keine Liste halten.
+                    #
+                    # Und deshalb auch KEIN gemeinsames `**kwargs`-Dict: Der
+                    # Pruefstein liest den Syntaxbaum und erkennt `on_select`
+                    # nur als echtes Schluesselwort. Ueber `**` verschwaende
+                    # das Widget aus seiner Sicht — der Test bliebe gruen und
+                    # die App fiele trotzdem. Die Doppelung ist die ehrliche
+                    # Loesung; der Vergleichsmodus rendert zwei Portfolios.
+                    if suffix == "pf2":
+                        auswahl = st.plotly_chart(
+                            fig, config={"displayModeBar": False},
+                            key="pf_beitrag_chart_pf2",
+                            on_select="rerun", selection_mode="points")
+                    else:
+                        auswahl = st.plotly_chart(
+                            fig, config={"displayModeBar": False},
+                            key="pf_beitrag_chart_pf1",
+                            on_select="rerun", selection_mode="points")
+                    st.caption(
+                        beitrag_einzelsegment_text(
+                            reihe.index[0], reihe.iloc[0], gattung,
+                            ohne, n_ohne)
+                        if len(reihe) == 1
+                        else beitrag_summe_text(reihe, ohne, n_ohne, gattung))
+
+                    # ── Die Einzeltitel des angeklickten Segments ──
+                    # `reihe` kommt absteigend, also ist reihe.index[0] der
+                    # groesste Balken — und damit das, was ohne Klick dasteht.
+                    # Einen leeren Zustand gibt es bewusst nicht.
+                    segment = gewaehlter_balkenname(auswahl,
+                                                    list(reihe.index))
+                    roh = titel_je_auspraegung(df, "Segment", segment,
+                                               gattung)
+                    anzeige = beitrag_titel_tabelle(roh)
+                    if anzeige is not None:
+                        st.markdown(beitrag_drilldown_satz(
+                            segment, reihe.loc[segment], gattung, len(roh)))
+                        st.dataframe(anzeige, width="stretch",
+                                     height="content", hide_index=True)
+                        st.caption(beitrag_drilldown_caption(
+                            len(roh), float(roh["beitrag"].sum())))
+                        if len(reihe) > 1:
+                            st.caption("Ein Klick auf einen Balken zeigt die "
+                                       "Titel dieses Segments.")
                 else:
                     st.caption(f"Innerhalb **{gattung}** traegt keine Position "
                                "einen ausgewiesenen Beitrag.")

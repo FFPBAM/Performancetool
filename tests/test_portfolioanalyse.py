@@ -496,7 +496,7 @@ def schritt7_beitrag_figur():
     try:
         from modules.portfolioanalyse import (
             build_beitrag_bar_chart, beitrag_chart_hoehe,
-            BEITRAG_BALKEN_HOEHE_PX,
+            BEITRAG_BALKEN_HOEHE_PX, BEITRAG_CHART_AB,
         )
         from modules.bestandsanalytik import performancebeitrag_je_kategorie
         from modules.shared import FFPB_DARK, FFPB_GOLD
@@ -593,6 +593,335 @@ def schritt7_beitrag_figur():
     else:
         print(f"    OK — Hoehe {fig.layout.height} px fuer {len(namen)} Balken")
 
+    # `customdata` traegt den Segmentnamen ein zweites Mal — der Ersatzweg
+    # der Klick-Aufloesung. Ohne ihn faellt sie stumm auf den groessten
+    # Balken zurueck, sobald Plotly die Achse anders zurueckmeldet.
+    if list(fig.data[0].customdata or []) != namen:
+        print("    FEHLER — customdata traegt nicht die Segmentnamen")
+        f += 1
+    else:
+        print("    OK — customdata traegt die Segmentnamen als Ersatzweg")
+
+    # ── Der EINE Balken (NEU 24.08.2026) ──
+    # Die Schwelle steht hier als REGEL und nicht als Verhalten: Ein AppTest
+    # kaeme an sie nicht heran, und ohne sie waere die Entscheidung vom
+    # 24.08.2026 beim naechsten Aufraeumen still zurueckgedreht.
+    if BEITRAG_CHART_AB != 1:
+        print(f"    FEHLER — BEITRAG_CHART_AB ist {BEITRAG_CHART_AB}; bei "
+              "einem Segment gaebe es keinen Balken zum Anklicken und die "
+              "Einzeltitel waeren dort unerreichbar")
+        f += 1
+    else:
+        print("    OK — BEITRAG_CHART_AB = 1, auch ein Segment bekommt einen "
+              "Balken")
+
+    # Genau ein Segment: Die Figur muss stehen, nicht None sein.
+    eins = reihe.iloc[:1]
+    fig1 = build_beitrag_bar_chart(eins, "Einzelfall")
+    if fig1 is None:
+        print("    FEHLER — ein einzelnes Segment liefert keine Figur")
+        f += 1
+    elif len(fig1.data[0].x) != 1:
+        print(f"    FEHLER — {len(fig1.data[0].x)} Balken statt 1")
+        f += 1
+    elif fig1.layout.height != beitrag_chart_hoehe(1):
+        print(f"    FEHLER — Hoehe {fig1.layout.height} statt "
+              f"{beitrag_chart_hoehe(1)}")
+        f += 1
+    else:
+        print(f"    OK — ein Segment: ein Balken, Hoehe "
+              f"{fig1.layout.height} px")
+
+    # Grenzfaelle eines einzelnen Balkens: Die Achse muss die 0 IMMER
+    # einschliessen, sonst haengt ein negativer Balken im Nichts.
+    for etikett, wert in (("ein negativer Wert", -0.031),
+                          ("ein positiver Wert", 0.031),
+                          ("exakt null", 0.0)):
+        einzeln = pd.Series([wert], index=["Testsegment"])
+        fx = build_beitrag_bar_chart(einzeln, etikett)
+        if fx is None:
+            print(f"    FEHLER — {etikett}: keine Figur")
+            f += 1
+            continue
+        von, bis = fx.layout.xaxis.range
+        if not (von <= 0 <= bis and von <= wert * 100 <= bis):
+            print(f"    FEHLER — {etikett}: Achse [{von}, {bis}] schliesst "
+                  "die 0 oder den Wert nicht ein")
+            f += 1
+            continue
+        farbe = list(fx.data[0].marker.color)[0]
+        soll = FFPB_GOLD if wert < 0 else FFPB_DARK
+        if farbe != soll:
+            print(f"    FEHLER — {etikett}: Farbe {farbe} statt {soll}")
+            f += 1
+        else:
+            print(f"    OK — {etikett}: Achse umschliesst 0, Farbe stimmt")
+
+    return f
+
+
+def schritt9_klick_aufloesung():
+    """Die Aufloesung eines Chart-Klicks — OHNE JEDES PAKET.
+
+    Der Klick selbst laesst sich weder im AppTest noch im Browser-freien Lauf
+    ausloesen (belegt am 18.08.2026: vier AppTest-Varianten, keine hat den
+    Fall erreicht). Was sich pruefen laesst, ist die Uebersetzung des
+    Ereignisses in einen Namen — und genau dort sass der Fehler, vor dem #53
+    warnt: Wechselt die Gattung, zeigt derselbe Balkenindex auf ein anderes
+    Segment.
+    """
+    print("Schritt 9 — der Chart-Klick wird ueber den NAMEN aufgeloest")
+    try:
+        from modules.auswahl import gewaehlter_balkenname
+    except ImportError as ex:
+        print(f"    FEHLER — ein Symbol fehlt: {ex}")
+        return 1
+
+    namen = ["Informationstechnologie", "Banken", "Eisen,Stahl,Rohstoffe"]
+    f = 0
+
+    def _auswahl(punkt):
+        return {"selection": {"points": [punkt]}}
+
+    faelle = [
+        ("kein Klick", None, namen[0]),
+        ("leere Auswahl", {}, namen[0]),
+        ("Auswahl ohne Punkte", {"selection": {"points": []}}, namen[0]),
+        ("Treffer ueber y", _auswahl({"y": "Banken"}), "Banken"),
+        ("Ersatzweg customdata (Liste)",
+         _auswahl({"y": 2, "customdata": ["Banken"]}), "Banken"),
+        ("Ersatzweg customdata (Zeichenkette)",
+         _auswahl({"y": None, "customdata": "Banken"}), "Banken"),
+        # DER FALL, DER DEN DRILLDOWN AUF DAS FALSCHE SEGMENT ZEIGEN LIESSE:
+        # ein Name aus der vorherigen Gattung, den es hier nicht mehr gibt.
+        ("veralteter Name", _auswahl({"y": "Staatsanleihen"}), namen[0]),
+        ("Schrott im Punkt", _auswahl({"y": {"a": 1}}), namen[0]),
+        ("Auswahl ist keine Abbildung", "kaputt", namen[0]),
+        ("Auswahl ist eine Zahl", 42, namen[0]),
+    ]
+    for etikett, auswahl, soll in faelle:
+        try:
+            ist = gewaehlter_balkenname(auswahl, namen)
+        except Exception as ex:
+            print(f"    FEHLER — {etikett}: {type(ex).__name__}: {ex}")
+            f += 1
+            continue
+        if ist != soll:
+            print(f"    FEHLER — {etikett}: {ist!r} statt {soll!r}")
+            f += 1
+    if not f:
+        print(f"    OK — {len(faelle)} Faelle, darunter veralteter Name und "
+              "Schrott-Eingabe, treffen den erwarteten Namen")
+
+    # Ohne Namen gibt es nichts zu waehlen — und keinen Absturz.
+    for etikett, leer in (("leere Liste", []), ("None", None)):
+        if gewaehlter_balkenname({"selection": {"points": []}}, leer) is not None:
+            print(f"    FEHLER — {etikett} liefert nicht None")
+            f += 1
+    if not f:
+        print("    OK — ohne Namen kommt None statt eines Absturzes")
+
+    # DIE ZUSAGE DER AUFRUFER: absteigend sortiert, also ist der Rueckfall
+    # der groesste Balken. Kippt die Sortierung, kippt auch, was ohne Klick
+    # dasteht — deshalb steht das hier und nicht nur im Docstring.
+    if gewaehlter_balkenname(None, namen) != namen[0]:
+        print("    FEHLER — ohne Klick steht nicht der erste Name da")
+        f += 1
+    else:
+        print("    OK — ohne Klick steht der erste (groesste) Balken da")
+    return f
+
+
+def schritt10_titel_je_segment():
+    """Die Zusage: die Einzeltitel ergeben zusammen den Balken.
+
+    Ueber ALLE Strategien und ALLE Gattung/Segment-Kombinationen, nicht an
+    einem Beispiel. Genau hier faellt auf, wenn die beiden Funktionen
+    unterschiedlich filtern — und das faellt sonst nirgends auf, weil beide
+    fuer sich plausible Zahlen liefern.
+    """
+    print("Schritt 10 — die Einzeltitel eines Segments ergeben den Balken")
+    try:
+        from modules.bestandsanalytik import (performancebeitrag_je_kategorie,
+                                              titel_je_auspraegung)
+    except ImportError as ex:
+        print(f"    FEHLER — ein Symbol fehlt: {ex}")
+        return 1
+
+    SPALTEN = ["wertpapier", "wkn", "gewicht", "beitrag", "wp_performance"]
+    f = 0
+    dateien = _pf_dateien()
+    if not dateien:
+        print("    UEBERSPRUNGEN — keine Bestandsdateien gefunden")
+        return 0
+
+    # Toleranz bewusst eng: Die groesste gemessene Abweichung liegt bei
+    # 1,4e-17 (Gleitkomma-Rauschen). Eine weite Toleranz wuerde eine
+    # fehlende ZEILE nicht mehr von Rauschen unterscheiden (#58).
+    TOLERANZ = 1e-12
+    schlimmste, n, ohne_titel = 0.0, 0, []
+    for pfad in dateien:
+        df = _lade(pfad)
+        if "Segment" not in df.columns or "Gattung" not in df.columns:
+            continue
+        for gattung in df["Gattung"].dropna().unique():
+            reihe, _o, _n = performancebeitrag_je_kategorie(
+                df, "Segment", gattung)
+            for segment, wert in reihe.items():
+                titel = titel_je_auspraegung(df, "Segment", segment, gattung)
+                if list(titel.columns) != SPALTEN:
+                    print(f"    FEHLER — Spalten {list(titel.columns)}")
+                    return f + 1
+                if len(titel) == 0:
+                    ohne_titel.append((_name(pfad), gattung, segment))
+                schlimmste = max(schlimmste,
+                                 abs(float(titel["beitrag"].sum()) - float(wert)))
+                n += 1
+    if ohne_titel:
+        print(f"    FEHLER — {len(ohne_titel)} Segment(e) stehen im Balken, "
+              f"haben aber keine Titel: {ohne_titel[:3]}")
+        f += 1
+    if schlimmste > TOLERANZ:
+        print(f"    FEHLER — groesste Abweichung {schlimmste:.3e} ueber "
+              f"{n} Kombinationen (erlaubt {TOLERANZ:.0e})")
+        f += 1
+    else:
+        print(f"    OK — {n} Gattung/Segment-Kombinationen, groesste "
+              f"Abweichung {schlimmste:.3e}")
+
+    # Grenzfaelle: immer ein leerer DataFrame MIT den Spalten, nie None und
+    # nie ein Wurf. Der Renderblock unterscheidet sonst zwei Faelle.
+    df = _lade(sorted(dateien)[-1])
+    grenzfaelle = [
+        ("df=None", (None, "Segment", "x", None)),
+        ("leerer DataFrame", (pd.DataFrame(), "Segment", "x", None)),
+        ("unbekanntes Segment", (df, "Segment", "GIBTESNICHT", None)),
+        ("unbekannte Gattung", (df, "Segment", "Banken", "GIBTESNICHT")),
+        ("Kategoriespalte fehlt", (df, "GIBTESNICHT", "x", None)),
+        ("Segment ist NaN-Text", (df, "Segment", "nan", None)),
+    ]
+    schlecht = 0
+    for etikett, args in grenzfaelle:
+        try:
+            r = titel_je_auspraegung(*args)
+        except Exception as ex:
+            print(f"    FEHLER — {etikett}: {type(ex).__name__}: {ex}")
+            schlecht += 1
+            continue
+        if r is None or len(r) != 0 or list(r.columns) != SPALTEN:
+            print(f"    FEHLER — {etikett}: {r!r}")
+            schlecht += 1
+    f += schlecht
+    if not schlecht:
+        print(f"    OK — {len(grenzfaelle)} Grenzfaelle liefern eine leere "
+              "Tabelle mit den richtigen Spalten")
+
+    # Fehlt "WP-Performance", kommt eine NaN-Spalte und keine Null (#46):
+    # 0 % Wertentwicklung ist eine Aussage, keine Angabe ist keine.
+    ohne_spalte = df.drop(columns=["WP-Performance"])
+    r = titel_je_auspraegung(ohne_spalte, "Segment",
+                             str(df["Segment"].dropna().iloc[0]))
+    if len(r) and float(r["wp_performance"].fillna(-999).iloc[0]) != -999:
+        print("    FEHLER — ohne die Spalte steht dort ein Wert statt NaN")
+        f += 1
+    else:
+        print("    OK — fehlende WP-Performance wird NaN, nicht 0")
+    return f
+
+
+def schritt11_drilldown_anzeige():
+    """Die Anzeige: deutsche Zahlen, kein Textbalken, Singular stimmt."""
+    print("Schritt 11 — die Aufstellung unter dem Balken")
+    try:
+        from modules.portfolioanalyse import (
+            beitrag_titel_tabelle, beitrag_drilldown_satz,
+            beitrag_drilldown_caption)
+        from modules.bestandsanalytik import titel_je_auspraegung
+        from modules.formats import EMPTY_VALUE
+    except ImportError as ex:
+        print(f"    FEHLER — ein Symbol fehlt: {ex}")
+        return 1
+
+    f = 0
+    SOLL = ["Wertpapier", "WKN", "Gewicht", "Beitrag", "Wertpapier-Performance"]
+    if beitrag_titel_tabelle(None) is not None:
+        print("    FEHLER — None liefert eine Tabelle statt None")
+        f += 1
+    if beitrag_titel_tabelle(pd.DataFrame()) is not None:
+        print("    FEHLER — ein leerer Eingang liefert eine Tabelle")
+        f += 1
+
+    dateien = _pf_dateien()
+    if not dateien:
+        print("    UEBERSPRUNGEN — keine Bestandsdateien gefunden")
+        return f
+    df = _lade(sorted(dateien)[-1])
+    segment = str(df["Segment"].dropna().iloc[0])
+    roh = titel_je_auspraegung(df, "Segment", segment)
+    anzeige = beitrag_titel_tabelle(roh)
+    if anzeige is None:
+        print(f"    FEHLER — {segment!r} liefert keine Anzeige")
+        return f + 1
+    if list(anzeige.columns) != SOLL:
+        print(f"    FEHLER — Spalten {list(anzeige.columns)} statt {SOLL}")
+        f += 1
+    # ALLE Werte sind fertige Zeichenketten aus modules/formats.py. Ein
+    # Punkt als Dezimaltrenner hiesse, dass jemand `st.column_config` oder
+    # eine eigene Formatierung eingefuehrt hat — dann formatiert das Tool
+    # je nach Browser-Locale verschieden.
+    zahlen = [w for spalte in ("Gewicht", "Beitrag", "Wertpapier-Performance")
+              for w in anzeige[spalte]]
+    if not all(isinstance(w, str) for w in zahlen):
+        print("    FEHLER — nicht alle Zahlen sind Zeichenketten")
+        f += 1
+    elif any("." in w for w in zahlen if w != EMPTY_VALUE):
+        print(f"    FEHLER — englische Notation: "
+              f"{[w for w in zahlen if '.' in w][:3]}")
+        f += 1
+    else:
+        print(f"    OK — {len(anzeige)} Zeilen, {len(SOLL)} Spalten, alle "
+              "Zahlen deutsch formatiert")
+
+    # KEIN TEXTBALKEN (Entscheidung Philip, 18.08.2026): Ein Block aus
+    # U+2588 liest sich als Textur, nicht als Diagramm.
+    if any("█" in str(w) for spalte in anzeige.columns
+           for w in anzeige[spalte]):
+        print("    FEHLER — die Tabelle traegt wieder Textbalken")
+        f += 1
+    else:
+        print("    OK — keine Textbalken in der Tabelle")
+
+    # Der Singular: "Die 1 Zeilen ergeben" waere ein Schoenheitsfehler, den
+    # genau die Einsegment-Gattungen zuverlaessig zeigen wuerden.
+    eine = beitrag_drilldown_caption(1, 0.0123)
+    viele = beitrag_drilldown_caption(4, 0.0123)
+    if "1 Zeilen" in eine or "Zeile ergibt" not in eine:
+        print(f"    FEHLER — Singular stimmt nicht: {eine!r}")
+        f += 1
+    elif "4 Zeilen ergeben" not in viele:
+        print(f"    FEHLER — Plural stimmt nicht: {viele!r}")
+        f += 1
+    else:
+        print("    OK — Singular und Plural der Caption stimmen")
+
+    # Der Vorbehalt zum Gewicht ist Pflicht: Die Spalte zeigt den Anteil am
+    # GANZEN Depot. Ohne den Satz erwartet man in ihr 100 %.
+    if "nicht am Segment" not in viele:
+        print("    FEHLER — die Caption nennt den Gewichts-Vorbehalt nicht")
+        f += 1
+    else:
+        print("    OK — die Caption grenzt das Depotgewicht ab")
+
+    satz = beitrag_drilldown_satz(segment, 0.0123, "Aktien", 1)
+    if "einen einzigen Titel" not in satz:
+        print(f"    FEHLER — der Satz stimmt bei einem Titel nicht: {satz!r}")
+        f += 1
+    elif "verteilt auf 7 Titel" not in beitrag_drilldown_satz(
+            segment, 0.0123, "Aktien", 7):
+        print("    FEHLER — der Satz stimmt bei mehreren Titeln nicht")
+        f += 1
+    else:
+        print("    OK — der Satz ueber der Tabelle nennt Segment und Zahl")
     return f
 
 
@@ -665,18 +994,57 @@ def schritt8_beitrag_apptest():
     else:
         print(f"    OK — der Block ist da, Gattungen {sorted(feld.options)}")
 
-    # (c) Edelmetalle hat GENAU EIN Segment -> ein Satz statt eines Balkens.
+    # (c) Edelmetalle hat GENAU EIN Segment -> seit 24.08.2026 Satz UND
+    # Balken. Vorher stand hier nur der Satz; die Meldung sagte das auch so
+    # und waere jetzt eine gruene Behauptung des Gegenteils.
+    #
+    # WIE DER BALKEN NACHGEWIESEN WIRD, OHNE IHN ZU SEHEN: AppTest kennt
+    # keinen Zugriff auf plotly_chart. Die Drilldown-Caption steht aber
+    # INNERHALB des Chart-Zweigs — erscheint sie, ist der Balken gezeichnet
+    # worden. Ein indirekter, aber belastbarer Beleg; die Figur selbst prueft
+    # Schritt 7.
     feld.set_value("Edelmetalle").run()
     if at.exception:
         print(f"    FEHLER — Edelmetalle: {str(at.exception[0].value)[:200]}")
         f += 1
     else:
-        satz = [c.value for c in at.caption if "nur ein Segment" in c.value]
+        captions = [c.value for c in at.caption]
+        satz = [c for c in captions if "nur ein Segment" in c]
+        balken = [c for c in captions if "den Balken oben" in c]
         if not satz:
-            print("    FEHLER — bei einem Segment fehlt der Ersatzsatz")
+            print("    FEHLER — bei einem Segment fehlt der erklaerende Satz")
+            f += 1
+        elif not balken:
+            print("    FEHLER — bei einem Segment fehlt die Aufstellung; der "
+                  "Balken wurde also nicht gezeichnet (BEITRAG_CHART_AB?)")
             f += 1
         else:
-            print("    OK — bei einem Segment steht ein Satz statt eines Balkens")
+            print("    OK — bei einem Segment stehen Balken, Satz UND die "
+                  "Einzeltitel")
+
+    # (c2) Der Drilldown selbst: Ohne Klick steht das GROESSTE Segment da.
+    feld.set_value("Aktien").run()
+    if at.exception:
+        print(f"    FEHLER — Aktien: {str(at.exception[0].value)[:200]}")
+        f += 1
+    else:
+        from modules.bestandsanalytik import performancebeitrag_je_kategorie
+        pfade = [x for x in _pf_dateien() if _name(x) == "Muster ausgewogen cVV"]
+        reihe, _o, _n = performancebeitrag_je_kategorie(
+            _lade(sorted(pfade)[-1]), "Segment", "Aktien") if pfade else (
+            None, 0, 0)
+        offen = [m.value for m in at.markdown
+                 if "zum Ergebnis bei" in m.value]
+        if not offen:
+            print("    FEHLER — keine Aufstellung unter dem Chart")
+            f += 1
+        elif reihe is not None and len(reihe) and str(reihe.index[0]) not in offen[0]:
+            print(f"    FEHLER — offen ist nicht das groesste Segment "
+                  f"{str(reihe.index[0])!r}: {offen[0][:90]}")
+            f += 1
+        else:
+            print(f"    OK — ohne Klick steht das groesste Segment offen: "
+                  f"{offen[0][:70]}")
 
     # (d) DER EIGENTLICHE FALL: eine Strategie ohne Aktien.
     at, fehler = _lauf("cVV konservativ", True)
@@ -709,13 +1077,16 @@ def main():
     for schritt in (schritt1_anzahl_titel, schritt2_faelligkeiten_werte,
                     schritt3_zusage_gewichte, schritt4_sortierung_und_grenzfaelle,
                     schritt5_tabellenhoehe, schritt6_apptest,
-                    schritt7_beitrag_figur, schritt8_beitrag_apptest):
+                    schritt7_beitrag_figur, schritt8_beitrag_apptest,
+                    schritt9_klick_aufloesung, schritt10_titel_je_segment,
+                    schritt11_drilldown_anzeige):
         fehler += schritt()
         print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
         return 1
-    print("BESTANDEN — Titelzahl, Faelligkeiten und Tabellenhoehe stimmen")
+    print("BESTANDEN — Titelzahl, Faelligkeiten und Tabellenhoehe stimmen,"
+          " und die Einzeltitel eines Segments ergeben seinen Balken")
     return 0
 
 
