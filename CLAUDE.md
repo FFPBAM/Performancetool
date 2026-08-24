@@ -323,6 +323,7 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/shared.py` | Konstanten, Login, CSV-Loader, `APP_TITLE` (Name des Tools) — **Formatierung nur noch durchgereicht** |
 | `modules/formats.py` | **alle** Zahlen-, Prozent- und Datumsformate + Fehlwert `–`; streamlit-frei, gilt für Tool *und* Broschüre |
 | `modules/anlagekriterien.py` | Anlagekriterien je Strategie — **streamlit-frei**, weil Tool *und* Export sie brauchen |
+| `modules/auswahl.py` | die Auflösung eines **Chart-Klicks** auf einen fachlichen Schlüssel (`gewaehlter_balkenname`) — **ohne jedes Paket**, weil Strategievergleich *und* Portfolioanalyse sie brauchen und die Grenzfälle in der eingeschränkten Firmenumgebung prüfbar bleiben müssen |
 | `modules/farben.py` | die **festen Assetklassen-Farben** und ihre Klassifizierung — **streamlit- und lxml-frei**, weil Broschüre *und* Oberfläche sie brauchen |
 | `modules/risiko_ansicht.py` | Heatmap und Risiko-Block **innerhalb** der Performance-Ansicht |
 | `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander — Punktwolke, Überschneidung, Exposure |
@@ -363,7 +364,7 @@ python tests/test_chartachsen.py [<ordner>]  # Schritte 1+2 ohne jedes Paket
 python tests/test_kalenderjahre.py           # Schritte 1+2 nur pandas, 3 + pptx
 python tests/test_monatsrenditen.py          # Schritte 1-4 nur numpy + pandas
 python tests/test_risiko.py                  # Schritte 1-2+4 nur numpy + pandas
-python tests/test_portfolioanalyse.py        # Schritte 1-5 pandas, 6 + streamlit
+python tests/test_portfolioanalyse.py        # Schritte 1-5+9-11 pandas, 6+8 + streamlit
 python tests/test_strategievergleich.py      # Schritte 1+4 numpy/pandas, 5 + streamlit
 python tests/test_bestandsanalytik.py        # Schritt 1 ohne jedes Paket
 python tests/test_theme.py                   # Schritt 1 ohne jedes Paket
@@ -371,6 +372,7 @@ python tests/test_keepalive.py               # ohne jedes Paket
 python tests/test_farben.py                  # Schritt 2 ohne jedes Paket
 python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
+python tests/test_wertentwicklung_platzhalter.py  # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 ```
 
@@ -392,6 +394,15 @@ ausgeben, fehlende Pakete **überspringen statt scheitern**, Rückgabewert 0/1.
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+**Ein Widget mit `on_select` braucht einen LITERALEN Key am Aufrufort.**
+`tests/test_keepalive.py` liest den Syntaxbaum und hält jeden solchen Key
+gegen `_KEEPALIVE_SPERRE`; ein berechneter Key (`key=f"chart_{suffix}"`)
+ließe sich gegen keine Liste halten und fällt in Schritt 4 durch. Und aus
+demselben Grund **kein gemeinsames `**kwargs`-Dict** für solche Aufrufe:
+Der Prüfstein erkennt `on_select` nur als echtes Schlüsselwort — über `**`
+verschwände das Widget aus seiner Sicht, der Test bliebe **grün** und die
+App fiele trotzdem. Lieber zwei ausgeschriebene Aufrufe (24.08.2026).
 
 **Statische Prüfung nicht vergessen:** `py_compile` findet keine
 undefinierten Namen. Nach dem Entfernen von Importen oder Funktionen immer

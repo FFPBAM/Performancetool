@@ -1,12 +1,85 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 24.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **29 von 29 Suiten grün**, `pyflakes` bei null ·
-**gepusht · DRACOON ist nachgezogen** (278 Dateien verglichen, keine
-inhaltliche Abweichung; die Unterschiede beschränken sich auf Zeilenenden
-und gehen in beide Richtungen).
+**Letzte Sitzung:** 24.08.2026 (nachmittags) · **Branch:**
+`verbesserungen` · **Nicht gemergt** · **30 von 30 Suiten grün**,
+`pyflakes` bei null · **noch nicht gepusht, Sichtprüfung offen**.
 
-> ### Für Philip: was diese Sitzung geändert hat (24.08.2026)
+> ### Für Philip: was diese Sitzung geändert hat (24.08.2026, nachmittags)
+>
+> **Drei Sachen. Die erste ist die wichtigste, und sie ist größer geworden
+> als geplant.**
+>
+> **1. Die Broschüre baut nicht mehr still weiter.** Der zurückgestellte
+> Punkt von heute Vormittag ist erledigt — mit einer Korrektur, die ich
+> vorher nachgestellt habe. **Der Beweis, im Arbeitsspeicher gebaut:** drei
+> comdirect-Strategien, bei der zweiten die Zeitreihe entfernt.
+>
+> | Lauf | Folie 7 | Folie 9 | Folie 11 | Meldung |
+> |---|---|---|---|---|
+> | ohne Eingriff | 0,0611 | 0,0861 | 0,0509 | keine ✔ |
+> | Zeitreihe entfernt | 0,0611 | **0,0715 / 0,1025** ← Vorlage | 0,0509 | **keine** ✘ |
+>
+> Genau eine Folie fällt auf die Beispielzahlen der Vorlage zurück, und
+> niemand erfährt es. Jetzt schon: Jede der drei Stellen meldet mit Namen,
+> Folie und Handlungsanweisung.
+>
+> **Es waren nämlich drei, nicht eine.** Derselbe stille Zweig stand in
+> `_build_we_data`, `_build_perf_data` **und** `_build_rollierend_data`.
+> Der dritte trifft die Familie *Thema* — also eine echte Kundenbroschüre.
+> Dazu eine vierte Lücke: Fehlte in der Übersichtstabelle **eine** von fünf
+> Zeitreihen, behielt genau diese Zeile die Vorlagenwerte, gemeldet wurde
+> aber nur, wenn **alle** fehlten.
+>
+> **Eine Meldung wäre fast eine Fehlmeldung geworden.** Nicht jede Vorlage
+> kennt jede Folie: Nur `Vorlage_FFPB` führt die Performance-Folie, nur
+> `Vorlage_Thema` die rollierende Tabelle; comdirect, CVV, ESG und ETF
+> führen keine von beiden. Meine erste Fassung hätte bei comdirect vor einer
+> Folie gewarnt, die es dort gar nicht gibt — und wer zwei Wochen lang eine
+> unzutreffende Zeile überliest, überliest bald auch die zutreffende. Die
+> Meldung hängt jetzt an der Rolle, die die Vorlage tatsächlich hat:
+> comdirect **1**, Standard **2**, Thema **2**.
+>
+> **Der Prüfstein misst nachweislich etwas** (`tests/test_wertentwicklung_`
+> `platzhalter.py`, die 30. Suite). Gegenprobe mit stillgelegter Meldung:
+> Schritt 3 **3 Fehler**, Schritt 5 **9 Fehler** — mit der Korrektur beide
+> null. Ein Test, der nur grün ist, beweist nichts.
+>
+> **2. Der Balken erscheint jetzt auch bei nur einem Segment.** Betroffen
+> sind **20 Fälle** über die 19 Strategien, fast alle *Edelmetalle* — aber
+> nicht nur: auch *ESG offensiv / Renten / Corporates*. Der erklärende Satz
+> bleibt und steht jetzt **unter** dem Balken statt an seiner Stelle.
+>
+> *Nebenbefund:* Der Satz behauptete, der Beitrag des einen Segments sei
+> zugleich der Beitrag der ganzen Gattung. Das gilt nur, solange keine
+> Position ohne Segment-Angabe dasteht — heute trifft das auf alle 20 Fälle
+> zu, zugesichert war es nie. Der Satz nennt den Fall jetzt.
+>
+> **3. Ein Klick auf ein Segment zeigt seine Einzeltitel** — mit Gewicht,
+> Beitrag und Wertpapier-Performance, absteigend nach Beitrag.
+> **Die Zahlen lassen sich nachrechnen:** Die Summe der angezeigten Beiträge
+> ist exakt der Balken darüber. Über **709 Gattung/Segment-Kombinationen**
+> gemessen, größte Abweichung **1,4e−17**. Die Summe wird dabei aus den
+> **angezeigten Zeilen** gerechnet und nicht vom Balken abgeschrieben —
+> sonst wäre die Zusage per Konstruktion wahr.
+>
+> *Ohne Klick steht das größte Segment offen* (dein Wunsch) — denselben
+> Weg geht der Drilldown im Strategievergleich. *Keine Textbalken:* Die
+> hattest du am 18.08. abgeschafft, das bleibt so.
+>
+> **Die Falle vom 18.08.2026 war eingeplant und ist entschärft.** Ein Chart
+> mit `on_select` ist ein Widget; sein Key muss in `_KEEPALIVE_SPERRE`
+> stehen, sonst hält die App beim zweiten Rendern an. Beide neuen Keys
+> stehen drin, und `tests/test_keepalive.py` bestätigt es. Der Key musste
+> dafür **ausgeschrieben** werden statt aus einer f-Zeichenkette zu kommen —
+> Einzelheiten unten.
+>
+> **➜ Was für dich offen bleibt:** die **Sichtprüfung** (der Klick lässt
+> sich in keinem Test auslösen — genau das ist die Klasse, die am
+> 18.08.2026 die laufende App angehalten hat), danach Push und Merge.
+>
+> ---
+>
+> ### Aus der Sitzung davor (24.08.2026, vormittags)
 >
 > **Vier neue Sachen, einzeln gebaut und einzeln gesichtet.** Der Datenstand
 > ist **260824**, 19 von 19 Strategien, alle Reihen bis 24.08.2026.
@@ -2372,6 +2445,12 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
+**ERLEDIGT am 24.08.2026 (nachmittags) — der Prüfstein steht, und der
+Fehler ist behoben.** `tests/test_wertentwicklung_platzhalter.py` (30.
+Suite); alle drei stillen Zweige melden jetzt, rollengebunden an die Folien,
+die die jeweilige Vorlage wirklich führt. Der ursprüngliche Befund bleibt
+unten stehen, weil die Begründung mehr wert ist als die Aufgabe.
+
 **NEU 24.08.2026 — ein Prüfstein fehlt: die Broschüre baut still weiter.**
 Fehlt einer Strategie die Zeitreihe, während ihr Bestand vorhanden ist, baut
 `pptx_export` die Broschüre trotzdem — und die Wertentwicklungs-Folie behält
@@ -2395,7 +2474,11 @@ Der Auslöser ist inzwischen weg (die Datenlieferung vom 24.08.2026 ist mit
 trägt keine Wertentwicklungs-Folie mehr die Zahlen ihrer Vorlage" wäre für
 alle sechs Vorlagen in wenigen Zeilen zu haben.
 
-*Zurückgestellt von Philip am 24.08.2026 — bewusst später, nicht vergessen.*
+*Zurückgestellt von Philip am 24.08.2026 vormittags — und am selben
+Nachmittag gebaut. Beim Bauen kamen zwei weitere Stellen derselben Klasse
+heraus, die im Befund oben noch nicht standen: `_build_rollierend_data`
+(Familie *Thema*, also eine echte Kundenbroschüre) und die
+Übersichtstabelle, die einen TEILausfall verschwieg.*
 
 **Es sind noch drei**, alle bei Philip. Punkt 1 (Sichtprüfung) ist am
 17.08.2026 abends **erledigt** und bleibt nur als Beleg stehen. Zwei weitere
