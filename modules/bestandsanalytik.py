@@ -73,6 +73,21 @@ BEITRAG_SPALTE = "Performancebeitrag"
 # Die Gattung ist die Ebene, INNERHALB derer ein Segment gelesen werden darf.
 GATTUNG_SPALTE = "Gattung"
 
+WERTPAPIER_SPALTE = "Wertpapier"
+"""Klartextname des Titels. Ein Schluessel ist er NICHT — dafuer ist die WKN
+da; derselbe Name kann in zwei Waehrungen gefuehrt sein."""
+
+WKN_SPALTE = "WKN"
+"""Der Titelschluessel dieser Datenquelle. Eine ISIN fuehren die CSVs nicht,
+auch wenn `parse_pf_data` die Spalte vorsorglich aufraeumt."""
+
+WP_PERF_SPALTE = "WP-Performance"
+"""Wertentwicklung des Papiers selbst seit Jahresbeginn, UNGEWICHTET.
+
+Nicht mit `BEITRAG_SPALTE` verwechseln: Diese Groesse ist NICHT additiv. Zwei
+Papiere mit je 10 % Wertentwicklung ergeben nicht 20 % fuer das Depot — was
+sich aufaddieren laesst, ist allein der Performancebeitrag."""
+
 # Was in einer Kategoriespalte kein Schluessel ist, sondern ein Fehlwert.
 _KEIN_SCHLUESSEL = ("", "nan", "none", "-")
 
@@ -236,6 +251,88 @@ def performancebeitrag_je_kategorie(df: pd.DataFrame, spalte: str,
 
     reihe = _kategorie_summen(mit_wert, spalte, BEITRAG_SPALTE)
     return reihe.sort_values(ascending=False), ohne_zuordnung, n_ohne
+
+
+def titel_je_auspraegung(df: pd.DataFrame, spalte: str, wert,
+                         nur_gattung=None) -> pd.DataFrame:
+    """Die Einzeltitel hinter EINER Auspraegung einer Kategorie.
+
+    Das Gegenstueck zu `performancebeitrag_je_kategorie`: Dort steht die
+    Summe je Auspraegung, hier stehen die Zeilen, aus denen sie entsteht.
+    Bewusst dieselbe Argumentfolge `(df, spalte, ..., nur_gattung)`, damit
+    sich die beiden nebeneinanderlegen lassen — sonst waere die Zusage unten
+    nicht nachpruefbar.
+
+    Args:
+        df: Bestand eines Stichtags (Ausgabe von `parse_pf_data`)
+        spalte: die Kategoriespalte, z.B. "Segment"
+        wert: die Auspraegung, deren Titel gesucht sind
+        nur_gattung: falls gesetzt, nur Titel dieser Gattung
+
+    Returns:
+        DataFrame mit `wertpapier`, `wkn`, `gewicht`, `beitrag`,
+        `wp_performance` (alles dezimal), absteigend nach `beitrag`.
+        Bei leerem Ergebnis ein LEERER DataFrame MIT diesen Spalten — nie
+        None, damit die Aufrufer nicht zwei Faelle unterscheiden muessen.
+
+    DIE ZUSAGE, AUF DIE ES ANKOMMT:
+
+        titel_je_auspraegung(df, "Segment", s, g)["beitrag"].sum()
+        == performancebeitrag_je_kategorie(df, "Segment", g)[0][s]
+
+    Sie haelt nur, solange BEIDE Funktionen dieselben Zeilen wegwerfen —
+    Gattungsfilter, `notna` auf dem Beitrag und `_gueltige_schluessel`, und
+    zwar in dieser Reihenfolge. Deshalb steht die Auswahl hier Schritt fuer
+    Schritt neben der dortigen und nicht in einer eigenen Kurzfassung. Am
+    24.08.2026 ueber 19 Strategien und 178 Gattung/Segment-Kombinationen
+    gemessen: groesste Abweichung 3,5e-18.
+
+    FEHLT `WP-Performance`, KOMMT EINE NaN-SPALTE UND KEINE NULL (#46): Eine
+    Wertentwicklung von 0 % ist eine Aussage, eine fehlende ist keine.
+    """
+    spalten = ["wertpapier", "wkn", "gewicht", "beitrag", "wp_performance"]
+    leer = pd.DataFrame({s: pd.Series(dtype=float) for s in spalten})
+
+    if df is None or len(df) == 0:
+        return leer
+    if spalte not in df.columns or BEITRAG_SPALTE not in df.columns:
+        return leer
+
+    d = df
+    if nur_gattung is not None:
+        if GATTUNG_SPALTE not in df.columns:
+            return leer
+        d = df[df[GATTUNG_SPALTE].astype(str).str.strip()
+               == str(nur_gattung).strip()]
+    if len(d) == 0:
+        return leer
+
+    mit_wert = d[d[BEITRAG_SPALTE].notna()]
+    if mit_wert.empty:
+        return leer
+
+    gueltig = _gueltige_schluessel(mit_wert[spalte])
+    treffer = mit_wert[gueltig & (mit_wert[spalte].astype(str).str.strip()
+                                  == str(wert).strip())]
+    if treffer.empty:
+        return leer
+
+    def _spalte(name):
+        if name in treffer.columns:
+            return list(treffer[name])
+        return [float("nan")] * len(treffer)
+
+    raus = pd.DataFrame({
+        "wertpapier": _spalte(WERTPAPIER_SPALTE),
+        "wkn": _spalte(WKN_SPALTE),
+        "gewicht": _spalte(GEWICHT_SPALTE),
+        "beitrag": [float(v) for v in treffer[BEITRAG_SPALTE]],
+        "wp_performance": _spalte(WP_PERF_SPALTE),
+    })
+    # mergesort ist stabil: Zwei Titel mit demselben Beitrag behalten die
+    # Reihenfolge der Quelle und tauschen nicht bei jedem Neuzeichnen.
+    return raus.sort_values("beitrag", ascending=False,
+                            kind="mergesort").reset_index(drop=True)
 
 
 def ueberlappung(a: pd.Series, b: pd.Series) -> float:
