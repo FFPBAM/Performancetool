@@ -15,7 +15,7 @@ import streamlit as st
 import plotly.graph_objects as go
 
 from modules.shared import (
-    FFPB_GOLD, FFPB_DARK, HEATMAP_GRUEN, HEATMAP_ROT,
+    FFPB_GOLD, FFPB_DARK,
     DATA_FOLDER, DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag, load_mapping,
@@ -658,10 +658,21 @@ def build_beitrag_bar_chart(reihe, titel: str):
     UNTEN, die Reihe kommt aber absteigend herein. Genau diese Umkehrung hat
     am 14.08.2026 die Heatmap ein halbes Jahr verkehrt herum gezeigt.
 
-    FARBE NACH VORZEICHEN, nicht nach Rang — mit den Heatmap-Farben, weil
-    dieselbe Aussage im selben Werkzeug nicht zweimal verschieden aussehen
-    darf. Keine Signalfarben (Begruendung in `modules/shared.py`). Die Farbe
-    traegt die Aussage nie allein: an jedem Balken steht die Zahl.
+    FARBE NACH VORZEICHEN, nicht nach Rang — und zwar in den CORPORATE
+    COLORS: Fuggerblau fuer positive, Fuggergold fuer negative Beitraege.
+
+    ZUR VORGESCHICHTE, damit niemand zurueckbaut: Beim ersten Bau standen
+    hier die Heatmap-Farben (Salbeigruen/Terrakotta) mit der Begruendung, die
+    Heatmap beantworte dieselbe Frage bereits so. Philip hat am 24.08.2026
+    entschieden, dass die Balken ins Corporate Design gehoeren — die
+    Heatmap-Farben sind dort nicht definiert. Ein Paar fuer positiv/negativ
+    gibt es in der Corporate-Palette nicht; gewaehlt wurden deshalb die
+    beiden HAUPTFARBEN, weil sie am weitesten auseinanderliegen. Gold ist die
+    Akzentfarbe und faellt auf — das passt, denn negative Segmente sind die
+    Ausnahme (meist eins bis zwei von elf).
+
+    Die Farbe traegt die Aussage nie allein: An jedem Balken steht die Zahl
+    mit Vorzeichen, und die Balken der negativen Seite zeigen nach links.
     """
     if reihe is None or len(reihe) == 0:
         return None
@@ -678,7 +689,7 @@ def build_beitrag_bar_chart(reihe, titel: str):
 
     fig = go.Figure(go.Bar(
         x=werte, y=namen, orientation="h",
-        marker=dict(color=[HEATMAP_GRUEN if w >= 0 else HEATMAP_ROT
+        marker=dict(color=[FFPB_DARK if w >= 0 else FFPB_GOLD
                            for w in werte]),
         text=[f"{w:+.2f} %".replace(".", ",") for w in werte],
         textposition="outside", cliponaxis=False,

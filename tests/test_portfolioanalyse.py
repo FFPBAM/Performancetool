@@ -499,7 +499,7 @@ def schritt7_beitrag_figur():
             BEITRAG_BALKEN_HOEHE_PX,
         )
         from modules.bestandsanalytik import performancebeitrag_je_kategorie
-        from modules.shared import HEATMAP_GRUEN, HEATMAP_ROT
+        from modules.shared import FFPB_DARK, FFPB_GOLD
     except ImportError as ex:
         # Ein fehlendes SYMBOL ist ein Fehler in der Sache, kein
         # Umgebungsproblem — deshalb FEHLER und nicht UEBERSPRUNGEN (#65).
@@ -549,16 +549,23 @@ def schritt7_beitrag_figur():
     if not f:
         print(f"    OK — {len(pruefungen)} Eigenschaften der Figur stimmen")
 
-    # Farbe folgt dem VORZEICHEN, nicht dem Rang.
+    # Farbe folgt dem VORZEICHEN, nicht dem Rang — und stammt aus den
+    # CORPORATE COLORS (Entscheidung Philip, 24.08.2026). Der Test nennt die
+    # Konstanten und nicht die Hexwerte: Aendert das Haus seine Farben, zieht
+    # dieser Pruefstein mit, statt an einer abgeschriebenen Zahl zu scheitern.
     farben = list(fig.data[0].marker.color)
-    soll_farben = [HEATMAP_GRUEN if float(v) >= 0 else HEATMAP_ROT
+    soll_farben = [FFPB_DARK if float(v) >= 0 else FFPB_GOLD
                    for v in reihe.values]
     if farben != soll_farben:
         print(f"    FEHLER — Farben folgen nicht dem Vorzeichen: {farben}")
         f += 1
+    elif set(farben) - {FFPB_DARK, FFPB_GOLD}:
+        print(f"    FEHLER — es steckt eine Farbe ausserhalb des Corporate "
+              f"Designs im Chart: {set(farben)}")
+        f += 1
     else:
-        print(f"    OK — {soll_farben.count(HEATMAP_ROT)} negative Balken in "
-              "Terrakotta, der Rest in Salbeigruen")
+        print(f"    OK — {soll_farben.count(FFPB_GOLD)} negative Balken in "
+              "Fuggergold, der Rest in Fuggerblau")
 
     # Der Platz fuer die aussen liegenden Beschriftungen muss auf BEIDEN
     # Seiten da sein. Ohne das wird die Zahl des negativsten Balkens am
