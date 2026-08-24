@@ -2,7 +2,9 @@
 
 **Letzte Sitzung:** 24.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **29 von 29 Suiten grün**, `pyflakes` bei null ·
-**gepusht — DRACOON steht noch auf dem alten Stand.**
+**gepusht · DRACOON ist nachgezogen** (278 Dateien verglichen, keine
+inhaltliche Abweichung; die Unterschiede beschränken sich auf Zeilenenden
+und gehen in beide Richtungen).
 
 > ### Für Philip: was diese Sitzung geändert hat (24.08.2026)
 >
@@ -58,6 +60,13 @@
 >
 > **➜ Was für dich offen bleibt:** die Sichtprüfung an der laufenden
 > Cloud-App (#11) und danach der Merge nach `main`.
+>
+> **Nachtrag am selben Tag:** Die Segment-Balken tragen jetzt die
+> **Corporate Colors** — Fuggerblau für positive, Fuggergold für negative
+> Beiträge (Entscheidung Philip). Vorher standen dort die Heatmap-Farben;
+> die sind im Corporate Design gar nicht definiert. Ein Paar für
+> positiv/negativ gibt es dort nicht, gewählt sind deshalb die beiden
+> Hauptfarben.
 >
 > **Nebenbefund, zurückgestellt:** Die Broschüre baut bei fehlender
 > Zeitreihe still mit den Zahlen der Vorlage weiter — Einzelheiten unter
