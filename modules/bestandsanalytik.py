@@ -357,6 +357,23 @@ def nicht_ueberlappung(a: pd.Series, b: pd.Series) -> float:
     return float(np.maximum(av - bv, 0.0).sum())
 
 
+def exklusive_schluessel(a: pd.Series, b: pd.Series) -> int:
+    """Wie viele Schluessel traegt `a` staerker als `b`?
+
+    Das Gegenstueck zu `gemeinsame_schluessel` und die Zahl der Zeilen, die
+    `exklusive_titel` liefert. Sie steht hier und nicht in der Oberflaeche,
+    damit beide Seiten dieselbe Zaehlweise benutzen.
+    """
+    if a is None or len(a) == 0:
+        return 0
+    if b is None or len(b) == 0:
+        return int(len(a))
+    idx = a.index.union(b.index)
+    av = a.reindex(idx).fillna(0.0).to_numpy(dtype=float)
+    bv = b.reindex(idx).fillna(0.0).to_numpy(dtype=float)
+    return int((av > bv).sum())
+
+
 def exklusive_titel(df_a, df_b, spalte: str = "WKN") -> pd.DataFrame:
     """Woraus setzt sich der exklusive Teil von A zusammen?
 

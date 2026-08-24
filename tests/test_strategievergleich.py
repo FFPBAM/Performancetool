@@ -1069,7 +1069,8 @@ def schritt8_apptest_bestand():
         print("    UEBERSPRUNGEN — streamlit.testing nicht verfuegbar")
         return 0
     from streamlit.testing.v1 import AppTest
-    from modules.strategievergleich import EBENEN, EXPOSURE_ACHSEN
+    from modules.strategievergleich import (EBENEN, EXPOSURE_ACHSEN,
+                                            UE_EXKLUSIV)
 
     f = 0
 
@@ -1115,6 +1116,12 @@ def schritt8_apptest_bestand():
 
     # EINE Strategie: die Ueberschneidung braucht zwei und muss das sagen,
     # statt eine leere Flaeche zu zeigen.
+    # Die zweite Ansicht der Ueberschneidung (24.08.2026). `sv_ue_ansicht`
+    # ist ein LITERALER Key und wirkt deshalb ueber session_state — anders
+    # als `sv_ue_ebene`, das in Wahrheit `sv_ue_ebene_<kennung>` heisst.
+    if _lauf("Nicht-Ueberschneidung", sv_ue_ansicht=UE_EXKLUSIV) is not None:
+        print("    OK — Nicht-Ueberschneidung")
+
     at = _lauf("nur eine Strategie", sv_familien=[])
     if at is not None:
         print("    OK — leere Familienauswahl")
@@ -1571,6 +1578,214 @@ def schritt11_eigener_zeitraum():
     return f
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+def schritt12_nicht_ueberschneidung():
+    """Die zweite Ansicht der Ueberschneidung: Figur, Drilldown, Schalter."""
+    print("Schritt 12 — die Nicht-Ueberschneidung in der Anzeige")
+    sym = _symbole("modules.strategievergleich",
+                   ("UE_GEMEINSAM", "UE_EXKLUSIV", "UE_ANSICHTEN", "EBENEN",
+                    "EBENE_TITEL", "ueberschneidung_tabelle",
+                    "ueberschneidung_figur", "_drilldown_tabelle",
+                    "ue_kernsatz", "ue_gegenrichtung_satz",
+                    "ue_ansicht_hinweis", "ue_summen_caption", "ue_vorbehalt"))
+    if sym is None:
+        return 0
+    if sym is False:
+        return 1
+
+    GEM, EXK = sym["UE_GEMEINSAM"], sym["UE_EXKLUSIV"]
+    EBENEN = sym["EBENEN"]
+    tab_fn, fig_fn = sym["ueberschneidung_tabelle"], sym["ueberschneidung_figur"]
+    f = 0
+
+    bestaende = _bestaende_fuer_test()
+    if bestaende is None:
+        return f
+
+    bezug = "cVV ausgewogen"
+    if bezug not in bestaende:
+        print(f"    FEHLER — {bezug} fehlt im Bestand")
+        return f + 1
+
+    # ── Die FIGUR (#54) ──────────────────────────────────────────────────
+    tab = tab_fn(bestaende, bezug, "WKN", EXK)
+    fig = fig_fn(tab, bezug, EBENE_TITEL_NAME(sym), EXK)
+    if fig is None:
+        print("    FEHLER — keine Figur fuer die exklusive Ansicht")
+        return f + 1
+    namen = list(tab.index)
+    pruefungen = [
+        ("x-Achse linear", fig.layout.xaxis.type, "linear"),
+        ("y-Achse category", fig.layout.yaxis.type, "category"),
+        ("Reihenfolge umgekehrt",
+         list(fig.layout.yaxis.categoryarray), list(reversed(namen))),
+        ("cliponaxis False", fig.data[0].cliponaxis, False),
+        ("automargin an", fig.layout.yaxis.automargin, True),
+        ("kein fester linker Rand", fig.layout.margin.l, None),
+        ("ein Balken je Strategie", len(fig.data[0].x), len(namen)),
+    ]
+    for bez, ist, soll in pruefungen:
+        if ist != soll:
+            print(f"    FEHLER — {bez}: {ist!r} statt {soll!r}")
+            f += 1
+    if not f:
+        print(f"    OK — {len(pruefungen)} Eigenschaften der Figur stimmen")
+
+    if list(tab["anteil"]) != sorted(tab["anteil"], reverse=True):
+        print("    FEHLER — die Tabelle ist nicht absteigend sortiert")
+        f += 1
+    else:
+        print("    OK — absteigend sortiert")
+
+    # Kein Balken darf ueber 100 % gehen — das war der Grund, die L1-Distanz
+    # zu verwerfen. Waere sie doch eingebaut, faellt es hier auf.
+    if max(fig.data[0].x) > 100.0:
+        print(f"    FEHLER — ein Balken geht ueber 100 %: "
+              f"{max(fig.data[0].x)}")
+        f += 1
+    else:
+        print(f"    OK — groesster Balken {max(fig.data[0].x):.1f} %, "
+              "kein Wert ueber 100")
+
+    # Die beiden Ansichten muessen sich unterscheiden — sonst waere der
+    # Schalter eine Attrappe.
+    fig_gem = fig_fn(tab_fn(bestaende, bezug, "WKN", GEM), bezug,
+                     EBENE_TITEL_NAME(sym), GEM)
+    if fig.layout.xaxis.title.text == fig_gem.layout.xaxis.title.text:
+        print("    FEHLER — beide Ansichten tragen denselben Achsentitel")
+        f += 1
+    elif fig.data[0].marker.color == fig_gem.data[0].marker.color:
+        print("    FEHLER — beide Ansichten haben dieselbe Balkenfarbe")
+        f += 1
+    else:
+        print(f"    OK — Achsentitel und Farbe unterscheiden sich "
+              f"({fig.layout.xaxis.title.text!r})")
+
+    # ── Der Drilldown ────────────────────────────────────────────────────
+    gegen = "cVV defensiv plus"
+    dd = sym["_drilldown_tabelle"]
+    for ebene in EBENEN:
+        anzeige = dd(bestaende, bezug, gegen, ebene, EXK)
+        if anzeige is None or anzeige.empty:
+            print(f"    FEHLER — Ebene {ebene}: keine Aufstellung")
+            f += 1
+            continue
+        text = " ".join(str(v) for v in anzeige.to_numpy().ravel())
+        if "\u2588" in text or "%" not in text:
+            print(f"    FEHLER — Ebene {ebene}: Blockzeichen oder keine "
+                  "Prozentangabe")
+            f += 1
+        if "." in text.replace("Inc.", "").replace("plc.", "").replace(
+                "Corp.", "").replace("AG.", ""):
+            pass  # Punkte in Wertpapiernamen sind erlaubt
+    print(f"    OK — alle {len(EBENEN)} Ebenen liefern eine Aufstellung")
+
+    anzeige = dd(bestaende, bezug, gegen, EBENE_TITEL_NAME(sym), EXK)
+    if "Art" not in anzeige.columns:
+        print("    FEHLER — die Spalte 'Art' fehlt")
+        f += 1
+    elif set(anzeige["Art"]) - {"nur hier", "Übergewicht"}:
+        print(f"    FEHLER — unerwartete Art-Werte: {set(anzeige['Art'])}")
+        f += 1
+    else:
+        print(f"    OK — Art-Spalte mit {sorted(set(anzeige['Art']))}")
+
+    # DIE ZUSAGE AN DER ANZEIGE: Die letzte Spalte summiert sich auf die Zahl
+    # im Kernsatz. Geprueft wird die ANGEZEIGTE Zeichenkette, nicht der
+    # Rohwert — genau dort koennte eine Formatierung etwas verlieren.
+    zeile = tab.loc[gegen]
+    def _zahl_aus(text):
+        return float(str(text).replace("%", "").replace(".", "")
+                     .replace(",", ".").strip())
+    summe = sum(_zahl_aus(v) for v in anzeige["nur hier"]) / 100.0
+    if abs(summe - float(zeile["anteil"])) > 5e-4:
+        print(f"    FEHLER — die Spalte summiert {summe} statt "
+              f"{float(zeile['anteil'])}")
+        f += 1
+    else:
+        print(f"    OK — die angezeigten Beitraege summieren sich auf "
+              f"{summe * 100:.2f} %, die Zahl im Kernsatz")
+
+    if len(anzeige) != int(zeile["schluessel"]):
+        print(f"    FEHLER — {len(anzeige)} Zeilen, der Kernsatz nennt "
+              f"{int(zeile['schluessel'])}")
+        f += 1
+    else:
+        print(f"    OK — {len(anzeige)} Zeilen, so viele nennt auch der "
+              "Kernsatz")
+
+    # ── Die Textbausteine unterscheiden die Ansichten ────────────────────
+    paare = [
+        ("ue_ansicht_hinweis",
+         sym["ue_ansicht_hinweis"](GEM), sym["ue_ansicht_hinweis"](EXK)),
+        ("ue_summen_caption",
+         sym["ue_summen_caption"](5, 0.25, GEM),
+         sym["ue_summen_caption"](5, 0.25, EXK)),
+        ("ue_vorbehalt",
+         sym["ue_vorbehalt"]("Bestand zum 23.08.2026.", GEM),
+         sym["ue_vorbehalt"]("Bestand zum 23.08.2026.", EXK)),
+    ]
+    for name, a, b in paare:
+        if not a or not b or a == b:
+            print(f"    FEHLER — {name} unterscheidet die Ansichten nicht")
+            f += 1
+    kern_g = sym["ue_kernsatz"](bezug, gegen, 0.7, 22, EBENE_TITEL_NAME(sym), GEM)
+    kern_e = sym["ue_kernsatz"](bezug, gegen, 0.25, 22, EBENE_TITEL_NAME(sym), EXK)
+    if kern_g == kern_e or bezug not in kern_e or gegen not in kern_e:
+        print("    FEHLER — der Kernsatz nennt nicht beide Strategien oder "
+              "unterscheidet die Ansichten nicht")
+        f += 1
+    gegen_satz = sym["ue_gegenrichtung_satz"](bezug, gegen, 0.24343)
+    if gegen not in gegen_satz or "24,34" not in gegen_satz:
+        print(f"    FEHLER — der Gegenrichtungs-Satz nennt die Zahl nicht: "
+              f"{gegen_satz!r}")
+        f += 1
+    else:
+        print("    OK — alle Textbausteine unterscheiden die beiden Ansichten")
+
+    # ── Der Schalter per AST ─────────────────────────────────────────────
+    import ast
+    quelle = os.path.join(WURZEL, "modules", "strategievergleich.py")
+    with open(quelle, encoding="utf-8") as fh:
+        baum = ast.parse(fh.read())
+    treffer = []
+    for knoten in ast.walk(baum):
+        if not isinstance(knoten, ast.Call):
+            continue
+        if getattr(knoten.func, "attr", None) not in ("radio",
+                                                      "segmented_control"):
+            continue
+        schluessel, required = None, False
+        for kw in knoten.keywords:
+            if kw.arg == "key" and isinstance(kw.value, ast.Constant):
+                schluessel = kw.value.value
+            if kw.arg == "required" and isinstance(kw.value, ast.Constant):
+                required = bool(kw.value.value)
+        if schluessel == "sv_ue_ansicht":
+            treffer.append((getattr(knoten.func, "attr", None), required))
+    if not treffer:
+        print("    FEHLER — kein Schalter mit literalem key='sv_ue_ansicht'")
+        f += 1
+    elif treffer[0][0] != "segmented_control":
+        print(f"    FEHLER — sv_ue_ansicht ist ein {treffer[0][0]}")
+        f += 1
+    elif not treffer[0][1]:
+        print("    FEHLER — sv_ue_ansicht ohne required=True")
+        f += 1
+    else:
+        print("    OK — sv_ue_ansicht ist ein segmented_control mit "
+              "required=True")
+
+    return f
+
+
+def EBENE_TITEL_NAME(sym):
+    """Der Anzeigename der Einzeltitel-Ebene."""
+    return sym["EBENE_TITEL"]
+
+
 def main():
     print("Pruefstein: Strategievergleich\n")
     fehler = 0
@@ -1579,7 +1794,8 @@ def main():
                     schritt6_umschalter, schritt7_figuren,
                     schritt8_apptest_bestand, schritt9_drilldown,
                     schritt10_auswahlfelder,
-                    schritt11_eigener_zeitraum):
+                    schritt11_eigener_zeitraum,
+                    schritt12_nicht_ueberschneidung):
         fehler += schritt()
         print()
     if fehler:

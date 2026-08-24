@@ -749,6 +749,19 @@ def schritt6_nicht_ueberlappung():
         print(f"    OK — {len(tab)} Zeilen, absteigend, davon {nur_a} "
               f"ausschliesslich bei der Bezugsstrategie")
 
+    # Die Zahl der exklusiven Schluessel zaehlt dieselben Zeilen.
+    from modules.bestandsanalytik import exklusive_schluessel
+    ga = gewichte_je_kategorie(bestaende["cVV ausgewogen"], "WKN")
+    gb2 = gewichte_je_kategorie(bestaende["cVV defensiv plus"], "WKN")
+    if exklusive_schluessel(ga, gb2) != len(tab):
+        print(f"    FEHLER — exklusive_schluessel zaehlt "
+              f"{exklusive_schluessel(ga, gb2)}, die Aufstellung hat "
+              f"{len(tab)} Zeilen")
+        f += 1
+    else:
+        print(f"    OK — exklusive_schluessel und die Aufstellung zaehlen "
+              f"beide {len(tab)}")
+
     # Jede Zeile ist wirklich die Differenz, nicht irgendeine Zahl.
     falsch = [z["schluessel"] for _, z in tab.iterrows()
               if abs(z["exklusiv"] - max(0.0, z["gewicht_a"] - z["gewicht_b"]))

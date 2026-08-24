@@ -88,8 +88,9 @@ import streamlit as st
 from modules.analytics import (RISIKO_PERIODEN, _perioden_start,
                               deckt_zeitraum_ab, risiko_perioden)
 from modules.bestandsanalytik import (
-    GEWICHT_SPALTE, calc_liquidity, gemeinsame_schluessel, gemeinsame_titel,
-    gewichte_je_kategorie, kategorien_vereinigt, ueberlappung,
+    GEWICHT_SPALTE, calc_liquidity, exklusive_schluessel, exklusive_titel,
+    gemeinsame_schluessel, gemeinsame_titel, gewichte_je_kategorie,
+    kategorien_vereinigt, nicht_ueberlappung, ueberlappung,
 )
 from modules.farben import gattung_farbe
 from modules.formats import fmt_date_de, fmt_pct
@@ -131,6 +132,22 @@ EIGEN = "Eigener Zeitraum"
 # Anzeigename -> Spalte in den Bestandsdaten. Dieselbe Rechnung auf gröberer
 # Ebene liefert zwangsläufig höhere Werte (siehe `bestandsanalytik`), deshalb
 # steht die gewählte Ebene immer im Titel und in der Caption.
+# ── Die beiden Ansichten der Überschneidung (NEU 24.08.2026) ───────────────
+# Dieselbe Bauform wie der X-Achsen-Umschalter: zwei Sichten auf dieselben
+# Bestände, die verschiedene Fragen stellen.
+#
+#   „Gemeinsam“           Was halten beide? — Summe der kleineren Gewichte.
+#   „Nur im Bezugsdepot“  Was hält die Bezugsstrategie allein? — Summe der
+#                         Übergewichte gegenüber der Gegenpartei.
+#
+# Die beiden ergänzen sich zum investierten Gewicht der Bezugsstrategie; die
+# Herleitung steht bei `bestandsanalytik.nicht_ueberlappung`. WICHTIG für die
+# Lesart: Die Überschneidung ist symmetrisch, die Nicht-Überschneidung NICHT.
+# Deshalb nennt die Oberfläche die Gegenrichtung ausdrücklich.
+UE_GEMEINSAM = "Gemeinsam"
+UE_EXKLUSIV = "Nur im Bezugsdepot"
+UE_ANSICHTEN = (UE_GEMEINSAM, UE_EXKLUSIV)
+
 EBENE_TITEL = "Einzeltitel (WKN)"
 EBENEN = {
     EBENE_TITEL: "WKN",
@@ -531,7 +548,8 @@ def _tabelle_zum_anzeigen(tabelle, x_groesse):
 # ABSCHNITT 2: UEBERSCHNEIDUNG
 # ===========================================================================
 
-def ueberschneidung_tabelle(bestaende, bezug, spalte):
+def ueberschneidung_tabelle(bestaende, bezug, spalte,
+                            ansicht=UE_GEMEINSAM):
     """Wie stark ueberschneidet sich `bezug` mit jedem anderen Bestand?
 
     Args:
@@ -541,8 +559,12 @@ def ueberschneidung_tabelle(bestaende, bezug, spalte):
 
     Returns:
         DataFrame, index = die uebrigen Strategien, absteigend nach "anteil";
-        Spalten "anteil" (dezimal) und "schluessel" (Anzahl gemeinsamer Titel
-        bzw. Kategorien). Leer, wenn `bezug` fehlt.
+        Spalten "anteil" (dezimal) und "schluessel" (Anzahl der gezaehlten
+        Titel bzw. Kategorien). Leer, wenn `bezug` fehlt.
+
+    `ansicht` hat einen VORGABEWERT, damit die vorhandenen Aufrufe und ihre
+    Pruefsteine unveraendert weitergelten. Bei UE_EXKLUSIV traegt "anteil"
+    die Nicht-Ueberschneidung und "schluessel" die Zahl der Uebergewichte.
 
     KEINE EIGENE MATHEMATIK - beides kommt aus `bestandsanalytik`.
     """
@@ -554,8 +576,12 @@ def ueberschneidung_tabelle(bestaende, bezug, spalte):
         if name == bezug:
             continue
         b = gewichte_je_kategorie(df, spalte)
-        zeilen[name] = {"anteil": ueberlappung(a, b),
-                        "schluessel": gemeinsame_schluessel(a, b)}
+        if ansicht == UE_EXKLUSIV:
+            zeilen[name] = {"anteil": nicht_ueberlappung(a, b),
+                            "schluessel": exklusive_schluessel(a, b)}
+        else:
+            zeilen[name] = {"anteil": ueberlappung(a, b),
+                            "schluessel": gemeinsame_schluessel(a, b)}
     if not zeilen:
         return pd.DataFrame(columns=["anteil", "schluessel"])
     return (pd.DataFrame.from_dict(zeilen, orient="index")
@@ -684,7 +710,7 @@ def legenden_layout():
                 font=dict(size=LEGENDE_SCHRIFT))
 
 
-def ueberschneidung_figur(tabelle, bezug, ebene):
+def ueberschneidung_figur(tabelle, bezug, ebene, ansicht=UE_GEMEINSAM):
     """Waagerechte Balken, groesste Ueberschneidung oben; None wenn leer.
 
     ACHSENTYPEN WERDEN GESETZT, nicht geraten (#54) - die y-Achse traegt
@@ -704,9 +730,13 @@ def ueberschneidung_figur(tabelle, bezug, ebene):
     schluessel = tabelle["schluessel"].tolist()
     einheit = "Titel" if ebene == EBENE_TITEL else "Kategorien"
 
+    exklusiv = ansicht == UE_EXKLUSIV
     fig = go.Figure(go.Bar(
         x=werte, y=namen, orientation="h",
-        marker=dict(color=FFPB_PALETTE[0]),
+        # Zwei Farben aus derselben Corporate-Palette, damit die Ansichten
+        # unterscheidbar bleiben. Die FARBE TRAEGT DIE AUSSAGE NIE ALLEIN —
+        # Schalter, Achsentitel, Kernsatz und Hover sagen alle dasselbe.
+        marker=dict(color=FFPB_PALETTE[1] if exklusiv else FFPB_PALETTE[0]),
         # NUR DER PROZENTWERT am Balken (18.08.2026). Vorher stand dort
         # zusaetzlich die Zahl der gemeinsamen Titel — bei 18 Balken zwei
         # Angaben je Zeile, das wirkte unruhig. Die Zahl steht jetzt im Hover
@@ -716,9 +746,12 @@ def ueberschneidung_figur(tabelle, bezug, ebene):
         # customdata traegt den NAMEN und die Zahl: den Namen braucht die
         # Klick-Auswahl (siehe `_gewaehlte_gegenpartei`), die Zahl der Hover.
         customdata=[[n, k] for n, k in zip(namen, schluessel)],
-        hovertemplate=("<b>%{y}</b><br>Überschneidung: %{x:.2f} %<br>"
-                       "gemeinsam: %{customdata[1]} " + einheit
-                       + "<extra></extra>"),
+        hovertemplate=("<b>%{y}</b><br>"
+                       + ("Nur im Bezugsdepot" if exklusiv
+                          else "Überschneidung")
+                       + ": %{x:.2f} %<br>"
+                       + ("davon abweichend: " if exklusiv else "gemeinsam: ")
+                       + "%{customdata[1]} " + einheit + "<extra></extra>"),
     ))
     hoehe, rand_unten = balken_geometrie(len(namen))
     fig.update_layout(
@@ -726,7 +759,8 @@ def ueberschneidung_figur(tabelle, bezug, ebene):
         # Kurzer Achsentitel (18.08.2026): Der lange Satz gehoert unter das
         # Chart, nicht an die Achse.
         xaxis=dict(type="linear", ticksuffix=" %",
-                   title="gemeinsames Depotgewicht",
+                   title=("Depotgewicht nur im Bezugsdepot" if exklusiv
+                          else "gemeinsames Depotgewicht"),
                    range=[0, max(100.0, (max(werte) * 1.25) if werte else 0.0)]),
         # automargin=True UND KEIN festes `l` im margin (18.08.2026): Beides
         # gehoert zusammen. Ein `margin=dict(l=10)` nagelt den linken Rand
@@ -1216,14 +1250,30 @@ def gewaehlte_gegenpartei(auswahl, tabelle):
 # Chart, das genau dafuer da ist.
 
 
-def _drilldown_tabelle(bestaende, bezug, gegen, ebene):
-    """Die gemeinsamen Titel als anzeigefertige Tabelle.
+def _drilldown_tabelle(bestaende, bezug, gegen, ebene,
+                       ansicht=UE_GEMEINSAM):
+    """Die Aufstellung hinter dem angeklickten Balken.
 
     Alle Zahlen sind FERTIG FORMATIERTE Zeichenketten aus `formats.fmt_pct` —
-    deutsche Notation, Fehlwert "–", eine einzige Quelle (siehe
-    `beitragsbalken`).
+    deutsche Notation, Fehlwert "–", eine einzige Quelle. `st.column_config`
+    waere die naheliegende Alternative und formatiert englisch.
+
+    BEI UE_EXKLUSIV stehen hier NUR die Positionen der Bezugsstrategie. Was
+    ausschliesslich die Gegenpartei haelt, fehlt bewusst: Diese Zeilen tragen
+    0 zur Zahl im Balken bei, und eine Tabelle, deren Summe nicht die Zahl
+    darueber ergibt, beantwortet die Frage nicht, fuer die sie da ist. Wer
+    die andere Richtung sehen will, wechselt die Bezugsstrategie — der Satz
+    unter dem Kernsatz sagt das und nennt die Summe.
     """
-    roh = gemeinsame_titel(bestaende[bezug], bestaende[gegen], EBENEN[ebene])
+    exklusiv = ansicht == UE_EXKLUSIV
+    if exklusiv:
+        roh = exklusive_titel(bestaende[bezug], bestaende[gegen],
+                              EBENEN[ebene])
+        wert_spalte, wert_titel = "exklusiv", "nur hier"
+    else:
+        roh = gemeinsame_titel(bestaende[bezug], bestaende[gegen],
+                               EBENEN[ebene])
+        wert_spalte, wert_titel = "gemeinsam", "gemeinsam"
     if roh.empty:
         return None
 
@@ -1236,8 +1286,104 @@ def _drilldown_tabelle(bestaende, bezug, gegen, ebene):
         spalten[ebene] = list(roh["schluessel"])
     spalten[bezug] = [fmt_pct(v) for v in roh["gewicht_a"]]
     spalten[gegen] = [fmt_pct(v) for v in roh["gewicht_b"]]
-    spalten["gemeinsam"] = [fmt_pct(v) for v in roh["gemeinsam"]]
+    if exklusiv:
+        # "nur in A" heisst in der Anzeige "nur hier": Der Berater sieht
+        # keinen Buchstaben A, sondern den Namen der Bezugsstrategie.
+        spalten["Art"] = ["nur hier" if a == "nur in A" else "Übergewicht"
+                          for a in roh["art"]]
+    spalten[wert_titel] = [fmt_pct(v) for v in roh[wert_spalte]]
     return pd.DataFrame(spalten)
+
+
+def ue_ansicht_hinweis(ansicht) -> str:
+    """Ein Satz, der sagt, was gerade gezaehlt wird.
+
+    Der Schalter traegt `label_visibility="collapsed"`; ohne diesen Satz
+    stuenden zwei Woerter ueber dem Chart, deren Bedeutung man raten muesste.
+    """
+    if ansicht == UE_EXKLUSIV:
+        return ("Gezählt wird, was die Bezugsstrategie **mehr** hält als die "
+                "jeweils andere — je länger der Balken, desto weniger haben "
+                "die beiden miteinander zu tun.")
+    return ("Gezählt wird das jeweils **kleinere** der beiden Gewichte — je "
+            "länger der Balken, desto ähnlicher sind sich die beiden.")
+
+
+def ue_kernsatz(bezug, gegen, anteil, anzahl, ebene, ansicht) -> str:
+    """Die Aussage des angeklickten Balkens in einem Satz."""
+    einheit = ("Titel" if ebene == EBENE_TITEL else "Kategorien").lower()
+    if ansicht == UE_EXKLUSIV:
+        return (f"**{bezug}** hält **{fmt_pct(anteil)}** des Depotgewichts, "
+                f"das **{gegen}** nicht hält — verteilt auf {int(anzahl)} "
+                f"{einheit}.")
+    return (f"**{bezug}** und **{gegen}** halten zu **{fmt_pct(anteil)}** "
+            f"des Depotgewichts dasselbe — {int(anzahl)} gemeinsame "
+            f"{einheit}.")
+
+
+def ue_gegenrichtung_satz(bezug, gegen, wert_zurueck) -> str:
+    """Nennt die andere Richtung — die Asymmetrie wird sichtbar statt versteckt.
+
+    WARUM DER SATZ NOETIG IST: Die Überschneidung ist symmetrisch, die
+    Nicht-Überschneidung nicht. Am 24.08.2026 gemessen: *cVV ausgewogen* hält
+    25,30 % allein gegenüber *cVV defensiv plus*, umgekehrt sind es 24,34 %.
+    Ohne diesen Hinweis läse man die Zahl als Eigenschaft des Paares und
+    verstünde nicht, warum sie sich beim Wechsel der Bezugsstrategie ändert.
+    Er erspart zugleich ein zweites Bedienelement.
+    """
+    return (f"Umgekehrt hält **{gegen}** {fmt_pct(wert_zurueck)} seines "
+            f"Gewichts, das **{bezug}** nicht hält. Die Bezugsstrategie links "
+            "tauscht die Richtung.")
+
+
+def ue_summen_caption(anzahl, anteil, ansicht) -> str:
+    """Der Satz unter der Aufstellung: die Zeilen ergeben die Zahl oben."""
+    if ansicht == UE_EXKLUSIV:
+        return (f"Die {anzahl} Beiträge summieren sich auf die "
+                f"{fmt_pct(anteil)} oben — je Eintrag das Übergewicht der "
+                "Bezugsstrategie. Was ausschließlich die andere Strategie "
+                "hält, steht hier nicht; dafür die Bezugsstrategie wechseln.")
+    return (f"Die {anzahl} Beiträge summieren sich auf die {fmt_pct(anteil)} "
+            "oben — es ist je Eintrag das kleinere der beiden Gewichte.")
+
+
+def ue_vorbehalt(stichtag_satz, ansicht) -> str:
+    """Der gesammelte Hinweisblock unter dem Abschnitt.
+
+    EIN Block statt drei einzelner Captions (18.08.2026): Drei graue Absätze
+    hintereinander lesen sich wie Kleingedrucktes.
+    """
+    # DER WORTLAUT DER GEMEINSAM-FASSUNG BLEIBT UNVERAENDERT. Er wurde am
+    # 18.08.2026 ausdruecklich als verstaendlich abgenommen; beim Umbau auf
+    # zwei Ansichten stand hier kurz "desto hoeher faellt die
+    # Ueberschneidung zwangslaeufig aus" — eine Verbesserung, die niemand
+    # bestellt hatte, und der ui_dump-Vergleich hat sie gemeldet. Die
+    # exklusive Fassung braucht ein eigenes Subjekt, weil "sie" dort auf
+    # die falsche Groesse zeigte.
+    ebenen_satz = (
+        "Die Zahlen verschiedener **Ebenen** sind nicht vergleichbar: Je "
+        "gröber die Ebene, desto höher fällt "
+        + ("die Nicht-Überschneidung" if ansicht == UE_EXKLUSIV else "sie")
+        + " zwangsläufig aus — dasselbe Paar liest sich auf Titelebene "
+          "als 20,5 % und auf Gattungsebene als 73,8 %.  \n")
+    if ansicht == UE_EXKLUSIV:
+        return (stichtag_satz
+                + " Gerechnet wird als Summe der Übergewichte gegenüber der "
+                  "anderen Strategie. Zusammen mit der Überschneidung ergibt "
+                  "das genau das investierte Gewicht der Bezugsstrategie — "
+                  "die beiden Ansichten sind zwei Hälften derselben Zahl.  \n"
+                + ebenen_satz
+                + "**0 % sind nicht erreichbar**: Zwei Depots halten "
+                  "unterschiedlich viel Kasse, und die zählt hier nicht mit. "
+                  "Die Obergrenze ist das investierte Gewicht der "
+                  "Bezugsstrategie, nicht 100 %.")
+    return (stichtag_satz
+            + " Gerechnet wird als Summe des jeweils kleineren Gewichts, die "
+              "Gegengröße zur Active Share.  \n"
+            + ebenen_satz
+            + "**100 % sind nicht erreichbar**: Die Titelgewichte machen je "
+              "nach Strategie nur 90 bis 98 % aus, der Rest ist Liquidität "
+              "und zählt hier nicht mit.")
 
 
 def _zeige_ueberschneidung(bestaende, auswertungsdatum):
@@ -1261,8 +1407,22 @@ def _zeige_ueberschneidung(bestaende, auswertungsdatum):
             "sv_ue_ebene", list(EBENEN), "Ebene",
             "Auf welcher Ebene gilt etwas als gemeinsam gehalten.")
 
-    tabelle = ueberschneidung_tabelle(bestaende, bezug, EBENEN[ebene])
-    fig = ueberschneidung_figur(tabelle, bezug, ebene)
+    # ── Der Umschalter, unter der Auswahl und ueber der Grafik ──────────
+    # Dieselbe Stelle und dieselbe Bauform wie beim X-Achsen-Schalter und bei
+    # der Heatmap. required=True: Ohne ihn liesse sich das aktive Segment
+    # abwaehlen, und es gaebe den Zustand "keine Ansicht gewaehlt".
+    if "sv_ue_ansicht" not in st.session_state:
+        st.session_state["sv_ue_ansicht"] = UE_GEMEINSAM
+    ansicht = st.segmented_control(
+        "Ansicht", list(UE_ANSICHTEN), key="sv_ue_ansicht", required=True,
+        label_visibility="collapsed",
+        help=("„Gemeinsam“ fragt, wie ähnlich sich zwei Depots sind — "
+              "„Nur im Bezugsdepot“ fragt, was der Kunde zusätzlich bekäme. "
+              "Zusammen ergeben sie das investierte Gewicht."))
+    st.caption(ue_ansicht_hinweis(ansicht))
+
+    tabelle = ueberschneidung_tabelle(bestaende, bezug, EBENEN[ebene], ansicht)
+    fig = ueberschneidung_figur(tabelle, bezug, ebene, ansicht)
     if fig is None:
         st.caption("Keine Vergleichsstrategie vorhanden.")
         return
@@ -1270,42 +1430,34 @@ def _zeige_ueberschneidung(bestaende, auswertungsdatum):
     # on_select macht das Chart selbst zur Navigation — ein Klick auf einen
     # Balken oeffnet den Drilldown darunter. Bewusst KEIN zusaetzliches
     # Auswahlfeld: Es waere ein Bedienelement mehr fuer dieselbe Sache.
+    #
+    # DER KEY BLEIBT UEBER BEIDE ANSICHTEN DERSELBE, und das ist Absicht:
+    # `gewaehlte_gegenpartei` loest ueber den NAMEN auf und nicht ueber den
+    # Balkenindex. Beim Umschalten dreht sich die Reihenfolge — das gewaehlte
+    # Paar bleibt trotzdem stehen. Genau dafuer wurde die Funktion gebaut.
     auswahl = st.plotly_chart(fig, config={"displayModeBar": False},
                               key="sv_ue_chart", on_select="rerun",
                               selection_mode="points")
 
-    einheit = "Titel" if ebene == EBENE_TITEL else "Kategorien"
     gegen = gewaehlte_gegenpartei(auswahl, tabelle)
     zeile = tabelle.loc[gegen]
 
-    st.markdown(
-        f"**{bezug}** und **{gegen}** halten zu "
-        f"**{fmt_pct(zeile['anteil'])}** des Depotgewichts dasselbe — "
-        f"{int(zeile['schluessel'])} gemeinsame {einheit.lower()}.")
+    st.markdown(ue_kernsatz(bezug, gegen, zeile["anteil"],
+                            zeile["schluessel"], ebene, ansicht))
+    if ansicht == UE_EXKLUSIV:
+        zurueck = nicht_ueberlappung(
+            gewichte_je_kategorie(bestaende[gegen], EBENEN[ebene]),
+            gewichte_je_kategorie(bestaende[bezug], EBENEN[ebene]))
+        st.caption(ue_gegenrichtung_satz(bezug, gegen, zurueck))
     st.caption("Ein Klick auf einen Balken zeigt die Aufstellung dieses Paares.")
 
-    anzeige = _drilldown_tabelle(bestaende, bezug, gegen, ebene)
+    anzeige = _drilldown_tabelle(bestaende, bezug, gegen, ebene, ansicht)
     if anzeige is not None:
         st.dataframe(anzeige, width="stretch", height="content",
                      hide_index=True)
-        st.caption(f"Die {len(anzeige)} Beiträge summieren sich auf die "
-                   f"{fmt_pct(zeile['anteil'])} oben — es ist je Eintrag das "
-                   "kleinere der beiden Gewichte.")
+        st.caption(ue_summen_caption(len(anzeige), zeile["anteil"], ansicht))
 
-    # EIN Hinweisblock statt drei einzelner Captions (18.08.2026): Drei graue
-    # Absaetze hintereinander lesen sich wie Kleingedrucktes. Der Wortlaut ist
-    # unveraendert — er wurde ausdruecklich als verstaendlich abgenommen.
-    st.caption(
-        _stichtag_text(auswertungsdatum)
-        + " Gerechnet wird als Summe des jeweils kleineren Gewichts, die "
-          "Gegengröße zur Active Share.  \n"
-        + "Die Zahlen verschiedener **Ebenen** sind nicht vergleichbar: Je "
-          "gröber die Ebene, desto höher fällt sie zwangsläufig aus — "
-          "dasselbe Paar liest sich auf Titelebene als 20,5 % und auf "
-          "Gattungsebene als 73,8 %.  \n"
-        + "**100 % sind nicht erreichbar**: Die Titelgewichte machen je nach "
-          "Strategie nur 90 bis 98 % aus, der Rest ist Liquidität und zählt "
-          "hier nicht mit.")
+    st.caption(ue_vorbehalt(_stichtag_text(auswertungsdatum), ansicht))
 
 
 def _zeige_exposure(bestaende, auswertungsdatum):
