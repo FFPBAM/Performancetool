@@ -90,16 +90,28 @@ from modules.analytics import (  # noqa: E402
 
 TOLERANZ = 1e-12
 
-# Die fuenf Strategien, deren Historie am 18.08.2026 kuerzer als drei Jahre
+# Die fuenf Strategien, deren Historie am 24.08.2026 kuerzer als drei Jahre
 # war — mit ihrer gemessenen Laenge. NAMENTLICH und nicht als Zahl: Wer eine
 # Strategie ergaenzt oder eine Historie nachliefert, soll hier anschlagen und
 # bewusst entscheiden, statt dass sich eine Zahl still verschiebt.
+#
+# NACHGEZOGEN am 24.08.2026 auf den Datenstand 260824. Vorher (Stand 260721,
+# gemessen 18.08.2026): Pro 2.9, Pro Dividende 1.7, Comdirect_* je 2.4.
+# Die Historien werden mit jeder Datenlieferung laenger — dass diese Zahlen
+# wandern, ist kein Fehler, sondern der Zweck des Ankers.
+#
+# ACHTUNG, DIESER ANKER LAEUFT AB: `Pro` beginnt am 01.09.2023 und erreicht
+# damit am 01.09.2026 die vollen drei Jahre. Ab der ersten Datenlieferung
+# danach faellt es aus dieser Liste, und Pruefung (a) meldet zu Recht eine
+# Abweichung — dann ist der Eintrag zu ENTFERNEN, nicht die Zahl zu erhoehen.
+# Die uebrigen vier halten laenger: Comdirect_* bis 12.03.2027,
+# Pro Dividende bis 22.10.2027.
 KURZ_UNTER_3J = {
-    "Pro":            2.9,
-    "Pro Dividende":  1.7,
-    "Comdirect_30":   2.4,
-    "Comdirect_70":   2.4,
-    "Comdirect_100":  2.4,
+    "Pro":            2.98,
+    "Pro Dividende":  1.84,
+    "Comdirect_30":   2.45,
+    "Comdirect_70":   2.45,
+    "Comdirect_100":  2.45,
 }
 
 

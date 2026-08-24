@@ -73,15 +73,24 @@ from modules.bestandsanalytik import (  # noqa: E402
 
 TOLERANZ = 1e-12
 
-# Drei Paare, am 18.08.2026 an den echten Bestaenden gemessen und HIER
+# Drei Paare, am 24.08.2026 an den echten Bestaenden gemessen und HIER
 # NAMENTLICH festgelegt. Wer die Bestandsdaten austauscht, sieht hier eine
 # Abweichung und entscheidet bewusst — statt dass sich eine Zahl still
 # verschiebt, die in der Doku als Beispiel steht.
+#
+# NACHGEZOGEN am 24.08.2026 auf den Bestandsstand 260824. Vorher standen hier
+# die Werte vom Stand 260708 (gemessen 18.08.2026):
+#   cVV ausgewogen/cVV defensiv plus  0.69564, 22 Titel
+#   cVV dynamic/Comdirect_100         0.44982, 13 Titel
+#   cVV ausgewogen/Comdirect_100      0.20530,  5 Titel
+# Genau dafuer stehen diese Anker: Der Test hat den Datenwechsel gemeldet,
+# statt ihn durchgehen zu lassen. Die Titelzahl des zweiten Paares ist dabei
+# von 13 auf 12 gefallen — eine echte Bestandsaenderung, keine Rundung.
 BEKANNTE_PAARE = [
     # (Strategie A, Strategie B, Anteil, gemeinsame Titel)
-    ("cVV ausgewogen", "cVV defensiv plus", 0.69564, 22),
-    ("cVV dynamic",    "Comdirect_100",     0.44982, 13),
-    ("cVV ausgewogen", "Comdirect_100",     0.20530,  5),
+    ("cVV ausgewogen", "cVV defensiv plus", 0.70552, 22),
+    ("cVV dynamic",    "Comdirect_100",     0.41607, 12),
+    ("cVV ausgewogen", "Comdirect_100",     0.21385,  5),
 ]
 # Die Werte sind EXAKT und nicht gerundet. Beim ersten Lauf standen hier
 # 0,696 und 0,450 aus einer gerundeten Ausgabe — der Test schlug an, und das
@@ -386,8 +395,9 @@ def schritt4_gemeinsame_titel():
               "statt 'XETRA Gold'")
         f += 1
     else:
+        # Nachgezogen 24.08.2026 (Stand 260824); vorher 0.07544 (Stand 260708).
         f += _nah("XETRA Gold als groesster Beitrag", oben["gemeinsam"],
-                  0.07544, 5e-6)
+                  0.08236, 5e-6)
 
     # AUF GROEBEREN EBENEN GIBT ES KEINEN KLARTEXTNAMEN. Beim ersten Schreiben
     # bildete die Funktion dort "Aktien" auf einen beliebigen Wertpapiernamen
