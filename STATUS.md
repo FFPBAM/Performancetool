@@ -1,10 +1,71 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 21.08.2026 · **Branch:** `verbesserungen` ·
+**Letzte Sitzung:** 24.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **29 von 29 Suiten grün**, `pyflakes` bei null ·
 **gepusht — DRACOON steht noch auf dem alten Stand.**
 
-> ### Für Philip: was diese Sitzung geändert hat, und was noch aussteht
+> ### Für Philip: was diese Sitzung geändert hat (24.08.2026)
+>
+> **Vier neue Sachen, einzeln gebaut und einzeln gesichtet.** Der Datenstand
+> ist **260824**, 19 von 19 Strategien, alle Reihen bis 24.08.2026.
+>
+> **1. Portfolioanalyse: Performancebeitrag je Segment.** Hinter dem
+> vorhandenen Sidebar-Haken „YTD Performance anzeigen" steht jetzt zusätzlich
+> ein waagerechtes Balkendiagramm mit **allen** Segmenten einer Gattung,
+> größter Beitrag oben, negative in Terrakotta.
+>
+> *Gewünscht war Top 5 / Flop 5. Es sind alle geworden* — bei rund elf
+> Segmenten, von denen meist ein bis zwei negativ sind, hätte eine
+> Flop-Spalte überwiegend **positive** Beiträge enthalten und verschwiegen,
+> was sie weglässt (#59). Entschieden mit Philip.
+>
+> *Die Gattungs-Auswahl davor ist keine Bequemlichkeit:* „Segment" trägt bei
+> Aktien Branchen, bei Renten Schuldnerklassen (Festlegung Philip,
+> 18.08.2026). An *cVV ausgewogen* gemessen steht „Eisen,Stahl,Rohstoffe"
+> unter Aktien bei **−0,159 %**, unter Edelmetallen bei **+0,574 %**; flach
+> aggregiert käme **+0,415 %** heraus — eine Zahl, die es in keiner Gattung
+> gibt, und mit dem **falschen Vorzeichen**. Genau das ist die Gegenprobe im
+> Prüfstein.
+>
+> **2. Strategievergleich: der X-Achsen-Schalter steht jetzt über der
+> Grafik** statt daneben — dieselbe Anordnung wie die Heatmap, die dieselbe
+> Aufgabe löst. Dazu eine Caption, die die **Leserichtung** nennt („je weiter
+> links, desto ruhiger"); ohne sie muss man raten, ob links besser ist.
+>
+> **3. Strategievergleich: eigener Zeitraum.** Ein Häkchen neben der
+> Schnellwahl blendet Kalenderfelder ein. Die eigentliche Arbeit steckte
+> nicht in den Feldern, sondern in einem **stillen Datenverlust**: Schneidet
+> man die Reihe aufs Fenster und rechnet „Seit Auflage", liefert auch eine
+> Strategie, die erst mitten im Fenster beginnt, brav eine Zahl — nur über
+> einen kürzeren Zeitraum, und niemand sähe es. `deckt_zeitraum_ab` fragt das
+> an **beiden** Rändern; wer durchfällt, wird namentlich genannt.
+> **Die Gegenprobe belegt, dass das keine theoretische Sorge war:** Bei
+> Beginn 01.01.2020 fallen 11 Strategien heraus, und die Fassung ohne diese
+> Prüfung hätte für **alle 11** eine Zahl geliefert.
+>
+> **4. Strategievergleich: Nicht-Überschneidung.** Ein Schalter zeigt
+> wahlweise „Gemeinsam" oder „Nur im Bezugsdepot" — er wirkt auf Chart *und*
+> Aufstellung. **Die Zahl lässt sich am Bildschirm nachrechnen:**
+> 70,55 % + 25,30 % = **95,86 %**, das investierte Gewicht von *cVV
+> ausgewogen* aus der Portfolioanalyse. Verworfen wurde die Summe der
+> Beträge aller Gewichtsunterschiede: Sie hätte für *cVV ausgewogen* gegen
+> *Comdirect_100* **148,7 %** ergeben — über 100 neben einem Maß mit Deckel
+> 100.
+>
+> *Achtung bei der Lesart:* Die Überschneidung ist **symmetrisch**, die
+> Nicht-Überschneidung **nicht** (25,30 % hin, 24,34 % zurück). Ein Satz
+> nennt die Gegenrichtung, damit die Asymmetrie sichtbar ist statt versteckt.
+>
+> **➜ Was für dich offen bleibt:** die Sichtprüfung an der laufenden
+> Cloud-App (#11) und danach der Merge nach `main`.
+>
+> **Nebenbefund, zurückgestellt:** Die Broschüre baut bei fehlender
+> Zeitreihe still mit den Zahlen der Vorlage weiter — Einzelheiten unter
+> „Offene Punkte".
+>
+> ---
+>
+> ### Aus der Sitzung davor (21.08.2026)
 >
 > **Neu ist eine YTD-Kachel** in der Kennzahlen-Reihe des Performance-Reiters,
 > direkt neben „Auflage der Strategie" (dein Feedback, 21.08.2026). Beide

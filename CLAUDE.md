@@ -314,7 +314,7 @@ prüfte statt gegen eine Schwelle (#47).
 
 | Datei | Zuständig für |
 |---|---|
-| `modules/analytics.py` | **alle** Berechnungen (CAGR, Vola, Sharpe, Drawdown) |
+| `modules/analytics.py` | **alle** Berechnungen auf Zeitreihen (CAGR, Vola, Sharpe, Drawdown) samt der Frage, ob eine Historie einen Zeitraum überhaupt abdeckt (`deckt_zeitraum_ab`) |
 | `modules/vorlagen_config.py` | Broschüren-Bauplan: Folienlisten, Familien, Dateinamen, `HISTORIE_AB` |
 | `modules/pptx_slides.py` | **was** auf einer Folie steht (Werte) |
 | `modules/chart_dynamik.py` | **wie** es aussieht (Optik, nie Werte) |
@@ -326,7 +326,7 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/farben.py` | die **festen Assetklassen-Farben** und ihre Klassifizierung — **streamlit- und lxml-frei**, weil Broschüre *und* Oberfläche sie brauchen |
 | `modules/risiko_ansicht.py` | Heatmap und Risiko-Block **innerhalb** der Performance-Ansicht |
 | `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander — Punktwolke, Überschneidung, Exposure |
-| `modules/bestandsanalytik.py` | Mathematik auf dem **Bestand** (Gewicht je Kategorie, Überschneidung, Liquidität) — **streamlit-frei**, Gegenstück zu `analytics.py` |
+| `modules/bestandsanalytik.py` | Mathematik auf dem **Bestand** (Gewicht und Performancebeitrag je Kategorie, Überschneidung und Nicht-Überschneidung, Liquidität) — **streamlit-frei**, Gegenstück zu `analytics.py` |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.
 `vorlagen_config.py` hat bewusst **keine Importe** — das bitte so lassen.
