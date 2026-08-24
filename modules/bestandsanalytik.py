@@ -65,6 +65,17 @@ import pandas as pd
 # `portfolioanalyse.parse_pf_data` sie beim Einlesen durch 100 teilt.
 GEWICHT_SPALTE = "Gewicht"
 
+# Der fertig gelieferte Performancebeitrag (Gewicht x Wertentwicklung seit
+# Jahresbeginn). Er wird NICHT hier gerechnet, sondern steht so in den
+# Bestands-CSVs und ist additiv. `parse_pf_data` teilt auch ihn durch 100.
+BEITRAG_SPALTE = "Performancebeitrag"
+
+# Die Gattung ist die Ebene, INNERHALB derer ein Segment gelesen werden darf.
+GATTUNG_SPALTE = "Gattung"
+
+# Was in einer Kategoriespalte kein Schluessel ist, sondern ein Fehlwert.
+_KEIN_SCHLUESSEL = ("", "nan", "none", "-")
+
 
 def calc_liquidity(df: pd.DataFrame) -> float:
     """Liquiditaet = 1 minus Summe der Titelgewichte, nie negativ.
@@ -109,26 +120,122 @@ def gewichte_je_kategorie(df: pd.DataFrame, spalte: str) -> pd.Series:
        auf WKN-Ebene ist es der Schutz davor, dass ein doppelt gefuehrter
        Titel beim Ueberschneidungsmass nur einmal zaehlt.
     """
-    if spalte not in df.columns or GEWICHT_SPALTE not in df.columns:
-        return pd.Series(dtype=float)
+    return _kategorie_summen(df, spalte, GEWICHT_SPALTE)
 
-    d = df[[spalte, GEWICHT_SPALTE]].copy()
-    # Erst die echten Fehlwerte, DANN die als Text getarnten. Die Reihenfolge
-    # ist nicht beliebig: `astype(str)` macht aus einem NA je nach
-    # pandas-Fassung entweder den String "nan" oder wieder ein NA — und ein
-    # NA ueberlebt den `isin`-Filter darunter, weil `isin` fuer NA False
-    # liefert. Bis zum 18.08.2026 hing diese Zeile deshalb nur zufaellig
-    # daran, dass die leere Schlusszeile auch kein Gewicht traegt. Fuer
-    # "Waehrung" und "Marktrisikowert" gilt das nicht einmal sicher:
-    # `parse_pf_data` raeumt nur "Wertpapier", "WKN", "ISIN", "Segment",
-    # "Region", "Gattung" und "Portfolio Name" auf, diese beiden nicht.
-    d = d[d[spalte].notna()]
-    d[spalte] = d[spalte].astype(str).str.strip()
-    d = d[~d[spalte].str.lower().isin(("", "nan", "none", "-"))]
-    d = d[d[GEWICHT_SPALTE].notna()]
+
+def _gueltige_schluessel(reihe: pd.Series) -> pd.Series:
+    """Maske: welche Eintraege einer Kategoriespalte sind echte Schluessel?
+
+    Erst die echten Fehlwerte, DANN die als Text getarnten. Die Reihenfolge
+    ist nicht beliebig: `astype(str)` macht aus einem NA je nach
+    pandas-Fassung entweder den String "nan" oder wieder ein NA — und ein NA
+    ueberlebt den `isin`-Filter, weil `isin` fuer NA False liefert. Bis zum
+    18.08.2026 hing das nur zufaellig daran, dass die leere Schlusszeile auch
+    kein Gewicht traegt. Fuer "Waehrung" und "Marktrisikowert" gilt das nicht
+    einmal sicher: `parse_pf_data` raeumt nur "Wertpapier", "WKN", "ISIN",
+    "Segment", "Region", "Gattung" und "Portfolio Name" auf, diese beiden nicht.
+    """
+    echt = reihe.notna()
+    text = reihe.astype(str).str.strip().str.lower()
+    return echt & ~text.isin(_KEIN_SCHLUESSEL)
+
+
+def _kategorie_summen(df: pd.DataFrame, spalte: str,
+                      wert_spalte: str) -> pd.Series:
+    """Summe einer Wertspalte je Auspraegung — der gemeinsame Rumpf.
+
+    WARUM DAS HIER STEHT UND NICHT ZWEIMAL: Die drei Aufraeumregeln aus
+    `gewichte_je_kategorie` gelten fuer JEDE Wertspalte. Waeren sie ein
+    zweites Mal geschrieben worden, waere das dieselbe Krankheit wie in
+    Backlog B/E/F — eine Funktion, die zweimal existiert und deren Kopien
+    auseinanderlaufen. Aufgefallen ist die dort NIE durch verschiedene
+    Formeln, sondern immer erst, als jemand die Kopien nebeneinanderlegte.
+    """
+    if spalte not in df.columns or wert_spalte not in df.columns:
+        return pd.Series(dtype=float)
+    d = df[[spalte, wert_spalte]].copy()
+    d = d[_gueltige_schluessel(d[spalte])]
     if d.empty:
         return pd.Series(dtype=float)
-    return d.groupby(spalte)[GEWICHT_SPALTE].sum().astype(float)
+    d[spalte] = d[spalte].astype(str).str.strip()
+    d = d[d[wert_spalte].notna()]
+    if d.empty:
+        return pd.Series(dtype=float)
+    return d.groupby(spalte)[wert_spalte].sum().astype(float)
+
+
+def performancebeitrag_je_kategorie(df: pd.DataFrame, spalte: str,
+                                    nur_gattung=None):
+    """Performancebeitrag seit Jahresbeginn je Auspraegung einer Kategorie.
+
+    Args:
+        df: Bestand einer Strategie (Ausgabe von `parse_pf_data`), dezimal
+        spalte: Kategoriespalte, in aller Regel "Segment"
+        nur_gattung: wenn gesetzt, zaehlen nur Zeilen dieser Gattung
+
+    Returns:
+        (reihe, ohne_zuordnung, n_ohne)
+            reihe           Series, Index = Auspraegung, Wert = Summe des
+                            Beitrags (dezimal), ABSTEIGEND sortiert
+            ohne_zuordnung  Summe der Beitraege, die keiner Auspraegung
+                            zugeordnet werden konnten (dezimal)
+            n_ohne          Zahl dieser Zeilen
+
+    HIER WIRD NICHTS GERECHNET, NUR ZUSAMMENGEZAEHLT. Die Spalte
+    `Performancebeitrag` kommt fertig aus der Quelle und ist additiv; sie ist
+    NICHT das Produkt aus Stichtagsgewicht und Stichtagsperformance (am
+    24.08.2026 gemessen: je Titel bis zu 0,48 Prozentpunkte Unterschied).
+    Wer sie nachbauen will, rechnet etwas anderes aus.
+
+    WARUM `nur_gattung` KEIN LUXUS IST: Die Spalte "Segment" traegt ZWEI
+    Bedeutungen — bei Aktien Branchen, bei Renten Schuldnerklassen
+    (Festlegung Philip, 18.08.2026; ausfuehrlich in `strategievergleich.py`).
+    Am 24.08.2026 an *cVV ausgewogen* gemessen: "Eisen,Stahl,Rohstoffe" steht
+    unter Aktien bei -0,159 % und unter Edelmetallen bei +0,574 %. Flach
+    aggregiert kaeme +0,415 % heraus — eine Zahl, die es in keiner der beiden
+    Gattungen gibt, und zwar mit dem FALSCHEN VORZEICHEN.
+
+    DIE ZUSAGE, an die ein Pruefstein sich haelt:
+
+        reihe.sum() + ohne_zuordnung == Summe des Beitrags der gezaehlten
+                                        Zeilen
+
+    `ohne_zuordnung` wird dabei EIGENSTAENDIG gebildet und nicht als Rest
+    ausgerechnet — sonst waere die Zusage per Konstruktion wahr und der
+    Pruefstein pruefte nichts.
+
+    EIN FEHLWERT IST KEIN MESSWERT (#46): Fehlt die Spalte, ist der Bestand
+    leer oder traegt die Gattung keine Zeile, kommt eine LEERE Reihe zurueck
+    — nie eine Kategorie mit dem Wert 0.
+    """
+    if df is None or len(df) == 0:
+        return pd.Series(dtype=float), 0.0, 0
+    if spalte not in df.columns or BEITRAG_SPALTE not in df.columns:
+        return pd.Series(dtype=float), 0.0, 0
+
+    d = df
+    if nur_gattung is not None:
+        if GATTUNG_SPALTE not in df.columns:
+            return pd.Series(dtype=float), 0.0, 0
+        d = df[df[GATTUNG_SPALTE].astype(str).str.strip()
+               == str(nur_gattung).strip()]
+    if len(d) == 0:
+        return pd.Series(dtype=float), 0.0, 0
+
+    # Nur Zeilen, die ueberhaupt einen Beitrag tragen. Eine Zeile ohne
+    # Beitrag geht niemandem verloren — sie traegt nichts bei, weder zu einer
+    # Kategorie noch zu `ohne_zuordnung`. Die leere Schlusszeile jeder CSV
+    # faellt genau hier heraus.
+    mit_wert = d[d[BEITRAG_SPALTE].notna()]
+    if mit_wert.empty:
+        return pd.Series(dtype=float), 0.0, 0
+
+    gueltig = _gueltige_schluessel(mit_wert[spalte])
+    ohne_zuordnung = float(mit_wert.loc[~gueltig, BEITRAG_SPALTE].sum())
+    n_ohne = int((~gueltig).sum())
+
+    reihe = _kategorie_summen(mit_wert, spalte, BEITRAG_SPALTE)
+    return reihe.sort_values(ascending=False), ohne_zuordnung, n_ohne
 
 
 def ueberlappung(a: pd.Series, b: pd.Series) -> float:

@@ -427,11 +427,167 @@ def schritt4_gemeinsame_titel():
     return f
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Am 24.08.2026 am Bestandsstand 260824 gemessen, Strategie *cVV ausgewogen*.
+# DIE GEGENPROBE ZU #64 STECKT IN DIESEN ZAHLEN: "Eisen,Stahl,Rohstoffe" ist
+# das einzige Segment, das in ZWEI Gattungen vorkommt. Flach ueber alle
+# Gattungen aggregiert kippt dabei sogar das VORZEICHEN — die naive Fassung
+# meldet einen Gewinn, wo die Aktienseite einen Verlust hatte.
+BEITRAG_CVV_AUSGEWOGEN = {
+    "Aktien":      (+0.089020, 9),   # (Summe, Zahl der Segmente)
+    "Edelmetalle": (+0.005740, 1),
+    "Renten":      (+0.001590, 2),
+}
+BEITRAG_GESAMT = +0.096350
+# Dasselbe Segment, dreimal gelesen:
+DOPPELSEGMENT = "Eisen,Stahl,Rohstoffe"
+DOPPEL_AKTIEN = -0.001590
+DOPPEL_EDELMETALLE = +0.005740
+DOPPEL_FLACH = +0.004150   # was eine Fassung OHNE Gattungsfilter liefern wuerde
+
+
+def schritt5_beitrag_je_kategorie():
+    """Der Performancebeitrag je Segment — additiv, gattungsrein, sortiert.
+
+    WARUM DIESER SCHRITT NICHT UEBERSPRINGT, WENN DER NAME FEHLT (#65): Ein
+    fehlendes PAKET ist ein Umgebungsproblem, ein fehlendes SYMBOL ist ein
+    Fehler in der Sache. Der Unterschied gehoert in die Ausgabe, sonst meldet
+    ein Test "bestanden", der nichts geprueft hat.
+    """
+    print("Schritt 5 — `performancebeitrag_je_kategorie`")
+    f = 0
+    try:
+        from modules.bestandsanalytik import performancebeitrag_je_kategorie as pjk
+    except ImportError as ex:
+        print(f"    FEHLER — das Symbol fehlt: {ex}")
+        return 1
+
+    # ── (a) Grenzfaelle: ein Fehlwert ist kein Messwert (#46) ────────────
+    leer_faelle = [
+        ("fehlende Kategoriespalte",
+         pd.DataFrame({"Performancebeitrag": [0.01], "Gattung": ["Aktien"]}),
+         "Segment", None),
+        ("fehlende Beitragsspalte",
+         pd.DataFrame({"Segment": ["X"], "Gattung": ["Aktien"]}),
+         "Segment", None),
+        ("leerer Bestand", pd.DataFrame(), "Segment", None),
+        ("Gattung ohne Zeilen",
+         pd.DataFrame({"Segment": ["X"], "Gattung": ["Aktien"],
+                       "Performancebeitrag": [0.01]}),
+         "Segment", "Renten"),
+    ]
+    for bez, df, spalte, gattung in leer_faelle:
+        reihe, ohne, n = pjk(df, spalte, gattung)
+        if len(reihe) or ohne != 0.0 or n != 0:
+            print(f"    FEHLER — {bez}: {len(reihe)} Eintraege, "
+                  f"ohne_zuordnung={ohne}, n={n} statt leer/0.0/0")
+            f += 1
+    if not f:
+        print(f"    OK — {len(leer_faelle)} Grenzfaelle liefern leer, 0.0, 0")
+
+    bestaende = _echte_bestaende()
+    if bestaende is None:
+        return f + 1   # UEBERSPRUNGEN waere hier eine Luege: die Daten sind da
+
+    # ── (b) Additiv je Gattung, vollstaendig ueber alle Gattungen ────────
+    schlimmste = 0.0
+    geprueft = 0
+    for name, df in sorted(bestaende.items()):
+        gesamt_ist = 0.0
+        for gattung in df["Gattung"].dropna().astype(str).str.strip().unique():
+            teil = df[df["Gattung"].astype(str).str.strip() == gattung]
+            soll = float(teil["Performancebeitrag"].sum())
+            reihe, ohne, _n = pjk(df, "Segment", gattung)
+            ist = float(reihe.sum()) + float(ohne)
+            schlimmste = max(schlimmste, abs(ist - soll))
+            if abs(ist - soll) > TOLERANZ:
+                print(f"    FEHLER — {name}/{gattung}: {ist} statt {soll}")
+                f += 1
+            gesamt_ist += ist
+            geprueft += 1
+        gesamt_soll = float(df["Performancebeitrag"].sum())
+        if abs(gesamt_ist - gesamt_soll) > TOLERANZ:
+            print(f"    FEHLER — {name}: Summe ueber alle Gattungen "
+                  f"{gesamt_ist} statt {gesamt_soll}")
+            f += 1
+    print(f"    OK — {geprueft} Strategie-Gattung-Paare additiv, groesste "
+          f"Abweichung {schlimmste:.3e}")
+
+    # ── (c) Absteigend sortiert — das ist eine fachliche Zusage ──────────
+    unsortiert = 0
+    for name, df in bestaende.items():
+        for gattung in df["Gattung"].dropna().astype(str).str.strip().unique():
+            reihe, _o, _n = pjk(df, "Segment", gattung)
+            if list(reihe) != sorted(reihe, reverse=True):
+                unsortiert += 1
+    if unsortiert:
+        print(f"    FEHLER — {unsortiert} Reihen sind nicht absteigend")
+        f += 1
+    else:
+        print("    OK — jede Reihe ist absteigend sortiert")
+
+    # ── (d) Keine leere und keine "nan"-Kategorie ────────────────────────
+    schrott = set()
+    for name, df in bestaende.items():
+        for gattung in df["Gattung"].dropna().astype(str).str.strip().unique():
+            reihe, _o, _n = pjk(df, "Segment", gattung)
+            for k in reihe.index:
+                if str(k).strip().lower() in ("", "nan", "none", "-"):
+                    schrott.add((name, gattung, k))
+    if schrott:
+        print(f"    FEHLER — Schrottkategorien: {sorted(schrott)[:3]}")
+        f += 1
+    else:
+        print("    OK — keine leere und keine \"nan\"-Kategorie")
+
+    # ── (e) NAMENTLICH: cVV ausgewogen ───────────────────────────────────
+    d = bestaende.get("cVV ausgewogen")
+    if d is None:
+        print("    FEHLER — cVV ausgewogen fehlt im Bestand")
+        return f + 1
+    for gattung, (soll, n_soll) in BEITRAG_CVV_AUSGEWOGEN.items():
+        reihe, ohne, _n = pjk(d, "Segment", gattung)
+        f += _nah(f"cVV ausgewogen/{gattung}", float(reihe.sum()) + float(ohne),
+                  soll, 5e-6)
+        if len(reihe) != n_soll:
+            print(f"    FEHLER — cVV ausgewogen/{gattung}: {len(reihe)} "
+                  f"Segmente statt {n_soll}")
+            f += 1
+    reihe_alle, ohne_alle, _n = pjk(d, "Segment", None)
+    f += _nah("cVV ausgewogen, alle Gattungen",
+              float(reihe_alle.sum()) + float(ohne_alle), BEITRAG_GESAMT, 5e-6)
+
+    # ── (f) DIE GEGENPROBE (#64): der Gattungsfilter wirkt wirklich ──────
+    # Ohne ihn stuende hier eine Zahl, die es in keiner Gattung gibt — und
+    # zwar mit dem falschen VORZEICHEN. Waeren die drei Werte gleich, pruefte
+    # (e) nichts.
+    aktien, _o, _n = pjk(d, "Segment", "Aktien")
+    edel, _o2, _n2 = pjk(d, "Segment", "Edelmetalle")
+    naiv = float(d.groupby("Segment")["Performancebeitrag"].sum()[DOPPELSEGMENT])
+    f += _nah(f"{DOPPELSEGMENT} unter Aktien", float(aktien[DOPPELSEGMENT]),
+              DOPPEL_AKTIEN, 5e-6)
+    f += _nah(f"{DOPPELSEGMENT} unter Edelmetallen", float(edel[DOPPELSEGMENT]),
+              DOPPEL_EDELMETALLE, 5e-6)
+    f += _nah(f"{DOPPELSEGMENT} flach (die verworfene Fassung)", naiv,
+              DOPPEL_FLACH, 5e-6)
+    if not (float(aktien[DOPPELSEGMENT]) < 0.0 < naiv):
+        print("    FEHLER — die Gegenprobe greift nicht: das Vorzeichen "
+              "kippt nicht mehr zwischen flach und gattungsrein")
+        f += 1
+    else:
+        print("    OK — flach kippt das Vorzeichen gegenueber der Aktienseite")
+
+    return f
+
+
 def main():
     print("Pruefstein: Bestands-Mathematik\n")
     fehler = 0
     for schritt in (schritt1_ueberlappung, schritt2_echte_dateien,
-                    schritt3_bekannte_paare, schritt4_gemeinsame_titel):
+                    schritt3_bekannte_paare, schritt4_gemeinsame_titel,
+                    schritt5_beitrag_je_kategorie):
         fehler += schritt()
         print()
     if fehler:
