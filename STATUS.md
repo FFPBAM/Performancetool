@@ -4,7 +4,9 @@
 `verbesserungen` · **Nicht gemergt** · **30 von 30 Suiten grün**,
 `pyflakes` bei null · **gepusht — der Branch IST die laufende App, die
 Änderungen sind also live. Die Sichtprüfung steht noch aus** (Philip hat den
-Push am 24.08.2026 bewusst vorgezogen).
+Push am 24.08.2026 bewusst vorgezogen) · **DRACOON ist nachgezogen** (280
+versionierte Dateien verglichen, keine inhaltliche Abweichung; 25
+unterscheiden sich nur im Zeilenende).
 
 > ### Für Philip: was diese Sitzung geändert hat (24.08.2026, nachmittags)
 >
