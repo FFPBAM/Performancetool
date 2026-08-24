@@ -1,0 +1,20 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+23.08.2026;Allianz SE;840400;3,089%;EUR;0,482%;18,123%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Comdirect 30
+23.08.2026;Belgien Staat 0,0 % 22.10.31;A287RJ;6,029%;EUR;-0,036%;-0,619%;22.10.2031;0%;5,1616;3,2952%;Staat/ Governments;Europa ohne Deutschland;Renten;3;Comdirect 30
+23.08.2026;Berkshire Hathaway Inc. B;A0YJQ2;2,903%;USD;-0,017%;-0,765%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Comdirect 30
+23.08.2026;Dt. Pfandbriefbk. Green Bond IHS 5 % 05.02.27;A30WF8;5,369%;EUR;0,088%;1,597%;05.02.2027;5,0000%;0,4521;3,7908%;Financials;Deutschland;Renten;3;Comdirect 30
+23.08.2026;EnBW Green Bond IHS 4,3 % 23.05.34;A3LREF;5,898%;EUR;0,023%;0,307%;23.05.2034;4,3000%;6,7538;3,9346%;Corporates;Deutschland;Renten;3;Comdirect 30
+23.08.2026;EUR Corp. Bond SRI 3-5Y ETF (BNPP Easy);A2PP8C;10,021%;EUR;0,001%;0,006%;-;0%;-;-;Index;Europa;Renten;2;Comdirect 30
+23.08.2026;Fraport IHS 1,875 % 31.03.28;A3E5F0;7,118%;EUR;0,082%;1,128%;31.03.2028;1,8750%;1,5815;3,2906%;Corporates;Deutschland;Renten;5;Comdirect 30
+23.08.2026;Grenke Finance IHS 5,75 % 06.07.29 ;A3LY39;5,495%;EUR;0,112%;1,925%;06.07.2029;5,7500%;2,7130;3,9993%;Financials;Deutschland;Renten;3;Comdirect 30
+23.08.2026;Heidelberg Materials IHS 3,75 % 31.05.32 ;A30V5U;5,441%;EUR;0,010%;0,127%;31.05.2032;3,7500%;5,2700;3,7096%;Corporates;Deutschland;Renten;3;Comdirect 30
+23.08.2026;Hochtief IHS 4,25 % 31.05.30;A383EL;5,722%;EUR;0,057%;0,949%;31.05.2030;4,2500%;3,5374;3,6637%;Corporates;Deutschland;Renten;3;Comdirect 30
+23.08.2026;Johnson & Johnson;853260;4,351%;USD;0,488%;12,296%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 30
+23.08.2026;Microsoft Corp.;870747;2,865%;USD;0,024%;0,986%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 30
+23.08.2026;Philip Morris Internat. Inc.;A0NDBJ;2,838%;USD;0,491%;20,161%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 30
+23.08.2026;Porsche IHS 4,25 % 27.09.30;A351SX;6,077%;EUR;0,101%;1,638%;27.09.2030;4,2500%;3,7189;3,8451%;Corporates;Deutschland;Renten;3;Comdirect 30
+23.08.2026;Shell PLC;A3C99G;3,653%;GBP;0,833%;29,013%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Europa ohne Deutschland;Aktien;5;Comdirect 30
+23.08.2026;Walmart Inc.;860853;3,400%;USD;-0,202%;-5,789%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 30
+23.08.2026;Waste Management Inc.;893579;2,493%;USD;0,090%;3,466%;-;0%;-;-;Versorger;Nordamerika;Aktien;5;Comdirect 30
+23.08.2026;XETRA Gold;A0S9GB;13,272%;EUR;1,272%;5,408%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Comdirect 30
+;;;;;;;;;;;;;;;
