@@ -2,9 +2,8 @@
 
 **Letzte Sitzung:** 24.08.2026 (nachmittags) · **Branch:**
 `verbesserungen` · **Nicht gemergt** · **30 von 30 Suiten grün**,
-`pyflakes` bei null · **gepusht — der Branch IST die laufende App, die
-Änderungen sind also live. Die Sichtprüfung steht noch aus** (Philip hat den
-Push am 24.08.2026 bewusst vorgezogen) · **DRACOON ist nachgezogen** (280
+`pyflakes` bei null · **gepusht und an der Cloud-App
+abgenommen** (Philip, 24.08.2026) · **DRACOON ist nachgezogen** (280
 versionierte Dateien verglichen, keine inhaltliche Abweichung; 25
 unterscheiden sich nur im Zeilenende).
 
@@ -77,12 +76,20 @@ unterscheiden sich nur im Zeilenende).
 > dafür **ausgeschrieben** werden statt aus einer f-Zeichenkette zu kommen —
 > Einzelheiten unten.
 >
-> **➜ Was für dich offen bleibt:** die **Sichtprüfung an der laufenden
-> Cloud-App** — sie ist diesmal NACH dem Push dran (Entscheidung Philip,
-> 24.08.2026). Der Klick lässt sich in keinem Test auslösen; genau diese
-> Klasse hat am 18.08.2026 die laufende App angehalten. Anzusehen: trägt der
-> einzelne Balken bei *Edelmetalle*, geht die Aufstellung beim Wechsel der
-> Gattung mit, und beides in hell und dunkel. Danach der Merge.
+> **Die Sichtprüfung ist bestanden** (Philip, 24.08.2026, an der laufenden
+> Cloud-App): *„Jap, das sieht sehr gut aus. Wie ich es mir gewünscht habe.“*
+> Geprüft wurden der Klick auf einen Balken, der einzelne Balken bei
+> *Edelmetalle* sowie hell und dunkel.
+>
+> Damit ist die riskanteste Stelle dieser Runde bestätigt: **Die
+> Keep-Alive-Falle hat sich nicht verwirklicht.** Der Klick lässt sich in
+> keinem Test auslösen — am 18.08.2026 meldeten vier AppTest-Varianten „kein
+> Absturz“, und die App stand danach trotzdem. Diesmal trägt sie.
+>
+> **➜ Offen bleibt allein der Merge nach `main`**, und der wartet auf die
+> **vollständige Rückmeldung der Kollegen** (Philip, 24.08.2026). Am
+> Betrieb ändert er nichts, weil die Cloud ohnehin auf `verbesserungen`
+> läuft — er räumt die Historie.
 >
 > ---
 >
