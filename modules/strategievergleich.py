@@ -92,6 +92,7 @@ from modules.bestandsanalytik import (
     gemeinsame_schluessel, gemeinsame_titel, gewichte_je_kategorie,
     kategorien_vereinigt, nicht_ueberlappung, ueberlappung,
 )
+from modules.auswahl import gewaehlter_balkenname
 from modules.farben import gattung_farbe
 from modules.formats import fmt_date_de, fmt_pct
 from modules.shared import FFPB_PALETTE
@@ -1213,24 +1214,14 @@ def gewaehlte_gegenpartei(auswahl, tabelle):
     """
     if tabelle is None or tabelle.empty:
         return None
-    kandidat = None
-    punkte = []
-    try:
-        punkte = list((auswahl or {}).get("selection", {}).get("points", []))
-    except Exception:
-        punkte = []
-    if punkte:
-        punkt = punkte[0]
-        # `y` traegt bei waagerechten Balken die Kategorie; `customdata[0]`
-        # ist der Ersatzweg, falls Plotly die Achse anders zurueckmeldet.
-        kandidat = punkt.get("y")
-        if kandidat not in tabelle.index:
-            daten = punkt.get("customdata")
-            if isinstance(daten, (list, tuple)) and daten:
-                kandidat = daten[0]
-    if kandidat in tabelle.index:
-        return kandidat
-    return tabelle.index[0]
+    # DIE AUFLOESUNG SELBST STEHT SEIT DEM 24.08.2026 IN modules/auswahl.py.
+    # Die Portfolioanalyse braucht dieselbe Mechanik fuer den Klick auf ein
+    # Segment; zwei Kopien waeren genau die Krankheit, an der diese Codebasis
+    # schon viermal gelitten hat (CLAUDE.md, "Wo was hingehoert"). Name,
+    # Signatur und Verhalten dieser Funktion bleiben unveraendert — die
+    # bestehenden Faelle in tests/test_strategievergleich.py sind damit der
+    # Pruefstein der Delegation.
+    return gewaehlter_balkenname(auswahl, list(tabelle.index))
 
 
 # EIN BEITRAGSBALKEN STAND HIER UND IST WIEDER WEG (Philip, 18.08.2026).
