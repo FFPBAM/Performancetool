@@ -2,7 +2,9 @@
 
 **Letzte Sitzung:** 24.08.2026 (nachmittags) · **Branch:**
 `verbesserungen` · **Nicht gemergt** · **30 von 30 Suiten grün**,
-`pyflakes` bei null · **noch nicht gepusht, Sichtprüfung offen**.
+`pyflakes` bei null · **gepusht — der Branch IST die laufende App, die
+Änderungen sind also live. Die Sichtprüfung steht noch aus** (Philip hat den
+Push am 24.08.2026 bewusst vorgezogen).
 
 > ### Für Philip: was diese Sitzung geändert hat (24.08.2026, nachmittags)
 >
@@ -73,9 +75,12 @@
 > dafür **ausgeschrieben** werden statt aus einer f-Zeichenkette zu kommen —
 > Einzelheiten unten.
 >
-> **➜ Was für dich offen bleibt:** die **Sichtprüfung** (der Klick lässt
-> sich in keinem Test auslösen — genau das ist die Klasse, die am
-> 18.08.2026 die laufende App angehalten hat), danach Push und Merge.
+> **➜ Was für dich offen bleibt:** die **Sichtprüfung an der laufenden
+> Cloud-App** — sie ist diesmal NACH dem Push dran (Entscheidung Philip,
+> 24.08.2026). Der Klick lässt sich in keinem Test auslösen; genau diese
+> Klasse hat am 18.08.2026 die laufende App angehalten. Anzusehen: trägt der
+> einzelne Balken bei *Edelmetalle*, geht die Aufstellung beim Wechsel der
+> Gattung mit, und beides in hell und dunkel. Danach der Merge.
 >
 > ---
 >
