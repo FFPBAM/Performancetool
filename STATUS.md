@@ -2302,6 +2302,31 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
+**NEU 24.08.2026 — ein Prüfstein fehlt: die Broschüre baut still weiter.**
+Fehlt einer Strategie die Zeitreihe, während ihr Bestand vorhanden ist, baut
+`pptx_export` die Broschüre trotzdem — und die Wertentwicklungs-Folie behält
+die **Zahlen aus der Vorlage**. Ohne Build-Meldung, ohne Eintrag in
+`LAST_BUILD_ERRORS`. Am 24.08.2026 am damaligen Datenstand 260821
+nachgewiesen, bytegleich mit der unveränderten `.pptx`:
+
+| Familie | Folie | Werte im gebauten Dokument |
+|---|---|---|
+| comdirect (Comdirect_30) | 7 | 2024: 5,36 %, 2025: 6,24 % |
+| ESG (ESG defensiv) | 17 | −12,91 / 5,56 / 6,91 / 7,03 % |
+
+Die Nachbarfolien waren korrekt ersetzt — es fällt also nicht auf. Damit
+stünden Platzhalterzahlen als echte Wertentwicklung in einem
+**Kundendokument**; dieselbe Klasse wie der comdirect-Disclaimer (Backlog H)
+und das fehlende `majorTimeUnit` (#49): eine Ersetzung, die lautlos ins Leere
+läuft.
+
+Der Auslöser ist inzwischen weg (die Datenlieferung vom 24.08.2026 ist mit
+19 von 19 vollständig), **der Fehler nicht**. Ein Test „nach dem Befüllen
+trägt keine Wertentwicklungs-Folie mehr die Zahlen ihrer Vorlage" wäre für
+alle sechs Vorlagen in wenigen Zeilen zu haben.
+
+*Zurückgestellt von Philip am 24.08.2026 — bewusst später, nicht vergessen.*
+
 **Es sind noch drei**, alle bei Philip. Punkt 1 (Sichtprüfung) ist am
 17.08.2026 abends **erledigt** und bleibt nur als Beleg stehen. Zwei weitere
 Punkte sind **bewusst zurückgestellt** und stehen darunter.
