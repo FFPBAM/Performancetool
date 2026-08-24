@@ -273,6 +273,151 @@ def gemeinsame_schluessel(a: pd.Series, b: pd.Series) -> int:
     return int(len(a.index.intersection(b.index)))
 
 
+# Was in der Gattungsspalte steht, wenn es zum Schluessel keinen Klartext
+# gibt — auf groeberen Ebenen ist das der Normalfall, kein Fehler.
+KEIN_KLARTEXT = "–"
+
+
+def _klartext_spalte(df, schluessel_spalte, quelle):
+    """{schluessel: Wert} aus einer Begleitspalte, ohne Fehlwerte."""
+    if df is None or schluessel_spalte not in df.columns \
+            or quelle not in df.columns:
+        return {}
+    d = df[[schluessel_spalte, quelle]].dropna()
+    d = d.astype(str).apply(lambda sp: sp.str.strip())
+    d = d[~d[quelle].str.lower().isin(_KEIN_SCHLUESSEL)]
+    return dict(zip(d[schluessel_spalte], d[quelle]))
+
+
+def _klartext_und_gattung(df_a, df_b, spalte):
+    """(namen, gattungen) zu den Schluesseln — leer auf groeberen Ebenen.
+
+    NUR AUF WKN-EBENE gibt es einen Klartextnamen und eine Gattung zum
+    Schluessel. Auf groeberen Ebenen IST der Schluessel schon der Klartext
+    ("Aktien", "Nordamerika") — eine Zuordnung Schluessel -> Wertpapier
+    wuerde dort "Aktien" auf irgendeinen Wertpapiernamen abbilden, weil je
+    Gattung viele Zeilen in Frage kommen und die letzte gewinnt. Genau so
+    war `gemeinsame_titel` beim ersten Schreiben gebaut.
+
+    HERAUSGELOEST am 24.08.2026, als `exklusive_titel` dazukam: Der Block
+    lag als Closure in `gemeinsame_titel`. Ein zweites Mal geschrieben waere
+    er dieselbe Krankheit wie in Backlog B/E/F — zwei Kopien, die
+    auseinanderlaufen, ohne dass es jemandem auffaellt.
+
+    `df_a` gewinnt bei Namensgleichheit, weil es die Bezugsstrategie ist.
+    """
+    if spalte != "WKN":
+        return {}, {}
+    namen = {**_klartext_spalte(df_b, spalte, "Wertpapier"),
+             **_klartext_spalte(df_a, spalte, "Wertpapier")}
+    gattungen = {**_klartext_spalte(df_b, spalte, "Gattung"),
+                 **_klartext_spalte(df_a, spalte, "Gattung")}
+    return namen, gattungen
+
+
+def nicht_ueberlappung(a: pd.Series, b: pd.Series) -> float:
+    """Der Teil des Depotgewichts von `a`, den `b` NICHT haelt.
+
+        Nicht-Ueberschneidung(A, B) = Summe max(0, w_A(i) - w_B(i))
+
+    ueber die Vereinigung der Schluessel. Fehlt ein Titel in `b`, zaehlt sein
+    volles Gewicht; haelt `b` ihn kleiner, zaehlt die Differenz.
+
+    NICHT SYMMETRISCH — und das ist keine Schwaeche, sondern die Aussage:
+    Die Frage "was habe ich, das der andere nicht hat" hat eine Richtung. Am
+    24.08.2026 gemessen: *cVV ausgewogen* haelt 25,30 % allein gegenueber
+    *cVV defensiv plus*, umgekehrt sind es 24,34 %. Die Oberflaeche nennt die
+    Gegenrichtung deshalb im Klartext, statt sie zu verschweigen.
+
+    DIE ZUSAGE, die alles zusammenhaelt:
+
+        nicht_ueberlappung(a, b) + ueberlappung(a, b) == a.sum()
+
+    Damit haengt die neue Zahl an der vorhandenen UND am Investitionsgrad,
+    den der Berater aus der Portfolioanalyse kennt — sie laesst sich am
+    Bildschirm nachrechnen.
+
+    WARUM NICHT die L1-Distanz `Summe |w_A - w_B|`: Die waere symmetrisch und
+    als "Unterschied" ebenso denkbar — sie kann aber UEBER 100 % gehen; bei
+    *cVV ausgewogen* gegen *Comdirect_100* sind es 148,7 %. Eine Prozentzahl
+    ueber 100 neben einem Mass mit Deckel 100 ist ein Missverstaendnis mit
+    Ansage. Verworfen am 24.08.2026, die Gegenprobe steht im Pruefstein.
+
+    OBERGRENZE IST `a.sum()`, NICHT 1,0 — aus demselben Grund, aus dem die
+    Ueberschneidung 100 % nicht erreicht: Die Titelgewichte summieren sich je
+    Portfolio nur auf 90 bis 98 %, der Rest ist Liquiditaet.
+    """
+    if a is None or len(a) == 0:
+        return 0.0
+    if b is None or len(b) == 0:
+        return float(a.sum())
+    idx = a.index.union(b.index)
+    av = a.reindex(idx).fillna(0.0).to_numpy(dtype=float)
+    bv = b.reindex(idx).fillna(0.0).to_numpy(dtype=float)
+    return float(np.maximum(av - bv, 0.0).sum())
+
+
+def exklusive_titel(df_a, df_b, spalte: str = "WKN") -> pd.DataFrame:
+    """Woraus setzt sich der exklusive Teil von A zusammen?
+
+    Args:
+        df_a: Bestand der BEZUGSSTRATEGIE
+        df_b: Bestand der Gegenpartei
+        spalte: Ebene, auf der verglichen wird
+
+    Returns:
+        DataFrame, absteigend nach "exklusiv", mit den Spalten
+            schluessel, bezeichnung, gattung, gewicht_a, gewicht_b,
+            exklusiv   max(0, gewicht_a - gewicht_b) — der BEITRAG
+            art        "nur in A" (die Gegenpartei haelt ihn gar nicht)
+                       oder "Uebergewicht" (sie haelt ihn, nur kleiner)
+
+    Zeilen mit `exklusiv == 0` fallen heraus: Sie tragen nichts bei, und eine
+    Aufstellung, deren Zeilen sich nicht auf ihre Summe addieren, beantwortet
+    die Frage nicht, fuer die sie da ist.
+
+    DIE ZUSAGE: `exklusive_titel(A, B)["exklusiv"].sum()`
+                == `nicht_ueberlappung(gewichte(A), gewichte(B))`
+
+    WAS HIER BEWUSST NICHT STEHT: die Titel, die nur die GEGENPARTEI haelt.
+    Sie tragen 0 zur Zahl bei; sie aufzunehmen zerstoerte die Zusage oben und
+    damit den Zusammenhang zwischen Balken und Tabelle. Wer sie sehen will,
+    wechselt die Bezugsstrategie — dieselbe Funktion mit vertauschten
+    Argumenten liefert sie.
+
+    Das Gegenstueck ist `gemeinsame_titel`; die beiden teilen sich absichtlich
+    den Aufbau, damit man sie nebeneinanderlegen kann.
+    """
+    leer = pd.DataFrame(columns=["schluessel", "bezeichnung", "gattung",
+                                 "gewicht_a", "gewicht_b", "exklusiv", "art"])
+    a = gewichte_je_kategorie(df_a, spalte)
+    if a.empty:
+        return leer
+    b = gewichte_je_kategorie(df_b, spalte)
+    namen, gattungen = _klartext_und_gattung(df_a, df_b, spalte)
+
+    zeilen = []
+    for schluessel, gewicht_a in a.items():
+        gewicht_b = float(b.get(schluessel, 0.0)) if len(b) else 0.0
+        beitrag = float(gewicht_a) - gewicht_b
+        if beitrag <= 0:
+            continue
+        zeilen.append({
+            "schluessel":  schluessel,
+            "bezeichnung": namen.get(schluessel, schluessel),
+            "gattung":     gattungen.get(schluessel, KEIN_KLARTEXT),
+            "gewicht_a":   float(gewicht_a),
+            "gewicht_b":   gewicht_b,
+            "exklusiv":    beitrag,
+            "art":         "nur in A" if gewicht_b == 0.0 else "Uebergewicht",
+        })
+    if not zeilen:
+        return leer
+    return (pd.DataFrame(zeilen)
+            .sort_values("exklusiv", ascending=False)
+            .reset_index(drop=True))
+
+
 def gemeinsame_titel(df_a: pd.DataFrame, df_b: pd.DataFrame,
                      spalte: str = "WKN") -> pd.DataFrame:
     """Welche Titel halten beide Depots — und wie viel davon ist gemeinsam?
@@ -317,26 +462,7 @@ def gemeinsame_titel(df_a: pd.DataFrame, df_b: pd.DataFrame,
     if len(gemeinsam) == 0:
         return leer
 
-    def _klartext(df, quelle):
-        """{schluessel: Wert} aus einer Begleitspalte, ohne Fehlwerte."""
-        if spalte not in df.columns or quelle not in df.columns:
-            return {}
-        d = df[[spalte, quelle]].dropna()
-        d = d.astype(str).apply(lambda sp: sp.str.strip())
-        d = d[~d[quelle].str.lower().isin(("", "nan", "none", "-"))]
-        return dict(zip(d[spalte], d[quelle]))
-
-    # NUR AUF WKN-EBENE gibt es einen Klartextnamen und eine Gattung zum
-    # Schluessel. Auf groeberen Ebenen IST der Schluessel schon der Klartext
-    # ("Aktien", "Nordamerika") — eine Zuordnung Schluessel -> Wertpapier
-    # wuerde dort "Aktien" auf irgendeinen Wertpapiernamen abbilden, weil je
-    # Gattung viele Zeilen in Frage kommen und die letzte gewinnt. Genau so
-    # war diese Funktion beim ersten Schreiben gebaut.
-    if spalte == "WKN":
-        namen = {**_klartext(df_b, "Wertpapier"), **_klartext(df_a, "Wertpapier")}
-        gattungen = {**_klartext(df_b, "Gattung"), **_klartext(df_a, "Gattung")}
-    else:
-        namen, gattungen = {}, {}
+    namen, gattungen = _klartext_und_gattung(df_a, df_b, spalte)
 
     zeilen = []
     for schluessel in gemeinsam:
@@ -344,7 +470,7 @@ def gemeinsame_titel(df_a: pd.DataFrame, df_b: pd.DataFrame,
         zeilen.append({
             "schluessel":  schluessel,
             "bezeichnung": namen.get(schluessel, schluessel),
-            "gattung":     gattungen.get(schluessel, "–"),
+            "gattung":     gattungen.get(schluessel, KEIN_KLARTEXT),
             "gewicht_a":   wa,
             "gewicht_b":   wb,
             "gemeinsam":   min(wa, wb),

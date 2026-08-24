@@ -582,12 +582,202 @@ def schritt5_beitrag_je_kategorie():
     return f
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Am 24.08.2026 am Bestandsstand 260824 gemessen. Die drei Zahlen je Paar
+# haengen ueber eine IDENTITAET zusammen, nicht ueber drei Messungen:
+#
+#     Ueberschneidung + Nicht-Ueberschneidung == investiertes Gewicht von A
+#
+# Wer eine davon aendert, bricht die Zusage — und genau deshalb stehen sie
+# hier nebeneinander und nicht einzeln.
+BEKANNTE_EXKLUSIV = [
+    # (A, B, Ueberschneidung, exklusiv A, exklusiv B, investiert A)
+    ("cVV ausgewogen", "cVV defensiv plus", 0.70552, 0.25303, 0.24343, 0.95855),
+    ("cVV ausgewogen", "Comdirect_100",     0.21385, 0.74470, 0.74246, 0.95855),
+    ("cVV dynamic",    "Comdirect_100",     0.41607, 0.56309, 0.54024, 0.97916),
+]
+# Die VERWORFENE Definition, zum Vergleich: Summe |w_A - w_B|. Sie ist
+# symmetrisch, kann aber ueber 100 % gehen — bei diesem Paar 148,7 %. Neben
+# einem Mass mit Deckel 100 waere das ein Missverstaendnis mit Ansage.
+L1_CVV_COMDIRECT = 1.48716
+
+
+def schritt6_nicht_ueberlappung():
+    """Die Nicht-Ueberschneidung: was A haelt und B nicht.
+
+    NICHT SYMMETRISCH, und das ist der Punkt: Die Ueberschneidung ist eine
+    Eigenschaft des PAARES, die Nicht-Ueberschneidung eine Eigenschaft der
+    RICHTUNG. Waeren beide Richtungen gleich, waere die Bezugsstrategie eine
+    Fiktion — deshalb wird die Ungleichheit hier namentlich festgehalten.
+    """
+    print("Schritt 6 — `nicht_ueberlappung` und `exklusive_titel`")
+    try:
+        from modules.bestandsanalytik import (exklusive_titel,
+                                              nicht_ueberlappung)
+    except ImportError as ex:
+        print(f"    FEHLER — ein Symbol fehlt: {ex}")
+        return 1
+
+    f = 0
+
+    # ── Grenzfaelle ──────────────────────────────────────────────────────
+    leer = pd.Series(dtype=float)
+    eins = pd.Series({"A": 0.5})
+    zwei = pd.Series({"B": 0.5})
+    faelle = [
+        ("leer gegen leer", leer, leer, 0.0),
+        ("leer gegen etwas", leer, eins, 0.0),
+        ("etwas gegen leer", eins, leer, 0.5),
+        ("voellig disjunkt", eins, zwei, 0.5),
+        ("identisch", eins, eins, 0.0),
+    ]
+    for bez, a, b, soll in faelle:
+        f += _nah(bez, nicht_ueberlappung(a, b), soll)
+
+    # ── Die drei Zusagen an den echten Bestaenden ────────────────────────
+    bestaende = _echte_bestaende()
+    if bestaende is None:
+        return f + 1
+
+    ebenen = ["WKN", "Gattung", "Region", "Segment", "Währung"]
+    namen = sorted(bestaende)
+    schlimmste_z1 = schlimmste_z2 = 0.0
+    paare = 0
+    for spalte in ebenen:
+        gew = {n: gewichte_je_kategorie(bestaende[n], spalte) for n in namen}
+        for a in namen:
+            # Z3: gegen sich selbst gibt es nichts Exklusives.
+            if abs(nicht_ueberlappung(gew[a], gew[a])) > TOLERANZ:
+                print(f"    FEHLER — {a}/{spalte}: n(a,a) = "
+                      f"{nicht_ueberlappung(gew[a], gew[a])} statt 0")
+                f += 1
+            for b in namen:
+                if a == b:
+                    continue
+                paare += 1
+                # Z1: die Identitaet, die alles zusammenhaelt.
+                summe = (nicht_ueberlappung(gew[a], gew[b])
+                         + ueberlappung(gew[a], gew[b]))
+                schlimmste_z1 = max(schlimmste_z1,
+                                    abs(summe - float(gew[a].sum())))
+                if abs(summe - float(gew[a].sum())) > TOLERANZ:
+                    print(f"    FEHLER — {a}->{b}/{spalte}: "
+                          f"{summe} statt {float(gew[a].sum())}")
+                    f += 1
+    print(f"    OK — Z1 ueber {paare} gerichtete Paar-Ebenen-Kombinationen, "
+          f"groesste Abweichung {schlimmste_z1:.3e}")
+    print("    OK — Z3: n(a,a) ist ueberall 0")
+
+    # Z2: die Aufstellung summiert sich auf die Zahl.
+    for spalte in ebenen:
+        gew = {n: gewichte_je_kategorie(bestaende[n], spalte) for n in namen}
+        for a in namen:
+            for b in namen:
+                if a == b:
+                    continue
+                tab = exklusive_titel(bestaende[a], bestaende[b], spalte)
+                ist = float(tab["exklusiv"].sum())
+                soll = nicht_ueberlappung(gew[a], gew[b])
+                schlimmste_z2 = max(schlimmste_z2, abs(ist - soll))
+                if abs(ist - soll) > TOLERANZ:
+                    print(f"    FEHLER — Z2 {a}->{b}/{spalte}: "
+                          f"{ist} statt {soll}")
+                    f += 1
+    print(f"    OK — Z2: die Aufstellung trifft die Zahl, groesste "
+          f"Abweichung {schlimmste_z2:.3e}")
+
+    # ── NAMENTLICH, und die Asymmetrie als Gegenprobe (#64) ──────────────
+    for a, b, ue_soll, exa_soll, exb_soll, summe_soll in BEKANNTE_EXKLUSIV:
+        if a not in bestaende or b not in bestaende:
+            print(f"    FEHLER — {a} oder {b} fehlt im Bestand")
+            f += 1
+            continue
+        ga = gewichte_je_kategorie(bestaende[a], "WKN")
+        gb = gewichte_je_kategorie(bestaende[b], "WKN")
+        f += _nah(f"{a} <-> {b} gemeinsam", ueberlappung(ga, gb), ue_soll, 5e-5)
+        exa = nicht_ueberlappung(ga, gb)
+        exb = nicht_ueberlappung(gb, ga)
+        f += _nah(f"nur bei {a}", exa, exa_soll, 5e-5)
+        f += _nah(f"nur bei {b}", exb, exb_soll, 5e-5)
+        f += _nah(f"investiert {a}", float(ga.sum()), summe_soll, 5e-5)
+        # DIE RICHTUNG IST ECHT: Waeren beide Seiten gleich, koennte man sich
+        # die Bezugsstrategie sparen — und der Schalter waere eine Attrappe.
+        if abs(exa - exb) < 1e-4:
+            print(f"    FEHLER — {a}/{b}: beide Richtungen sind gleich "
+                  f"({exa} gegen {exb}), die Asymmetrie ist eine Fiktion")
+            f += 1
+
+    # ── Die verworfene Definition liefert etwas ANDERES ──────────────────
+    # Ohne diese Gegenprobe koennte jemand die Formel still gegen die
+    # L1-Distanz tauschen, ohne dass ein Test es merkte.
+    ga = gewichte_je_kategorie(bestaende["cVV ausgewogen"], "WKN")
+    gb = gewichte_je_kategorie(bestaende["Comdirect_100"], "WKN")
+    idx = ga.index.union(gb.index)
+    l1 = float((ga.reindex(idx).fillna(0.0)
+                - gb.reindex(idx).fillna(0.0)).abs().sum())
+    f += _nah("L1-Distanz (die verworfene Fassung)", l1, L1_CVV_COMDIRECT, 5e-5)
+    if l1 <= 1.0:
+        print("    FEHLER — die Gegenprobe traegt nicht mehr: die L1-Distanz "
+              "geht nicht mehr ueber 100 %")
+        f += 1
+    elif abs(l1 - nicht_ueberlappung(ga, gb)) < 1e-4:
+        print("    FEHLER — L1 und Nicht-Ueberschneidung sind dasselbe "
+              "geworden")
+        f += 1
+    else:
+        print(f"    OK — L1 liegt bei {l1 * 100:.1f} % und damit ueber 100, "
+              "die Nicht-Ueberschneidung nicht")
+
+    # ── Die Aufstellung: Spalten, Sortierung, Art ────────────────────────
+    tab = exklusive_titel(bestaende["cVV ausgewogen"],
+                          bestaende["cVV defensiv plus"])
+    soll_spalten = ["schluessel", "bezeichnung", "gattung", "gewicht_a",
+                    "gewicht_b", "exklusiv", "art"]
+    if list(tab.columns) != soll_spalten:
+        print(f"    FEHLER — Spalten {list(tab.columns)} statt {soll_spalten}")
+        f += 1
+    elif list(tab["exklusiv"]) != sorted(tab["exklusiv"], reverse=True):
+        print("    FEHLER — nicht absteigend sortiert")
+        f += 1
+    elif (tab["exklusiv"] <= 0).any():
+        print("    FEHLER — eine Zeile traegt nichts bei und steht trotzdem da")
+        f += 1
+    else:
+        nur_a = int((tab["art"] == "nur in A").sum())
+        print(f"    OK — {len(tab)} Zeilen, absteigend, davon {nur_a} "
+              f"ausschliesslich bei der Bezugsstrategie")
+
+    # Jede Zeile ist wirklich die Differenz, nicht irgendeine Zahl.
+    falsch = [z["schluessel"] for _, z in tab.iterrows()
+              if abs(z["exklusiv"] - max(0.0, z["gewicht_a"] - z["gewicht_b"]))
+              > TOLERANZ]
+    if falsch:
+        print(f"    FEHLER — {len(falsch)} Zeilen sind nicht max(0, a-b)")
+        f += 1
+    else:
+        print("    OK — jede Zeile ist das Uebergewicht der Bezugsstrategie")
+
+    # Auf groeberer Ebene gibt es keinen Klartextnamen (wie `gemeinsame_titel`).
+    grob = exklusive_titel(bestaende["cVV ausgewogen"],
+                           bestaende["cVV defensiv plus"], "Gattung")
+    if len(grob) and list(grob["bezeichnung"]) != list(grob["schluessel"]):
+        print("    FEHLER — auf Gattungsebene weicht die Bezeichnung ab")
+        f += 1
+    else:
+        print("    OK — auf groeberer Ebene ist der Schluessel der Klartext")
+
+    return f
+
+
 def main():
     print("Pruefstein: Bestands-Mathematik\n")
     fehler = 0
     for schritt in (schritt1_ueberlappung, schritt2_echte_dateien,
                     schritt3_bekannte_paare, schritt4_gemeinsame_titel,
-                    schritt5_beitrag_je_kategorie):
+                    schritt5_beitrag_je_kategorie,
+                    schritt6_nicht_ueberlappung):
         fehler += schritt()
         print()
     if fehler:
