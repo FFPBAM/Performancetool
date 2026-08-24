@@ -630,6 +630,99 @@ def schritt6_umschalter():
         f += 1
     else:
         print("    OK — sv_xachse ist ein segmented_control mit required=True")
+
+    # ── DIE REIHENFOLGE (NEU 24.08.2026) ────────────────────────────────
+    #
+    # Der Schalter steht seit heute UNTER dem Zeitraum-Feld und direkt ueber
+    # der Grafik. Das ist nicht nur Optik: Sein Rueckgabewert `x_groesse`
+    # geht in `punktwolke_figur` und in `_tabelle_zum_anzeigen`. Stuende das
+    # Widget im Quelltext HINTER seinen Verbrauchern, waere das entweder ein
+    # NameError oder — schlimmer — ein Chart, das die VORHERIGE Auswahl
+    # zeichnet, weil eine alte Variable noch im Namensraum liegt. Ein
+    # stiller Fehler also, genau die Sorte, die keine Sichtpruefung findet.
+    #
+    # Geprueft wird deshalb die Zeilennummer, nicht der Augenschein.
+    #
+    # EHRLICH GESAGT: Vor dem Umzug war dieser Block bereits GRUEN — der
+    # Schalter stand in der rechten Spalte, also ohnehin oberhalb. Er faengt
+    # also nicht den Umbau vom 24.08.2026, sondern den Rueckfall danach.
+    # Ein direkter `NameError` waere harmlos, weil er sofort auffiele; die
+    # gefaehrliche Fassung ist die REPARIERTE — Widget nach unten, Wert aus
+    # `st.session_state` geholt. Die laeuft durch und zeichnet die vorherige
+    # Auswahl. Gegen diese Form ist der Block gebaut.
+    ziel_funktion = None
+    for knoten in ast.walk(baum):
+        if (isinstance(knoten, ast.FunctionDef)
+                and knoten.name == "zeige_strategievergleich"):
+            ziel_funktion = knoten
+    if ziel_funktion is None:
+        print("    FEHLER — `zeige_strategievergleich` nicht gefunden")
+        return f + 1
+
+    def _zeile(pruefer):
+        for k in ast.walk(ziel_funktion):
+            if isinstance(k, ast.Call) and pruefer(k):
+                return k.lineno
+        return None
+
+    def _mit_key(name):
+        def _p(k):
+            return any(kw.arg == "key" and isinstance(kw.value, ast.Constant)
+                       and kw.value.value == name for kw in k.keywords)
+        return _p
+
+    schalter = _zeile(lambda k: getattr(k.func, "attr", None)
+                      == "segmented_control" and _mit_key("sv_xachse")(k))
+    verbraucher = {
+        "punktwolke_figur": _zeile(
+            lambda k: getattr(k.func, "id", getattr(k.func, "attr", None))
+            == "punktwolke_figur"),
+        "plotly_chart(sv_wolke)": _zeile(
+            lambda k: getattr(k.func, "attr", None) == "plotly_chart"
+            and _mit_key("sv_wolke")(k)),
+        "_tabelle_zum_anzeigen": _zeile(
+            lambda k: getattr(k.func, "id", getattr(k.func, "attr", None))
+            == "_tabelle_zum_anzeigen"),
+    }
+    if schalter is None:
+        print("    FEHLER — der Schalter steht nicht in "
+              "`zeige_strategievergleich`")
+        f += 1
+    else:
+        spaet = {n: z for n, z in verbraucher.items()
+                 if z is not None and z < schalter}
+        if spaet:
+            print(f"    FEHLER — diese lesen `x_groesse`, bevor der Schalter "
+                  f"in Zeile {schalter} steht: "
+                  + ", ".join(f"{n} (Zeile {z})" for n, z in spaet.items()))
+            f += 1
+        elif any(z is None for z in verbraucher.values()):
+            fehlt = [n for n, z in verbraucher.items() if z is None]
+            print(f"    FEHLER — nicht gefunden: {fehlt}. Der Test prueft "
+                  "sonst nichts (#65).")
+            f += 1
+        else:
+            print(f"    OK — der Schalter (Zeile {schalter}) steht vor allen "
+                  "drei Verbrauchern")
+
+    # Der Schalter traegt die Ueberschrift nicht selbst — daher collapsed.
+    beschriftung = None
+    for k in ast.walk(ziel_funktion):
+        if (isinstance(k, ast.Call)
+                and getattr(k.func, "attr", None) == "segmented_control"
+                and _mit_key("sv_xachse")(k)):
+            for kw in k.keywords:
+                if kw.arg == "label_visibility" and isinstance(kw.value,
+                                                              ast.Constant):
+                    beschriftung = kw.value.value
+    if beschriftung != "collapsed":
+        print(f"    FEHLER — sv_xachse ohne label_visibility='collapsed' "
+              f"({beschriftung!r}); die eigene Zeile braucht die doppelte "
+              "Beschriftung nicht")
+        f += 1
+    else:
+        print("    OK — die Beschriftung ist eingeklappt")
+
     return f
 
 

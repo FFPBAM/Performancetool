@@ -31,6 +31,12 @@ WURZEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VS16 = "️"      # Variantenselektor: erzwingt Emoji- statt Textdarstellung
 
 # Diese Dateien liefern die sichtbare Oberflaeche.
+#
+# ERGAENZT am 24.08.2026 um `strategievergleich.py` und `bestandsanalytik.py`.
+# Beide standen hier nicht, obwohl der Strategievergleich seit dem 18.08.2026
+# eine gleichwertige Ansicht ist — die Regel galt dort also, war aber von
+# keinem Pruefstein gedeckt. Beide sind heute emojifrei; die Erweiterung ist
+# damit sofort gruen und schliesst die Luecke, BEVOR neuer Text hinzukommt.
 DATEIEN = [
     "streamlit_app.py",
     os.path.join("modules", "shared.py"),
@@ -38,6 +44,8 @@ DATEIEN = [
     os.path.join("modules", "download_helfer.py"),
     os.path.join("modules", "portfolio_builder.py"),
     os.path.join("modules", "risiko_ansicht.py"),
+    os.path.join("modules", "strategievergleich.py"),
+    os.path.join("modules", "bestandsanalytik.py"),
 ]
 
 
@@ -76,7 +84,7 @@ def _pruefe_gerenderte_app():
     at.session_state["username"] = "testnutzer"
 
     fehler = 0
-    for ansicht in ("Performance", "Portfolioanalyse"):
+    for ansicht in ("Performance", "Portfolioanalyse", "Strategievergleich"):
         if ansicht != "Performance":
             at.session_state["nav_view"] = ansicht
         try:

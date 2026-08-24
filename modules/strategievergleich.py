@@ -245,6 +245,30 @@ def kennzahlen_je_strategie(reihen, periode):
     return pd.DataFrame.from_dict(zeilen, orient="index")[spalten]
 
 
+def xachsen_hinweis(x_groesse: str) -> str:
+    """Ein Satz, der sagt, was gerade auf der X-Achse steht.
+
+    WARUM DAS NOETIG WURDE (24.08.2026): Der Schalter traegt seit dem Umzug
+    `label_visibility="collapsed"` — die beiden nackten Woerter
+    "Volatilitaet" und "Max Drawdown" stuenden sonst ohne Zusammenhang ueber
+    der Grafik und saehen aus wie ein Filter. Der Satz nennt zusaetzlich die
+    LESERICHTUNG; ohne sie muss man raten, ob links besser oder schlechter
+    ist. Der Vergleich der beiden Groessen steht weiterhin im `help` des
+    Schalters, wo man ihn sucht, wenn man ihn braucht.
+
+    ALS FUNKTION und nicht als f-String an der Aufrufstelle (#55): Ein
+    Wortlaut, der inline gebaut wird, ist fuer keinen Pruefstein erreichbar.
+    Genau daran ist am 14.08.2026 ein Fehler lange unbemerkt geblieben.
+    """
+    if x_groesse == X_DRAWDOWN:
+        return ("Auf der X-Achse steht der **grösste Rückgang** vom "
+                "Höchststand bis zum Tiefpunkt des Zeitraums. Je weiter "
+                "links, desto flacher ist die Strategie gefallen.")
+    return ("Auf der X-Achse steht die **Schwankungsbreite** der "
+            "Wertentwicklung, annualisiert. Je weiter links, desto ruhiger "
+            "war der Weg.")
+
+
 def zeitraum_text(reihen, periode):
     """Verortet den gewählten Zeitraum in Klartext — oder "" wenn nichts geht.
 
@@ -761,8 +785,13 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
             key="sv_strategien_" + "|".join(sorted(fam_wahl)),
             help="Jede gewählte Strategie ist ein Punkt im Chart.")
 
-    spalte_zeit, spalte_x = st.columns(2)
-    with spalte_zeit:
+    # EINE HALBE SPALTE, kein zweispaltiges Paar mehr (24.08.2026): Der
+    # X-Achsen-Schalter ist nach unten gewandert, direkt ueber die Grafik —
+    # dieselbe Anordnung wie bei der Heatmap im Performance-Reiter, die
+    # dieselbe Aufgabe loest. Das Zeitraum-Feld bleibt trotzdem halbbreit;
+    # ueber die ganze Seite gezogen sieht ein Dropdown mit sechs Eintraegen
+    # aus, als haette es mehr zu sagen, als es hat.
+    with st.columns(2)[0]:
         # VORBELEGUNG "3 Jahre" und NICHT der gemeinsame Zeitraum, obwohl der
         # zuerst naheliegt: Ueber alle 19 Strategien sind das nur 1,7 Jahre,
         # weil "Pro Dividende" erst im Oktober 2024 aufgelegt wurde (am
@@ -778,34 +807,50 @@ def zeige_strategievergleich(reihen_alle, familien_reihenfolge=(),
                                     "wie in der Broschüre. Das Honorarfeld "
                                     "der Performance-Ansicht wirkt hier "
                                     "nicht.")
-    with spalte_x:
-        # segmented_control statt radio (18.08.2026, Philip): Die Heatmap
-        # schaltet ihre zwei Ansichten genauso um, und zwei Bauformen für
-        # dieselbe Aufgabe sehen ungleichmäßig aus.
-        #
-        # required=True ist dabei nicht Kosmetik, sondern der Grund, warum
-        # dieser Baustein hier überhaupt trägt: Ohne ihn lässt sich das
-        # aktive Segment abwählen, und es gäbe den Zustand „keine X-Achse
-        # gewählt" — denselben Fehler hat `p_zeitraum` schon einmal gehabt.
-        if "sv_xachse" not in st.session_state:
-            st.session_state["sv_xachse"] = X_VOLA
-        x_groesse = st.segmented_control(
-            "Risikomaß auf der X-Achse", list(X_ACHSEN), key="sv_xachse",
-            required=True,
-            help=(f"„{X_VOLA}“ fragt, wie ruhig der Weg war — {X_DRAWDOWN} "
-                  "fragt, wie weh der schlimmste Moment tat."))
-
     reihen = [r for r in reihen_alle if r[0] in wahl]
     if not reihen:
         st.info("Keine Strategie gewählt — bitte mindestens eine auswählen.")
         return
 
     tabelle = kennzahlen_je_strategie(reihen, periode)
-    fig = punktwolke_figur(tabelle, x_groesse)
 
+    # Die Zeitraum-Caption bleibt BEIM ZEITRAUM-FELD und wandert nicht mit
+    # nach unten: Jede Caption steht neben dem Bedienelement, das sie
+    # erklaert. Zwei graue Zeilen gesammelt vor der Grafik waeren ein Block,
+    # den niemand liest.
     hinweis = zeitraum_text(reihen, periode)
     if hinweis:
         st.caption(hinweis)
+
+    # ── Der X-Achsen-Schalter, direkt ueber der Grafik ───────────────────
+    #
+    # segmented_control statt radio (18.08.2026, Philip): Die Heatmap
+    # schaltet ihre zwei Ansichten genauso um, und zwei Bauformen für
+    # dieselbe Aufgabe sehen ungleichmäßig aus. Seit dem 24.08.2026 steht er
+    # auch an derselben STELLE wie dort — unter der Auswahl, ueber der
+    # Grafik.
+    #
+    # required=True ist dabei nicht Kosmetik, sondern der Grund, warum
+    # dieser Baustein hier überhaupt trägt: Ohne ihn lässt sich das
+    # aktive Segment abwählen, und es gäbe den Zustand „keine X-Achse
+    # gewählt" — denselben Fehler hat `p_zeitraum` schon einmal gehabt.
+    #
+    # ACHTUNG BEI KUENFTIGEN UMBAUTEN: `x_groesse` wird unten von
+    # `punktwolke_figur` UND `_tabelle_zum_anzeigen` gelesen. Das Widget
+    # muss im Quelltext vor beiden stehen. Wer es nach unten schoebe und
+    # den Wert stattdessen aus `st.session_state` holte, bekaeme beim ersten
+    # Lauf nach dem Umschalten die VORHERIGE Auswahl gezeichnet — lautlos.
+    # Schritt 6 des Pruefsteins nagelt die Reihenfolge deshalb fest.
+    if "sv_xachse" not in st.session_state:
+        st.session_state["sv_xachse"] = X_VOLA
+    x_groesse = st.segmented_control(
+        "Risikomaß auf der X-Achse", list(X_ACHSEN), key="sv_xachse",
+        required=True, label_visibility="collapsed",
+        help=(f"„{X_VOLA}“ fragt, wie ruhig der Weg war — {X_DRAWDOWN} "
+              "fragt, wie weh der schlimmste Moment tat."))
+    st.caption(xachsen_hinweis(x_groesse))
+
+    fig = punktwolke_figur(tabelle, x_groesse)
 
     if fig is None:
         st.warning("Für den gewählten Zeitraum hat keine der gewählten "
