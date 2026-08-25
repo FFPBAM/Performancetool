@@ -123,14 +123,6 @@ NACH_SOLL = {
     ("Vorlage_ESG.pptx", 22, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
     ("Vorlage_ETF.pptx", 16, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
     ("Vorlage_ETF.pptx", 18, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
-    ("Vorlage_FFPB.pptx", 7, "C_Kennzahlen"): dict(d=2.3986, cx=2.2652, cy=2.2736, hole=79),
-    ("Vorlage_FFPB.pptx", 8, "C_Kennzahlen"): dict(d=2.3986, cx=2.2652, cy=2.2736, hole=79),
-    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2"): dict(d=0.8181, cx=3.4927, cy=1.1035, hole=79),
-    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen1"): dict(d=1.3097, cx=3.7084, cy=2.2736, hole=79),
-    ("Vorlage_FFPB.pptx", 12, "C_Kennzahlen1"): dict(d=2.1772, cx=3.1861, cy=2.2736, hole=79),
-    ("Vorlage_Thema.pptx", 10, "C_Kennzahlen"): dict(d=2.4555, cx=2.6876, cy=2.2736, hole=68),
-    ("Vorlage_Thema.pptx", 11, "C_Kennzahlen2"): dict(d=1.8083, cx=3.2743, cy=1.6659, hole=68),
-    ("Vorlage_Thema.pptx", 11, "C_Kennzahlen1"): dict(d=2.1697, cx=3.1318, cy=1.8172, hole=68),
     ("Vorlage_cVV_Infoboard.pptx", 7, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
     ("Vorlage_cVV_Infoboard.pptx", 9, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
     ("Vorlage_cVV_Infoboard.pptx", 11, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
@@ -139,6 +131,14 @@ NACH_SOLL = {
     ("Vorlage_comdirect.pptx", 6, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
     ("Vorlage_comdirect.pptx", 8, "C_Kennzahlen"): dict(d=2.0638, cx=2.2319, cy=1.5729, hole=79),
     ("Vorlage_comdirect.pptx", 10, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_FFPB.pptx", 7, "C_Kennzahlen"): dict(d=2.3986, cx=2.2652, cy=2.2736, hole=79),
+    ("Vorlage_FFPB.pptx", 8, "C_Kennzahlen"): dict(d=2.3986, cx=2.2652, cy=2.2736, hole=79),
+    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2"): dict(d=0.8181, cx=3.4927, cy=1.1035, hole=79),
+    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen1"): dict(d=1.3097, cx=3.7084, cy=2.2736, hole=79),
+    ("Vorlage_FFPB.pptx", 12, "C_Kennzahlen1"): dict(d=2.1772, cx=3.1861, cy=2.2736, hole=79),
+    ("Vorlage_Thema.pptx", 10, "C_Kennzahlen"): dict(d=3.3506, cx=2.6876, cy=2.2736, hole=79),
+    ("Vorlage_Thema.pptx", 11, "C_Kennzahlen2"): dict(d=1.9771, cx=3.2743, cy=2.0936, hole=79),
+    ("Vorlage_Thema.pptx", 11, "C_Kennzahlen1"): dict(d=2.5455, cx=3.1318, cy=2.2736, hole=79),
 }
 
 
@@ -611,11 +611,43 @@ def schritt4_gebaute_broschueren(ausgabe):
         masse = ", ".join(f"F{nr} {sh.name} {_plot(sh)['r'] * 2 * 2.54:.2f} cm"
                           for nr, _f, sh in ringe)
         print(f"    {familie:<12} {len(ringe)} Ring(e) — {masse}")
+        # DIE ZWEI FAMILIENERKENNUNGEN MUESSEN SICH EINIG SEIN (25.08.2026).
+        # `_familie_fuer_strategie` liest die MAPPING-TABELLE und waehlt die
+        # VORLAGE; `_familie_aus_prs` liest den FOLIENTITEL und waehlt die
+        # RING-OPTIK. Laufen sie auseinander, bekommt eine Broschuere die
+        # richtige Vorlage und die falsche Optik — und beides sieht fuer sich
+        # stimmig aus. Genau das war bei den SCHWEIZ-Strategien wochenlang so
+        # (Vorlage Thema, Optik Standard), und es fiel erst auf, als sich die
+        # beiden Optiken deutlich genug unterschieden.
+        erkannt = cd._familie_aus_prs(prs)
+        if erkannt != familie:
+            print(f"    FEHLER — {familie}: die Ring-Optik erkennt "
+                  f"{erkannt!r} statt {familie!r} — Vorlage und Optik "
+                  f"laufen auseinander")
+            fehler += 1
         f, k = _zusicherungen(familie, prs)
         # Hier gilt die harte Null: das sind die Zahlen, die beim Kunden
         # landen. Gemessen am 25.08.2026 ueber 69 Fuehrungslinien, vor und
         # nach der Vergroesserung jeweils null Kreuzungen.
         fehler += f + k
+    # Bei Thema steht der Strategiename IM Folientitel — dort kann die
+    # Erkennung je Strategie anders ausfallen. Die vier anderen Familien
+    # tragen statische Titel aus der Vorlage und sind mit einem Bau geprueft.
+    thema_strategien = [n for n in daten["namen"]
+                        if _familie_fuer_strategie(daten["nm"], n) == "Thema"]
+    for name in thema_strategien:
+        ziel, _g, _m = smoke._bauen([smoke._portfolio(name, daten)], "Thema",
+                                    daten, ausgabe, f"famcheck_{name}.pptx")
+        erkannt = cd._familie_aus_prs(Presentation(ziel))
+        if erkannt != "Thema":
+            print(f"    FEHLER — Thema-Strategie {name!r}: die Ring-Optik "
+                  f"erkennt {erkannt!r} — sie bekaeme andere Ringe als der "
+                  f"Rest ihrer Familie")
+            fehler += 1
+    if thema_strategien and not fehler:
+        print(f"    OK — alle {len(thema_strategien)} Thema-Strategien werden "
+              f"auch an ihrem Folientitel als Thema erkannt")
+
     if not fehler:
         print(f"    OK — {gemessen} Ringe in echten Broschueren halten "
               f"dieselben Zusagen, keine kreuzenden Fuehrungslinien")
@@ -634,20 +666,20 @@ def schritt5_familien_look():
         fehler += 1
     else:
         print("    OK — ohne Familie bleibt es beim duennen Ring (hole 79)")
-    # Seit 25.08.2026 tragen die vier Familien mit Anlagestrategie-Folien die
-    # BANDSTAERKE DER MAKRO-BROSCHUERE (hole 79 = 0,56 cm bei 5,34 cm), weil
-    # der Ring dort jetzt Makro-Groesse hat. Thema hat keine solche Folie und
-    # behaelt den kraeftigen Ring vom 27.07. (hole 68) — deshalb ein eigener
-    # Block, siehe _RING_THEMA.
-    SOLL_HOLE = {"CVV": 79, "ESG": 79, "ETF": 79, "comdirect": 79, "Thema": 68}
+    # Seit 25.08.2026 tragen ALLE fuenf Familien die Bandstaerke der
+    # Makro-Broschuere (hole 79). Fuer die vier mit Anlagestrategie-Folien
+    # heisst das 0,56 cm bei 5,34 cm, fuer Thema 0,89 cm bei 8,51 cm auf F10 —
+    # beides der Makro-Wert. Der kraeftige Ring vom 27.07.2026 (hole 68) ist
+    # damit ueberall abgeloest; das war eine bewusste Entscheidung, keine
+    # Nebenwirkung.
+    SOLL_HOLE = {"CVV": 79, "ESG": 79, "ETF": 79, "comdirect": 79, "Thema": 79}
     for familie, soll in sorted(SOLL_HOLE.items()):
         fmt = cd._ring_format(familie, 79, 0.14)
         if fmt["hole"] != soll:
             print(f"    FEHLER — {familie}: hole {fmt['hole']} statt {soll}")
             fehler += 1
     if not fehler:
-        print("    OK — die vier Anlagestrategie-Familien tragen hole 79, "
-              "Thema behaelt hole 68")
+        print("    OK — alle fuenf Familien tragen den duennen Ring (hole 79)")
 
     # Und die Rueckkopplung laeuft NUR dort, wo sie beauftragt UND vermessen
     # ist. Ihre VOREINSTELLUNG ist AUS: eine Familie, die niemand gemessen hat,
@@ -661,7 +693,7 @@ def schritt5_familien_look():
     # Rueckkopplung ungeprueft mit (5,73 -> 6,09 cm auf F7). Der Pfad wird von
     # test_export_smoke.py nicht gebaut und faellt sonst niemandem auf.
     SOLL_RK = {"CVV": True, "ESG": True, "ETF": True, "comdirect": True,
-               "Thema": False, None: False}
+               "Thema": True, None: False}
     for familie, soll in sorted(SOLL_RK.items(), key=lambda p: str(p[0])):
         ist = cd._ring_format(familie, 79, 0.14)["rueckkopplung"]
         if ist != soll:
@@ -669,8 +701,8 @@ def schritt5_familien_look():
             print(f"    FEHLER — {bez}: Rueckkopplung {ist} statt {soll}")
             fehler += 1
     if not fehler:
-        print("    OK — die Rueckkopplung laeuft in den vier vermessenen "
-              "Familien; Thema und Standard bleiben aus")
+        print("    OK — die Rueckkopplung laeuft in den fuenf vermessenen "
+              "Familien; Standard bleibt aus")
     return fehler
 
 

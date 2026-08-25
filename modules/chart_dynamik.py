@@ -151,7 +151,7 @@ RK_SCHRITT_IN       = 0.02    # Zoll je Verkleinerungsschritt
 RK_HOEHER_IN        = 0.06    # Zoll je Hochruecken des Ringmittelpunkts
 RK_HOEHER_SCHRITTE  = 3       # so oft wird hochgerueckt, bevor der Ring
                               # verkleinert wird
-RK_DECKEL_ANTEIL_H  = 0.32    # Obergrenze als Anteil der Rahmenhoehe; None =
+RK_DECKEL_ANTEIL_H  = 0.37    # Obergrenze als Anteil der Rahmenhoehe; None =
                               # nur die Vorlage (plotArea) deckelt.
 # GEMESSEN am 25.08.2026 an den 17 Ringen echter Broschueren, MIT der
 # korrigierten Zusicherung (a). Die vier Varianten unterscheiden sich in zwei
@@ -163,12 +163,23 @@ RK_DECKEL_ANTEIL_H  = 0.32    # Obergrenze als Anteil der Rahmenhoehe; None =
 #   B          79   0.32     4,33 + 13x 5,34 cm      0,56 cm   7,39 cm
 #   C          68   0.27     4,34 + 10x 4,64 cm      0,74 cm   6,24 cm
 #   D          68   0.32     4,33 + 13x 5,34 cm      0,85 cm   7,39 cm
-#   B*         79   0.32     14x 5,34 cm             0,56 cm   6,24 cm  <- hier
+#   B*         79   0.32     14x 5,34 cm             0,56 cm   6,24 cm
+#   heute      79   0.37     14x 5,34 cm             0,56 cm   8,51 cm  <- hier
 #
 # Die alte Makro-PowerPoint hatte 5,34 cm bei 0,56 cm Band — genau das liefert
-# B*, und zwar auf ALLEN 14 Anlagestrategie-Ringen. Thema steht in B* wieder
-# auf seinen alten Massen, weil dort die Rueckkopplung aus ist
-# (_RING_THEMA["rueckkopplung"] = False) — der Deckel allein taete das nicht.
+# B*, und zwar auf ALLEN 14 Anlagestrategie-Ringen.
+#
+# NACHTRAG 25.08.2026 abends: Philip hat auch die Makro-Fassung der
+# Pro-Broschuere vorgelegt — Thema war bis dahin ausgenommen. Deckel 0.37 und
+# `hole 79` auch fuer Thema bringen dessen F10 auf 8,51 cm bei 0,89 cm Band,
+# also EXAKT auf den Makro-Wert. Der hoehere Deckel fasst die vier
+# Anlagestrategie-Familien NICHT an: sie schlagen ohnehin an der
+# Vorlagen-Obergrenze (plotArea) an, gemessen bei 0.32 wie bei 0.37 dieselben
+# Werte. Die F11-Ringe von Thema erreichen das Makro NICHT (6,47 statt 7,18 und
+# 4,92 statt 5,53) — dort ist die Legende 36 bzw. 53 % der Rahmenbreite breit
+# und gilt als Vollsperre. Ein Anheben von LEGENDE_SCHMAL_BIS aendert daran
+# nichts (bei 0.30 wie bei 0.70 dieselben Werte), weil dann der horizontale
+# Sicherheitsabstand greift.
 # Preis: EINE Fuehrungslinie unter MIN_LEADER (0,240" statt 0,28", ETF F18).
 # Bei duennerem Band rueckt der Leader-Ansatz (leader_start_tiefe = 0.5 ->
 # Bandmitte) um 0,055*R_out nach aussen und die Linie wird entsprechend
@@ -264,13 +275,17 @@ _RING_KRAEFTIG = {
 # Anlagestrategie-Folien. Thema hat gar keine solche Folie und soll seine
 # heutige Bandstaerke behalten — deshalb eine Kopie mit festem hole 68, die
 # von einer Aenderung an _RING_KRAEFTIG unberuehrt bleibt.
-_RING_THEMA = dict(_RING_KRAEFTIG, hole=68, rueckkopplung=False)
-# `rueckkopplung: False` haelt die Themen-Ringe BYTEGLEICH auf dem Stand
-# vom 24.08.2026 — nachgewiesen ueber alle Chart-Teile und alle
-# RingLeader-Shapes der Thema-Broschuere. Ein niedrigerer Deckel allein
-# reicht dafuer NICHT: Thema F11 C_Kennzahlen1 waechst auch bei Deckel
-# 0.27 von 5,51 auf 6,24 cm, weil der Zuwachs aus der Rueckkopplung
-# selbst kommt und nicht aus dem Deckel.
+# Thema teilt seit dem 25.08.2026 abends die Optik der anderen Familien und
+# braucht deshalb keinen eigenen Block mehr. Der Name bleibt stehen, damit die
+# Zuordnung unten lesbar ist und ein kuenftiges Abweichen einen Ort hat.
+#
+# HISTORIE, damit die Kehrtwende nachvollziehbar bleibt: Bis zum Nachmittag
+# stand hier `hole=68, rueckkopplung=False` — Thema war bewusst ausgenommen,
+# weil niemand danach gefragt hatte, und die Unberuehrtheit war bytegleich
+# belegt. Am Abend legte Philip die Makro-Fassung der Pro-Broschuere vor:
+# dort steht F10 auf 8,51 cm bei 0,89 cm Band. Genau das liefert der
+# gemeinsame Block mit Deckel 0.37.
+_RING_THEMA = _RING_KRAEFTIG
 FAMILIE_RING_FORMAT = {
     "CVV": _RING_KRAEFTIG,
     "ESG": _RING_KRAEFTIG,
@@ -339,6 +354,16 @@ def _ring_format(fam, hole_size, label_gap_in):
 _STRATEGIE_FAMILIE = {
     # Thema (kein Prefix im Titel)
     "pro dividende": "Thema", "offensiv": "Thema", "pro": "Thema",
+    # SCHWEIZ ergaenzt am 25.08.2026: Beide Strategien nutzen die
+    # Thema-Vorlage, standen hier aber nicht — `_familie_aus_prs` gab None
+    # zurueck und sie liefen mit den Standard-Werten. Aufgefallen ist es erst,
+    # als Thema die Rueckkopplung bekam: Die SCHWEIZ-Ringe blieben als
+    # einzige der Familie bei 6,24 cm, waehrend die uebrigen auf 8,51 gingen.
+    # Die Ungleichheit bestand schon vorher (hole 79 statt 68), nur
+    # unauffaelliger. Der Titel schreibt den Namen mit Leerzeichen, die
+    # Mapping-Tabelle mit Unterstrich — deshalb hier die Leerzeichen-Form.
+    "schweiz aktienorientiert": "Thema",
+    "schweiz substanzorientiert": "Thema",
     # ESG (mit "ESG"-Prefix im Titel)
     "esg defensiv plus": "ESG", "esg defensiv": "ESG",
     "esg ausgewogen": "ESG", "esg offensiv": "ESG",

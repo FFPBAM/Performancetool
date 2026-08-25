@@ -226,6 +226,48 @@ Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 >
 > ---
 >
+> ### Nachtrag am Abend: Thema doch, und ein Fund dabei
+>
+> **Philip legte die Makro-Fassung der Pro-Broschüre vor** — Thema war bis
+> dahin ausgenommen. Dort steht F10 auf **8,51 cm bei 0,89 cm Band**. Mit
+> `hole 79`, eingeschalteter Rückkopplung und Deckel 0,37 trifft unsere
+> Broschüre diesen Wert **exakt**. Der höhere Deckel fasst die vier
+> Anlagestrategie-Familien **nicht** an — sie schlagen ohnehin an der
+> Vorlagen-Obergrenze an, bei 0,32 wie bei 0,37 dieselben Werte.
+>
+> **Die F11-Ringe erreichen das Makro nicht** (6,67 statt 7,18 und 4,72 statt
+> 5,53). Dort ist die Legende **36 bzw. 53 %** der Rahmenbreite breit und gilt
+> als Vollsperre. Ein Anheben von `LEGENDE_SCHMAL_BIS` ändert daran nichts —
+> gemessen bei 0,30 wie bei 0,70 dieselben Werte, weil dann der horizontale
+> Sicherheitsabstand greift.
+>
+> **Damit ist die Zusage vom Nachmittag bewusst umgedreht.** Thema war
+> eingefroren, weil niemand danach gefragt hatte, und die Unberührtheit war
+> bytegleich belegt. Jetzt ist es eine Entscheidung statt einer Nebenwirkung;
+> der Kommentar über `_RING_THEMA` hält die Kehrtwende samt Datum fest.
+>
+> **Der eigentliche Fund kam beim Nachmessen:** Die beiden
+> **SCHWEIZ-Strategien** benutzen die Thema-Vorlage, standen aber nicht in
+> `_STRATEGIE_FAMILIE`. Es gibt nämlich **zwei** Familienerkennungen:
+>
+> | | liest | wählt |
+> |---|---|---|
+> | `_familie_fuer_strategie` | die Mapping-Tabelle | die **Vorlage** |
+> | `_familie_aus_prs` | den **Folientitel** | die **Ring-Optik** |
+>
+> Sie liefen bei SCHWEIZ auseinander: richtige Vorlage, Optik der Familie
+> „Standard". **Das bestand schon vorher** (`hole 79` statt 68), fiel aber
+> nicht auf, weil sich die beiden Optiken kaum unterschieden. Erst als Thema
+> auf 8,51 cm ging und SCHWEIZ bei 6,24 blieb, wurde es sichtbar.
+>
+> Beide Strategien sind jetzt eingetragen; SCHWEIZ trifft dabei **zwei**
+> Makro-Werte exakt (8,51 und 7,18). Und Schritt 4 des Prüfsteins verlangt
+> seither, dass sich die beiden Erkennungen einig sind — bei Thema **je
+> Strategie** geprüft, weil dort der Name im Titel steht. **Gegenprobe:** ohne
+> die SCHWEIZ-Einträge meldet sie `None` statt `Thema` und wird rot.
+>
+> ---
+>
 > ### Aus der Sitzung davor (24.08.2026, nachmittags)
 >
 > **Drei Sachen. Die erste ist die wichtigste, und sie ist größer geworden

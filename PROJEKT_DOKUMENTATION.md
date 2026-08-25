@@ -2760,6 +2760,41 @@ ist die Warnung ein Präzedenzfall und kein Verbot. Und: Wer eine
 Randbedingung lockert, zählt vorher auf, **was den freigegebenen Raum belegt**
 — auch das, was nicht in der Shape-Liste der Folie steht.
 
+---
+
+**ZWEITER NACHTRAG, am Abend: Thema, und zwei Familienerkennungen, die
+auseinanderliefen.**
+
+Thema war den Tag über ausgenommen. Als die Makro-Fassung der Pro-Broschüre
+vorlag, war der Unterschied dieselbe Klasse wie bei den Anlagestrategie-Folien:
+**8,51 cm gegen 6,24 cm** auf F10. Mit `hole 79`, Rückkopplung und Deckel 0,37
+trifft F10 den Makro-Wert exakt; die F11-Ringe nicht, weil ihre Legende **36
+bzw. 53 %** der Rahmenbreite belegt und damit als Vollsperre gilt. Ein höheres
+`LEGENDE_SCHMAL_BIS` hilft dort nicht (bei 0,30 wie 0,70 dieselben Werte) — der
+horizontale Sicherheitsabstand greift dann.
+
+**Der Fund, der bleibt, ist ein anderer.** Es gibt **zwei** Familienerkennungen,
+und sie arbeiten auf verschiedenen Quellen:
+
+| | liest | bestimmt |
+|---|---|---|
+| `portfolioanalyse._familie_fuer_strategie` | die Mapping-Tabelle | die **Vorlage** |
+| `chart_dynamik._familie_aus_prs` | den **Folientitel** | die **Ring-Optik** |
+
+Bei den beiden SCHWEIZ-Strategien liefen sie auseinander: Vorlage `Thema`,
+Optik `Standard`, weil ihr Name nicht in `_STRATEGIE_FAMILIE` stand. **Das
+bestand seit Wochen** — sie trugen `hole 79`, der Rest der Familie 68 — und
+fiel nie auf, weil beides für sich stimmig aussah. Erst als sich die Optiken
+deutlich genug unterschieden (8,51 gegen 6,24 cm), wurde es sichtbar.
+
+**Übertragbar:** Wo **zwei** Mechanismen dieselbe Frage beantworten, aus
+verschiedenen Quellen, gehört ihre Übereinstimmung geprüft — und zwar am
+gebauten Artefakt, nicht an einer Nachbildung. Mein erster Versuch simulierte
+den Folientitel aus dem Strategienamen und meldete 19 Fehlalarme: Bei vier
+Familien steht der Titel **statisch in der Vorlage** („Anlagestrategie
+Portfolioverwaltung 30"), nur bei Thema wird er eingesetzt. Die Prüfung misst
+deshalb an der fertigen Broschüre und baut für Thema je Strategie eine.
+
 **Was bleibt, ist ein Prüfstein, den es vorher nicht gab.**
 `tests/test_ring_geometrie.py` misst Größe, Bandstärke, Ringmitte, Label- und
 Legendenabstände über alle sechs Vorlagen (22 Ringe) und an echt gebauten
