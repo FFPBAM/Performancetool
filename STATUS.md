@@ -126,6 +126,30 @@ Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 >
 > ---
 >
+> **Zweiter Nachtrag: ein Fehler im neuen Prüfstein selbst.** Die Zusicherung
+> „keine Beschriftung ragt in den Ring" rechnete mit **vertauschten Achsen**.
+> `PROJEKT_DOKUMENTATION.md` #26 notiert `0,33·|sin| + 0,10·|cos|` — das gilt
+> für den Winkel, den `chart_dynamik` rechnet (`atan2(lvx, -lvy)`, gemessen ab
+> der **Senkrechten**). Der Prüfstein misst ab der **Waagerechten** und hatte
+> die Koeffizienten unbesehen übernommen:
+>
+> | Label liegt | verlangt wurde | richtig ist |
+> |---|---|---|
+> | seitlich vom Ring | 0,10″ | **0,33″** (halbe Breite) |
+> | über/unter dem Ring | 0,33″ | **0,10″** (halbe Höhe) |
+>
+> Seitlich war der Test also 0,23″ zu lax. **Verdeckt hat er nichts:** Mit der
+> korrigierten Formel bleibt alles grün, und der schmalste Label→Ring-Abstand
+> liegt bei **+0,114″** (Thema F11) — vor wie nach der Vergrößerung derselbe
+> Wert, weil Thema gar nicht angefasst wurde.
+>
+> *Gefunden hat ihn der Nebenversuch* (isolierter Worktree
+> `experiment/ring-rueckkopplung`), nicht ein Testlauf. Eine Formel abzuschreiben
+> heißt, ihre **Winkelkonvention** mit abzuschreiben — sonst stimmen die
+> Koeffizienten und das Ergebnis trotzdem nicht.
+>
+> ---
+>
 > ### Aus der Sitzung davor (24.08.2026, nachmittags)
 >
 > **Drei Sachen. Die erste ist die wichtigste, und sie ist größer geworden

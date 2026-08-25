@@ -389,11 +389,20 @@ def _zusicherungen(quelle, prs):
         # (a) Keine Beschriftung ragt in den Ring. Der Text ist waagerecht:
         #     seitlich ragt die halbe BREITE zum Ring, oben/unten die halbe
         #     Hoehe (#26, Falle 6).
+        #
+        #     ACHTUNG BEIM ABSCHREIBEN (Fehler vom 25.08.2026, am selben Tag
+        #     gefunden): #26 notiert 0,33*|sin| + 0,10*|cos| — das gilt fuer
+        #     den Winkel, den `chart_dynamik` rechnet (`atan2(lvx, -lvy)`,
+        #     gemessen ab der SENKRECHTEN). Hier wird ab der WAAGERECHTEN
+        #     gemessen (`atan2(dy, dx)`), also gehoert die halbe Breite an den
+        #     KOSINUS. Uebernommen wurden die Koeffizienten zunaechst
+        #     unbesehen — dadurch verlangte der Test seitlich 0,23" zu wenig
+        #     und oben/unten 0,23" zu viel.
         for mx, my in beschriftungen:
             abstand = math.hypot(mx - geo["cx"], my - geo["cy"])
             winkel = math.atan2(my - geo["cy"], mx - geo["cx"])
-            ueberstand = (HALB_BREITE * abs(math.sin(winkel))
-                          + HALB_HOEHE * abs(math.cos(winkel)))
+            ueberstand = (HALB_BREITE * abs(math.cos(winkel))
+                          + HALB_HOEHE * abs(math.sin(winkel)))
             frei = abstand - ueberstand - geo["r"]
             if frei < -TOLERANZ:
                 print(f"    FEHLER — {ort}: Beschriftung ragt {-frei:.3f} Zoll "
