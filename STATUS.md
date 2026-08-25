@@ -2,16 +2,29 @@
 
 **Letzte Sitzung:** 25.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **31 von 31 Suiten grün**, `pyflakes` bei null ·
-**an der Broschüre wurde nichts geändert** — die Sitzung hat die
-Ringdiagramme vermessen und festgenagelt. Stand davor: gepusht und an der
+**die Ringe der Anlagestrategie-Folien sind
+13-21 % größer** — vermessen, festgenagelt, Sichtprüfung in echtem
+PowerPoint offen. Stand davor: gepusht und an der
 Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 
 > ### Für Philip: was diese Sitzung geändert hat (25.08.2026)
 >
-> **Am Broschüren-Generator wurde nichts geändert. Das war die Entscheidung,
-> und sie ist belegt:** `git diff` fasst `modules/` nicht an, und die sieben
-> Broschüren aus dem Baulauf vor der Sitzung sind byte-identisch mit denen
-> danach.
+> **Der Ring auf den Anlagestrategie-Folien ist größer geworden** — nach
+> einer Messung, die zweimal mein eigenes Ergebnis widerlegt hat.
+>
+> | | vorher | nachher |
+> |---|---|---|
+> | ESG / ETF | 3,41 cm | **3,86 cm** |
+> | cVV | 3,41-3,86 cm | 3,86-4,37 cm |
+> | comdirect | 3,20-3,63 cm | 3,63-4,10 cm |
+>
+> **Betroffen sind genau 14 Ringe.** Die anderen acht — FFPB F9 und F12,
+> Thema F10 und F11 — bleiben unverändert, weil dort die Legende die halbe
+> Rahmenbreite belegt und die Regel bewusst nicht greift. Belegt nicht nur
+> rechnerisch: Thema Folie 11 ist vorher und nachher als Bild **pixelgleich**.
+>
+> **Eine Zeile schaltet zurück:** `LEGENDE_SPALTENWEISE = False` in
+> `modules/chart_dynamik.py` stellt exakt den Stand vom 24.08.2026 her.
 >
 > **Deine Beobachtung war richtig — und sie ist jetzt eine Zahl.** Der Ring in
 > der Makro-PowerPoint ist **nicht eingebildet größer**, sondern messbar:
@@ -59,9 +72,34 @@ Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 > gekostet hat. Steht unter „Offene Punkte", nicht als Aufgabe, sondern als
 > Fundstelle.
 >
-> **➜ Was für dich offen bleibt:** die beiden Bilder ansehen und sagen, ob es
-> beim heutigen Stand bleibt. Wenn ja, ist das Thema zu — und dieses Mal mit
-> einem Prüfstein, der es hält.
+> **Zweimal hat die Messung mich widerlegt — beide Male vor dem Push.**
+>
+> 1. Ich hatte **4,64 cm** vorgerechnet. Bei dieser Größe landen
+>    Beschriftungen auf der Legende (4 von 14 Ringen). Die Eintauchtiefe
+>    unter die Legendenoberkante ist deshalb auf **0,20″** ausgemessen, nicht
+>    gewählt: bei 0,30″ bricht es. An echten Broschüren wäre 0,25″ noch
+>    sauber — das ist die Reserve.
+> 2. Der neue Kreuzungs-Test meldete eine Verschlechterung. Die Gegenprobe
+>    am Produktionsstand zeigte: Auf den **Platzhalterdaten der Vorlagen**
+>    kreuzen sich auch heute schon zwei Führungslinien (ETF F16, comdirect
+>    F6); die Änderung **halbiert** sie auf eine. In echten Broschüren sind
+>    es vorher wie nachher **null von 69 Linien**. Beinahe hätte ich die
+>    Eintauchtiefe auf 0,15 gedreht, weil dort zufällig null herauskam — das
+>    wäre Anpassen an Rauschen gewesen.
+>
+> **Was NICHT geht, und warum** (Einzelheiten in **#71**): Die Makro-Größe
+> von 5,34 cm scheitert nicht an der Arithmetik, sondern an der Reihenfolge
+> der Arbeitsschritte — die Ringgröße steht fest, bevor die Labels gesetzt
+> sind. Der Weg über die Vorlage ist ebenfalls zu: Die Legende sitzt bereits
+> am Rahmenboden und ist knapper bemessen, als die eigene Formel verlangt
+> (#34), und 0,19 cm unter dem Rahmen liegt die Abschlusslinie des Blocks.
+> Mehr wäre nur über ein verändertes **Folienlayout** zu haben — gemessen
+> ~4,4 cm bei 0,6 cm tieferer Linie, entschieden gegen den Eingriff, weil
+> das eine gestalterische Entscheidung über sechs Vorlagen wäre.
+>
+> **➜ Was für dich offen bleibt:** die Sichtprüfung an der laufenden
+> Cloud-App und in echtem PowerPoint. Die Bilder aller sieben betroffenen
+> Folien liegen vor; LibreOffice taugt dafür nicht (#29).
 >
 > ---
 >
@@ -2432,7 +2470,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_theme.py` *(neu 18.08.2026)* | Schritt 1 ohne jedes Paket, 2–4 **+ streamlit** | Die Oberflächen-Konfiguration — die einzige Datei, deren Fehler sich **nicht bemerkbar machen**. **Schritt 2 ist der eigentliche:** `config.get_where_defined` muss auf `.streamlit/config.toml` zeigen und nicht auf `<default>`; ein Test auf den Dateiinhalt hätte den Fehler von #23 nicht gefunden. Dazu: Punkt im Ordnernamen, kein Zwilling ohne Punkt, gültiges TOML, Farben identisch mit `shared.py`, kein Streamlit-Rot mehr, `theme.base` nicht gesetzt (hell und dunkel bleiben beide), kein `font-family`-CSS mehr im Quelltext |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
-| `test_ring_geometrie.py` *(neu 25.08.2026)* | **+ python-pptx**, Schritt 4 zusätzlich **+ streamlit** und ein Ausgabeordner | Die Geometrie der Ringdiagramme, für die es bis dahin **keinen** Prüfstein gab. Schritt 1 die sechs Vorlagen (Rahmen, `holeSize`, `plotArea` aller 22 Ringe — die Geometrie kommt zu 100 % aus der .pptx), Schritt 2 die Ist-Werte **nach** `nachbearbeiten` gegen eingefrorene Maße, Schritt 3 die Zusagen, die auch eine spätere Änderung überleben müssen (keine Beschriftung im Ring, keine Überlappung, nichts aus dem Rahmen, kein Ring in der Legende), Schritt 4 dasselbe an 17 Ringen echter Broschüren, Schritt 5 die Trennung der Familien-Optik (Standard 79, die fünf Familien 68). **Gegenprobe belegt:** Dicke zurückgestellt → 22 Fehler, Verkleinerung stillgelegt → 44 Fehler |
+| `test_ring_geometrie.py` *(neu 25.08.2026)* | **+ python-pptx**, Schritt 4 zusätzlich **+ streamlit** und ein Ausgabeordner | Die Geometrie der Ringdiagramme, für die es bis dahin **keinen** Prüfstein gab. Schritt 1 die sechs Vorlagen (Rahmen, `holeSize`, `plotArea` aller 22 Ringe — die Geometrie kommt zu 100 % aus der .pptx), Schritt 2 die Ist-Werte **nach** `nachbearbeiten` gegen eingefrorene Maße, Schritt 3 die Zusagen, die auch eine spätere Änderung überleben müssen (keine Beschriftung im Ring, keine Überlappung, nichts aus dem Rahmen, kein Ring in der Legende), Schritt 4 dasselbe an 17 Ringen echter Broschüren, Schritt 5 die Trennung der Familien-Optik (Standard 79, die fünf Familien 68). Seit dem 25.08.2026 zusätzlich: **Flächenprüfung** gegen die Legende (nicht mehr nur die Oberkante) und **kreuzende Führungslinien** — in echten Broschüren null von 69, auf den Platzhalterdaten der Vorlagen höchstens der gemessene Ausgangswert 2. **Gegenprobe belegt:** Dicke zurückgestellt → 22 Fehler, Verkleinerung stillgelegt → 44 Fehler |
 
 ```
 python tests/test_bedienung.py
@@ -2519,20 +2557,17 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**NEU 25.08.2026 — der Ringdurchmesser: vermessen, verstanden, NICHT
-geändert.** Der Ring der Streamlit-Broschüre ist 32–40 % kleiner als der der
-Makro-PowerPoint; die Bandstärke ist fast gleich. Ursache und Zahlen stehen in
-`PROJEKT_DOKUMENTATION.md` **#71**, festgenagelt in
-`tests/test_ring_geometrie.py`.
+**NEU 25.08.2026 — Sichtprüfung der größeren Ringe.** Die 14 Ringe der
+Anlagestrategie-Folien sind 13–21 % größer. Bitte in **echtem PowerPoint**
+ansehen (LibreOffice taugt nicht, #29) — die Bilder aller sieben betroffenen
+Folien liegen als Vorher/Nachher vor. Zurückschalten ist eine Zeile:
+`LEGENDE_SPALTENWEISE = False`.
 
-*Zurückgestellt, nicht vergessen:* Der einzige Hebel wäre, in Schritt 2b die
-Legende nur dort als Sperre zu werten, wo sie tatsächlich steht (unten links,
-rund ein Viertel der Breite) statt über die ganze Rahmenbreite. Das fasst die
-Label-Mechanik an, die zwischen dem 09.07. und 10.08.2026 fünf Anlauf-Wellen
-gekostet hat und deren Stand Philip mit „wir sind am Zenit angekommen"
-abgenommen hat (#44). **Wer das Thema aufmacht, fängt bei #71 und #44 an und
-nicht bei null** — und hat seit dem 25.08.2026 einen Prüfstein, der jede
-Verschiebung sichtbar macht.
+*Entschieden und nicht offen:* Die Makro-Größe von 5,34 cm bleibt
+unerreichbar, ohne die Label-Engine umzubauen (#44 rät ab) oder das
+Folienlayout zu ändern (Abschlusslinie tiefer, ~4,4 cm, sechs Vorlagen). Die
+Ursachenkette steht vollständig in `PROJEKT_DOKUMENTATION.md` **#71**. **Wer
+das Thema aufmacht, fängt dort an und nicht bei null.**
 
 **ERLEDIGT am 24.08.2026 (nachmittags) — der Prüfstein steht, und der
 Fehler ist behoben.** `tests/test_wertentwicklung_platzhalter.py` (30.

@@ -2678,7 +2678,37 @@ rund 24 % der Breite; ein Ring in Makro-Größe läge horizontal bei 3,0–8,3 c
 11-cm-Rahmen und würde sie nicht berühren. Wer das aufmacht, fasst aber genau
 die Label-Mechanik an, die zwischen dem 09.07. und dem 10.08.2026 fünf
 Anlauf-Wellen gekostet hat (#26, #29–#34, #40, #44). Entscheidung Philip am
-25.08.2026: **messen und festnageln, nicht ändern.**
+25.08.2026 nach dem Bildvergleich: **den Teil nehmen, der ohne Umbau zu haben
+ist.** Umgesetzt ist deshalb nur die Spaltenregel — `LEGENDE_SPALTENWEISE`
+in `chart_dynamik.py`: Eine Legende, die höchstens 30 % der Rahmenbreite
+belegt, sperrt nur ihre eigene Spalte. Ergebnis **+13 bis +21 %** auf den 14
+Anlagestrategie-Ringen; die acht Ringe mit breiter Legende (FFPB F9/F12,
+Thema F10/F11) bleiben pixelgleich.
+
+**Zwei Korrekturen, die die Messung erzwungen hat — beide vor dem Push:**
+
+1. Die vorgerechneten **4,64 cm** waren falsch. Bei dieser Größe wandern die
+   Labels der unteren Segmente auf die Legende (4 von 14 Ringen). Die
+   Eintauchtiefe unter die Legendenoberkante ist deshalb **ausgemessen**
+   (0,20″; bei 0,30″ bricht es), nicht gewählt.
+2. Der neu gebaute Kreuzungs-Test meldete eine Verschlechterung — bis die
+   Gegenprobe am Produktionsstand zeigte, dass die Platzhalterdaten der
+   Vorlagen **schon vorher** zwei kreuzende Leader haben und die Änderung
+   sie auf einen **halbiert**. In echten Broschüren: null von 69 Linien,
+   vorher wie nachher. Beinahe wäre die Eintauchtiefe auf 0,15 gedreht
+   worden, weil dort zufällig null herauskam — **Anpassen an Rauschen**.
+   Deshalb steht der Ausgangswert jetzt als Konstante im Prüfstein, statt
+   dass eine Null erzwungen wird, die es nie gab.
+
+**Warum nicht weiter:** Der Weg über die Vorlage ist zu — die Legende sitzt
+bereits am Rahmenboden (`y + h = 1,000`) und hat mit 2,13 cm **weniger** Höhe,
+als `ensure_ring_legend_fits` für vier Einträge verlangt (2,39 cm); sie tiefer
+zu setzen kostet Legendeneinträge (#34). Und 0,19 cm unter dem Rahmen liegt
+„Linie links", der optische Abschluss des Blocks. Bliebe das **Folienlayout**:
+0,6 cm tiefere Abschlusslinie ergäben ~4,4 cm, 0,9 cm ~4,8 cm — beides ohne
+Verletzung gemessen, aber der Platz endet am Logo (ab 17,08 cm), die rechte
+Abschlusslinie müsste mitwandern, und es wären sechs Vorlagen. Das ist eine
+gestalterische Entscheidung, keine technische.
 
 **Was bleibt, ist ein Prüfstein, den es vorher nicht gab.**
 `tests/test_ring_geometrie.py` misst Größe, Bandstärke, Ringmitte, Label- und

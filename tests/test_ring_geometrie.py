@@ -70,6 +70,13 @@ UEBERLAPP_X, UEBERLAPP_Y = 0.55, 0.19
 # fuer Rundungen beim Schreiben der f"{val:.5f}"-Bruchteile.
 TOLERANZ = 0.005
 
+# Kreuzende Fuehrungslinien auf den PLATZHALTERDATEN der Vorlagen. Kein
+# Wunschwert, sondern der Ausgangswert: am 25.08.2026 gegen den Stand vom
+# 24.08.2026 gemessen (LEGENDE_SPALTENWEISE=False) — zwei Stueck, in
+# Vorlage_ETF F16 und Vorlage_comdirect F6. In echten Broschueren sind es
+# null; deshalb steht hier eine Obergrenze und in Schritt 4 die Null.
+KREUZUNGEN_VORLAGEN_MAX = 2
+
 # Was in den sechs Vorlagen steht — Rahmen (Breite, Hoehe) in Zoll,
 # `plotArea`-manualLayout (x, y, w, h) als Bruchteile des Rahmens und die
 # `holeSize` der Vorlage. Maschinell aus den .pptx erzeugt, nicht abgetippt.
@@ -109,20 +116,20 @@ VORLAGEN_SOLL = {
 # ECHTE Standard-Broschuere traegt den richtigen Strategienamen, faellt auf
 # Familie None und bleibt bei 79 — festgenagelt in Schritt 5.
 NACH_SOLL = {
-    ("Vorlage_ESG.pptx", 16, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.3561, hole=68),
-    ("Vorlage_ESG.pptx", 18, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.355, hole=68),
-    ("Vorlage_ESG.pptx", 20, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.355, hole=68),
-    ("Vorlage_ESG.pptx", 22, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.3553, hole=68),
-    ("Vorlage_ETF.pptx", 16, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.3561, hole=68),
-    ("Vorlage_ETF.pptx", 18, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.355, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 7, "C_Kennzahlen"): dict(d=1.4275, cx=2.2319, cy=1.4341, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 9, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.361, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 11, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.361, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 13, "C_Kennzahlen"): dict(d=1.3418, cx=2.2319, cy=1.3599, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 15, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.5016, hole=68),
-    ("Vorlage_comdirect.pptx", 6, "C_Kennzahlen"): dict(d=1.2613, cx=2.2319, cy=1.356, hole=68),
-    ("Vorlage_comdirect.pptx", 8, "C_Kennzahlen"): dict(d=1.2613, cx=2.2319, cy=1.3594, hole=68),
-    ("Vorlage_comdirect.pptx", 10, "C_Kennzahlen"): dict(d=1.4275, cx=2.2319, cy=1.4263, hole=68),
+    ("Vorlage_ESG.pptx", 16, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4678, hole=68),
+    ("Vorlage_ESG.pptx", 18, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4666, hole=68),
+    ("Vorlage_ESG.pptx", 20, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4666, hole=68),
+    ("Vorlage_ESG.pptx", 22, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4669, hole=68),
+    ("Vorlage_ETF.pptx", 16, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4678, hole=68),
+    ("Vorlage_ETF.pptx", 18, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4666, hole=68),
+    ("Vorlage_cVV_Infoboard.pptx", 7, "C_Kennzahlen"): dict(d=1.6155, cx=2.2319, cy=1.5401, hole=68),
+    ("Vorlage_cVV_Infoboard.pptx", 9, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4726, hole=68),
+    ("Vorlage_cVV_Infoboard.pptx", 11, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4726, hole=68),
+    ("Vorlage_cVV_Infoboard.pptx", 13, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4716, hole=68),
+    ("Vorlage_cVV_Infoboard.pptx", 15, "C_Kennzahlen"): dict(d=1.7186, cx=2.2319, cy=1.6016, hole=68),
+    ("Vorlage_comdirect.pptx", 6, "C_Kennzahlen"): dict(d=1.4275, cx=2.2319, cy=1.4729, hole=68),
+    ("Vorlage_comdirect.pptx", 8, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4307, hole=68),
+    ("Vorlage_comdirect.pptx", 10, "C_Kennzahlen"): dict(d=1.6155, cx=2.2319, cy=1.5323, hole=68),
     ("Vorlage_FFPB.pptx", 7, "C_Kennzahlen"): dict(d=2.2547, cx=2.2652, cy=1.9153, hole=68),
     ("Vorlage_FFPB.pptx", 8, "C_Kennzahlen"): dict(d=2.2547, cx=2.2652, cy=1.9153, hole=68),
     ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2"): dict(d=0.8181, cx=3.4927, cy=1.1035, hole=68),
@@ -199,16 +206,73 @@ def _labels(shape, rahmen_b, rahmen_h):
     return raus
 
 
-def _legende_oben(shape):
-    """Oberkante der Legende in Zoll — die Schranke, gegen die Schritt 2b den
-    Ring verkleinert. None, wenn die Legende kein manuelles Layout hat."""
+def _legende_box(shape):
+    """Die Legende als RECHTECK (links, oben, rechts, unten) in Zoll.
+
+    Bewusst kein blosser Vergleich mit der Oberkante: Seit dem 25.08.2026
+    (#71) darf ein Ring TIEFER reichen als die Legendenoberkante, solange er
+    rechts neben der Legende steht. Geprueft gehoert deshalb die Flaeche, nicht
+    die Kante — sonst prueft man eine Regel, die es nicht mehr gibt.
+    """
     lg = shape.chart._chartSpace.find(".//" + _q("legend"))
     if lg is None:
         return None
     ml = lg.find(".//" + _q("manualLayout"))
     if ml is None or ml.find(_q("y")) is None:
         return None
-    return float(ml.find(_q("y")).get("val")) * (shape.height / 914400.0)
+
+    def wert(tag, ersatz):
+        el = ml.find(_q(tag))
+        return float(el.get("val")) if el is not None else ersatz
+
+    breite = shape.width / 914400.0
+    hoehe = shape.height / 914400.0
+    lx, ly = wert("x", 0.0), wert("y", 0.0)
+    lw, lh = wert("w", 1.0), wert("h", 1.0 - ly)
+    return (lx * breite, ly * hoehe, (lx + lw) * breite, (ly + lh) * hoehe)
+
+
+def _abstand_zu_rechteck(px, py, box):
+    """Kuerzester Abstand des Punktes (px, py) zum Rechteck. 0 innerhalb."""
+    links, oben, rechts, unten = box
+    dx = max(links - px, 0.0, px - rechts)
+    dy = max(oben - py, 0.0, py - unten)
+    return math.hypot(dx, dy)
+
+
+def _leader(folie, shape):
+    """Die gezeichneten Fuehrungslinien dieses Rings als Strecken in Zoll,
+    relativ zur linken oberen Ecke des Chart-Rahmens.
+
+    `ring_leader_zeichnen` legt sie als eigene Connector-Shapes auf die Folie
+    und benennt sie "RingLeader_<Shapename>_<i>" (#29) — daran haengen wir uns.
+    """
+    praefix = "RingLeader_%s_" % shape.name
+    raus = []
+    for kandidat in folie.shapes:
+        if not (kandidat.name or "").startswith(praefix):
+            continue
+        try:
+            ax, ay = kandidat.begin_x, kandidat.begin_y
+            ex, ey = kandidat.end_x, kandidat.end_y
+        except AttributeError:      # kein Connector (z.B. der Punkt am Ende)
+            continue
+        raus.append((((ax - shape.left) / 914400.0, (ay - shape.top) / 914400.0),
+                     ((ex - shape.left) / 914400.0, (ey - shape.top) / 914400.0)))
+    return raus
+
+
+def _kreuzen(s1, s2):
+    """Schneiden sich zwei Strecken? Beruehrungen an den Enden zaehlen nicht."""
+    def richtung(a, b, c):
+        return ((b[0] - a[0]) * (c[1] - a[1])
+                - (b[1] - a[1]) * (c[0] - a[0]))
+    (a, b), (c, d) = s1, s2
+    d1, d2 = richtung(c, d, a), richtung(c, d, b)
+    d3, d4 = richtung(a, b, c), richtung(a, b, d)
+    # echtes Kreuzen: beide Strecken trennen die jeweils andere strikt
+    return ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)) \
+        and min(abs(d1), abs(d2), abs(d3), abs(d4)) > 1e-9
 
 
 def _abweichung(bezeichnung, ist, soll, toleranz=TOLERANZ):
@@ -304,9 +368,18 @@ def schritt2_ist_geometrie():
 
 def _zusicherungen(quelle, prs):
     """Die Zusagen, die unabhaengig von den konkreten Zahlen gelten muessen.
-    Gibt die Zahl der Verletzungen zurueck."""
+
+    Gibt (Verletzungen, sich kreuzende Fuehrungslinien) zurueck. Die
+    Kreuzungen sind BEWUSST getrennt: Auf den PLATZHALTERDATEN der Vorlagen
+    kreuzen sich auch im Stand vom 24.08.2026 zwei Linien (Vorlage_ETF F16 und
+    Vorlage_comdirect F6) — eine Eigenschaft dieser kuenstlichen Daten, nicht
+    des Codes. In ECHTEN Broschueren sind es vorher wie nachher null von 69
+    Linien. Deshalb entscheidet der Aufrufer: Schritt 4 fordert die Null,
+    Schritt 3 vergleicht gegen den gemessenen Ausgangswert.
+    """
     fehler = 0
-    for nr, _folie, shape in _ringe(prs):
+    kreuzungen = 0
+    for nr, folie, shape in _ringe(prs):
         geo = _plot(shape)
         if geo is None:
             continue
@@ -348,26 +421,66 @@ def _zusicherungen(quelle, prs):
                       f"{geo['rahmen_h']:.3f})")
                 fehler += 1
 
-        # (d) Der Ring bleibt ueber der Legende. Genau dafuer verkleinert
-        #     Schritt 2b — faellt das weg, laeuft der Ring in die Legende.
-        legende = _legende_oben(shape)
-        if legende is not None and geo["cy"] + geo["r"] > legende + TOLERANZ:
-            print(f"    FEHLER — {ort}: Ringunterkante "
-                  f"{geo['cy'] + geo['r']:.3f} liegt unter der "
-                  f"Legenden-Oberkante {legende:.3f} (Zoll)")
-            fehler += 1
-    return fehler
+        # (d) Weder der Ring noch eine Beschriftung liegt AUF der Legende.
+        #     Das ist die eigentliche Zusage — seit #71 darf der Ring tiefer
+        #     reichen als die Legendenoberkante, aber niemals in ihre Flaeche.
+        #     Der schmalste gemessene Abstand ist die Reserve, von der die
+        #     Entscheidung fuer 4,64 cm statt 5,32 cm abhing.
+        box = _legende_box(shape)
+        if box is not None:
+            abstand = _abstand_zu_rechteck(geo["cx"], geo["cy"], box)
+            if abstand < geo["r"] - TOLERANZ:
+                print(f"    FEHLER — {ort}: der Ring (Radius {geo['r']:.3f}) "
+                      f"schneidet die Legende, Abstand nur {abstand:.3f} Zoll")
+                fehler += 1
+            for mx, my in beschriftungen:
+                if (mx + HALB_BREITE > box[0] and mx - HALB_BREITE < box[2]
+                        and my + HALB_HOEHE > box[1]
+                        and my - HALB_HOEHE < box[3]):
+                    print(f"    FEHLER — {ort}: Beschriftung "
+                          f"({mx:.3f}, {my:.3f}) liegt auf der Legende "
+                          f"({box[0]:.2f}, {box[1]:.2f})-({box[2]:.2f}, "
+                          f"{box[3]:.2f})")
+                    fehler += 1
+
+        # (e) Keine zwei Fuehrungslinien kreuzen sich. Am 10.08.2026 wurde
+        #     dieser Wert ueber alle Broschueren mit NULL gemessen (#44) —
+        #     er ist damit eine Zusage und keine Zufaelligkeit. Verschieben
+        #     sich Labels, ist das die Klasse, die als erstes bricht.
+        strecken = _leader(folie, shape)
+        for i in range(len(strecken)):
+            for j in range(i + 1, len(strecken)):
+                if _kreuzen(strecken[i], strecken[j]):
+                    kreuzungen += 1
+                    print(f"    HINWEIS — {ort}: zwei Fuehrungslinien "
+                          f"kreuzen sich")
+    return fehler, kreuzungen
 
 
 def schritt3_zusicherungen():
     print("Schritt 3 — die Zusicherungen (unabhaengig von den Sollwerten)")
     fehler = 0
+    kreuzungen = 0
     for name, prs in _vorlagen():
         cd.nachbearbeiten(prs)
-        fehler += _zusicherungen(name, prs)
+        f, k = _zusicherungen(name, prs)
+        fehler += f
+        kreuzungen += k
     if not fehler:
         print("    OK — keine Beschriftung im Ring, keine Ueberlappung, "
               "nichts aus dem Rahmen, kein Ring in der Legende")
+    # Kreuzende Fuehrungslinien auf den PLATZHALTERDATEN der Vorlagen: der
+    # Stand vom 24.08.2026 hat hier zwei (Vorlage_ETF F16, Vorlage_comdirect
+    # F6), gemessen mit LEGENDE_SPALTENWEISE=False. Schlechter darf es nicht
+    # werden; besser gern. Die harte Null steht in Schritt 4, wo echte Daten
+    # gerechnet werden.
+    if kreuzungen > KREUZUNGEN_VORLAGEN_MAX:
+        print(f"    FEHLER — {kreuzungen} kreuzende Fuehrungslinien, erlaubt "
+              f"sind {KREUZUNGEN_VORLAGEN_MAX} (Ausgangswert 24.08.2026)")
+        fehler += kreuzungen - KREUZUNGEN_VORLAGEN_MAX
+    else:
+        print(f"    OK — {kreuzungen} kreuzende Fuehrungslinien auf den "
+              f"Platzhalterdaten, Ausgangswert war {KREUZUNGEN_VORLAGEN_MAX}")
     return fehler
 
 
@@ -431,10 +544,14 @@ def schritt4_gebaute_broschueren(ausgabe):
         masse = ", ".join(f"F{nr} {sh.name} {_plot(sh)['r'] * 2 * 2.54:.2f} cm"
                           for nr, _f, sh in ringe)
         print(f"    {familie:<12} {len(ringe)} Ring(e) — {masse}")
-        fehler += _zusicherungen(familie, prs)
+        f, k = _zusicherungen(familie, prs)
+        # Hier gilt die harte Null: das sind die Zahlen, die beim Kunden
+        # landen. Gemessen am 25.08.2026 ueber 69 Fuehrungslinien, vor und
+        # nach der Vergroesserung jeweils null Kreuzungen.
+        fehler += f + k
     if not fehler:
         print(f"    OK — {gemessen} Ringe in echten Broschueren halten "
-              f"dieselben Zusagen")
+              f"dieselben Zusagen, keine kreuzenden Fuehrungslinien")
     return fehler
 
 
@@ -475,8 +592,8 @@ def main():
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
         return 1
-    print("BESTANDEN — Ringgroesse, Ringdicke und Beschriftungen stehen, "
-          "wo sie am 10.08.2026 abgenommen wurden")
+    print("BESTANDEN — Ringgroesse, Ringdicke und Beschriftungen stehen auf "
+          "ihren eingefrorenen Massen (Stand 25.08.2026)")
     print("Hinweis: die OPTIK beweist das nicht — dafuer in ECHTEM PowerPoint "
           "ansehen (#29).")
     return 0

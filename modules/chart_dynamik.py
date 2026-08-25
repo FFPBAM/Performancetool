@@ -109,6 +109,36 @@ WERTACHSE_MAX_TICKS = 13
 # das wären bei grobem Raster zwanzig leere Prozentpunkte über der Kurve.
 WERTACHSE_LUFT      = 0.05
 
+# ── Ring-Größe: wie weit die Legende den Ring nach oben drückt ──────────────
+# (NEU 25.08.2026, Transferwissen #71)
+# Bis zum 24.08.2026 galt die Legende als Sperre über die GANZE Rahmenbreite.
+# Tatsächlich sitzt sie auf den Anlagestrategie-Folien unten links und belegt
+# rund ein Viertel; der Ring steht rechts daneben und ließ den Platz darunter
+# ungenutzt — deshalb war er 32-40 % kleiner als in der alten Makro-
+# PowerPoint. Steht der Ring nachweislich rechts neben einer SCHMALEN
+# Legende, darf er den Raum jetzt mitbenutzen.
+#   LEGENDE_SPALTENWEISE = False stellt exakt das Verhalten bis 24.08.2026 her.
+LEGENDE_SPALTENWEISE = True
+LEGENDE_SCHMAL_BIS   = 0.30   # Legendenbreite als Bruchteil der Rahmenbreite.
+                              # Gemessen: Anlagestrategie-Folien 0,24-0,26;
+                              # FFPB F9 0,48-0,50 und Thema F11 0,36-0,53
+                              # liegen darüber und bleiben unverändert.
+LEGENDE_LUFT_IN      = 0.12   # Mindestabstand zwischen Ringkante und rechter
+                              # Legendenkante, sonst wächst der Ring nicht.
+LEGENDE_EINTAUCHTIEFE_IN = 0.20
+# Wie tief der Ring unter die Legendenoberkante reichen darf. NICHT frei
+# gewählt, sondern am 25.08.2026 ausgemessen — die Labels der unteren
+# Segmente wandern mit dem Ring nach unten und landen sonst NEBEN der
+# Legende auf deren Höhe:
+#     Tiefe   Ø Anlagestrategie-Ringe      Verletzungen (Vorlagen)
+#     0.20    3,63 / 3,86 / 4,10 / 4,37    0
+#     0.30    4,10 / 4,37 / 4,64           1  Beschriftung auf der Legende
+#     0.60    4,64                         4  Beschriftungen auf der Legende
+# An ECHTEN Broschüren wäre 0.25 noch sauber; 0.20 lässt also eine Stufe
+# Reserve für andere Segmentaufteilungen. Geprüft von
+# tests/test_ring_geometrie.py, Schritt 3 (Flächenprüfung gegen die
+# Legende) — wer den Wert erhöht, bekommt dort die Quittung.
+
 # ── Familien-spezifische Ring-Optik (NEU 27.07.2026) ────────────────────────
 # NUR die hier gelisteten Familien weichen von den globalen Defaults ab; alle
 # anderen nutzen die Defaults → deren Ringe bleiben UNVERÄNDERT. Steuerbar:
@@ -750,22 +780,55 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     #     den Ring wenn nötig und zentrieren ihn im freien Bereich → Labels oben
     #     wie unten mit Abstand, konsistente Größe.
     legend = root.find(".//" + _q("legend"))
-    leg_y = None
+    leg_y = leg_x = leg_w = None
     if legend is not None:
         lm = legend.find(".//" + _q("manualLayout"))
         if lm is not None and lm.find(_q("y")) is not None:
             leg_y = float(lm.find(_q("y")).get("val"))
+            _lx, _lw = lm.find(_q("x")), lm.find(_q("w"))
+            leg_x = float(_lx.get("val")) if _lx is not None else 0.0
+            leg_w = float(_lw.get("val")) if _lw is not None else 1.0
     legend_top = (leg_y * frame_h_in) if leg_y is not None else frame_h_in * 0.97
+    rahmen_unten = frame_h_in * 0.97
     kopf_rand = 0.15          # Luft zur Überschrift oben
     label_pad = 0.52          # vertikale Ausdehnung Label + Rand (inkl. De-overlap-Spreizung)
-    R_ziel = min(R_out, 0.27 * frame_h_in)     # Grundverkleinerung großer Ringe
-    # so weit verkleinern, dass Ring + Labels zwischen Kopf und Legende passen
-    for _ in range(20):
-        lo = kopf_rand + R_ziel + label_pad          # min. mögliche Zentrum-y
-        hi = legend_top - R_ziel - label_pad         # max. mögliche Zentrum-y
-        if hi >= lo:
-            break
-        R_ziel *= 0.94
+
+    def _groesster_ring(schranke_unten):
+        """Größter Ring, der mit seinen Labels zwischen Überschrift und
+        `schranke_unten` passt — plus die Grenzen des möglichen Zentrums."""
+        r = min(R_out, 0.27 * frame_h_in)      # Grundverkleinerung großer Ringe
+        u = o = 0.0
+        for _ in range(20):
+            u = kopf_rand + r + label_pad      # min. mögliche Zentrum-y
+            o = schranke_unten - r - label_pad  # max. mögliche Zentrum-y
+            if o >= u:
+                break
+            r *= 0.94
+        return r, u, o
+
+    R_ziel, lo, hi = _groesster_ring(legend_top)
+
+    # NEU 25.08.2026 (#71): Eine SCHMALE Legende sitzt unten LINKS und sperrt
+    # nur ihre eigene Spalte, nicht die ganze Rahmenbreite. Steht der Ring
+    # vollständig rechts daneben, darf er den Platz darunter mitbenutzen —
+    # genau das ist der Unterschied zur Makro-PowerPoint, deren Ring 32-40 %
+    # größer ist. BREITE Legenden bleiben Vollsperre: bei Vorlage_FFPB F9 und
+    # Vorlage_Thema F11 belegt die Legende die halbe Rahmenbreite, dort liegt
+    # der Ring über ihr und darf NICHT wachsen.
+    # Der Ring wird dabei nie kleiner als vorher — nur die größere der beiden
+    # Möglichkeiten gewinnt.
+    if (LEGENDE_SPALTENWEISE and leg_w is not None
+            and leg_w <= LEGENDE_SCHMAL_BIS and legend_top < rahmen_unten):
+        # Nicht bis zum Rahmenboden: die Labels der unteren Segmente wandern
+        # mit dem Ring nach unten und landen sonst NEBEN der Legende auf
+        # deren Höhe. Wie tief der Ring unter die Legendenoberkante darf,
+        # steht in LEGENDE_EINTAUCHTIEFE_IN — empirisch bestimmt, siehe dort.
+        schranke = min(rahmen_unten, legend_top + LEGENDE_EINTAUCHTIEFE_IN)
+        _r, _lo, _hi = _groesster_ring(schranke)
+        leg_rechts = (leg_x + leg_w) * frame_w_in
+        if _r > R_ziel and (cx - _r) >= leg_rechts + LEGENDE_LUFT_IN:
+            R_ziel, lo, hi = _r, _lo, _hi
+
     new_cy = min(max(frame_h_in / 2.0, lo), hi) if hi >= lo else (lo + hi) / 2.0
     if R_ziel < R_out - 1e-3 or abs(new_cy - cy) > 1e-3:
         faktor = R_ziel / R_out
