@@ -240,6 +240,44 @@ def _abstand_zu_rechteck(px, py, box):
     return math.hypot(dx, dy)
 
 
+def _zeichnungsobjekte(shape):
+    """Die Zeichnungsobjekte IM CHART als (links, oben, rechts, unten, Text),
+    in Zoll ab der linken oberen Rahmenecke.
+
+    Sie stehen nicht auf der Folie, sondern als `cdr:relSizeAnchor` in
+    `ppt/drawings/drawingN.xml` des Chart-Teils — dort sitzen der
+    Ueberschriftenbalken UND die Quellenangabe. `chart_dynamik` liest von hier
+    bereits den Balken (`kopf_sperre_aus_usershapes`), aber nur den; fuer das
+    untere Objekt gab es bis zum 25.08.2026 keine Entsprechung.
+
+    Die Anker sind Bruchteile des Rahmens, nicht EMU.
+    """
+    CDR = "{http://schemas.openxmlformats.org/drawingml/2006/chartDrawing}"
+    A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+    breite = shape.width / 914400.0
+    hoehe = shape.height / 914400.0
+    raus = []
+    try:
+        from lxml import etree
+        for rel in shape.chart.part.rels.values():
+            if "chartUserShapes" not in rel.reltype:
+                continue
+            wurzel = etree.fromstring(rel.target_part.blob)
+            for anker in wurzel:
+                von, bis = anker.find(CDR + "from"), anker.find(CDR + "to")
+                if von is None or bis is None:
+                    continue
+                fx = float(von.find(CDR + "x").text)
+                fy = float(von.find(CDR + "y").text)
+                tx = float(bis.find(CDR + "x").text)
+                ty = float(bis.find(CDR + "y").text)
+                text = " ".join(" ".join(e.text or "" for e in anker.iter(A + "t")).split())
+                raus.append((fx * breite, fy * hoehe, tx * breite, ty * hoehe, text))
+    except Exception:
+        pass
+    return raus
+
+
 def _leader(folie, shape):
     """Die gezeichneten Fuehrungslinien dieses Rings als Strecken in Zoll,
     relativ zur linken oberen Ecke des Chart-Rahmens.
@@ -450,6 +488,25 @@ def _zusicherungen(quelle, prs):
                           f"({mx:.3f}, {my:.3f}) liegt auf der Legende "
                           f"({box[0]:.2f}, {box[1]:.2f})-({box[2]:.2f}, "
                           f"{box[3]:.2f})")
+                    fehler += 1
+
+        # (f) Keine Beschriftung liegt auf der QUELLENANGABE (NEU 25.08.2026).
+        #     Gemeldet von Philip an cVV Folie 7: "89,66 %" lag mitten auf
+        #     "Quelle: Eigene Berechnung Stand: ...". Nachgemessen waren es
+        #     vier Folien, nicht eine. Keine Pruefklasse deckte das ab, weil
+        #     die Angabe kein Folien-Shape ist, sondern im Chart-Teil steckt —
+        #     und weil unten bis dahin nur die Legende als Schranke galt. Die
+        #     Quellenangabe liegt RECHTS daneben, also genau in dem Bereich,
+        #     den die Spaltenregel vom 25.08.2026 freigegeben hat.
+        for bl, bo, br, bu, text in _zeichnungsobjekte(shape):
+            if "quelle" not in text.lower():
+                continue
+            for mx, my in beschriftungen:
+                if (mx + HALB_BREITE > bl and mx - HALB_BREITE < br
+                        and my + HALB_HOEHE > bo and my - HALB_HOEHE < bu):
+                    print(f"    FEHLER — {ort}: Beschriftung "
+                          f"({mx:.3f}, {my:.3f}) liegt auf der Quellenangabe "
+                          f"({bl:.2f}, {bo:.2f})-({br:.2f}, {bu:.2f})")
                     fehler += 1
 
         # (e) Keine zwei Fuehrungslinien kreuzen sich. Am 10.08.2026 wurde

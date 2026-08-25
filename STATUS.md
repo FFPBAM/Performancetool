@@ -150,6 +150,34 @@ Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 >
 > ---
 >
+> **Dritter Nachtrag: die Quellenangabe war ungeschützt.** Philip hat beim
+> Durchsehen der Versuchsbroschüren gemeldet, dass auf *cVV Konservativ* die
+> Prozentzahl auf „Quelle: Eigene Berechnung Stand: …" liegt. Nachgemessen
+> waren es **vier Folien** (cVV F7, cVV F15, ESG F22, comdirect F10) — und
+> zwar in **jeder** Variante mit 5,34 cm Ringen, unabhängig von der
+> Bandstärke. Der ausgelieferte Stand mit 3,86 cm ist frei; die Ringe reichen
+> dort noch nicht so weit.
+>
+> **Warum keine Prüfklasse das abdeckte:** Die Quellenangabe ist **kein
+> Folien-Shape**. Sie steckt im Chart-Teil als `cdr:relSizeAnchor` in
+> `ppt/drawings/drawingN.xml` — dort, wo auch der Überschriftenbalken sitzt.
+> `kopf_sperre_aus_usershapes` liest diese Zeichnungen bereits, sucht aber
+> ausdrücklich nur das **obere**, fast rahmenbreite Rechteck. Für das untere
+> gab es keine Entsprechung. Und unten galt bis zum 25.08.2026 die Legende als
+> einzige Schranke — die Quellenangabe liegt **rechts daneben**, also genau in
+> dem Bereich, den die neue Spaltenregel freigibt.
+>
+> `tests/test_ring_geometrie.py` prüft das jetzt als Zusicherung (f), gelesen
+> aus den Zeichnungsobjekten statt verdrahtet. **Gegenprobe:** an den
+> Versuchsdateien meldet sie genau die vier Fälle, am ausgelieferten Stand
+> keinen.
+>
+> *Die Lehre ist dieselbe wie beim Ring selbst:* Wer einer Fläche mehr Raum
+> gibt, muss wissen, **was in diesem Raum schon steht** — und zwar auch das,
+> was nicht auf der Folie liegt, sondern im Chart.
+>
+> ---
+>
 > ### Aus der Sitzung davor (24.08.2026, nachmittags)
 >
 > **Drei Sachen. Die erste ist die wichtigste, und sie ist größer geworden
