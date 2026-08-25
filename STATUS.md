@@ -3,8 +3,8 @@
 **Letzte Sitzung:** 25.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **31 von 31 Suiten grün**, `pyflakes` bei null ·
 **die Ringe der Anlagestrategie-Folien sind
-13-21 % größer** — vermessen, festgenagelt, Sichtprüfung in echtem
-PowerPoint offen. Stand davor: gepusht und an der
+13-21 % größer** — vermessen, festgenagelt und **an der Broschüre
+abgenommen** (Philip, 25.08.2026). Dazu der ESG-Dateiname korrigiert. Stand davor: gepusht und an der
 Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 
 > ### Für Philip: was diese Sitzung geändert hat (25.08.2026)
@@ -97,9 +97,32 @@ Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 > ~4,4 cm bei 0,6 cm tieferer Linie, entschieden gegen den Eingriff, weil
 > das eine gestalterische Entscheidung über sechs Vorlagen wäre.
 >
-> **➜ Was für dich offen bleibt:** die Sichtprüfung an der laufenden
-> Cloud-App und in echtem PowerPoint. Die Bilder aller sieben betroffenen
-> Folien liegen vor; LibreOffice taugt dafür nicht (#29).
+> **Die Sichtprüfung ist bestanden** (Philip, 25.08.2026, an der
+> Broschüre): *„die Ringe passen in der Broschüre sehen gut aus."*
+>
+> ---
+>
+> **Nachtrag am selben Tag: der ESG-Dateiname klebte am Datum.** Beim Export
+> kam `ESG Broschüre Inforboard23.08.2026.pptx` heraus, richtig ist
+> `ESG Broschüre Inforboard_23.08.2026.pptx`. Ein fehlender Trenner in
+> `EXPORT_NAME_FAMILIE` (`modules/vorlagen_config.py`) — **gefunden von
+> Philip am Endprodukt, von keinem Test.**
+>
+> *Der Grund, warum kein Test anschlug:* Die Namensmuster wurden von **keiner**
+> Suite geprüft. Das ist jetzt anders — `tests/test_folien_config.py` hat einen
+> vierten Schritt: Vor `{datum}` muss ein Trenner stehen (das ist die
+> Fehlerklasse), und der Wortlaut aller sieben Muster ist festgenagelt.
+> **Gegenprobe:** Mit dem Stand von heute Morgen wird der Schritt rot, und
+> zwar an beiden Prüfungen.
+>
+> **Beim Korrigieren kam eine zweite Abweichung heraus:** ESG schrieb
+> „Inforboard" mit einem *r* zu viel, während CVV und ETF „Infoboard" führen —
+> und die Makro-Broschüre ebenfalls. Auf Zuruf mitkorrigiert. Der ESG-Export
+> heißt jetzt `ESG Broschüre Infoboard_23.08.2026.pptx`.
+>
+> *Merksatz für den Prüfstein:* Er hält den **Wortlaut** fest und nicht nur
+> die Regel „Trenner vor dem Datum". Eine Regel allein hätte den Tippfehler
+> nie gefunden — der Name war ja wohlgeformt.
 >
 > ---
 >
@@ -2457,7 +2480,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_benchmark_charts.py` | pandas; Schritte 2+3 **+ python-pptx, streamlit** | dasselbe für **Chart, Legende, Fußnote und den Hinweis im Tool** — Schritt 2 baut zwei echte Broschüren und liest nach, Schritt 3 prüft den Hinweis an der gerenderten Oberfläche; „Pro" ist jeweils Kontrollfall |
 | `test_honorarsatz.py` | pandas **+ streamlit** | jede Strategie hat einen Satz zwischen 0,5 % und 3 %; SCHWEIZ auf 1,55 % festgenagelt. **Schritt 4 (14.08.2026)** ist die Gegenprobe dazu: Er entfernt eine Mapping-Zeile absichtlich und verlangt, dass die Zeitreihe den Ausfall in `attrs["honorar_gefunden"]` vermerkt — Schritt 1 prüft, dass heute nichts fehlt, Schritt 4, dass ein Fehlen *auffällt*. Dazu fünf Fälle von `strategien_ohne_honorarsatz` |
 | `test_historie_ab.py` | pandas **+ streamlit** | 5 Reihen ab 2009, 14 unberührt, Konfiguration zeigt auf existierende Reihen |
-| `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX |
+| `test_folien_config.py` | pandas **+ streamlit** | Thema-Config identisch zur handgeschriebenen Fassung, alle 5 Familien passen zu ihrer PPTX. **Neu am 25.08.2026: Schritt 4** — die Dateinamen der Broschüren. Vor `{datum}` muss ein Trenner stehen (das ist die Fehlerklasse), und der Wortlaut aller sieben Namensmuster steht fest. Anlass waren `ESG Broschüre Inforboard23.08.2026` (fehlender Trenner) und die Schreibweise „Inforboard", beides gefunden von Philip am Endprodukt |
 | `test_chartachsen.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Beide Achsen der Linien-Charts. Schritt 1 rechnet `achsen_raster` gegen 13 Fälle nach (Datumsachse), Schritt 2 `wert_raster` gegen 15 (Wertachse) — alle von Hand nachgerechnet, inkl. Grenzfälle. Schritt 3 baut je Familie eine Broschüre plus Themen-Duplikation und SCHWEIZ und **rechnet jede Tickfolge nach**: letzter Datums-Tick im Jahr des letzten Datenpunkts, 100 % auf dem Wertachsen-Raster, keine Achse schneidet etwas ab, beide bleiben lesbar |
 | `test_quelle_position.py` | pandas **+ python-pptx**; Schritt 3 **+ streamlit** | Die Quellenangabe steht unter dem Disclaimer, nicht darin. Schritt 1 rechnet den Fußnoten-Textblock aller sechs Vorlagen gegen `WE_QUELLE_TOP_CM`, Schritt 2 misst die Länge **jedes** Ersatztextes gegen die Zeilenbreite (der Test, der den Fehler verhindert hätte), Schritt 3 misst 19 Folien in sieben gebauten Broschüren |
 | `test_kalenderjahre.py` | **nichts** (Schritte 1+2); Schritt 3 **+ python-pptx, streamlit** | Der Säulen-Chart zeigt nur Kalenderjahre, die die Zeitreihe vollständig abdeckt. Schritt 1 rechnet 15 Grenzfälle nach (beide Toleranzränder, Loch in der Historie, Strategie ohne ein einziges volles Jahr), Schritt 2 misst **jeden** Balken der 19 echten Reihen gegen die Daten, die ihn tragen, und nagelt die 7 bekannten Fälle namentlich fest, Schritt 3 liest die Kategorien aus gebauten Broschüren (Pro, SCHWEIZ, comdirect ×3, Offensiv als Kontrolle) |

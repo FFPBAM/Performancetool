@@ -150,10 +150,98 @@ def pruefe_gegen_vorlagen():
     return ok
 
 
+def pruefe_export_namen():
+    """Die Dateinamen der fertigen Broschueren (NEU 25.08.2026).
+
+    Anlass: Der ESG-Name klebte am Datum ("ESG Broschuere Inforboard23.08.2026"
+    statt "…Inforboard_23.08.2026"), gemeldet von Philip nach einem Export.
+    Kein Test hat das bemerkt, weil die Muster bis dahin von keinem geprueft
+    wurden. Zwei Zusicherungen:
+
+      1. STRUKTUR — vor {datum} steht ein Trenner. Das ist die Fehlerklasse:
+         ein fehlender Trenner faellt in der Konfiguration nicht auf, im
+         Dateinamen beim Berater aber sofort.
+      2. WORTLAUT — die erzeugten Namen stehen fest. Wer ein Muster aendert,
+         aendert hier mit und sieht dabei, was beim Berater ankommt.
+
+    Beim Korrigieren fiel eine ZWEITE Abweichung auf: ESG schrieb
+    "Inforboard" mit einem r zu viel, waehrend CVV und ETF "Infoboard"
+    fuehren — und die per Makro erzeugte Broschuere ebenfalls. Auch das ist
+    am 25.08.2026 korrigiert. Beides zusammen ist der Grund, warum hier der
+    WORTLAUT steht und nicht nur eine Regel: Eine Regel haette den Tippfehler
+    nie gefunden.
+    """
+    from modules.vorlagen_config import (  # noqa: E402
+        EXPORT_DATUM_FORMAT, EXPORT_NAME_DEFAULT, EXPORT_NAME_FAMILIE,
+        EXPORT_NAME_STRATEGIE,
+    )
+    print("\n4. Die Dateinamen der Broschueren")
+
+    TRENNER = (" ", "_", "-", ".", "(", "[")
+    fehler = 0
+
+    def mustertext(eintrag):
+        return eintrag[0] if isinstance(eintrag, (tuple, list)) else eintrag
+
+    alle = [("EXPORT_NAME_DEFAULT", EXPORT_NAME_DEFAULT)]
+    alle += [(f"Familie {k}", v) for k, v in EXPORT_NAME_FAMILIE.items()]
+    alle += [(f"Strategie {k}", v) for k, v in EXPORT_NAME_STRATEGIE.items()]
+
+    for herkunft, eintrag in alle:
+        muster = mustertext(eintrag)
+        stelle = muster.find("{datum}")
+        if stelle < 0:
+            print(f"   FEHLER — {herkunft}: kein {{datum}} im Muster")
+            fehler += 1
+        elif stelle == 0:
+            print(f"   FEHLER — {herkunft}: Muster beginnt mit dem Datum")
+            fehler += 1
+        elif muster[stelle - 1] not in TRENNER:
+            print(f"   FEHLER — {herkunft}: kein Trenner vor dem Datum — "
+                  f"{muster!r} ergibt einen Namen, der am Datum klebt")
+            fehler += 1
+
+    # Wortlaut: ein fester Stichtag, damit die Namen vergleichbar sind
+    from datetime import date
+    stichtag = date(2026, 8, 23)
+    SOLL = {
+        "EXPORT_NAME_DEFAULT": "Portfolioanalyse_Musterstrategie_23.08.2026",
+        "Familie CVV":         "cVV Broschüre_Infoboard_23.08.2026",
+        "Familie ETF":         "ETF Broschüre Infoboard 23.08.2026",
+        "Familie ESG":         "ESG Broschüre Infoboard_23.08.2026",
+        "Familie comdirect":   "Klassische Portfolioverwaltung_20260823",
+        "Familie Thema":       "Musterstrategie Broschüre_23.08.2026",
+        "Strategie Offensiv":  "Offensive Broschüre_23.08.2026",
+    }
+    for herkunft, eintrag in alle:
+        muster = mustertext(eintrag)
+        fmt = (eintrag[1] if isinstance(eintrag, (tuple, list)) and len(eintrag) >= 2
+               else EXPORT_DATUM_FORMAT)
+        ist = muster.format(datum=stichtag.strftime(fmt),
+                            strategie="Musterstrategie", familie="Familie")
+        soll = SOLL.get(herkunft)
+        if soll is None:
+            print(f"   FEHLER — {herkunft}: neuer Eintrag ohne Sollwert "
+                  f"(ergibt {ist!r})")
+            fehler += 1
+        elif ist != soll:
+            print(f"   FEHLER — {herkunft}: {ist!r} statt {soll!r}")
+            fehler += 1
+    for herkunft in set(SOLL) - {h for h, _ in alle}:
+        print(f"   FEHLER — {herkunft} ist aus der Konfiguration verschwunden")
+        fehler += 1
+
+    if fehler:
+        return False
+    print(f"   OK — {len(alle)} Namensmuster, jedes mit Trenner vor dem Datum")
+    return True
+
+
 def main():
     ergebnisse = [pruefe_thema_aequivalenz(),
                   pruefe_modus_wachen(),
-                  pruefe_gegen_vorlagen()]
+                  pruefe_gegen_vorlagen(),
+                  pruefe_export_namen()]
     print()
     if all(ergebnisse):
         print("BESTANDEN")

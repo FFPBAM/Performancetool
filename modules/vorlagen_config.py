@@ -580,7 +580,11 @@ EXPORT_NAME_DEFAULT = "Portfolioanalyse_{strategie}_{datum}"
 EXPORT_NAME_FAMILIE = {
     "CVV":       "cVV Broschüre_Infoboard_{datum}",
     "ETF":       "ETF Broschüre Infoboard {datum}",
-    "ESG":       "ESG Broschüre Inforboard{datum}",
+    # Zweimal korrigiert am 25.08.2026 (Philip): Der Name klebte am Datum
+    # ("…Inforboard23.08.2026"), und "Inforboard" trug ein r zu viel — CVV
+    # und ETF führen "Infoboard", die Makro-Broschüre ebenfalls.
+    # Prüfstein: test_folien_config.py, Schritt 4.
+    "ESG":       "ESG Broschüre Infoboard_{datum}",
     "comdirect": ("Klassische Portfolioverwaltung_{datum}", "%Y%m%d"),
     "Thema":     "{strategie} Broschüre_{datum}",   # → "Pro Broschüre_…", "Pro Dividende Broschüre_…"
 }
