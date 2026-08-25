@@ -2722,6 +2722,39 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
+**NEU 25.08.2026 — die Seitentreue der Beschriftungen.** Gemeldet von Philip
+an *Pro* Folie 11: Die Zahl „8,27 %" wirkt neben ihrer Führungslinie statt an
+ihr. **Geometrisch ist nichts falsch** — jede Linie endet exakt an der Kante
+ihrer Textbox, nichts kreuzt sich, keine der sieben Prüfklassen bricht. Zwei
+Dinge erzeugen den Eindruck:
+
+1. Die Textbox ist mit `HALB_BREITE = 0.33"` **fest 1,68 cm breit**, „8,27 %"
+   rendert aber nur rund 1,1 cm. Die Linie beginnt an der **Box**-Kante, also
+   3 mm hinter dem letzten Zeichen. Betrifft jede kurze Zahl überall.
+2. **Die Nachbarzahl steht auf der falschen Seite ihres Segments.** „3,21 %"
+   gehört zu einem Segment bei 95,8°, also links der senkrechten Ringachse —
+   die Zahl steht rechts davon. Ihre Linie läuft deshalb nach links in den
+   Zwischenraum, und die beiden Linienanfänge liegen nur 5 mm auseinander.
+
+**Punkt 2 ist systematisch: 52 von 282 Führungslinien (18 %).** Er besteht
+seit Wochen und ist durch die Ringvergrößerung **nicht schlechter** geworden —
+gemessen 19 % am Stand vom 24.08.2026, 23 % nach der Anlagestrategie-Änderung,
+**14 %** nach der Thema-Änderung. Die größeren Ringe machen ihn nur besser
+sichtbar.
+
+*Das Projekt kennt den Punkt bereits:* `PROJEKT_DOKUMENTATION.md` **#44** führt
+ihn als zweiten Ansatzpunkt — „**Seitentreue** — `seite` in Pass 6d aus dem
+**Segmentwinkel** statt aus der x-Position (~10 Zeilen)", mit dem Vermerk
+„kleinster Eingriff" nach der Kopfluft.
+
+**Wer das aufmacht, hat alles beisammen:** den Ort (Pass 6d in
+`ring_labels_aussen_dynamisch`), die Messzahl (18 %, jederzeit reproduzierbar:
+für jede Führungslinie prüfen, ob das innere Ende links der Ringmitte liegt und
+das äußere ebenfalls), den Aufwand aus dem Projekt selbst (~10 Zeilen) und
+sieben Prüfklassen, die eine Verschlechterung sofort zeigen. **Zurückgestellt
+am 25.08.2026 abends** — nicht wegen Zweifeln an der Lösung, sondern weil ein
+Eingriff in die Label-Mechanik einen eigenen, ausgeruhten Durchgang verdient.
+
 **NEU 25.08.2026 — Sichtprüfung der größeren Ringe.** Die 14 Ringe der
 Anlagestrategie-Folien sind 13–21 % größer. Bitte in **echtem PowerPoint**
 ansehen (LibreOffice taugt nicht, #29) — die Bilder aller sieben betroffenen
