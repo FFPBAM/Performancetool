@@ -49,6 +49,16 @@ prüfte statt gegen eine Schwelle (#47).
   erlaubt. Prüfstein: `tests/test_keine_piktogramme.py`.
 - **`chart.replace_data()` ist verseucht** (#12, vier Bugs). Immer
   `replace_chart_data_safe()`, Ringe über `replace_chart_data`.
+- **Die Ringgröße wird gemessen, nicht gesetzt** (NEU 25.08.2026, #71).
+  `ring_labels_aussen_dynamisch` sucht seither die größte Größe, bei der die
+  Beschriftungen kollisionsfrei liegen — Rückkopplung statt pauschaler
+  Platzreserve. Alle fünf Familien tragen damit die Geometrie der alten
+  Makro-PowerPoint. **Notausschalter: `RK_AN = False`** in
+  `chart_dynamik.py`, stellt den Stand vom 24.08.2026 her. Wer dort etwas
+  ändert, bekommt die Quittung von `tests/test_ring_geometrie.py` (sieben
+  Zusicherungen, Sollwerte eingefroren). **Tabuflächen sind Legende UND
+  Quellenangabe** — letztere steht nicht auf der Folie, sondern als
+  Zeichnungsobjekt im Chart-Teil.
 - **Jedes Trigger-Widget mit `key=` → Key in `_KEEPALIVE_SPERRE`** (oben in
   `streamlit_app.py`). Sonst stürzt die Seite ab: Das Keep-Alive schreibt
   alle session_state-Keys zurück, und für diese Widgets ist das verboten. Die
