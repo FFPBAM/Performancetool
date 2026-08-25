@@ -2634,6 +2634,68 @@ Typen.
 
 ---
 
+### #71 — Was aussieht wie eine verstellte Größe, ist der Preis einer anderen Zusage (NEU 25.08.2026) ⭐
+
+**Gemeldet wurde:** Das Ringdiagramm auf der Anlagestrategie-Folie sei in der
+alten, per Excel-Makro erzeugten PowerPoint **größer und etwas dünner** —
+„denke einfach anders skaliert".
+
+**Gemessen wurde** (Referenz `H:\...\ESG Broschüre Infoboard 24.08.2026.pptx`,
+Geometrie bitgleich mit `Vorlage_ESG.pptx`, Werte aber echt — also gebaut, nicht
+die Vorlage):
+
+| | Makro | Streamlit | |
+|---|---|---|---|
+| Durchmesser ESG / ETF | 5,34 cm | 3,41 cm | −36 % |
+| Durchmesser cVV | 5,34 cm | 3,63 cm | −32 % |
+| Durchmesser comdirect | 5,34 cm | 3,20 cm | −40 % |
+| **Bandstärke** | 0,56 cm | 0,51–0,58 cm | **±3 %** |
+
+**Die Diagnose kippt die Meldung um.** „Dünner" war die Wahrnehmung, gemessen
+ist die Bandstärke praktisch identisch — verändert hat sich **nur der
+Durchmesser**. Gleiche Dicke auf kleinerem Kreis wirkt dick. Wer der Meldung
+gefolgt wäre und an `holeSize` gedreht hätte, hätte am falschen Wert gedreht.
+
+**Die Ursache ist eine Zusage, die der Makro-PP nicht gibt.** Genau eine Stelle
+im Repo ändert die Ringgröße: `ring_labels_aussen_dynamisch`, Schritt 2b in
+`modules/chart_dynamik.py`. Sie verkleinert den Ring, bis **Ring plus
+Außenbeschriftung** zwischen Überschriftenbalken (`kopf_rand = 0.15`) und
+Legenden-Oberkante passen (`label_pad = 0.52`, oben wie unten). Der Makro-PP
+schreibt nur Werte in die Vorlage; seine vier Beschriftungen stehen dort, wo
+ein Mensch sie **für genau diese vier Segmente** hingelegt hat. Unser Generator
+platziert bis zu sieben Segmente automatisch, für 19 Strategien.
+
+**Die Ungleichung, die die Frage beantwortet:** Damit die Makro-Größe passt,
+müsste gelten `kopf_rand + R + label_pad <= legende_oben - R - label_pad`. Mit
+R = 1,053″ und der Legende bei 2,545″ folgt `label_pad <= 0,147″` — die reine
+Texthöhe beträgt bereits **0,20″**. **Auf diesem Weg ist die Makro-Größe nicht
+erreichbar**, unabhängig vom guten Willen.
+
+**Der Nebenbefund ist der eigentliche Hebel — und er bleibt liegen.** Schritt 2b
+liest nur die *Oberkante* der Legende und behandelt sie als Sperre über die
+**ganze Rahmenbreite**. Tatsächlich sitzt die Legende unten **links** und belegt
+rund 24 % der Breite; ein Ring in Makro-Größe läge horizontal bei 3,0–8,3 cm im
+11-cm-Rahmen und würde sie nicht berühren. Wer das aufmacht, fasst aber genau
+die Label-Mechanik an, die zwischen dem 09.07. und dem 10.08.2026 fünf
+Anlauf-Wellen gekostet hat (#26, #29–#34, #40, #44). Entscheidung Philip am
+25.08.2026: **messen und festnageln, nicht ändern.**
+
+**Was bleibt, ist ein Prüfstein, den es vorher nicht gab.**
+`tests/test_ring_geometrie.py` misst Größe, Bandstärke, Ringmitte, Label- und
+Legendenabstände über alle sechs Vorlagen (22 Ringe) und an echt gebauten
+Broschüren (17 Ringe). Gegenprobe, damit er nicht nur grün ist: Ringdicke
+zurückgestellt → **22 Fehler**, Verkleinerung stillgelegt → **44 Fehler**,
+danach wieder null.
+
+**Übertragbar:** Wenn eine Größe „verstellt" aussieht, ist sie oft nicht
+verstellt, sondern **abgeleitet** — das Ergebnis einer anderen Zusage, die das
+Vergleichsartefakt gar nicht gibt. Erst messen, welcher der beiden Werte sich
+wirklich geändert hat (hier: Durchmesser, nicht Dicke), dann die Ungleichung
+aufschreiben, die ihn erzeugt. Steht sie da, ist auch beantwortet, ob der Wunsch
+überhaupt erfüllbar ist — vor der ersten Codezeile.
+
+---
+
 ### #70 — Eine zweite Anzeige derselben Zahl teilt sich die Rechnung, oder sie läuft auseinander (NEU 21.08.2026) ⭐
 
 Am 21.08.2026 sollte die **YTD-Rendite** als Kachel in die Kennzahlen-Reihe

@@ -1,13 +1,71 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 24.08.2026 (nachmittags) · **Branch:**
-`verbesserungen` · **Nicht gemergt** · **30 von 30 Suiten grün**,
-`pyflakes` bei null · **gepusht und an der Cloud-App
-abgenommen** (Philip, 24.08.2026) · **DRACOON ist nachgezogen** (280
-versionierte Dateien verglichen, keine inhaltliche Abweichung; 25
-unterscheiden sich nur im Zeilenende).
+**Letzte Sitzung:** 25.08.2026 · **Branch:** `verbesserungen` ·
+**Nicht gemergt** · **31 von 31 Suiten grün**, `pyflakes` bei null ·
+**an der Broschüre wurde nichts geändert** — die Sitzung hat die
+Ringdiagramme vermessen und festgenagelt. Stand davor: gepusht und an der
+Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 
-> ### Für Philip: was diese Sitzung geändert hat (24.08.2026, nachmittags)
+> ### Für Philip: was diese Sitzung geändert hat (25.08.2026)
+>
+> **Am Broschüren-Generator wurde nichts geändert. Das war die Entscheidung,
+> und sie ist belegt:** `git diff` fasst `modules/` nicht an, und die sieben
+> Broschüren aus dem Baulauf vor der Sitzung sind byte-identisch mit denen
+> danach.
+>
+> **Deine Beobachtung war richtig — und sie ist jetzt eine Zahl.** Der Ring in
+> der Makro-PowerPoint ist **nicht eingebildet größer**, sondern messbar:
+>
+> | | Makro (`H:` ESG Broschüre 24.08.) | Streamlit heute | Differenz |
+> |---|---|---|---|
+> | Durchmesser ESG / ETF | 5,34 cm | 3,41 cm | **−36 %** |
+> | Durchmesser cVV | 5,34 cm | 3,63 cm | −32 % |
+> | Durchmesser comdirect | 5,34 cm | 3,20 cm | −40 % |
+> | Bandstärke | 0,56 cm | 0,51–0,58 cm | **fast gleich** |
+>
+> **Der Ring ist also nicht dicker geworden, sondern kleiner.** Gleiche
+> Bandstärke auf kleinerem Kreis wirkt dick — daher dein Eindruck „größer und
+> dünner". Beide Folien liegen als Bild vor, mit **denselben Prozentzahlen**
+> (10,57 / 60,59 / 23,17 / 5,67), damit der Vergleich sauber ist.
+>
+> **Es ist kein Fehler, sondern der Preis der Außenbeschriftung.** Eine
+> einzige Stelle verkleinert den Ring: `ring_labels_aussen_dynamisch`,
+> Schritt 2b in `modules/chart_dynamik.py`. Sie schrumpft ihn, bis Ring
+> **plus Beschriftung** zwischen Überschriftenbalken und Legende passt. Der
+> Makro-PP macht das nicht — er schreibt nur Zahlen in die Vorlage und lässt
+> die vier Beschriftungen dort stehen, wo ein Mensch sie für **vier**
+> Segmente hingelegt hat. Unser Generator muss bis zu **sieben** automatisch
+> platzieren.
+>
+> **Die Makro-Größe ist auf diesem Weg nicht erreichbar** — dafür müsste das
+> Label-Budget von 0,52″ auf 0,13–0,21″ fallen, und allein die Texthöhe
+> beträgt 0,20″. Das ist keine Meinung, das ist die Ungleichung aus Schritt 2b.
+>
+> **Neuer Prüfstein: `tests/test_ring_geometrie.py` (31. Suite).** Bis heute
+> prüfte **nichts** die Ringgeometrie — nicht die Größe, nicht die Dicke,
+> nicht die Label-Abstände. Fünf Schritte über alle sechs Vorlagen und alle
+> 22 Ringe, dazu 17 Ringe in echt gebauten Broschüren.
+>
+> **Der Prüfstein misst nachweislich etwas.** Zwei Gegenproben, im
+> Arbeitsspeicher, ohne eine Datei anzufassen: Ringdicke auf den dünnen Look
+> zurückgestellt → **22 Fehler**; die Verkleinerung stillgelegt → **44
+> Fehler**; danach wieder **null**. Ein Test, der nur grün ist, beweist nichts.
+>
+> **Nebenbefund, bewusst zurückgestellt:** Schritt 2b behandelt die Legende
+> als Sperre über die **ganze** Rahmenbreite. Tatsächlich sitzt sie unten
+> links und belegt rund ein Viertel; ein Ring in Makro-Größe (horizontal
+> 3,0–8,3 cm im 11-cm-Rahmen) würde sie gar nicht berühren. **Dort läge der
+> Hebel** — er fasst aber die Label-Mechanik an, die die vielen Iterationen
+> gekostet hat. Steht unter „Offene Punkte", nicht als Aufgabe, sondern als
+> Fundstelle.
+>
+> **➜ Was für dich offen bleibt:** die beiden Bilder ansehen und sagen, ob es
+> beim heutigen Stand bleibt. Wenn ja, ist das Thema zu — und dieses Mal mit
+> einem Prüfstein, der es hält.
+>
+> ---
+>
+> ### Aus der Sitzung davor (24.08.2026, nachmittags)
 >
 > **Drei Sachen. Die erste ist die wichtigste, und sie ist größer geworden
 > als geplant.**
@@ -2374,6 +2432,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_theme.py` *(neu 18.08.2026)* | Schritt 1 ohne jedes Paket, 2–4 **+ streamlit** | Die Oberflächen-Konfiguration — die einzige Datei, deren Fehler sich **nicht bemerkbar machen**. **Schritt 2 ist der eigentliche:** `config.get_where_defined` muss auf `.streamlit/config.toml` zeigen und nicht auf `<default>`; ein Test auf den Dateiinhalt hätte den Fehler von #23 nicht gefunden. Dazu: Punkt im Ordnernamen, kein Zwilling ohne Punkt, gültiges TOML, Farben identisch mit `shared.py`, kein Streamlit-Rot mehr, `theme.base` nicht gesetzt (hell und dunkel bleiben beide), kein `font-family`-CSS mehr im Quelltext |
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
+| `test_ring_geometrie.py` *(neu 25.08.2026)* | **+ python-pptx**, Schritt 4 zusätzlich **+ streamlit** und ein Ausgabeordner | Die Geometrie der Ringdiagramme, für die es bis dahin **keinen** Prüfstein gab. Schritt 1 die sechs Vorlagen (Rahmen, `holeSize`, `plotArea` aller 22 Ringe — die Geometrie kommt zu 100 % aus der .pptx), Schritt 2 die Ist-Werte **nach** `nachbearbeiten` gegen eingefrorene Maße, Schritt 3 die Zusagen, die auch eine spätere Änderung überleben müssen (keine Beschriftung im Ring, keine Überlappung, nichts aus dem Rahmen, kein Ring in der Legende), Schritt 4 dasselbe an 17 Ringen echter Broschüren, Schritt 5 die Trennung der Familien-Optik (Standard 79, die fünf Familien 68). **Gegenprobe belegt:** Dicke zurückgestellt → 22 Fehler, Verkleinerung stillgelegt → 44 Fehler |
 
 ```
 python tests/test_bedienung.py
@@ -2403,6 +2462,7 @@ python tests/test_keepalive.py
 python tests/test_farben.py
 python tests/test_export_smoke.py C:\pfad\zur\ausgabe
 python tests/test_trennstriche.py C:\pfad\zur\ausgabe
+python tests/test_ring_geometrie.py [C:\pfad\zur\ausgabe]
 ```
 
 **Nachgemessen am 12.08.2026** — nicht geschätzt: Alle **19** Suiten wurden mit
@@ -2458,6 +2518,21 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 ## Offene Punkte
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
+
+**NEU 25.08.2026 — der Ringdurchmesser: vermessen, verstanden, NICHT
+geändert.** Der Ring der Streamlit-Broschüre ist 32–40 % kleiner als der der
+Makro-PowerPoint; die Bandstärke ist fast gleich. Ursache und Zahlen stehen in
+`PROJEKT_DOKUMENTATION.md` **#71**, festgenagelt in
+`tests/test_ring_geometrie.py`.
+
+*Zurückgestellt, nicht vergessen:* Der einzige Hebel wäre, in Schritt 2b die
+Legende nur dort als Sperre zu werten, wo sie tatsächlich steht (unten links,
+rund ein Viertel der Breite) statt über die ganze Rahmenbreite. Das fasst die
+Label-Mechanik an, die zwischen dem 09.07. und 10.08.2026 fünf Anlauf-Wellen
+gekostet hat und deren Stand Philip mit „wir sind am Zenit angekommen"
+abgenommen hat (#44). **Wer das Thema aufmacht, fängt bei #71 und #44 an und
+nicht bei null** — und hat seit dem 25.08.2026 einen Prüfstein, der jede
+Verschiebung sichtbar macht.
 
 **ERLEDIGT am 24.08.2026 (nachmittags) — der Prüfstein steht, und der
 Fehler ist behoben.** `tests/test_wertentwicklung_platzhalter.py` (30.

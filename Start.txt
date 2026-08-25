@@ -142,10 +142,13 @@ WICHTIG FUER DIE NAECHSTE SITZUNG
 
       git config windows.appendAtomically false
 
-- 29 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
+- 31 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
   .venv\Scripts\python.exe (sonst ueberspringen sie ihre schweren
   Schritte stillschweigend). Zwei davon brauchen ein Ausgabeverzeichnis
   als Argument: test_export_smoke.py und test_trennstriche.py.
+  test_ring_geometrie.py nimmt optional einen (dann prueft es die
+  Ringe zusaetzlich in echt gebauten Broschueren statt nur in den
+  Vorlagen).
 - pyflakes steht seit dem 12.08.2026 auf NULL Meldungen. Jede neue ist
   damit ein echtes Signal. Es ist ein reines Entwicklungswerkzeug und
   steht bewusst nicht in requirements.txt:

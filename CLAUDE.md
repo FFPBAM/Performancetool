@@ -374,6 +374,7 @@ python tests/test_quelle_position.py [<ordner>]  # + python-pptx
 python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_wertentwicklung_platzhalter.py  # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
+python tests/test_ring_geometrie.py [<ordner>]   # + python-pptx, Schritt 4 streamlit
 ```
 
 Dazu ein Werkzeug, kein Test — für den Beweis nach einem UI-Umbau:
