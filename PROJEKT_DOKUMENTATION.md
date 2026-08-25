@@ -2710,6 +2710,56 @@ Verletzung gemessen, aber der Platz endet am Logo (ab 17,08 cm), die rechte
 Abschlusslinie müsste mitwandern, und es wären sechs Vorlagen. Das ist eine
 gestalterische Entscheidung, keine technische.
 
+---
+
+**NACHTRAG am selben Tag: Die Makro-Größe ist erreicht — und die Absage oben
+war falsch.**
+
+Philip ließ den Weg, von dem dieser Eintrag abrät, in einem isolierten
+Worktree durchmessen. Ergebnis: **alle 14 Anlagestrategie-Ringe auf 5,34 cm
+bei 0,56 cm Bandstärke**, der Makro-Wert auf zwei Nachkommastellen, bei null
+Verletzungen in allen sieben Prüfklassen.
+
+**Warum die Absage falsch war.** #44 warnt vor einer **neuen Layout-Engine**
+— Kräftemodell, Solver, Annealing — mit drei Begründungen. Ich habe die
+Warnung auf einen Fall angewandt, den sie nicht meint. Was tatsächlich nötig
+war, ist eine **Rückkopplung um die unveränderte Logik herum**: Der
+Platzierungsblock (Pässe 5–6e) wandert unverändert in eine innere Funktion,
+und darum liegt eine Schleife — größte Größe probieren, Labels probeweise
+setzen, gegen dieselben Zusicherungen prüfen, bei Kollision verkleinern. Die
+acht Pässe sind dabei **byte-identisch** geblieben (`git diff -w`: +427/−20,
+die 20 sind der alte Resize-Block). Alle drei Begründungen von #44 bleiben
+richtig; keine trifft dieses Vorgehen.
+
+**Was den Ausschlag gab, war nicht die Schleife, sondern eine Tabufläche.**
+Erst als die **Quellenangabe** als Sperrfläche dazukam — gelesen aus den
+`chartUserShapes`, nicht verdrahtet —, erreichte auch ETF F16 die volle Größe.
+Der Grund: Die Sperre wirkt nicht nur in der Rückkopplung, sondern auch in
+**Pass 6d2**, jener Suche, die aktiv eine freie Position für ein Label sucht.
+Die kannte bis dahin weder Legende noch Quellenzeile und durfte Labels dort
+parken; seither findet sie von vornherein eine Stelle, die einen größeren Ring
+zulässt. **Eine Sperre mehr hat den Ring größer gemacht, nicht kleiner.**
+
+**Nebenbefund, der vorher niemandem aufgefallen war:** Innerhalb einer
+Broschüre waren die Ringe bisher **unterschiedlich groß** — cVV 3,86 / 4,10 /
+4,37 cm über fünf Folien, comdirect 3,63 / 3,86 / 4,10 über drei. Weil jetzt
+alle an derselben Obergrenze anschlagen, ist jede Broschüre in sich
+einheitlich. Das war kein Ziel, sondern ein Nebenprodukt.
+
+**Die Voreinstellung gehört auf AUS.** `rueckkopplung` stand zunächst im
+Default-Block auf `True` und traf damit auch die Familie **Standard**, die
+niemand gebaut hatte — dort entstand eine kreuzende Führungslinie. Umgestellt
+auf `False` mit ausdrücklichem Einschalten in den vier vermessenen Familien;
+danach ist der Standard-Pfad **bytegleich** zum Vorstand. Festgenagelt in
+Schritt 5 des Prüfsteins mit der Zeile `None: False` — genau die hätte den
+Befund gefangen.
+
+**Übertragbar:** Wenn eine dokumentierte Warnung einen Wunsch blockiert, halte
+ihre **Begründungen einzeln** gegen das konkrete Vorhaben. Trifft keine zu,
+ist die Warnung ein Präzedenzfall und kein Verbot. Und: Wer eine
+Randbedingung lockert, zählt vorher auf, **was den freigegebenen Raum belegt**
+— auch das, was nicht in der Shape-Liste der Folie steht.
+
 **Was bleibt, ist ein Prüfstein, den es vorher nicht gab.**
 `tests/test_ring_geometrie.py` misst Größe, Bandstärke, Ringmitte, Label- und
 Legendenabstände über alle sechs Vorlagen (22 Ringe) und an echt gebauten

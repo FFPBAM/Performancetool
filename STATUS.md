@@ -2,9 +2,10 @@
 
 **Letzte Sitzung:** 25.08.2026 · **Branch:** `verbesserungen` ·
 **Nicht gemergt** · **31 von 31 Suiten grün**, `pyflakes` bei null ·
-**die Ringe der Anlagestrategie-Folien sind
-13-21 % größer** — vermessen, festgenagelt und **an der Broschüre
-abgenommen** (Philip, 25.08.2026). Dazu der ESG-Dateiname korrigiert. Stand davor: gepusht und an der
+**die Ringe der Anlagestrategie-Folien
+tragen jetzt die Geometrie der alten Makro-PowerPoint** — 5,34 cm bei
+0,56 cm Bandstärke, alle 14, **an den Broschüren abgenommen** (Philip,
+25.08.2026). Dazu der ESG-Dateiname korrigiert. Stand davor: gepusht und an der
 Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 
 > ### Für Philip: was diese Sitzung geändert hat (25.08.2026)
@@ -175,6 +176,53 @@ Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
 > *Die Lehre ist dieselbe wie beim Ring selbst:* Wer einer Fläche mehr Raum
 > gibt, muss wissen, **was in diesem Raum schon steht** — und zwar auch das,
 > was nicht auf der Folie liegt, sondern im Chart.
+>
+> ---
+>
+> ### Und dann ging doch, was ich für unmöglich erklärt hatte
+>
+> **Die Ringe stehen jetzt auf der Makro-Geometrie: 5,34 cm bei 0,56 cm
+> Bandstärke, alle 14, in allen vier Familien.** Nicht ungefähr — auf zwei
+> Nachkommastellen derselbe Wert wie in der alten Makro-PowerPoint, aus zwei
+> völlig verschiedenen Erzeugungswegen.
+>
+> **Ich hatte das am selben Vormittag für nicht machbar erklärt** — mit
+> Verweis auf #44, das von einer neuen Layout-Engine abrät. Die Warnung war
+> richtig, aber sie meint den **Ersatz** der Positionierungslogik. Gebraucht
+> wurde eine **Rückkopplung um die unveränderte Logik herum**: dieselben acht
+> Pässe, nur mehrfach ausgeführt, bis die größte kollisionsfreie Größe
+> gefunden ist. `git diff -w` zeigt **+427 / −20** Zeilen, und die 20
+> gelöschten sind ausschließlich der alte Resize-Block — **die acht Pässe
+> sind byte-identisch**. Ausgetauscht wurde eine geratene Zahl
+> (`label_pad = 0.52`) gegen eine Messung pro Ring.
+>
+> **Nebenbei ist eine Ungleichheit verschwunden, die vorher niemandem
+> aufgefallen war:** Bei cVV standen 3,86 / 4,10 / 4,37 cm über fünf Folien
+> derselben Broschüre, bei comdirect 3,63 / 3,86 / 4,10 über drei. Jetzt ist
+> **jede Broschüre in sich einheitlich**.
+>
+> **Was unberührt bleibt, ist belegt und nicht behauptet:**
+>
+> | | Nachweis |
+> |---|---|
+> | Thema | **bytegleich** zum Vorstand — 184 ZIP-Teile, abweichend nur zwei Zeitstempel eingebetteter Mappen |
+> | Standard-Broschüre | **bytegleich** — 20 verglichene Teile, null Unterschiede |
+> | der gesichtete Stand | der Branch baut ihn **zeichengleich** nach, über alle fünf Broschüren |
+>
+> **Die Voreinstellung steht auf AUS.** `_RING_FORMAT_DEFAULT`
+> `["rueckkopplung"] = False`; eingeschaltet ist sie ausdrücklich in
+> `_RING_KRAEFTIG` für die vier vermessenen Familien. Das war eine Korrektur
+> im letzten Moment: Vorher stand sie auf `True`, und der nie gebaute
+> Standard-Pfad bekam eine kreuzende Führungslinie. **Wer den Mechanismus
+> für eine weitere Familie will, misst ihn dort vorher.**
+>
+> **Der Preis, damit er nicht in Vergessenheit gerät:** Die schmalste
+> Label→Ring-Reserve halbiert sich von 0,114″ auf **0,057″** (ETF F18), und
+> **eine** Führungslinie liegt mit 0,240″ unter der internen Richtgröße 0,28″
+> — dieselbe, die Philip angesehen und für gut befunden hat. Beides ist der
+> Preis der Makro-Größe und war in **jeder** Variante mit 5,34 cm so.
+>
+> **Zurück geht es mit einer Zeile:** `RK_AN = False` in `chart_dynamik.py`.
 >
 > ---
 >

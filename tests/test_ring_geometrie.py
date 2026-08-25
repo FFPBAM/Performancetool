@@ -13,18 +13,18 @@ Ein unbeabsichtigter Eingriff faellt sonst erst in einer Kundenbroschuere auf.
      Bandstaerke, Ringmitte) gegen eingefrorene Sollwerte
   3. Die ZUSICHERUNGEN, die unabhaengig von den konkreten Zahlen gelten
   4. Dieselben Messungen an ECHT GEBAUTEN Broschueren (nur mit Ordner-Argument)
-  5. Der Familien-Look: "Standard" bleibt duenn (79), die fuenf Familien 68
+  5. Der Familien-Look und wo die Rueckkopplung ueberhaupt laeuft
 
 SCHRITT 1 HAENGT AM ARTEFAKT. Die Ringgeometrie kommt zu 100 Prozent aus der
 .pptx-Vorlage — kein Code setzt jemals die Groesse eines Chart-Rahmens. Wer
 eine Vorlage austauscht, verschiebt damit still jeden Ring.
 
 SCHRITT 2 IST DER EIGENTLICHE WAECHTER. Die Ringgroesse entsteht in genau
-einer Funktion: `ring_labels_aussen_dynamisch`, Schritt 2b
-(`modules/chart_dynamik.py`). Sie verkleinert den Ring, bis Ring PLUS
-Aussenbeschriftung zwischen Ueberschriftenbalken und Legende passen. Wer dort
-an `kopf_rand`, `label_pad`, dem Deckel 0.27 oder an der Legende dreht,
-aendert JEDEN Ring — dieser Schritt macht es sichtbar.
+einer Funktion: `ring_labels_aussen_dynamisch` (`modules/chart_dynamik.py`).
+Seit dem 25.08.2026 sucht sie die groesste Groesse, bei der die Labels noch
+kollisionsfrei liegen, statt pauschal Platz freizuhalten. Wer an `kopf_rand`,
+am Deckel, an den Tabuflaechen oder an der Legende dreht, aendert JEDEN Ring —
+dieser Schritt macht es sichtbar.
 
 SCHRITT 3 UEBERLEBT EINE BEWUSSTE AENDERUNG. Die Zahlen aus Schritt 2 sind
 dann neu einzufrieren; die Zusagen hier muessen weiter gelten.
@@ -112,32 +112,33 @@ VORLAGEN_SOLL = {
 # Messung an echten Broschueren.
 #
 # ACHTUNG bei Vorlage_FFPB: Deren Platzhalter-Folientitel nennen eine
-# cVV-Strategie, `_familie_aus_prs` liest daraus 'CVV' und setzt hole=68. Eine
-# ECHTE Standard-Broschuere traegt den richtigen Strategienamen, faellt auf
-# Familie None und bleibt bei 79 — festgenagelt in Schritt 5.
+# cVV-Strategie, `_familie_aus_prs` liest daraus 'CVV'. Die FFPB-Ringe laufen
+# hier also MIT Rueckkopplung, obwohl eine echte Standard-Broschuere ohne
+# laeuft. Der Standard-Pfad wird von Schritt 4 nicht beruehrt (dort wird keine
+# Broschuere ohne Familie gebaut) — festgenagelt ist er in Schritt 5.
 NACH_SOLL = {
-    ("Vorlage_ESG.pptx", 16, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4678, hole=68),
-    ("Vorlage_ESG.pptx", 18, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4666, hole=68),
-    ("Vorlage_ESG.pptx", 20, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4666, hole=68),
-    ("Vorlage_ESG.pptx", 22, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4669, hole=68),
-    ("Vorlage_ETF.pptx", 16, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4678, hole=68),
-    ("Vorlage_ETF.pptx", 18, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4666, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 7, "C_Kennzahlen"): dict(d=1.6155, cx=2.2319, cy=1.5401, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 9, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4726, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 11, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4726, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 13, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4716, hole=68),
-    ("Vorlage_cVV_Infoboard.pptx", 15, "C_Kennzahlen"): dict(d=1.7186, cx=2.2319, cy=1.6016, hole=68),
-    ("Vorlage_comdirect.pptx", 6, "C_Kennzahlen"): dict(d=1.4275, cx=2.2319, cy=1.4729, hole=68),
-    ("Vorlage_comdirect.pptx", 8, "C_Kennzahlen"): dict(d=1.5186, cx=2.2319, cy=1.4307, hole=68),
-    ("Vorlage_comdirect.pptx", 10, "C_Kennzahlen"): dict(d=1.6155, cx=2.2319, cy=1.5323, hole=68),
-    ("Vorlage_FFPB.pptx", 7, "C_Kennzahlen"): dict(d=2.2547, cx=2.2652, cy=1.9153, hole=68),
-    ("Vorlage_FFPB.pptx", 8, "C_Kennzahlen"): dict(d=2.2547, cx=2.2652, cy=1.9153, hole=68),
-    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2"): dict(d=0.8181, cx=3.4927, cy=1.1035, hole=68),
-    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen1"): dict(d=1.1289, cx=3.7084, cy=1.2968, hole=68),
-    ("Vorlage_FFPB.pptx", 12, "C_Kennzahlen1"): dict(d=2.0465, cx=3.186, cy=1.7786, hole=68),
+    ("Vorlage_ESG.pptx", 16, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_ESG.pptx", 18, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_ESG.pptx", 20, "C_Kennzahlen"): dict(d=1.9838, cx=2.2319, cy=1.5729, hole=79),
+    ("Vorlage_ESG.pptx", 22, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_ETF.pptx", 16, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_ETF.pptx", 18, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_FFPB.pptx", 7, "C_Kennzahlen"): dict(d=2.3986, cx=2.2652, cy=2.2736, hole=79),
+    ("Vorlage_FFPB.pptx", 8, "C_Kennzahlen"): dict(d=2.3986, cx=2.2652, cy=2.2736, hole=79),
+    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2"): dict(d=0.8181, cx=3.4927, cy=1.1035, hole=79),
+    ("Vorlage_FFPB.pptx", 9, "C_Kennzahlen1"): dict(d=1.3097, cx=3.7084, cy=2.2736, hole=79),
+    ("Vorlage_FFPB.pptx", 12, "C_Kennzahlen1"): dict(d=2.1772, cx=3.1861, cy=2.2736, hole=79),
     ("Vorlage_Thema.pptx", 10, "C_Kennzahlen"): dict(d=2.4555, cx=2.6876, cy=2.2736, hole=68),
     ("Vorlage_Thema.pptx", 11, "C_Kennzahlen2"): dict(d=1.8083, cx=3.2743, cy=1.6659, hole=68),
     ("Vorlage_Thema.pptx", 11, "C_Kennzahlen1"): dict(d=2.1697, cx=3.1318, cy=1.8172, hole=68),
+    ("Vorlage_cVV_Infoboard.pptx", 7, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_cVV_Infoboard.pptx", 9, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_cVV_Infoboard.pptx", 11, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_cVV_Infoboard.pptx", 13, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_cVV_Infoboard.pptx", 15, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_comdirect.pptx", 6, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
+    ("Vorlage_comdirect.pptx", 8, "C_Kennzahlen"): dict(d=2.0638, cx=2.2319, cy=1.5729, hole=79),
+    ("Vorlage_comdirect.pptx", 10, "C_Kennzahlen"): dict(d=2.1038, cx=2.2319, cy=1.6929, hole=79),
 }
 
 
@@ -633,13 +634,43 @@ def schritt5_familien_look():
         fehler += 1
     else:
         print("    OK — ohne Familie bleibt es beim duennen Ring (hole 79)")
-    for familie in ("CVV", "ESG", "ETF", "Thema", "comdirect"):
+    # Seit 25.08.2026 tragen die vier Familien mit Anlagestrategie-Folien die
+    # BANDSTAERKE DER MAKRO-BROSCHUERE (hole 79 = 0,56 cm bei 5,34 cm), weil
+    # der Ring dort jetzt Makro-Groesse hat. Thema hat keine solche Folie und
+    # behaelt den kraeftigen Ring vom 27.07. (hole 68) — deshalb ein eigener
+    # Block, siehe _RING_THEMA.
+    SOLL_HOLE = {"CVV": 79, "ESG": 79, "ETF": 79, "comdirect": 79, "Thema": 68}
+    for familie, soll in sorted(SOLL_HOLE.items()):
         fmt = cd._ring_format(familie, 79, 0.14)
-        if fmt["hole"] != 68:
-            print(f"    FEHLER — {familie}: hole {fmt['hole']} statt 68")
+        if fmt["hole"] != soll:
+            print(f"    FEHLER — {familie}: hole {fmt['hole']} statt {soll}")
             fehler += 1
     if not fehler:
-        print("    OK — die fuenf Familien tragen den kraeftigen Ring (hole 68)")
+        print("    OK — die vier Anlagestrategie-Familien tragen hole 79, "
+              "Thema behaelt hole 68")
+
+    # Und die Rueckkopplung laeuft NUR dort, wo sie beauftragt UND vermessen
+    # ist. Ihre VOREINSTELLUNG ist AUS: eine Familie, die niemand gemessen hat,
+    # bekommt sie nicht geschenkt. Ausdruecklich ein ist sie fuer die vier
+    # Familien mit Anlagestrategie-Folien; Thema und "Standard" (Strategien
+    # ohne Familienzuordnung, `_ring_format(None, ...)`) bleiben aus —
+    # nachgewiesen ueber bytegleiche Chart-XML gegen den Stand vom 24.08.2026.
+    #
+    # Die None-Zeile ist der eigentliche Waechter: Bis zum 25.08.2026 stand die
+    # Voreinstellung auf True, und die Standard-Broschuere erbte die
+    # Rueckkopplung ungeprueft mit (5,73 -> 6,09 cm auf F7). Der Pfad wird von
+    # test_export_smoke.py nicht gebaut und faellt sonst niemandem auf.
+    SOLL_RK = {"CVV": True, "ESG": True, "ETF": True, "comdirect": True,
+               "Thema": False, None: False}
+    for familie, soll in sorted(SOLL_RK.items(), key=lambda p: str(p[0])):
+        ist = cd._ring_format(familie, 79, 0.14)["rueckkopplung"]
+        if ist != soll:
+            bez = familie if familie is not None else "Standard (ohne Familie)"
+            print(f"    FEHLER — {bez}: Rueckkopplung {ist} statt {soll}")
+            fehler += 1
+    if not fehler:
+        print("    OK — die Rueckkopplung laeuft in den vier vermessenen "
+              "Familien; Thema und Standard bleiben aus")
     return fehler
 
 

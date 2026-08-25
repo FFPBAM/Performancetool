@@ -139,6 +139,82 @@ LEGENDE_EINTAUCHTIEFE_IN = 0.20
 # tests/test_ring_geometrie.py, Schritt 3 (Flächenprüfung gegen die
 # Legende) — wer den Wert erhöht, bekommt dort die Quittung.
 
+# -- RUECKKOPPLUNG Ringgroesse <-> Labels (EXPERIMENT 25.08.2026) ----------
+# Bis heute war die Ringgroesse eine EINBAHNSTRASSE: `label_pad` (0.52") war
+# eine pauschale Worst-Case-Reserve fuer Labelhoehe plus Entzerrung, festgelegt
+# BEVOR ein einziges Label stand. Mit RK_AN wird stattdessen gemessen: groessten
+# Ring versuchen, Labels probeweise setzen, gegen dieselben Zusicherungen
+# pruefen, die tests/test_ring_geometrie.py prueft — bei Kollision verkleinern
+# und wiederholen. Der alte Wert bleibt Untergrenze; kein Ring wird kleiner.
+RK_AN               = True
+RK_SCHRITT_IN       = 0.02    # Zoll je Verkleinerungsschritt
+RK_HOEHER_IN        = 0.06    # Zoll je Hochruecken des Ringmittelpunkts
+RK_HOEHER_SCHRITTE  = 3       # so oft wird hochgerueckt, bevor der Ring
+                              # verkleinert wird
+RK_DECKEL_ANTEIL_H  = 0.32    # Obergrenze als Anteil der Rahmenhoehe; None =
+                              # nur die Vorlage (plotArea) deckelt.
+# GEMESSEN am 25.08.2026 an den 17 Ringen echter Broschueren, MIT der
+# korrigierten Zusicherung (a). Die vier Varianten unterscheiden sich in zwei
+# Zahlen: diesem Deckel und `hole` in _RING_KRAEFTIG (Thema bleibt bei 68).
+#
+#   Variante  hole  Deckel   Anlagestrategie-Ringe   Band     Thema F10
+#   (vorher)   68   --       3,63-4,37 cm            0,62 cm   6,24 cm
+#   A          79   0.27     4,34 + 10x 4,64 cm      0,49 cm   6,24 cm
+#   B          79   0.32     4,33 + 13x 5,34 cm      0,56 cm   7,39 cm
+#   C          68   0.27     4,34 + 10x 4,64 cm      0,74 cm   6,24 cm
+#   D          68   0.32     4,33 + 13x 5,34 cm      0,85 cm   7,39 cm
+#   B*         79   0.32     14x 5,34 cm             0,56 cm   6,24 cm  <- hier
+#
+# Die alte Makro-PowerPoint hatte 5,34 cm bei 0,56 cm Band — genau das liefert
+# B*, und zwar auf ALLEN 14 Anlagestrategie-Ringen. Thema steht in B* wieder
+# auf seinen alten Massen, weil dort die Rueckkopplung aus ist
+# (_RING_THEMA["rueckkopplung"] = False) — der Deckel allein taete das nicht.
+# Preis: EINE Fuehrungslinie unter MIN_LEADER (0,240" statt 0,28", ETF F18).
+# Bei duennerem Band rueckt der Leader-Ansatz (leader_start_tiefe = 0.5 ->
+# Bandmitte) um 0,055*R_out nach aussen und die Linie wird entsprechend
+# kuerzer; bei hole 68 bleibt dieselbe Linie mit 0,291" knapp darueber. Vom
+# Auftraggeber am 25.08.2026 in echtem PowerPoint angesehen und als in
+# Ordnung befunden.
+RK_UEBERLAPP_X      = 0.56    # Ueberlappungsmass der Beschriftungen; der Test
+RK_UEBERLAPP_Y      = 0.20    # prueft mit 0.55/0.19 - hier eine Spur strenger.
+RK_TABU_LUFT        = 0.02    # Zoll Sicherheitsabstand zu den Tabuflaechen
+                              # (Legende UND Quellenangabe). 0.0 waere die
+                              # nackte Ueberlappungsgrenze des Pruefsteins.
+RK_LEGENDE_LUFT     = RK_TABU_LUFT   # alter Name, extern referenzierbar
+# --- zwei Wege gegen EIN Label in der Legendenspalte (ETF F16) -------------
+# ETF Folie 16 war der einzige Ring, der die Makro-Groesse verfehlte: ein
+# Label auf 7 Uhr ragte 0,076" in die Legendenspalte, die Rueckkopplung
+# verkleinerte ihn deshalb auf 4,33 cm und die ETF-Broschuere war als einzige
+# in sich uneinheitlich. Drei Auswege wurden am 25.08.2026 GEBAUT und
+# vermessen (alle sechs Pruefklassen jeweils null):
+#
+#   Weg                          ETF F16 / F18      Reserve   kuerzester Leader
+#   (nichts tun)                 4,33 / 5,34 cm     +0,057"   0,240"
+#   (a) RK_LEGENDE_AUSWEICHEN    5,34 / 5,34 cm     +0,057"   0,240"
+#   (b) RK_CX_VERSATZ_IN = 0.10  5,34 / 5,34 cm     +0,165"   0,339"
+#   (c) Deckel auf 4,33 cm       4,33 / 4,33 cm     +0,159"   0,318"
+#
+# GEBRAUCHT WIRD KEINER DAVON. Die Quellenangabe als Tabuflaeche (s.
+# _quelle_rechteck) hat den Fall nebenbei geloest: Seit `_frei` in Pass 6d2
+# die Tabuflaechen kennt, sucht die Leader-Sicherung von vornherein eine
+# Stelle, die weder auf der Legende noch auf der Quellenzeile liegt — ETF F16
+# nimmt 5,34 cm seither im ERSTEN Versuch, das Label sitzt bei (1,52 | 2,87)
+# mit 0,15" Abstand zur Legendenkante. Beide Schalter bleiben als vermessene
+# Notausgaenge stehen, beide AUS.
+RK_LEGENDE_AUSWEICHEN = False # True: ein Label, das in der Legendenspalte
+                              # landet, wird WAAGERECHT herausgeschoben statt
+                              # den ganzen Ring dafuer zu verkleinern (Weg a).
+RK_AUSWEICH_MAX_IN  = 0.35    # so weit hoechstens; darueber bleibt es liegen
+RK_CX_VERSATZ_IN    = 0.0     # Ringmitte waagerecht verschieben (Weg b; Zoll,
+                              # rechts positiv). 0.0 = Mitte bleibt, wo die
+                              # Vorlage sie hat. Wirkt GLOBAL auf jeden Ring
+                              # und ruecht die Ringmitte aus der Mitte des
+                              # Ueberschriftenbalkens (gemessen: Balken
+                              # 0,000"-4,319", Mitte 2,160"; Ring bei 2,232").
+RK_VERSUCHE         = []      # Diagnose: Probelaeufe je Ring (Laufzeitmessung)
+RK_PROTOKOLL        = None    # Diagnose: auf [] setzen, dann sammelt die
+                              # Rueckkopplung (Durchmesser_cm, Grund) je Versuch
+
 # ── Familien-spezifische Ring-Optik (NEU 27.07.2026) ────────────────────────
 # NUR die hier gelisteten Familien weichen von den globalen Defaults ab; alle
 # anderen nutzen die Defaults → deren Ringe bleiben UNVERÄNDERT. Steuerbar:
@@ -156,7 +232,16 @@ LEGENDE_EINTAUCHTIEFE_IN = 0.20
 # EINMAL definiert. Soll EINE Familie abweichen, gib ihr unten statt
 # _RING_KRAEFTIG einen eigenen dict-Block mit anderen Zahlen.
 _RING_KRAEFTIG = {
-    "hole": 68,                 # dickerer, markanterer Ring (Default 79)
+    "hole": 79,                 # NEU 25.08.2026: zurueck auf die Bandstaerke
+                                # der alten Makro-PowerPoint (0,56 cm bei
+                                # 5,34 cm Durchmesser). Vom 27.07. bis
+                                # 24.08.2026 stand hier 68 ("kraeftiger Ring",
+                                # 0,85 cm) — das war die richtige Antwort auf
+                                # einen 3,86-cm-Ring. Seit die Rueckkopplung
+                                # den Ring auf Makro-Groesse bringt, wirkt
+                                # dieselbe Zahl wuchtig; die Ausgangs-
+                                # beobachtung lautete "groesser UND etwas
+                                # duenner". Thema behaelt 68, s. _RING_THEMA.
     "leader_breite_emu": 15875, # 1,25 pt: kräftig, aber nicht zu dominant
     "label_fett": True,         # fette Prozentzahlen (bleiben schwarz)
     "punkte": True,             # Punkte an den Leader-Enden
@@ -164,12 +249,33 @@ _RING_KRAEFTIG = {
     "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
     "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
     "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
+    "rueckkopplung": True,      # AUSDRUECKLICH ein (25.08.2026): CVV, ESG,
+                                # ETF und comdirect sind die vier Familien mit
+                                # Anlagestrategie-Folien, fuer die die
+                                # Rueckkopplung beauftragt UND vermessen ist
+                                # (14 Ringe, sieben Pruefklassen, Vorlagen und
+                                # echte Broschueren). Thema erbt diesen Block,
+                                # setzt den Schalter aber auf False zurueck.
 }
+# Thema bekommt eine EIGENE Kopie (NEU 25.08.2026). Grund: Seit die
+# Rueckkopplung die Anlagestrategie-Ringe auf Makro-Durchmesser bringt, steht
+# die Frage nach der Makro-BANDSTAERKE (hole 79, 0,56 cm) gegen die kraeftige
+# Optik vom 27.07. (hole 68, 0,85 cm). Diese Frage betrifft NUR die
+# Anlagestrategie-Folien. Thema hat gar keine solche Folie und soll seine
+# heutige Bandstaerke behalten — deshalb eine Kopie mit festem hole 68, die
+# von einer Aenderung an _RING_KRAEFTIG unberuehrt bleibt.
+_RING_THEMA = dict(_RING_KRAEFTIG, hole=68, rueckkopplung=False)
+# `rueckkopplung: False` haelt die Themen-Ringe BYTEGLEICH auf dem Stand
+# vom 24.08.2026 — nachgewiesen ueber alle Chart-Teile und alle
+# RingLeader-Shapes der Thema-Broschuere. Ein niedrigerer Deckel allein
+# reicht dafuer NICHT: Thema F11 C_Kennzahlen1 waechst auch bei Deckel
+# 0.27 von 5,51 auf 6,24 cm, weil der Zuwachs aus der Rueckkopplung
+# selbst kommt und nicht aus dem Deckel.
 FAMILIE_RING_FORMAT = {
     "CVV": _RING_KRAEFTIG,
     "ESG": _RING_KRAEFTIG,
     "ETF": _RING_KRAEFTIG,
-    "Thema": _RING_KRAEFTIG,
+    "Thema": _RING_THEMA,
     "comdirect": _RING_KRAEFTIG,
     # Nur "Standard" (Strategien ohne Familie) ist NICHT gelistet → bewusst der
     # bisherige Look. (Bei Bedarf einfach "Standard": _RING_KRAEFTIG, ergänzen —
@@ -184,6 +290,28 @@ _RING_FORMAT_DEFAULT = {
     "leader_start_tiefe": 0.0,      # 0.0 = Ansatz am Außenrand (bisheriges Verhalten)
     "leader_gerade": False,         # False = bisherige geknickte Führung
     "label_gap_in": None,           # None → der label_gap_in-Parameter von nachbearbeiten
+    "rueckkopplung": False,         # Ringgroesse per Rueckkopplung suchen?
+                                    # VOREINSTELLUNG AUS (25.08.2026): eine
+                                    # Familie bekommt sie erst, wenn sie
+                                    # VERMESSEN ist. Eingeschaltet ist sie
+                                    # ausdruecklich in _RING_KRAEFTIG (CVV,
+                                    # ESG, ETF, comdirect); Thema und
+                                    # "Standard" (Strategien ohne Familie,
+                                    # Vorlage_FFPB.pptx) bleiben damit auf dem
+                                    # Stand bis 24.08.2026 — der aus label_pad
+                                    # geratenen Groesse.
+                                    #
+                                    # WARUM HERUM: Bis eben stand hier True,
+                                    # und "Standard" erbte die Rueckkopplung,
+                                    # ohne dass dieser Pfad je gemessen worden
+                                    # waere (test_export_smoke.py baut nur die
+                                    # fuenf Familien). Gebaut zeigte er
+                                    # 5,73 -> 6,09 cm auf F7 und 2,87 -> 5,66 cm
+                                    # auf F10 C_Kennzahlen1 — keine Zusicherung
+                                    # gebrochen, aber ungeprueft. Das ist die
+                                    # Projektregel aus PROJEKT_DOKUMENTATION.md
+                                    # #28.7: additiv daneben bauen, den alten
+                                    # Pfad bitweise unveraendert lassen.
 }
 
 
@@ -736,10 +864,81 @@ def ring_labels_kompakt(chart, frame_w_in, frame_h_in,
     return gesetzt
 
 
+def _quelle_rechteck(chart, frame_w_in, frame_h_in):
+    """Die Quellenangabe ("Quelle: Eigene Berechnung Stand: ...") als Rechteck
+    (links, oben, rechts, unten) in Zoll — oder None, wenn es sie nicht gibt.
+
+    ENTDECKT AM 25.08.2026 durch Hinsehen, nicht durch Messen: Auf cVV F7 lag
+    "89,66 %" mitten auf der Quellenzeile. Keine Pruefklasse deckte das ab,
+    weil die Zeile KEIN Folien-Shape ist — sie steckt wie der
+    Ueberschriftenbalken als <cdr:relSizeAnchor> in den chartUserShapes des
+    Charts (ppt/drawings/drawingN.xml). Unten war bisher die Legende die
+    einzige Schranke; die Quellenzeile liegt RECHTS daneben, also genau in dem
+    Bereich, den die Spaltenregel (#71) freigegeben hat.
+
+    Gesucht wird inhaltsbasiert: das Objekt, dessen Text "Quelle" enthaelt.
+    Ersatzweise das UNTERE Rechteck (fy > 0.8) — der Kopfbalken sitzt oben und
+    wird dadurch nie erwischt. Findet sich nichts, gilt KEINE Sperre; geraten
+    wird nicht.
+    """
+    CDR = "{http://schemas.openxmlformats.org/drawingml/2006/chartDrawing}"
+    try:
+        from lxml import etree
+        bester = ersatz = None
+        for rel in chart.part.rels.values():
+            if "chartUserShapes" not in rel.reltype:
+                continue
+            for anchor in etree.fromstring(rel.target_part.blob):
+                f = anchor.find(CDR + "from")
+                t = anchor.find(CDR + "to")
+                if f is None or t is None:
+                    continue
+                fx = float(f.find(CDR + "x").text)
+                fy = float(f.find(CDR + "y").text)
+                tx = float(t.find(CDR + "x").text)
+                ty = float(t.find(CDR + "y").text)
+                kasten = (fx * frame_w_in, fy * frame_h_in,
+                          tx * frame_w_in, ty * frame_h_in)
+                text = " ".join(e.text or "" for e in anchor.iter(_A + "t"))
+                if "quelle" in text.lower():
+                    bester = kasten
+                elif fy > 0.8:
+                    ersatz = kasten
+        return bester or ersatz
+    except Exception:
+        return None
+
+
+def _legende_rechteck(root, frame_w_in, frame_h_in):
+    """Die Legende als Rechteck (links, oben, rechts, unten) in Zoll — oder
+    None, wenn sie kein manuelles Layout hat.
+
+    Dieselbe Flaeche, die tests/test_ring_geometrie.py als Zusicherung (d)
+    prueft. Gebraucht an ZWEI Stellen: die Rueckkopplung in
+    ring_labels_aussen_dynamisch verkleinert den Ring, wenn eine Beschriftung
+    darauf laege; ring_labels_stub_fix laesst den Nudge dann sein.
+    """
+    legend = root.find(".//" + _q("legend"))
+    if legend is None:
+        return None
+    ml = legend.find(".//" + _q("manualLayout"))
+    if ml is None or ml.find(_q("y")) is None:
+        return None
+
+    def _w(tag, ersatz):
+        e = ml.find(_q(tag))
+        return float(e.get("val")) if e is not None else ersatz
+
+    lx, ly = _w("x", 0.0), _w("y", 0.0)
+    lw, lh = _w("w", 1.0), _w("h", 1.0 - _w("y", 0.0))
+    return (lx * frame_w_in, ly * frame_h_in,
+            (lx + lw) * frame_w_in, (ly + lh) * frame_h_in)
+
+
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                  gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
                                  tangential_in=0.14, rand_oben_in=None,
-                                 kopf_frei_in=None):
+                                 kopf_frei_in=None, rueckkopplung=True):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -830,21 +1029,38 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
             R_ziel, lo, hi = _r, _lo, _hi
 
     new_cy = min(max(frame_h_in / 2.0, lo), hi) if hi >= lo else (lo + hi) / 2.0
-    if R_ziel < R_out - 1e-3 or abs(new_cy - cy) > 1e-3:
-        faktor = R_ziel / R_out
-        cxf = px + pw / 2.0                       # horizontales Zentrum halten
-        pw2, ph2 = pw * faktor, ph * faktor
-        px2 = cxf - pw2 / 2.0
-        py2 = (new_cy / frame_h_in) - ph2 / 2.0   # vertikal neu setzen
-        for tag, val in (("x", px2), ("y", py2), ("w", pw2), ("h", ph2)):
-            e = pa.find(_q(tag))
-            if e is not None:
-                e.set("val", f"{val:.5f}")
-        left, right = px2 * frame_w_in, (px2 + pw2) * frame_w_in
-        top, bot = py2 * frame_h_in, (py2 + ph2) * frame_h_in
-        cx, cy = (left + right) / 2.0, (top + bot) / 2.0
-        R_out = min(right - left, bot - top) / 2.0
 
+    # ======================================================================
+    #  RUECKKOPPLUNG (Experiment 25.08.2026)
+    # ======================================================================
+    #  Bis hierher ist `R_ziel`/`new_cy` der ALTE Wert: aus der pauschalen
+    #  Worst-Case-Reserve `label_pad` geraten, BEVOR ein einziges Label stand.
+    #  Er bleibt als garantierte Untergrenze stehen — die Rueckkopplung darf
+    #  einen Ring nur VERGROESSERN, nie verkleinern.
+    HALB_W, HALB_H = 0.33, 0.10   # halbe Text-Box (Zoll, ~"29,60%")
+    R_basis, cy_basis = R_ziel, new_cy
+    R_vorlage = R_out          # was die Vorlage hergibt (harte Obergrenze)
+    cx_fest, cy_alt = cx + RK_CX_VERSATZ_IN, cy   # waagerechte Mitte
+
+    # Die Legende als RECHTECK — dieselbe Flaechenpruefung wie in
+    # tests/test_ring_geometrie.py, Zusicherung (d).
+    legende_box = _legende_rechteck(root, frame_w_in, frame_h_in)
+    quelle_box = _quelle_rechteck(chart, frame_w_in, frame_h_in)
+    # Flaechen, auf denen weder Ring noch Beschriftung liegen duerfen.
+    tabuflaechen = [(bez, kasten) for bez, kasten
+                    in (("der Legende", legende_box),
+                        ("der Quellenangabe", quelle_box)) if kasten]
+
+    def _auf_tabu(x, y):
+        """Liegt die Label-Box (x +- HALB_W, y +- HALB_H) auf einer
+        Tabuflaeche? Rueckgabe: Bezeichnung der Flaeche oder None."""
+        for bez, (bx0, by0, bx1, by1) in tabuflaechen:
+            if (x + HALB_W > bx0 - RK_TABU_LUFT
+                    and x - HALB_W < bx1 + RK_TABU_LUFT
+                    and y + HALB_H > by0 - RK_TABU_LUFT
+                    and y - HALB_H < by1 + RK_TABU_LUFT):
+                return bez
+        return None
     # (Auch hier wurde bis 12.08.2026 die holeSize gelesen und als `band_center`
     # der PP-Default-Radius berechnet — unbenutzt, siehe die Erklärung weiter
     # oben. R_target unten ersetzt ihn vollständig.)
@@ -852,7 +1068,6 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     # Die nötige radiale Distanz der Label-MITTE hängt vom Winkel ab, weil der
     # Text waagerecht ist: seitlich ragt die halbe Breite zum Ring, oben/unten
     # nur die halbe Höhe. R_target wird deshalb pro Label in Schritt 5 berechnet.
-    HALB_W, HALB_H = 0.33, 0.10                # halbe Text-Box (Zoll, ~"29,60%")
     # 3) Segment-Mittelwinkel (Grad, im Uhrzeigersinn ab 12 Uhr)
     val_block = root.find(".//" + _q("val"))
     if val_block is None:
@@ -896,67 +1111,38 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     # das Label wieder bis rand_in hoch und es landet im Überschriftenbalken.
     _rand_oben = rand_in if rand_oben_in is None else float(rand_oben_in)
 
-    ziel = []
-    for i in range(len(mids)):
-        la = math.radians(label_ang[i])
-        sx, sy = math.sin(la), -math.cos(la)          # radial nach außen
-        tsx, tsy = math.cos(la), math.sin(la)         # tangential (im Uhrzeigersinn)
-        # radiale Ausdehnung der (waagerechten) Text-Box in Blickrichtung:
-        # seitlich zählt die Breite, oben/unten die Höhe.
-        radial_extent = HALB_W * abs(sx) + HALB_H * abs(sy)
-        r_target_i = R_out + gap_in + radial_extent    # → Innenkante = R_out+gap_in
-        r_use = r_target_i
-        if sx > 1e-6:    r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
-        elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
-        if sy > 1e-6:    r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
-        elif sy < -1e-6: r_use = min(r_use, (_rand_oben - cy) / sy)
-        r_use = max(r_use, R_out + 0.05)              # nie innerhalb des Rings
-        tx = cx + r_use * sx + tangential_in * tsx
-        ty = cy + r_use * sy + tangential_in * tsy
-        ziel.append([tx, ty])
+    # -- Der Platzierungs-Lauf als FUNKTION (Umbau 25.08.2026) ----------
+    #    Frueher lief dieser Block genau EINMAL, fest verdrahtet auf die
+    #    oben geratene Ringgroesse. Als Funktion laesst er sich fuer
+    #    mehrere Ringgroessen PROBEWEISE rechnen, ohne etwas zu schreiben —
+    #    das ist die Rueckkopplung. Der Inhalt ist unveraendert.
+    def _platzieren(cx, cy, R_out):
+        ziel = []
+        for i in range(len(mids)):
+            la = math.radians(label_ang[i])
+            sx, sy = math.sin(la), -math.cos(la)          # radial nach außen
+            tsx, tsy = math.cos(la), math.sin(la)         # tangential (im Uhrzeigersinn)
+            # radiale Ausdehnung der (waagerechten) Text-Box in Blickrichtung:
+            # seitlich zählt die Breite, oben/unten die Höhe.
+            radial_extent = HALB_W * abs(sx) + HALB_H * abs(sy)
+            r_target_i = R_out + gap_in + radial_extent    # → Innenkante = R_out+gap_in
+            r_use = r_target_i
+            if sx > 1e-6:    r_use = min(r_use, (frame_w_in - rand_in - cx) / sx)
+            elif sx < -1e-6: r_use = min(r_use, (rand_in - cx) / sx)
+            if sy > 1e-6:    r_use = min(r_use, (frame_h_in - rand_in - cy) / sy)
+            elif sy < -1e-6: r_use = min(r_use, (_rand_oben - cy) / sy)
+            r_use = max(r_use, R_out + 0.05)              # nie innerhalb des Rings
+            tx = cx + r_use * sx + tangential_in * tsx
+            ty = cy + r_use * sy + tangential_in * tsy
+            ziel.append([tx, ty])
 
-    # 6) ADAPTIVE Überlappungs-Auflösung im ABSOLUTEN Raum — garantiert, dass
-    #    sich keine zwei Zahlen überlappen, egal wie die Segmente verteilt
-    #    sind. Zu dicht stehende Labels werden vertikal auseinandergedrängt
-    #    (Zahlen sind waagerechter Text → Überlappung ist v.a. vertikal),
-    #    dabei im Rahmen gehalten. min_v/min_h ≈ halbe Label-Höhe/-Breite.
-    min_v, min_h = 0.205, 0.60
-    for _ in range(120):
-        bewegt = False
-        reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
-        for a in range(len(reihenfolge)):
-            for b in range(a + 1, len(reihenfolge)):
-                i, j = reihenfolge[a], reihenfolge[b]
-                if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
-                    schub = (min_v - abs(ziel[i][1] - ziel[j][1])) / 2.0 + 0.005
-                    hoch, runter = (i, j) if ziel[i][1] <= ziel[j][1] else (j, i)
-                    ziel[hoch][1] = max(_rand_oben, ziel[hoch][1] - schub)
-                    ziel[runter][1] = min(frame_h_in - rand_in, ziel[runter][1] + schub)
-                    bewegt = True
-        if not bewegt:
-            break
-
-    # 6b) LEADER-GARANTIE: jedes Label muss einen Mindest-Seitenabstand
-    #     (senkrecht zur radialen Linie seines Segments) haben, sonst zeichnet
-    #     PowerPoint keinen Strich. Wir schieben zu radial-nahe Labels
-    #     tangential weg — danach nochmal Überlappung auflösen.
-    min_tang = 0.20
-    for _durchlauf in range(6):
-        for i in range(len(ziel)):
-            md = math.radians(mids[i])
-            perp_x, perp_y = math.cos(md), math.sin(md)   # senkrecht zur Radial-Richtung
-            lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
-            d_perp = lvx * perp_x + lvy * perp_y
-            if abs(d_perp) < min_tang:
-                richtung = 1.0 if d_perp >= 0 else -1.0
-                korr = (min_tang - abs(d_perp)) * richtung
-                nx = ziel[i][0] + korr * perp_x
-                ny = ziel[i][1] + korr * perp_y
-                # im Rahmen halten
-                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, nx))
-                ziel[i][1] = max(_rand_oben, min(frame_h_in - rand_in, ny))
-        # Überlappung erneut auflösen (Tangential-Schub kann welche erzeugt haben)
-        for _ in range(60):
+        # 6) ADAPTIVE Überlappungs-Auflösung im ABSOLUTEN Raum — garantiert, dass
+        #    sich keine zwei Zahlen überlappen, egal wie die Segmente verteilt
+        #    sind. Zu dicht stehende Labels werden vertikal auseinandergedrängt
+        #    (Zahlen sind waagerechter Text → Überlappung ist v.a. vertikal),
+        #    dabei im Rahmen gehalten. min_v/min_h ≈ halbe Label-Höhe/-Breite.
+        min_v, min_h = 0.205, 0.60
+        for _ in range(120):
             bewegt = False
             reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
             for a in range(len(reihenfolge)):
@@ -971,287 +1157,474 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
             if not bewegt:
                 break
 
-    # 6c) MINDEST-RING-ABSTAND: kein Label darf dem Ring zu nah kommen
-    #     (die vertikale De-overlap kann Labels zum Ring drücken). Zu nahe
-    #     Labels werden radial nach außen geschoben (im Rahmen gehalten).
-    min_clear = 0.12
-    for _ in range(4):
-        for i in range(len(ziel)):
-            lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
-            rad = math.hypot(lvx, lvy) or 1e-6
-            pa_ang = math.atan2(lvx, -lvy)                      # Positionswinkel
-            rext = 0.33 * abs(math.sin(pa_ang)) + 0.10 * abs(math.cos(pa_ang))
-            inner = rad - rext - R_out
-            if inner < min_clear:
-                schub = min_clear - inner
-                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, ziel[i][0] + schub * lvx / rad))
-                ziel[i][1] = max(_rand_oben, min(frame_h_in - rand_in, ziel[i][1] + schub * lvy / rad))
-
-    # 6d) KOPF-FREIHALTUNG (NEU 10.07.2026) — harte Garantie gegen Kollision
-    #     mit dem Überschriftenbalken.
-    #
-    #     Ein Label, das oben am Ring sitzt, lässt sich RADIAL nicht nach unten
-    #     schieben: dort ist der Ring (r_use = max(r_use, R_out+0.05) gewinnt).
-    #     Ein größerer oberer Rand bewegt es deshalb kaum.
-    #
-    #     Lösung: das Label auf SEINEM Radius entlang der Ringkurve wegdrehen,
-    #     bis die geforderte Oberkante erreicht ist. Der Abstand zum Ring bleibt
-    #     dabei exakt erhalten, die Führungslinie zeigt weiter auf sein Segment.
-    #
-    #         y = cy - r*cos(a)  →  cos(a) = (cy - y_ziel) / r
-    #
-    #     kopf_frei_in = Mindest-Oberkante des Labels (None → Pass aus).
-    if kopf_frei_in is not None:
-        y_soll = float(kopf_frei_in) + HALB_H          # gewünschte Label-MITTE
-        for i in range(len(mids)):
-            if ziel[i][1] >= y_soll - 1e-6:
-                continue                                # tief genug
-            dx0, dy0 = ziel[i][0] - cx, ziel[i][1] - cy
-            r_i = math.hypot(dx0, dy0)
-            if r_i < 1e-6:
-                continue
-            seite = 1.0 if dx0 >= 0 else -1.0           # Seite beibehalten
-            # Winkel UND Radius gemeinsam lösen: beim Herunterdrehen zeigt die
-            # Textbox stärker mit ihrer BREITE zum Ring (HALB_W statt HALB_H),
-            # der Radius muss also mitwachsen — sonst berührt das Label den Ring.
-            r = r_i
-            gefunden = False
-            for _ in range(8):
-                c = (cy - y_soll) / r
-                if abs(c) > 1.0:
-                    break
-                a = math.acos(max(-1.0, min(1.0, c)))
-                sx, sy = seite * math.sin(a), -math.cos(a)
-                r_noetig = R_out + gap_in + HALB_W * abs(sx) + HALB_H * abs(sy)
-                r_neu = max(r, r_noetig)
-                if abs(r_neu - r) < 1e-4:
-                    gefunden = True
-                    break
-                r = r_neu
-            if not gefunden and abs((cy - y_soll) / r) > 1.0:
-                # Radius reicht nicht: so tief wie möglich (waagerecht daneben)
-                ziel[i][1] = cy
-                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
-                                              cx + seite * r))
-                continue
-            c = max(-1.0, min(1.0, (cy - y_soll) / r))
-            a = math.acos(c)
-            ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
-                                          cx + seite * r * math.sin(a)))
-            ziel[i][1] = cy - r * c
-
-        # Entzerren (nur nach unten) und radiales Ausschieben BEEINFLUSSEN
-        # SICH GEGENSEITIG: das Nach-unten-Schieben drückt Labels auf den Ring,
-        # der Ausschub schiebt zwei Labels wieder zusammen. Einmal nacheinander
-        # reicht nicht — gemessen an [0.94, 0.03, 0.02, 0.01]. Deshalb im
-        # Wechsel, und mit dem Entzerren als LETZTEM Schritt.
-        def _entzerren_nach_unten():
+        # 6b) LEADER-GARANTIE: jedes Label muss einen Mindest-Seitenabstand
+        #     (senkrecht zur radialen Linie seines Segments) haben, sonst zeichnet
+        #     PowerPoint keinen Strich. Wir schieben zu radial-nahe Labels
+        #     tangential weg — danach nochmal Überlappung auflösen.
+        min_tang = 0.20
+        for _durchlauf in range(6):
+            for i in range(len(ziel)):
+                md = math.radians(mids[i])
+                perp_x, perp_y = math.cos(md), math.sin(md)   # senkrecht zur Radial-Richtung
+                lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
+                d_perp = lvx * perp_x + lvy * perp_y
+                if abs(d_perp) < min_tang:
+                    richtung = 1.0 if d_perp >= 0 else -1.0
+                    korr = (min_tang - abs(d_perp)) * richtung
+                    nx = ziel[i][0] + korr * perp_x
+                    ny = ziel[i][1] + korr * perp_y
+                    # im Rahmen halten
+                    ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, nx))
+                    ziel[i][1] = max(_rand_oben, min(frame_h_in - rand_in, ny))
+            # Überlappung erneut auflösen (Tangential-Schub kann welche erzeugt haben)
             for _ in range(60):
                 bewegt = False
                 reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
-                for a_ in range(len(reihenfolge)):
-                    for b_ in range(a_ + 1, len(reihenfolge)):
-                        i, j = reihenfolge[a_], reihenfolge[b_]
-                        if (abs(ziel[i][1] - ziel[j][1]) < min_v
-                                and abs(ziel[i][0] - ziel[j][0]) < min_h):
-                            schub = (min_v - abs(ziel[i][1] - ziel[j][1])) + 0.005
-                            runter = j if ziel[j][1] >= ziel[i][1] else i
-                            ziel[runter][1] = min(frame_h_in - rand_in,
-                                                  ziel[runter][1] + schub)
+                for a in range(len(reihenfolge)):
+                    for b in range(a + 1, len(reihenfolge)):
+                        i, j = reihenfolge[a], reihenfolge[b]
+                        if abs(ziel[i][1] - ziel[j][1]) < min_v and abs(ziel[i][0] - ziel[j][0]) < min_h:
+                            schub = (min_v - abs(ziel[i][1] - ziel[j][1])) / 2.0 + 0.005
+                            hoch, runter = (i, j) if ziel[i][1] <= ziel[j][1] else (j, i)
+                            ziel[hoch][1] = max(_rand_oben, ziel[hoch][1] - schub)
+                            ziel[runter][1] = min(frame_h_in - rand_in, ziel[runter][1] + schub)
                             bewegt = True
                 if not bewegt:
                     break
 
-        def _radial_ausschieben():
-            for i in range(len(mids)):
+        # 6c) MINDEST-RING-ABSTAND: kein Label darf dem Ring zu nah kommen
+        #     (die vertikale De-overlap kann Labels zum Ring drücken). Zu nahe
+        #     Labels werden radial nach außen geschoben (im Rahmen gehalten).
+        min_clear = 0.12
+        for _ in range(4):
+            for i in range(len(ziel)):
                 lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
-                rad = math.hypot(lvx, lvy)
-                if rad < 1e-6:
-                    continue
-                inner = rad - (HALB_W * abs(lvx) + HALB_H * abs(lvy)) / rad - R_out
+                rad = math.hypot(lvx, lvy) or 1e-6
+                pa_ang = math.atan2(lvx, -lvy)                      # Positionswinkel
+                rext = 0.33 * abs(math.sin(pa_ang)) + 0.10 * abs(math.cos(pa_ang))
+                inner = rad - rext - R_out
                 if inner < min_clear:
                     schub = min_clear - inner
+                    ziel[i][0] = max(rand_in, min(frame_w_in - rand_in, ziel[i][0] + schub * lvx / rad))
+                    ziel[i][1] = max(_rand_oben, min(frame_h_in - rand_in, ziel[i][1] + schub * lvy / rad))
+
+        # 6d) KOPF-FREIHALTUNG (NEU 10.07.2026) — harte Garantie gegen Kollision
+        #     mit dem Überschriftenbalken.
+        #
+        #     Ein Label, das oben am Ring sitzt, lässt sich RADIAL nicht nach unten
+        #     schieben: dort ist der Ring (r_use = max(r_use, R_out+0.05) gewinnt).
+        #     Ein größerer oberer Rand bewegt es deshalb kaum.
+        #
+        #     Lösung: das Label auf SEINEM Radius entlang der Ringkurve wegdrehen,
+        #     bis die geforderte Oberkante erreicht ist. Der Abstand zum Ring bleibt
+        #     dabei exakt erhalten, die Führungslinie zeigt weiter auf sein Segment.
+        #
+        #         y = cy - r*cos(a)  →  cos(a) = (cy - y_ziel) / r
+        #
+        #     kopf_frei_in = Mindest-Oberkante des Labels (None → Pass aus).
+        if kopf_frei_in is not None:
+            y_soll = float(kopf_frei_in) + HALB_H          # gewünschte Label-MITTE
+            for i in range(len(mids)):
+                if ziel[i][1] >= y_soll - 1e-6:
+                    continue                                # tief genug
+                dx0, dy0 = ziel[i][0] - cx, ziel[i][1] - cy
+                r_i = math.hypot(dx0, dy0)
+                if r_i < 1e-6:
+                    continue
+                seite = 1.0 if dx0 >= 0 else -1.0           # Seite beibehalten
+                # Winkel UND Radius gemeinsam lösen: beim Herunterdrehen zeigt die
+                # Textbox stärker mit ihrer BREITE zum Ring (HALB_W statt HALB_H),
+                # der Radius muss also mitwachsen — sonst berührt das Label den Ring.
+                r = r_i
+                gefunden = False
+                for _ in range(8):
+                    c = (cy - y_soll) / r
+                    if abs(c) > 1.0:
+                        break
+                    a = math.acos(max(-1.0, min(1.0, c)))
+                    sx, sy = seite * math.sin(a), -math.cos(a)
+                    r_noetig = R_out + gap_in + HALB_W * abs(sx) + HALB_H * abs(sy)
+                    r_neu = max(r, r_noetig)
+                    if abs(r_neu - r) < 1e-4:
+                        gefunden = True
+                        break
+                    r = r_neu
+                if not gefunden and abs((cy - y_soll) / r) > 1.0:
+                    # Radius reicht nicht: so tief wie möglich (waagerecht daneben)
+                    ziel[i][1] = cy
                     ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
-                                                  ziel[i][0] + schub * lvx / rad))
-                    ziel[i][1] = max(y_soll, min(frame_h_in - rand_in,
-                                                 ziel[i][1] + schub * lvy / rad))
+                                                  cx + seite * r))
+                    continue
+                c = max(-1.0, min(1.0, (cy - y_soll) / r))
+                a = math.acos(c)
+                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
+                                              cx + seite * r * math.sin(a)))
+                ziel[i][1] = cy - r * c
 
-        for _ in range(4):
+            # Entzerren (nur nach unten) und radiales Ausschieben BEEINFLUSSEN
+            # SICH GEGENSEITIG: das Nach-unten-Schieben drückt Labels auf den Ring,
+            # der Ausschub schiebt zwei Labels wieder zusammen. Einmal nacheinander
+            # reicht nicht — gemessen an [0.94, 0.03, 0.02, 0.01]. Deshalb im
+            # Wechsel, und mit dem Entzerren als LETZTEM Schritt.
+            def _entzerren_nach_unten():
+                for _ in range(60):
+                    bewegt = False
+                    reihenfolge = sorted(range(len(ziel)), key=lambda i: ziel[i][1])
+                    for a_ in range(len(reihenfolge)):
+                        for b_ in range(a_ + 1, len(reihenfolge)):
+                            i, j = reihenfolge[a_], reihenfolge[b_]
+                            if (abs(ziel[i][1] - ziel[j][1]) < min_v
+                                    and abs(ziel[i][0] - ziel[j][0]) < min_h):
+                                schub = (min_v - abs(ziel[i][1] - ziel[j][1])) + 0.005
+                                runter = j if ziel[j][1] >= ziel[i][1] else i
+                                ziel[runter][1] = min(frame_h_in - rand_in,
+                                                      ziel[runter][1] + schub)
+                                bewegt = True
+                    if not bewegt:
+                        break
+
+            def _radial_ausschieben():
+                for i in range(len(mids)):
+                    lvx, lvy = ziel[i][0] - cx, ziel[i][1] - cy
+                    rad = math.hypot(lvx, lvy)
+                    if rad < 1e-6:
+                        continue
+                    inner = rad - (HALB_W * abs(lvx) + HALB_H * abs(lvy)) / rad - R_out
+                    if inner < min_clear:
+                        schub = min_clear - inner
+                        ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
+                                                      ziel[i][0] + schub * lvx / rad))
+                        ziel[i][1] = max(y_soll, min(frame_h_in - rand_in,
+                                                     ziel[i][1] + schub * lvy / rad))
+
+            for _ in range(4):
+                _entzerren_nach_unten()
+                _radial_ausschieben()
             _entzerren_nach_unten()
-            _radial_ausschieben()
-        _entzerren_nach_unten()
 
-    # 6d2) BOGENGRENZEN-ABSTAND (NEU 13.07.2026) — sichert, dass PowerPoint für
-    #      jedes Label eine Führungslinie zeichnet.
-    #
-    #      SYSTEMATISCH am realen Chart nachgewiesen (alle 5 Regionen-Labels):
-    #      PowerPoint zeichnet den radialen Leader nur, wenn er EINDEUTIG einem
-    #      Segment zuzuordnen ist. Das ist der Fall, wenn der POSITIONSWINKEL des
-    #      Labels (Winkel vom Ringmittelpunkt zur Label-Mitte)
-    #        (a) INNERHALB des eigenen Segmentbogens liegt, mit Mindestabstand zu
-    #            beiden Bogengrenzen, ODER
-    #        (b) klar AUSSERHALB (langer Leader, z.B. winziges 12-Uhr-Segment).
-    #
-    #      Der 8,33%-Fall (Asien) hatte seinen Positionswinkel mit 0,1° EXAKT auf
-    #      der Naht zwischen Asien und Deutschland → der Leader hätte auf der
-    #      Segmentgrenze geendet → mehrdeutig → PowerPoint zeichnete nichts.
-    #      Alle anderen Labels (auch alle Branchen) lagen ≥11,9° von jeder Grenze
-    #      → alle hatten Leader. Regel gegen alle belegten Fälle verifiziert.
-    #
-    #      Frühere Fixes drehten am Winkel-OFFSET zum Mittelwinkel — die falsche
-    #      Größe. Die richtige ist der Abstand zur GRENZE. Ist ausschließlich aus
-    #      der Segmentgeometrie berechenbar und daher OHNE Rendern prüfbar.
-    #
-    #      Fix: Für jedes Label, dessen Positionswinkel zu nah an einer eigenen
-    #      Bogengrenze liegt (und das nicht ohnehin klar außerhalb sitzt), suche
-    #      die nächstgelegene Position, deren Positionswinkel GRENZ_ABSTAND von
-    #      beiden Grenzen hält — unter Balken, ohne Überlappung, ohne Ring-
-    #      Berührung. Findet sich keine, bleibt das Label (nichts wird schlechter).
-    GRENZ_ABSTAND = 6.0    # Mindest-Winkelabstand des Positionswinkels zur
-    #                        Bogengrenze. Belegt: Leader ab ~11,9° sicher, kein
-    #                        Leader bei 0,1°. 6° ist ein konservativer Mittelwert
-    #                        mit Sicherheitsmarge zur belegten Nicht-Zeichnung.
-    MIN_LEADER = 0.28      # Mindest-Leader-Länge (Label klar außerhalb des Rings)
+        # 6d2) BOGENGRENZEN-ABSTAND (NEU 13.07.2026) — sichert, dass PowerPoint für
+        #      jedes Label eine Führungslinie zeichnet.
+        #
+        #      SYSTEMATISCH am realen Chart nachgewiesen (alle 5 Regionen-Labels):
+        #      PowerPoint zeichnet den radialen Leader nur, wenn er EINDEUTIG einem
+        #      Segment zuzuordnen ist. Das ist der Fall, wenn der POSITIONSWINKEL des
+        #      Labels (Winkel vom Ringmittelpunkt zur Label-Mitte)
+        #        (a) INNERHALB des eigenen Segmentbogens liegt, mit Mindestabstand zu
+        #            beiden Bogengrenzen, ODER
+        #        (b) klar AUSSERHALB (langer Leader, z.B. winziges 12-Uhr-Segment).
+        #
+        #      Der 8,33%-Fall (Asien) hatte seinen Positionswinkel mit 0,1° EXAKT auf
+        #      der Naht zwischen Asien und Deutschland → der Leader hätte auf der
+        #      Segmentgrenze geendet → mehrdeutig → PowerPoint zeichnete nichts.
+        #      Alle anderen Labels (auch alle Branchen) lagen ≥11,9° von jeder Grenze
+        #      → alle hatten Leader. Regel gegen alle belegten Fälle verifiziert.
+        #
+        #      Frühere Fixes drehten am Winkel-OFFSET zum Mittelwinkel — die falsche
+        #      Größe. Die richtige ist der Abstand zur GRENZE. Ist ausschließlich aus
+        #      der Segmentgeometrie berechenbar und daher OHNE Rendern prüfbar.
+        #
+        #      Fix: Für jedes Label, dessen Positionswinkel zu nah an einer eigenen
+        #      Bogengrenze liegt (und das nicht ohnehin klar außerhalb sitzt), suche
+        #      die nächstgelegene Position, deren Positionswinkel GRENZ_ABSTAND von
+        #      beiden Grenzen hält — unter Balken, ohne Überlappung, ohne Ring-
+        #      Berührung. Findet sich keine, bleibt das Label (nichts wird schlechter).
+        GRENZ_ABSTAND = 6.0    # Mindest-Winkelabstand des Positionswinkels zur
+        #                        Bogengrenze. Belegt: Leader ab ~11,9° sicher, kein
+        #                        Leader bei 0,1°. 6° ist ein konservativer Mittelwert
+        #                        mit Sicherheitsmarge zur belegten Nicht-Zeichnung.
+        MIN_LEADER = 0.28      # Mindest-Leader-Länge (Label klar außerhalb des Rings)
 
-    ob_grenze = kopf_frei_in if kopf_frei_in is not None else _rand_oben
+        ob_grenze = kopf_frei_in if kopf_frei_in is not None else _rand_oben
 
-    # Segmentbögen (Start/Ende in Grad) aus kumulierten Werten + firstSliceAng.
-    # (mids wurde oben genau so gebildet; hier rekonstruieren wir die Grenzen.)
-    _summe = sum(vals) or 1.0
-    _bogen = []
-    _kum = 0.0
-    for _v in vals:
-        _f = _v / _summe
-        _bogen.append(((fsa + _kum * 360) % 360, (fsa + (_kum + _f) * 360) % 360))
-        _kum += _f
+        # Segmentbögen (Start/Ende in Grad) aus kumulierten Werten + firstSliceAng.
+        # (mids wurde oben genau so gebildet; hier rekonstruieren wir die Grenzen.)
+        _summe = sum(vals) or 1.0
+        _bogen = []
+        _kum = 0.0
+        for _v in vals:
+            _f = _v / _summe
+            _bogen.append(((fsa + _kum * 360) % 360, (fsa + (_kum + _f) * 360) % 360))
+            _kum += _f
 
-    def _pos_winkel(x, y):
-        return math.degrees(math.atan2(x - cx, -(y - cy))) % 360
+        def _pos_winkel(x, y):
+            return math.degrees(math.atan2(x - cx, -(y - cy))) % 360
 
-    def _abstand_grenze(i, x, y):
-        """Kleinster Winkelabstand des Positionswinkels zu den Bögen-Grenzen
-        von Segment i. Positiv, in Grad."""
-        pang = _pos_winkel(x, y)
-        a, b = _bogen[i]
-        d_a = min(abs(pang - a), 360 - abs(pang - a))
-        d_b = min(abs(pang - b), 360 - abs(pang - b))
-        return min(d_a, d_b)
+        def _abstand_grenze(i, x, y):
+            """Kleinster Winkelabstand des Positionswinkels zu den Bögen-Grenzen
+            von Segment i. Positiv, in Grad."""
+            pang = _pos_winkel(x, y)
+            a, b = _bogen[i]
+            d_a = min(abs(pang - a), 360 - abs(pang - a))
+            d_b = min(abs(pang - b), 360 - abs(pang - b))
+            return min(d_a, d_b)
 
-    def _im_bogen(i, x, y):
-        pang = _pos_winkel(x, y)
-        a, b = _bogen[i]
-        if a <= b:
-            return a <= pang <= b
-        return pang >= a or pang <= b          # Bogen über 0° hinweg
+        def _im_bogen(i, x, y):
+            pang = _pos_winkel(x, y)
+            a, b = _bogen[i]
+            if a <= b:
+                return a <= pang <= b
+            return pang >= a or pang <= b          # Bogen über 0° hinweg
 
-    def _leader_sicher(i, x, y):
-        """PowerPoint zeichnet: entweder klar im Bogen mit Grenzabstand, oder
-        klar außerhalb (dann ist die Zuordnung über die Länge eindeutig)."""
-        if not _im_bogen(i, x, y):
-            return True                        # außerhalb → langer Leader
-        return _abstand_grenze(i, x, y) >= GRENZ_ABSTAND
+        def _leader_sicher(i, x, y):
+            """PowerPoint zeichnet: entweder klar im Bogen mit Grenzabstand, oder
+            klar außerhalb (dann ist die Zuordnung über die Länge eindeutig)."""
+            if not _im_bogen(i, x, y):
+                return True                        # außerhalb → langer Leader
+            return _abstand_grenze(i, x, y) >= GRENZ_ABSTAND
 
-    def _frei(i, x, y):
-        if not (rand_in <= x <= frame_w_in - rand_in):
-            return False
-        if not (ob_grenze <= y - HALB_H and y <= frame_h_in - rand_in):
-            return False
-        # Ring-Abstand positionsabhängig: seitlich zählt die Box-Breite,
-        # oben/unten die Höhe.
-        lvx, lvy = x - cx, y - cy
-        rad = math.hypot(lvx, lvy)
-        if rad > 1e-6:
-            pa_ang = math.atan2(lvx, -lvy)
-            rext = HALB_W * abs(math.sin(pa_ang)) + HALB_H * abs(math.cos(pa_ang))
-            if rad - rext - R_out < 0.05:
+        def _frei(i, x, y):
+            if not (rand_in <= x <= frame_w_in - rand_in):
                 return False
-        for j in range(len(ziel)):
-            if j == i:
+            if _auf_tabu(x, y):
+                return False
+            if not (ob_grenze <= y - HALB_H and y <= frame_h_in - rand_in):
+                return False
+            # Ring-Abstand positionsabhängig: seitlich zählt die Box-Breite,
+            # oben/unten die Höhe.
+            lvx, lvy = x - cx, y - cy
+            rad = math.hypot(lvx, lvy)
+            if rad > 1e-6:
+                pa_ang = math.atan2(lvx, -lvy)
+                rext = HALB_W * abs(math.sin(pa_ang)) + HALB_H * abs(math.cos(pa_ang))
+                if rad - rext - R_out < 0.05:
+                    return False
+            for j in range(len(ziel)):
+                if j == i:
+                    continue
+                if abs(x - ziel[j][0]) < min_h and abs(y - ziel[j][1]) < min_v:
+                    return False
+            return True
+
+        for i in range(len(mids)):
+            # nur eingreifen, wenn der Leader aktuell NICHT sicher ist
+            if _leader_sicher(i, ziel[i][0], ziel[i][1]) and _frei(i, ziel[i][0],
+                                                                   ziel[i][1]):
                 continue
-            if abs(x - ziel[j][0]) < min_h and abs(y - ziel[j][1]) < min_v:
-                return False
-        return True
+            seg = mids[i] % 360
+            sx = cx + R_out * math.sin(math.radians(seg))
+            sy = cy - R_out * math.cos(math.radians(seg))
+            # Suche die Position mit dem GRÖSSTEN Grenzabstand, die alle
+            # Constraints erfüllt. Winkel um den Mittelwinkel, Radius fein gerastert.
+            bestpos = None
+            best_abstand = -1.0
+            for off_grad in (0, 2, 4, 6, 8, 10, 12):
+                for seite in (-1, 1):
+                    for r_delta in (0.12, 0.16, 0.20, 0.24, 0.28, 0.32,
+                                    0.36, 0.40, 0.44):
+                        r = R_out + r_delta
+                        a = math.radians(seg + seite * off_grad)
+                        x = cx + r * math.sin(a)
+                        y = cy - r * math.cos(a)
+                        if math.hypot(x - sx, y - sy) < MIN_LEADER:
+                            continue
+                        if not _frei(i, x, y):
+                            continue
+                        if not _leader_sicher(i, x, y):
+                            continue
+                        ab = _abstand_grenze(i, x, y)
+                        if ab > best_abstand:
+                            best_abstand = ab
+                            bestpos = (x, y)
+            # übernehmen, wenn eine sichere Position gefunden wurde und sie den
+            # Grenzabstand VERBESSERT
+            if bestpos is not None and best_abstand > _abstand_grenze(
+                    i, ziel[i][0], ziel[i][1]):
+                ziel[i][0], ziel[i][1] = bestpos
 
-    for i in range(len(mids)):
-        # nur eingreifen, wenn der Leader aktuell NICHT sicher ist
-        if _leader_sicher(i, ziel[i][0], ziel[i][1]) and _frei(i, ziel[i][0],
-                                                               ziel[i][1]):
-            continue
-        seg = mids[i] % 360
-        sx = cx + R_out * math.sin(math.radians(seg))
-        sy = cy - R_out * math.cos(math.radians(seg))
-        # Suche die Position mit dem GRÖSSTEN Grenzabstand, die alle
-        # Constraints erfüllt. Winkel um den Mittelwinkel, Radius fein gerastert.
-        bestpos = None
-        best_abstand = -1.0
-        for off_grad in (0, 2, 4, 6, 8, 10, 12):
-            for seite in (-1, 1):
-                for r_delta in (0.12, 0.16, 0.20, 0.24, 0.28, 0.32,
-                                0.36, 0.40, 0.44):
-                    r = R_out + r_delta
-                    a = math.radians(seg + seite * off_grad)
-                    x = cx + r * math.sin(a)
-                    y = cy - r * math.cos(a)
-                    if math.hypot(x - sx, y - sy) < MIN_LEADER:
-                        continue
-                    if not _frei(i, x, y):
-                        continue
-                    if not _leader_sicher(i, x, y):
-                        continue
-                    ab = _abstand_grenze(i, x, y)
-                    if ab > best_abstand:
-                        best_abstand = ab
-                        bestpos = (x, y)
-        # übernehmen, wenn eine sichere Position gefunden wurde und sie den
-        # Grenzabstand VERBESSERT
-        if bestpos is not None and best_abstand > _abstand_grenze(
-                i, ziel[i][0], ziel[i][1]):
-            ziel[i][0], ziel[i][1] = bestpos
+        # 6d3) LEGENDEN-AUSWEICHEN (EXPERIMENT 25.08.2026, per Schalter)
+        #      Seit der Ring bis unter die Legendenoberkante reicht, kann EIN
+        #      Label unten links in der Legendenspalte landen (gemessen: ETF
+        #      F16, 0,076" Ueberlappung). Bisher kostete das den ganzen Ring:
+        #      die Rueckkopplung verkleinert, bis das Label frei steht.
+        #      Billiger ist, NUR dieses Label waagerecht aus der Spalte zu
+        #      schieben — dieselbe Bewegung, die ring_labels_stub_fix ohnehin
+        #      macht. Uebernommen nur, wenn die neue Stelle frei ist (_frei
+        #      prueft Rahmen, Ringabstand, Nachbarlabels, Kopfbalken).
+        if RK_LEGENDE_AUSWEICHEN and legende_box is not None:
+            _lx0, _ly0, _lx1, _ly1 = legende_box
+            for i in range(len(ziel)):
+                x, y = ziel[i]
+                if not (x + HALB_W > _lx0 - RK_LEGENDE_LUFT
+                        and x - HALB_W < _lx1 + RK_LEGENDE_LUFT
+                        and y + HALB_H > _ly0 - RK_LEGENDE_LUFT
+                        and y - HALB_H < _ly1 + RK_LEGENDE_LUFT):
+                    continue
+                noetig = (_lx1 + RK_LEGENDE_LUFT) - (x - HALB_W)
+                if noetig <= 0 or noetig > RK_AUSWEICH_MAX_IN:
+                    continue
+                if _frei(i, x + noetig, y) and not _auf_tabu(x + noetig, y):
+                    ziel[i][0] = x + noetig
 
-    # 6e) ANTI-KREUZUNG (NEU 10.07.2026) — letzte Garantie, dass sich keine
-    #     zwei Führungslinien überkreuzen.
-    #
-    #     Ursache der Kreuzung: die vorherigen Pässe (De-overlap, Leader-
-    #     Garantie) verschieben Labels tangential, ohne die Winkelreihenfolge
-    #     der Segmente zu respektieren. Sitzen zwei kleine Segmente eng
-    #     beieinander (z.B. Versorger 321° / Elektro 347° oben), kann das Label
-    #     des einen auf die Seite des anderen geraten → die Leader kreuzen sich
-    #     (im Screenshot bei 6,96%/7,03% sichtbar).
-    #
-    #     Lösung: Kreuzung ist ein rein GEOMETRISCHES Kriterium (schneiden sich
-    #     die Strecken Segment→Label?). Wir erkennen jedes kreuzende Paar und
-    #     TAUSCHEN die beiden Label-Positionen. Nach dem Tausch zeigt jeder
-    #     Leader auf sein eigenes Segment über die Box des Partners — das
-    #     entwirrt die Kreuzung, ohne neue Überlappung zu erzeugen (die Boxen
-    #     standen ja schon kollisionsfrei). Wiederholen bis kreuzungsfrei.
-    #
-    #     Generisch für jede Segmentzahl und -verteilung; hart nach oben
-    #     begrenzt, damit es unter allen Umständen terminiert.
-    def _seg_end(i):
-        m = math.radians(mids[i])
-        return (cx + R_out * math.sin(m), cy - R_out * math.cos(m))
+        # 6e) ANTI-KREUZUNG (NEU 10.07.2026) — letzte Garantie, dass sich keine
+        #     zwei Führungslinien überkreuzen.
+        #
+        #     Ursache der Kreuzung: die vorherigen Pässe (De-overlap, Leader-
+        #     Garantie) verschieben Labels tangential, ohne die Winkelreihenfolge
+        #     der Segmente zu respektieren. Sitzen zwei kleine Segmente eng
+        #     beieinander (z.B. Versorger 321° / Elektro 347° oben), kann das Label
+        #     des einen auf die Seite des anderen geraten → die Leader kreuzen sich
+        #     (im Screenshot bei 6,96%/7,03% sichtbar).
+        #
+        #     Lösung: Kreuzung ist ein rein GEOMETRISCHES Kriterium (schneiden sich
+        #     die Strecken Segment→Label?). Wir erkennen jedes kreuzende Paar und
+        #     TAUSCHEN die beiden Label-Positionen. Nach dem Tausch zeigt jeder
+        #     Leader auf sein eigenes Segment über die Box des Partners — das
+        #     entwirrt die Kreuzung, ohne neue Überlappung zu erzeugen (die Boxen
+        #     standen ja schon kollisionsfrei). Wiederholen bis kreuzungsfrei.
+        #
+        #     Generisch für jede Segmentzahl und -verteilung; hart nach oben
+        #     begrenzt, damit es unter allen Umständen terminiert.
+        def _seg_end(i):
+            m = math.radians(mids[i])
+            return (cx + R_out * math.sin(m), cy - R_out * math.cos(m))
 
-    def _ccw(a, b, c):
-        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+        def _ccw(a, b, c):
+            return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
 
-    def _kreuzt(i, j):
-        p1, p2 = _seg_end(i), ziel[i]
-        p3, p4 = _seg_end(j), ziel[j]
-        return (_ccw(p1, p3, p4) != _ccw(p2, p3, p4)
-                and _ccw(p1, p2, p3) != _ccw(p1, p2, p4))
+        def _kreuzt(i, j):
+            p1, p2 = _seg_end(i), ziel[i]
+            p3, p4 = _seg_end(j), ziel[j]
+            return (_ccw(p1, p3, p4) != _ccw(p2, p3, p4)
+                    and _ccw(p1, p2, p3) != _ccw(p1, p2, p4))
 
-    for _entwirren in range(len(ziel) * len(ziel) + 5):
-        getauscht = False
-        for a_ in range(len(ziel)):
-            for b_ in range(a_ + 1, len(ziel)):
-                if _kreuzt(a_, b_):
-                    ziel[a_], ziel[b_] = ziel[b_], ziel[a_]
-                    getauscht = True
+        for _entwirren in range(len(ziel) * len(ziel) + 5):
+            getauscht = False
+            for a_ in range(len(ziel)):
+                for b_ in range(a_ + 1, len(ziel)):
+                    if _kreuzt(a_, b_):
+                        ziel[a_], ziel[b_] = ziel[b_], ziel[a_]
+                        getauscht = True
+                        break
+                if getauscht:
                     break
-            if getauscht:
+            if not getauscht:
                 break
-        if not getauscht:
-            break
+        return ziel
+
+
+    # -- Der Pruefer: dieselben Zusicherungen wie tests/test_ring_geometrie.py
+    def _kollisionsgrund(cxk, cyk, rk, zk):
+        """Leerer String = kollisionsfrei, sonst der Grund. Der Grund ist
+        nicht Kosmetik: er sagt, WORAN eine Ringgroesse scheitert."""
+        # (a) keine Beschriftung ragt in den Ring.
+        #     `w` wird ab der WAAGERECHTEN gemessen (atan2(dy, dx)), deshalb
+        #     gehoert die halbe BREITE an den Kosinus. #26 notiert die
+        #     Koeffizienten fuer den Winkel ab der SENKRECHTEN (Pass 6c,
+        #     atan2(lvx, -lvy)) — wer sie unbesehen abschreibt, vertauscht
+        #     seitlich und oben/unten um je 0,23 Zoll (Fehler vom 25.08.2026,
+        #     stand am selben Tag auch in tests/test_ring_geometrie.py).
+        for x, y in zk:
+            d = math.hypot(x - cxk, y - cyk)
+            w = math.atan2(y - cyk, x - cxk)
+            ueber = HALB_W * abs(math.cos(w)) + HALB_H * abs(math.sin(w))
+            if d - ueber - rk < 0.0:
+                return "Beschriftung im Ring (%.3f, %.3f, %.3f tief)" % (x, y, -(d - ueber - rk))
+        # (b) keine zwei Beschriftungen ueberlappen
+        for i in range(len(zk)):
+            for j in range(i + 1, len(zk)):
+                if (abs(zk[i][0] - zk[j][0]) < RK_UEBERLAPP_X
+                        and abs(zk[i][1] - zk[j][1]) < RK_UEBERLAPP_Y):
+                    return "Beschriftungen ueberlappen"
+        # (c) jede Beschriftung liegt vollstaendig im Rahmen
+        for x, y in zk:
+            if (x - HALB_W < 0.0 or x + HALB_W > frame_w_in
+                    or y - HALB_H < 0.0 or y + HALB_H > frame_h_in):
+                return "Beschriftung aus dem Rahmen"
+        # (f) nichts in den Ueberschriftenbalken hinein
+        if kopf_frei_in is not None:
+            for x, y in zk:
+                if y - HALB_H < float(kopf_frei_in) - 1e-9:
+                    return "Beschriftung im Ueberschriftenbalken"
+        # (d) weder Ring noch Beschriftung auf einer Tabuflaeche
+        #     (Legende ODER Quellenangabe)
+        for _bez, (_bx0, _by0, _bx1, _by1) in tabuflaechen:
+            dx = max(_bx0 - cxk, 0.0, cxk - _bx1)
+            dy = max(_by0 - cyk, 0.0, cyk - _by1)
+            if math.hypot(dx, dy) < rk + RK_TABU_LUFT:
+                return "Ring auf " + _bez
+        for x, y in zk:
+            _bez = _auf_tabu(x, y)
+            if _bez:
+                return "Beschriftung auf %s (%.3f, %.3f)" % (_bez, x, y)
+        # (e) keine zwei Fuehrungslinien kreuzen sich
+        def _se(i):
+            m = math.radians(mids[i])
+            return (cxk + rk * math.sin(m), cyk - rk * math.cos(m))
+
+        def _ccw3(a, b, c):
+            return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+        for i in range(len(zk)):
+            for j in range(i + 1, len(zk)):
+                p1, p2, p3, p4 = _se(i), zk[i], _se(j), zk[j]
+                if (_ccw3(p1, p3, p4) != _ccw3(p2, p3, p4)
+                        and _ccw3(p1, p2, p3) != _ccw3(p1, p2, p4)):
+                    return "Fuehrungslinien kreuzen sich"
+        return ""
+
+    def _ring_mitten(r):
+        """Moegliche Ringmitten fuer Radius r, in der Reihenfolge, in der sie
+        probiert werden sollen.
+
+        Zuerst die mittige Lage (das ist der gewohnte Look), dann schrittweise
+        HOEHER. Das ist kein Schoenheitsspiel: die Legende sitzt unten links,
+        und die Beschriftungen der unteren Segmente wandern mit dem Ring nach
+        unten. Ein Ring, der 5 mm hoeher steht, haelt seine Beschriftungen von
+        der Legendenflaeche frei — gemessen an Vorlage_ETF F18 und
+        Vorlage_cVV F13, die sonst bei jeder Groesse an genau dieser Zusage
+        scheitern. Nach oben begrenzt der Ueberschriftenbalken.
+        """
+        ob = kopf_rand if kopf_frei_in is None else max(kopf_rand,
+                                                       float(kopf_frei_in))
+        lo_r, hi_r = ob + r, rahmen_unten - r
+        if hi_r < lo_r:
+            return []
+        zentriert = min(max(frame_h_in / 2.0, lo_r), hi_r)
+        aus = [zentriert]
+        for k in range(1, RK_HOEHER_SCHRITTE + 1):
+            y = zentriert - k * RK_HOEHER_IN
+            if y >= lo_r - 1e-9:
+                aus.append(y)
+        return aus
+
+    # Groesstmoeglichen Ring zuerst, dann in RK_SCHRITT_IN-Schritten kleiner,
+    # bis die Beschriftungen kollisionsfrei stehen. Findet sich nichts, bleibt
+    # es beim alten Wert — der Ring wird also nie kleiner als heute.
+    versuche = 0
+    ziel = None
+    if RK_AN and rueckkopplung:
+        r_max = R_vorlage if RK_DECKEL_ANTEIL_H is None else min(
+            R_vorlage, RK_DECKEL_ANTEIL_H * frame_h_in)
+        r = r_max
+        while r > R_basis + 1e-6 and ziel is None:
+            for cy_k in _ring_mitten(r):
+                versuche += 1
+                zk = _platzieren(cx_fest, cy_k, r)
+                grund = _kollisionsgrund(cx_fest, cy_k, r, zk)
+                if RK_PROTOKOLL is not None:
+                    RK_PROTOKOLL.append((round(r * 2 * 2.54, 2),
+                                         round(cy_k, 3), grund or "frei"))
+                if not grund:
+                    R_ziel, new_cy, ziel = r, cy_k, zk
+                    break
+            r -= RK_SCHRITT_IN
+    if ziel is None:
+        R_ziel, new_cy = R_basis, cy_basis
+        ziel = _platzieren(cx_fest, new_cy, R_ziel)
+    RK_VERSUCHE.append(versuche)
+
+    # Gewaehlte Groesse/Lage in das plotArea-Layout schreiben
+    if abs(R_ziel - R_vorlage) > 1e-3 or abs(new_cy - cy_alt) > 1e-3:
+        faktor = R_ziel / R_vorlage
+        cxf = cx_fest / frame_w_in                # horizontales Zentrum
+        pw2, ph2 = pw * faktor, ph * faktor
+        px2 = cxf - pw2 / 2.0
+        py2 = (new_cy / frame_h_in) - ph2 / 2.0   # vertikal neu setzen
+        for tag, val in (("x", px2), ("y", py2), ("w", pw2), ("h", ph2)):
+            e = pa.find(_q(tag))
+            if e is not None:
+                e.set("val", f"{val:.5f}")
+    cx, cy, R_out = cx_fest, new_cy, R_ziel
 
     # 7) Offsets schreiben (Nullpunkt = Ring-Band-Mitte des Segments; so
     #    rechnet PowerPoint den manualLayout-Offset bei vorhandenem
@@ -1316,7 +1689,8 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     for idx, d in list(dlbls.items()):
         if idx >= len(vals):
             d.getparent().remove(d)
-    return {"segmente": len(vals), "R_out": round(R_out, 3)}
+    return {"segmente": len(vals), "R_out": round(R_out, 3),
+            "versuche": versuche}
 
 
 
@@ -1641,11 +2015,23 @@ def ring_labels_stub_fix(chart, frame_w_in, frame_h_in,
         my = float(ye.get("val")) * frame_h_in + HH
         boxen[ixv] = [mx, my, ml, xe]
 
+    # Die Legende ist tabu (NEU 25.08.2026): seit der Ring bis unter die
+    # Legendenoberkante reichen darf, sitzen untere Labels auf deren Hoehe.
+    # Der Nudge schiebt WAAGERECHT — bei einem Label links unten also genau
+    # auf die Legende zu. Passt es nicht, bleibt die gerade Linie (der Fix hat
+    # ohnehin "nichts wird schlechter" als Regel).
+    _tabu = [k for k in (_legende_rechteck(root, frame_w_in, frame_h_in),
+                         _quelle_rechteck(chart, frame_w_in, frame_h_in)) if k]
+
     def _kollision(ixv, mx_neu, my):
         for j, (jx, jy, *_ ) in boxen.items():
             if j == ixv:
                 continue
             if abs(mx_neu - jx) < 2 * HW and abs(my - jy) < 2 * HH:
+                return True
+        for bx0, by0, bx1, by1 in _tabu:
+            if (mx_neu + HW > bx0 and mx_neu - HW < bx1
+                    and my + HH > by0 and my - HH < by1):
                 return True
         return False
 
@@ -2050,7 +2436,8 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                                  min_gap_deg=_gap,
                                                  tangential_in=_tang,
                                                  rand_oben_in=_rand_oben,
-                                                 kopf_frei_in=_kopf)
+                                                 kopf_frei_in=_kopf,
+                                                 rueckkopplung=_fmt["rueckkopplung"])
 
                     # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
                     # stattdessen EIGENE Linien als Connector zeichnen — die
