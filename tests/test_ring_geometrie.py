@@ -15,7 +15,8 @@ Ein unbeabsichtigter Eingriff faellt sonst erst in einer Kundenbroschuere auf.
   4. Dieselben Messungen an ECHT GEBAUTEN Broschueren (nur mit Ordner-Argument)
      sowie: jede Fuehrungslinie traegt ihren Punkt am Label-Ende
   5. Der Familien-Look und wo Rueckkopplung und Seitentreue laufen
-  6. Die Seite der Beschriftungen an ECHT GEBAUTEN Broschueren
+  6. Die Seite der Beschriftungen an ECHT GEBAUTEN Broschueren, und vor
+     allem: wie WEIT eine Fuehrungslinie ueber die Ringachse laufen darf
   7. Die buendige Anbindung der Zahl an ihre Fuehrungslinie
   8. Steile Linien setzen an der Unterkante an, nicht seitlich
 
@@ -85,21 +86,31 @@ TOLERANZ = 0.005
 #   mittags              4 — die Seitentreue kostete zwei zusaetzliche
 #   abends               2 — Seitentreue zurueckgenommen, Preis mit zurueck
 #   danach               1 — Seitentreue wieder ein, ABER mit der buendigen
-#                        Anbindung aus Punkt 1: jetzt kreuzt sich nur noch EIN
-#                        Paar (Vorlage_FFPB F9 C_Kennzahlen2).
+#                        Anbindung aus Punkt 1: nur noch EIN kreuzendes Paar.
+#   zuletzt              0 — mit der Totzone der Seitentreue verschwindet auch
+#                        dieses. Erstmals seit es diese Konstante gibt, ist
+#                        die Zusage eine harte NULL, auch auf den
+#                        Platzhalterdaten der Vorlagen.
 #
-# Die 1 steht hier, weil sie GEMESSEN ist und nicht gewuenscht. Die
+# Die 0 steht hier, weil sie GEMESSEN ist und nicht gewuenscht. Die
 # Vorlagendaten sind fest — der Wert schwankt nicht mit dem Bestand, also darf
-# die Grenze eng sein. Wer eine Aenderung baut, die wieder auf 2 geht, soll
-# das begruenden muessen.
+# die Grenze eng sein. Und eine Null bricht sichtbar, waehrend sich eine
+# Obergrenze schleichend fuellt.
 #
-# WER SIE ANHEBT, FUEHRT DEN NACHWEIS MIT: Schritt 4 verlangt die harte NULL
+# WER SIE ANHEBT, FUEHRT DEN NACHWEIS MIT: Schritt 4 verlangt dieselbe Null
 # an echt gebauten Broschueren (17 Ringe, 68 Linien) — sonst wird aus einer
 # Obergrenze eine Ausrede.
-KREUZUNGEN_VORLAGEN_MAX = 1
+KREUZUNGEN_VORLAGEN_MAX = 0
 
 # Namentlich geduldete Beschriftungen auf der Legende, auf den PLATZHALTERDATEN
-# der Vorlagen. Ein Eintrag, seit die Seitentreue laeuft (26.08.2026).
+# der Vorlagen. WIEDER LEER seit dem 26.08.2026 abends: Mit der Totzone der
+# Seitentreue tritt der Fall (Vorlage_FFPB F9) nicht mehr auf — nachgemessen,
+# Schritt 3 meldet keine Legenden-Beruehrung mehr. Der Preis geht mit der
+# Aenderung zurueck, so wie er mit ihr gekommen ist.
+#
+# Der folgende Text erklaert die Bauform und die Korrektur, die dabei
+# aufgefallen ist — beides bleibt gueltig, falls je wieder ein Fall geduldet
+# werden muss.
 #
 # Warum geduldet: Der Fall tritt mit den BEISPIELZAHLEN der Vorlage auf, nicht
 # mit echten Daten — Schritt 4 misst dieselbe Zusage an echt gebauten
@@ -119,7 +130,7 @@ KREUZUNGEN_VORLAGEN_MAX = 1
 # die Zusage fuer JEDEN anderen Ring hart, der Fall bleibt sichtbar (er wird
 # als HINWEIS gedruckt), und wer die Vorlage anfasst, bekommt sofort eine
 # Meldung an anderer Stelle.
-LEGENDE_GEDULDET = {("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2")}
+LEGENDE_GEDULDET = set()
 
 # SEITENTREUE (NEU 26.08.2026): Hoechstzahl an Fuehrungslinien, deren inneres
 # Ende (am Segment) und aeusseres Ende (am Label) auf VERSCHIEDENEN Seiten der
@@ -130,15 +141,46 @@ LEGENDE_GEDULDET = {("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2")}
 # Bewusst je Familie und als ZAHL, nicht als Quote: Eine Zahl je Familie zeigt,
 # WO es schlechter wird; eine Gesamtquote laesst sich wegmitteln.
 #
-# DIE VIER FAMILIEN MIT ANLAGESTRATEGIE-FOLIEN HALTEN DIE HARTE NULL, Thema
-# steht auf 3. Das ist der Stand nach der dritten Sichtpruefung (26.08.2026):
-# Die Seitentreue laeuft dort, wo sie angesehen und fuer besser befunden wurde,
-# und ist bei Thema ausdruecklich aus.
+# DIE ANZAHL IST SEIT DEM 26.08.2026 NICHT MEHR DIE ZUSAGE — die SCHWERE ist
+# es (siehe UEBERSTAND_MAX_* darunter). Diese Zahlen bleiben als MESSUNG mit
+# Deckel stehen: Sie zeigen, wenn ein Eingriff die Menge der Kreuzungen
+# vervielfacht, waehrend der Ueberstands-Waechter jede EINZELNE schwere
+# Kreuzung faengt.
 #
-# Eine NULL ist hier mehr wert als eine Quote: Sie bricht sofort und sichtbar,
-# waehrend sich eine Quote wegmitteln laesst. Bei Thema steht die 3, weil dort
-# kein Schalter laeuft — sie ist eine Messung mit Deckel, kein Zielwert.
-SEITENTREUE_MAX = {"CVV": 0, "ESG": 0, "ETF": 0, "comdirect": 0, "Thema": 3}
+# WARUM DIE HARTE NULL GEFALLEN IST: Bis zum Abend des 26.08.2026 stand hier
+# fuer die vier Anlagestrategie-Familien eine 0. Philip meldete daraufhin,
+# die Zahlen seien "sehr nach links konzentriert" — die strenge Seitentreue
+# draengt Beschriftungen fast senkrechter Segmente weit zur Seite. Mit der
+# Totzone (`seitentreue_totzone`, 15 Grad) duerfen sie auf die freie Seite;
+# 13 von 17 Ringen gehen dadurch von 3:1 auf 2:2.
+#
+# Gemessen am 26.08.2026 an echt gebauten Broschueren, mit Totzone:
+#   CVV 5/17, ESG 4/16, ETF 2/8, comdirect 2/11, Thema 1/16 — und der
+#   groesste Ueberstand ueber die Ringachse liegt bei 4,8 mm. Der von Philip
+#   beanstandete Fall (ESG Offensiv, EDELMETALLE) hatte 10,9 mm; er bleibt
+#   behoben, weil sein Segment weit AUSSERHALB der Totzone liegt.
+SEITENTREUE_MAX = {"CVV": 5, "ESG": 4, "ETF": 2, "comdirect": 2, "Thema": 1}
+
+# DER EIGENTLICHE WAECHTER: Wie WEIT darf eine Fuehrungslinie ueber die
+# senkrechte Ringachse laufen?
+#
+# Das ist die Groesse, die den gemeldeten Fehler von den geduldeten Faellen
+# trennt — und die Anzahl ist es nicht. Vor dem 26.08.2026 gab es 17
+# Kreuzungen mit Ueberstaenden von 1,1 bis 10,9 mm; heute sind es 14 mit
+# hoechstens 4,8 mm. Die Zahl ist kaum kleiner, die Optik deutlich besser.
+#
+# Fuer Familien MIT Seitentreue folgt die Grenze aus der Regel selbst: Ein
+# Label darf nur dann auf der anderen Seite stehen, wenn sein Segment in der
+# Totzone liegt — und dann ist der Ueberstand hoechstens R_aussen * Totzone.
+# Der Waechter rechnet ihn je Ring aus, statt eine Zahl einzufrieren: Er
+# waechst also mit, wenn jemand die Totzone oder die Ringgroesse aendert, und
+# bleibt trotzdem eine harte Zusage.
+UEBERSTAND_LUFT = 0.02          # Zoll Toleranz auf die gerechnete Grenze
+
+# Fuer Familien OHNE Seitentreue (Thema, Standard) gibt es keine Regel, aus
+# der sich etwas herleiten liesse — hier steht ein gemessener Deckel.
+# Groesster Wert am 26.08.2026: 4,8 mm auf Thema F10.
+UEBERSTAND_MAX_OHNE = 0.20
 
 # Naeher als das an der Senkrechten ist "die Seite" keine sinnvolle Aussage.
 SEITE_TOTZONE = 0.02
@@ -819,9 +861,43 @@ def schritt6_seitentreue(ausgabe):
                   f"fehlt (Schritt 4 baut sie)")
             continue
         geprueft += 1
-        gesamt, schief, beispiele = _seitentreue(Presentation(pfad))
+        prs = Presentation(pfad)
+        gesamt, schief, beispiele = _seitentreue(prs)
         ges_all += gesamt
         schief_all += schief
+
+        # DIE SCHWERE, nicht die Anzahl: Wie weit laeuft die schlimmste
+        # Kreuzung ueber die Ringachse? Bei eingeschalteter Seitentreue folgt
+        # die Grenze aus der Regel (R_aussen * Totzone), sonst aus der Messung.
+        fmt = cd._ring_format(familie, 79, 0.14)
+        for nr, folie, shape in _ringe(prs):
+            geo = _plot(shape)
+            if geo is None:
+                continue
+            cx, cy = geo["cx"], geo["cy"]
+            if fmt["seitentreue"]:
+                grenze_in = geo["r"] * fmt["seitentreue_totzone"] + UEBERSTAND_LUFT
+                woher = (f"R {geo['r']:.2f}\" x Totzone "
+                         f"{fmt['seitentreue_totzone']:.2f}")
+            else:
+                grenze_in = UEBERSTAND_MAX_OHNE
+                woher = "gemessener Deckel (ohne Seitentreue)"
+            for (ax, ay), (ex, ey) in _leader(folie, shape):
+                innen, aussen = (((ax, ay), (ex, ey))
+                                 if (ax - cx) ** 2 + (ay - cy) ** 2
+                                 <= (ex - cx) ** 2 + (ey - cy) ** 2
+                                 else ((ex, ey), (ax, ay)))
+                di, do = innen[0] - cx, aussen[0] - cx
+                if abs(di) < SEITE_TOTZONE or abs(do) < SEITE_TOTZONE:
+                    continue
+                if (di >= 0) == (do >= 0):
+                    continue
+                if abs(di) > grenze_in:
+                    print(f"    FEHLER — {familie}: F{nr} {shape.name} laeuft "
+                          f"{abs(di) * 25.4:.1f} mm ueber die Ringachse, "
+                          f"erlaubt sind {grenze_in * 25.4:.1f} mm "
+                          f"({woher})")
+                    fehler += 1
         if schief > grenze:
             print(f"    FEHLER — {familie}: {schief} von {gesamt} "
                   f"Fuehrungslinien laufen auf die falsche Seite, erlaubt "
@@ -838,7 +914,8 @@ def schritt6_seitentreue(ausgabe):
         # Grundgesamtheiten, eine Prozentzahl — genau so entstehen Vergleiche,
         # die stimmen wollen und nicht stimmen.
         print(f"    OK — {schief_all} von {ges_all} Fuehrungslinien "
-              f"({anteil:.1f} %), jede Familie unter ihrer Obergrenze")
+              f"({anteil:.1f} %), und keine laeuft weiter ueber die Ringachse "
+              f"als die Totzone erlaubt")
     return fehler
 
 
@@ -1186,6 +1263,26 @@ def schritt5_familien_look():
         print("    OK — die senkrechte Anbindung laeuft in den fuenf "
               "Familien; Standard bleibt aus")
     fehler += sk_fehler
+
+    # Und die TOTZONE der Seitentreue (26.08.2026): Wie nah an der Senkrechten
+    # hat ein Segment keine Seite mehr? Philip hat die strenge Fassung und die
+    # mit 15-Grad-Totzone in echtem PowerPoint verglichen und die zweite
+    # gewaehlt. Der Standard-Pfad bleibt bei 0.0, also bei der strengen.
+    tz_fehler = 0
+    SOLL_TZ = {"CVV": cd.SEITENTREUE_TOTZONE, "ESG": cd.SEITENTREUE_TOTZONE,
+               "ETF": cd.SEITENTREUE_TOTZONE,
+               "comdirect": cd.SEITENTREUE_TOTZONE,
+               "Thema": cd.SEITENTREUE_TOTZONE, None: 0.0}
+    for familie, soll in sorted(SOLL_TZ.items(), key=lambda p: str(p[0])):
+        ist = cd._ring_format(familie, 79, 0.14)["seitentreue_totzone"]
+        if abs(ist - soll) > 1e-9:
+            bez = familie if familie is not None else "Standard (ohne Familie)"
+            print(f"    FEHLER — {bez}: seitentreue_totzone {ist} statt {soll}")
+            tz_fehler += 1
+    if not tz_fehler:
+        print(f"    OK — die Totzone der Seitentreue steht auf "
+              f"{cd.SEITENTREUE_TOTZONE}; Standard bleibt bei 0.0 (streng)")
+    fehler += tz_fehler
     return fehler
 
 

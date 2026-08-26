@@ -164,6 +164,49 @@ LABEL_LUFT_IN       = 0.045      # Luft zwischen Linienende und Zeichen
 # (gemessen 26.08.2026 ueber alle fuenf Familien). Die uebrigen Ringe haben
 # keine Zahl, die so weit oben oder unten steht. Der Schalter steht trotzdem
 # je Familie — eine andere Bestandsverteilung kann das aendern.
+# ── Wie nah an der Senkrechten hat ein Segment keine Seite mehr? ───────────
+# (NEU 26.08.2026, Voreinstellung in _RING_FORMAT_DEFAULT, je Familie setzbar)
+#
+# Die Seitentreue gibt einer Zahl die Seite ihres Segments. Fuer ein Segment
+# DICHT AN DER SENKRECHTEN ist das eine Scheingenauigkeit: Bei 350,8 Grad
+# liegt der Ansatzpunkt nur 4 mm links der Ringachse — die Zahl wandert
+# deswegen aber fast einen Zoll nach links und draengt sich dort zu den
+# anderen. Gemeldet von Philip an ESG Offensiv: "alle Linien und Zahlen sehr
+# nach links konzentriert".
+#
+# DIE URSACHE IST NICHT DIE SEITENTREUE, sondern eine harte Grenze: Die
+# Kopfsperre erlaubt als hoechste Label-Mitte genau die Hoehe der
+# RINGOBERKANTE. Kein Label kann ueber den Ring — wessen Segment nahe 12 Uhr
+# sitzt, wird deshalb seitlich abgedraengt. Und die Datenlage tut ihr Uebriges:
+# auf ESG Offensiv liegen drei von vier Segmenten im oberen linken Viertel.
+# Kein Einzelfall — 13 von 17 Ringen zeigten dieselbe 3:1-Verteilung.
+#
+# Innerhalb dieser Totzone entscheidet deshalb wieder die Lage aus den
+# vorherigen Paessen, also faktisch die freie Seite. Gemessen ueber alle 68
+# Fuehrungslinien:
+#                          falsch stehend   Ueberstand ueber   Ringe mit
+#                                           die Achse          Schieflage >=2
+#   vor allem (25.08.)      17 von 68       1,1 bis 10,9 mm     4 von 17
+#   streng (1e-6)            1 von 68       4,8 mm             13 von 17
+#   mit Totzone 15 Grad     14 von 68       1,1 bis  4,8 mm     4 von 17
+#
+# DER PREIS IST BEWUSST UND VERMESSEN. Der von Philip beanstandete Fall
+# (ESG Offensiv, EDELMETALLE bei 332,8 Grad) hat 10,9 mm Ueberstand und liegt
+# WEIT ausserhalb der Totzone — er bleibt behoben. Was zurueckkommt, sind
+# ausschliesslich milde Faelle von hoechstens 4,8 mm. Genau darauf passt der
+# neue Waechter im Pruefstein: nicht die ANZAHL der Kreuzungen ist die
+# Zusage, sondern ihre SCHWERE.
+#
+# ZWEI WEGE, DIE NICHT FUNKTIONIEREN (damit sie niemand zweimal geht):
+#   * "Bei fast senkrechten Segmenten entscheidet die KUERZERE Linie" aendert
+#     gar nichts — die segmenttreue Seite liefert immer schon die kuerzere.
+#   * Weniger Kopfluft aendert die Anordnung nicht (0,20) oder schaltet die
+#     Seitentreue fuer diese Labels still ab (0,15), weil Pass 6d dann gar
+#     nicht mehr greift: 12 falsch stehende Linien statt einer.
+SEITENTREUE_TOTZONE = 0.26       # |sin| des Segment-Mittelwinkels, 0.26 = 15
+                                 # Grad. Darunter gilt: keine richtige Seite.
+                                 # 0.0 = die alte, strenge Fassung.
+
 LEADER_SENKRECHT_STEIL = 4.0     # Ab welcher Steilheit |dy|/|dx| die Linie
                                  # als "kommt von unten/oben" gilt.
                                  #
@@ -366,6 +409,12 @@ _RING_KRAEFTIG = {
     "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
     "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
     "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
+    "seitentreue_totzone": SEITENTREUE_TOTZONE,
+                                # AUSDRUECKLICH gesetzt (26.08.2026): Philip
+                                # hat Fassung A (streng) und Fassung B (mit
+                                # Totzone) an ESG Offensiv und CVV F9 in
+                                # echtem PowerPoint verglichen und B gewaehlt
+                                # ("besser verteilt, mehr ausgewogen").
     "leader_senkrecht": True,   # AUSDRUECKLICH ein (26.08.2026): Steht die
                                 # Zahl fast senkrecht ueber ihrem Segment,
                                 # setzt die Linie unten an statt seitlich.
@@ -467,6 +516,12 @@ _RING_FORMAT_DEFAULT = {
     "leader_start_tiefe": 0.0,      # 0.0 = Ansatz am Außenrand (bisheriges Verhalten)
     "leader_gerade": False,         # False = bisherige geknickte Führung
     "label_gap_in": None,           # None → der label_gap_in-Parameter von nachbearbeiten
+    "seitentreue_totzone": 0.0,     # Keine Totzone — die strenge Fassung,
+                                    # wie sie bis zum 26.08.2026 galt.
+                                    # VOREINSTELLUNG wie bei jeder
+                                    # Optik-Aenderung: erst ansehen, dann
+                                    # setzen. Ohne eingeschaltete
+                                    # `seitentreue` ist der Wert ohne Wirkung.
     "leader_senkrecht": False,      # Linie an der WAAGERECHTEN Boxkante,
                                     # wenn sie steiler als 45 Grad ankommt
                                     # (26.08.2026). VOREINSTELLUNG AUS, wie
@@ -1146,7 +1201,8 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                  gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
                                  tangential_in=0.14, rand_oben_in=None,
                                  kopf_frei_in=None, rueckkopplung=True,
-                                 seitentreue=False, buendig=False):
+                                 seitentreue=False, buendig=False,
+                                 totzone=0.0):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -1460,15 +1516,21 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 # Gemessen ueber alle Familien: 19,7 % der Fuehrungslinien liefen
                 # vorher auf die falsche Seite (69 von 351).
                 _sx_seg = math.sin(math.radians(mids[i]))
-                if seitentreue and abs(_sx_seg) > 1e-6:
+                if seitentreue and abs(_sx_seg) > max(totzone, 1e-6):
                     seite = 1.0 if _sx_seg > 0 else -1.0
                 else:
                     # Zwei Faelle, ein Verhalten — das bisherige:
                     #   • `seitentreue` aus: Thema und der Standard-Pfad bleiben
                     #     genau so, wie sie vor dem 26.08.2026 waren.
-                    #   • Segment genau auf der Senkrechten (12 oder 6 Uhr): Dort
-                    #     gibt es keine richtige Seite; eine willkuerliche Wahl
-                    #     waere schlechter als Stetigkeit.
+                    #   • Segment NAHE DER SENKRECHTEN (12 oder 6 Uhr): Dort
+                    #     gibt es keine richtige Seite. Wie nah "nahe" ist,
+                    #     sagt `seitentreue_totzone` — siehe die Messung beim
+                    #     CONSTANT SEITENTREUE_TOTZONE oben. Ohne Totzone
+                    #     (0.0) bleibt nur der entartete Fall exakt auf der
+                    #     Achse uebrig, also das Verhalten bis zum 26.08.2026.
+                    #     Die Lage aus den vorherigen Paessen zu behalten ist
+                    #     hier keine Willkuer: Sie ist das Ergebnis der
+                    #     Entzerrung und zeigt damit auf die FREIE Seite.
                     seite = 1.0 if dx0 >= 0 else -1.0
                 # Winkel UND Radius gemeinsam lösen: beim Herunterdrehen zeigt die
                 # Textbox stärker mit ihrer BREITE zum Ring (HALB_W statt HALB_H),
@@ -2832,7 +2894,8 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                                  kopf_frei_in=_kopf,
                                                  rueckkopplung=_fmt["rueckkopplung"],
                                                  seitentreue=_fmt["seitentreue"],
-                                                 buendig=_fmt["label_buendig"])
+                                                 buendig=_fmt["label_buendig"],
+                                                 totzone=_fmt["seitentreue_totzone"])
 
                     # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
                     # stattdessen EIGENE Linien als Connector zeichnen — die
