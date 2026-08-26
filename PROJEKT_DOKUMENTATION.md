@@ -1798,6 +1798,64 @@ einer Folie** eindeutig. Eine CVV-Broschüre trägt auf fünf Folien fünf Ringe
 namens `C_Kennzahlen`; ohne die Foliennummer im Schlüssel fiel das auf vier
 zusammen und meldete „4 von 4" statt „17 von 17".
 
+##### NACHTRAG, dritte Durchsicht — die Seitentreue kehrt zurueck, und eine neue Regel
+
+**Philip sah den Endstand an und fand zwei Dinge.** Sie hatten verschiedene
+Ursachen, und das zu trennen war die halbe Arbeit.
+
+**1. ESG Offensiv F22: eine Fuehrungslinie quer ueber den Ringkopf.**
+EDELMETALLE sitzt bei 332,8° (oben links), die Zahl stand bei 55,5° (oben
+rechts) — Abweichung +82,7°, Linienlänge 1,39" gegen sonst 0,4 bis 0,5.
+Genau der Fall, für den Pass 6d gebaut wurde. Die Seitentreue läuft deshalb
+wieder für CVV, ESG, ETF und comdirect; **Thema bleibt ausgenommen**. Die
+längste Linie auf F22 fällt auf 0,71", die Verteilung ist 0,46 / 0,52 / 0,53
+/ 0,71 statt 0,45 / 0,52 / 1,00 / 1,39.
+
+*Warum das keine Unentschlossenheit ist:* Die Seitentreue sah beim zweiten
+Mal schlechter aus, weil sie die Zahlen nach **links** schob — und links lag
+damals die 5-mm-Lücke aus Punkt 1. Mit deren Behebung ist der Grund weg. **Wer
+eine Änderung zurücknimmt, weil sie schlecht aussieht, sollte notieren,
+*woran* das lag — sonst ist sie für immer verbrannt, auch wenn die Ursache
+später verschwindet.**
+
+*Der Preis war beim zweiten Anlauf kleiner:* `KREUZUNGEN_VORLAGEN_MAX` steht
+jetzt auf **1** statt der 4 vom ersten Anlauf — mit der bündigen Anbindung
+kreuzt sich nur noch ein Paar auf den Vorlagendaten.
+
+**2. Thema F11: „5,14 %" hing nicht an seiner Linie.** Andere Ursache,
+gegengeprüft: mit eingeschalteter Seitentreue ändert sich an diesem Label
+nichts. Die Zahl steht auf der richtigen Seite — aber `ring_leader_zeichnen`
+setzte die Linie **immer** an der linken oder rechten Kante an. Steht eine
+Zahl fast senkrecht über ihrem Segment, läuft sie damit unter der Zahl
+hindurch zurück.
+
+#### Eine Schwelle kommt aus der Verteilung, nicht aus der Intuition
+
+Der erste Entwurf lautete „senkrecht anbinden, wenn die Linie steiler als 45°
+ankommt". Das klang zwingend und war falsch: Es traf **zwölf** Beschriftungen
+statt der zwei beanstandeten, darunter diagonale wie CVV F13 „65,82 %"
+(Steilheit 1,17), die dadurch sichtbar schlechter aussahen. *Bei einer
+Diagonalen ist keine der beiden Kanten die richtige, und eine Regel, die genau
+dort kippt, ist willkürlich.*
+
+Die Messung über alle 69 Führungslinien zeigte eine **Lücke**:
+
+| | Steilheit `|dy|/|dx|` |
+|---|---:|
+| Median über alle Linien | 0,23 |
+| die beiden beanstandeten Labels | **13,1 und 11,3** |
+| nächsthöherer Wert im ganzen Produkt | 3,3 |
+
+`LEADER_SENKRECHT_STEIL = 4` liegt in dieser Lücke und trifft genau die zwei
+Fälle. **Die Lehre gilt über diesen Fall hinaus: erst die Verteilung ansehen,
+dann die Grenze setzen — und in den Kommentar schreiben, welche Werte links
+und rechts davon liegen.** Eine Schwelle ohne diese Nachbarn ist nicht
+nachprüfbar.
+
+*Der Prüfstein hält die REGEL fest, nicht die Stückzahl* (Schritt 8): Eine
+Linie setzt genau dann senkrecht an, wenn sie steil genug ankommt. Wie viele
+Labels das heute sind, hängt am Bestand.
+
 #### Ansatzpunkte, falls das Thema wieder aufgemacht wird
 
 1. **Kopfluft datenbasiert** statt fix 0,30" — größter gemessener Hebel, kleinster Eingriff. Offene Frage: wie nah dürfen Zahlen optisch an den Balken?

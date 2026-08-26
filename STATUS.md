@@ -9,12 +9,14 @@ und nachher**. Zwei neue Prüfsteine (`test_pptx_integritaet.py`,
 `test_broschuere_auswahl.py`); die Thema-Broschüre führt jetzt **nur die obere
 Strategie** (Entscheidung Philip, nach der Behebung bestätigt).
 
-**Am Abend kamen drei Entscheidungen aus der zweiten Sichtprüfung dazu:**
-**Die Seitentreue ist überall aus** (der Schalter bleibt, ausgeschaltet;
-bytegleich mit dem Stand davor). **Punkt 1 ist behoben** — die Zahl klebt an
-ihrer Führungslinie: am Bild gemessen links 5,14 → **1,51 mm**, rechts
-0 → **1,66 mm**. **Der Regionen-Ring bekommt seine Punkte** — er war der
-einzige Ring im Produkt ohne Punkt am Linienende (Thema 10 von 17 → 17/17).
+**Am Abend kam die Ring-Optik in fünf Schritten zum Abschluss:**
+**Punkt 1 ist behoben** — die Zahl klebt an ihrer Führungslinie: am Bild
+gemessen links 5,14 → **1,51 mm**, rechts 0 → **1,66 mm**. **Der
+Regionen-Ring bekommt seine Punkte** (Thema 10 von 17 → 17/17; er war der
+einzige Ring im Produkt ohne). **Die Seitentreue läuft wieder** für die vier
+Anlagestrategie-Familien — Thema bleibt als einziges ohne; auf ESG Offensiv
+fällt die längste Führungslinie von 1,39 auf 0,71 Zoll. **Steile Linien
+setzen unten an** statt seitlich (zwei Labels auf Thema F11).
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
 > ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
@@ -111,6 +113,61 @@ Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 > **Thema behält zwei, und das ist Absicht:** Pass 6d dreht nur Labels im
 > Kopfbereich. Die letzten zwei lägen bei Ansatzpunkt 3 (Entzerrung in 2D) —
 > dort steht in #44 „höchstes Risiko", und daran halte ich mich.
+>
+> ---
+>
+> ### Nachtrag: die dritte Durchsicht am Endstand
+>
+> Du hast den Endstand angesehen — „CVV, ESG und Thema schauen super aus" —
+> und zwei Dinge gefunden. Beide sind behoben, und sie hatten **verschiedene**
+> Ursachen.
+>
+> #### ESG Offensiv (F22): eine Linie schoss zu weit nach rechts
+>
+> Sie gehört zu **EDELMETALLE 4,91 %**. Gemessen:
+>
+> | Segment | liegt bei | Zahl stand bei | Abweichung |
+> |---|---|---|---|
+> | EDELMETALLE 4,91 % | **332,8°** (oben links) | 55,5° (oben rechts) | **+82,7°** |
+> | LIQUIDITÄT 5,09 % | 350,8° | 46,7° | +55,8° |
+>
+> Die Linie war **1,39 Zoll** lang gegen sonst 0,4 bis 0,5. Zwei Dinge dazu:
+> Sie war **nicht neu** — im Vorher-Stand steht sie genauso da. Und sie ist
+> **genau der Fall, für den die Seitentreue gebaut wurde**, die am selben
+> Abend abgeschaltet worden war.
+>
+> **Deshalb läuft die Seitentreue wieder** — und das ist keine
+> Unentschlossenheit, sondern die Folge einer behobenen Ursache: Sie sah
+> schlechter aus, weil sie die Zahlen nach links schob und dort die 5-mm-Lücke
+> saß. Die gibt es nicht mehr. Du hast die Vorher/Nachher-Bilder von ESG F22
+> und CVV F9 gesehen und entschieden.
+>
+> Wirkung: CVV 0 von 17, ESG 0 von 16, ETF 0 von 8, comdirect 0 von 11,
+> **Thema 3 von 16** — zusammen 3 von 68 (4,4 %). Auf ESG F22 fällt die
+> längste Linie von 1,39 auf **0,71 Zoll**. **Thema bleibt ausgenommen**, dort
+> hast du sie zweimal abgelehnt.
+>
+> #### Thema F11 Regionen: „5,14 %" hing nicht an seiner Linie
+>
+> **Andere Ursache, der Schalter half hier nicht** (gegengeprüft). Die Zahl
+> steht auf der *richtigen* Seite — aber die Linie setzte **immer** an der
+> linken oder rechten Kante an. Steht eine Zahl fast senkrecht über ihrem
+> Segment, ist das die falsche Kante: Die Linie lief unter der Zahl hindurch
+> zurück. Jetzt endet sie mittig **unter** der Zahl.
+>
+> **Der erste Versuch war falsch, und das gehört dazu.** „Steiler als 45°"
+> klang richtig und traf **zwölf** Labels statt zwei — darunter diagonale wie
+> CVV F13 „65,82 %", die dadurch sichtbar schlechter aussahen. Erst die
+> Messung über alle 69 Führungslinien gab die richtige Schwelle:
+>
+> | | Steilheit |
+> |---|---:|
+> | Median über alle Linien | 0,23 |
+> | die beiden beanstandeten Labels | **13,1 und 11,3** |
+> | nächsthöherer Wert im ganzen Produkt | 3,3 |
+>
+> In dieser Lücke steht die Schwelle **4**. Sie trifft genau die zwei Labels
+> und ändert in CVV, ESG, ETF und comdirect keine einzige Linie.
 >
 > ---
 >
@@ -3066,13 +3123,15 @@ Führungslinie endet `LABEL_LUFT_IN` davor. Am Bild gemessen: links
 Prüfstein Schritt 7. Einzelheiten im Sitzungsbericht oben und in
 `PROJEKT_DOKUMENTATION.md` #44.
 
-**ZURÜCKGENOMMEN am 26.08.2026 (abends) — die Seitentreue.** Nach der zweiten
-Sichtprüfung überall aus. Der Schalter bleibt eingebaut; der Stand ist
-bytegleich mit `3b19ae6`. **Offen als Frage, nicht als Aufgabe:** Ob die
-Seitentreue mit der jetzt sauberen Anbindung besser aussieht, ist nicht
-entschieden — sie schob die Zahlen nach links, und links war genau die Seite
-mit dem schlechten Anschluss. Wer das aufmacht, legt Philip ein
-Vorher/Nachher vor und ändert dann eine Zeile.
+**ERLEDIGT am 26.08.2026 (abends) — die Seitentreue, im dritten Anlauf.**
+Sie läuft für CVV, ESG, ETF und comdirect (je null falsch stehende
+Führungslinien) und ist bei **Thema** ausdrücklich aus. Auslöser war Philips
+Fund an ESG Offensiv; die Frage von zuvor ist damit beantwortet.
+
+**ERLEDIGT am 26.08.2026 (abends) — steile Linien setzen unten an.** Schwelle
+`LEADER_SENKRECHT_STEIL = 4`, gemessen aus der Verteilung über alle 69
+Führungslinien. Familien-Schalter `leader_senkrecht`, Prüfstein Schritt 8
+(hält die **Regel** fest, nicht die Stückzahl).
 
 **NEU 26.08.2026 (abends) — der Ring-Prüfstein sieht die Optik nicht.** Das
 gilt weiter und ist der Grund, warum Schritt 7 seine Zahlen aus dem

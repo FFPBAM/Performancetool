@@ -167,6 +167,17 @@ prüfte statt gegen eine Schwelle (#47).
   passt, wird gekürzt statt umgebrochen (`wrap="none"` behebt es). *Ein
   geöffnetes Dokument ist kein Beweis. Ein Bild ist einer.* Der Export geht
   per COM: `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`.
+- **Eine Schwelle kommt aus der VERTEILUNG, nicht aus der Intuition**
+  (26.08.2026). „Die Linie setzt unten an, wenn sie steiler als 45° ankommt"
+  klang zwingend — und traf **zwölf** Beschriftungen statt der zwei
+  beanstandeten, darunter diagonale, die dadurch schlechter aussahen. Bei
+  einer Diagonalen ist keine der beiden Kanten richtig, und eine Regel, die
+  genau dort kippt, ist willkürlich. Die Messung über alle 69 Führungslinien
+  zeigte dann eine **Lücke**: Median 0,23, die beanstandeten Fälle 13,1 und
+  11,3, der nächsthöhere Wert im ganzen Produkt 3,3. Die Schwelle gehört in
+  die Lücke, nicht auf einen runden Wert. *Erst die Verteilung ansehen, dann
+  die Grenze setzen — und in den Kommentar schreiben, welche Werte links und
+  rechts davon liegen.*
 - **Wer eine Optik-Änderung zurücknimmt, nimmt ihren PREIS mit zurück**
   (26.08.2026). Die Seitentreue hatte zwei Zugeständnisse gekostet — eine von
   2 auf 4 angehobene Obergrenze für kreuzende Linien und eine namentlich
