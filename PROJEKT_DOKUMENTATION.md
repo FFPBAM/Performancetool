@@ -1599,6 +1599,64 @@ Betroffen ist systematisch **LIQUIDITÄT in jeder Familie** — als letztes Segm
 
 **Der wirksame Hebel ist die Kopfluft:** eine Zahl halbiert die engen Paare und drückt die schlimmste Kategorie um 76 %.
 
+#### NACHTRAG 26.08.2026 — Ansatzpunkt 2 ist umgesetzt
+
+**Gemeldet hatte Philip** an *Pro* Folie 11: „8,27 %" wirke **neben** ihrer
+Führungslinie statt an ihr. Nachgemessen war die Ursache Punkt 2 der
+Ursachenkette oben: Die Nachbarzahl stand auf der **falschen Seite** ihres
+Segments, ihre Linie lief deshalb in den Zwischenraum.
+
+**Der Eingriff** (Pass 6d in `ring_labels_aussen_dynamisch`): `seite` kommt
+jetzt aus dem **Segmentwinkel** `mids[i]` statt aus der aktuellen x-Position
+des Labels. Genau das, was oben als „~10 Zeilen" stand. Die alte Zeile
+`seite = 1.0 if dx0 >= 0 else -1.0` las eine Position, die von den Pässen
+davor bereits verschoben war — ein tangentialer Schubs von 0,24" kippte damit
+eine 65°-Entscheidung.
+
+**Gemessen an echt gebauten Broschüren** (inneres und äußeres Ende jeder
+Führungslinie auf derselben Seite der senkrechten Ringachse?):
+
+| Familie | vorher | nachher |
+|---|---:|---:|
+| CVV | 5 von 17 | **0** |
+| ESG | 5 von 16 | **0** |
+| ETF | 2 von 8 | **0** |
+| comdirect | 2 von 11 | **0** |
+| Thema | 3 von 17 | **2** |
+| **gesamt** | **32 von 143 (22,4 %)** | **12 (8,4 %)** |
+
+Auf den fünf Familien-Broschüren allein: **2 von 69 (2,9 %)**.
+
+**Thema behält zwei**, und das ist kein Versehen: Pass 6d dreht nur Labels im
+**Kopfbereich**. Wer die restlichen zwei will, landet bei Ansatzpunkt 3
+(Entzerrung in 2D) — dort steht oben „höchstes Risiko", und das gilt weiter.
+
+**Der Preis, ausdrücklich benannt.** Auf den **Platzhalterdaten der Vorlagen**
+kostet die Änderung zwei zusätzliche kreuzende Führungslinien und eine
+Beschriftung, die auf der Legende liegt — beides überwiegend in
+`Vorlage_FFPB.pptx` F9, dem Standard-Pfad, der **nie gebaut** wird. An echt
+gebauten Broschüren bleibt alles unverändert grün: 17 Ringe, unveränderte
+Durchmesser (5,34 / 8,51 cm), **null** Kreuzungen. `KREUZUNGEN_VORLAGEN_MAX`
+steht deshalb auf 4 statt 2, und die eine Legenden-Berührung ist als
+**namentliche** Ausnahme (`LEGENDE_GEDULDET`) hinterlegt — nicht als
+aufgeweichter Schwellwert, damit die Zusage für jeden anderen Ring hart bleibt
+und der Fall sichtbar bleibt.
+
+**Ein Reparaturversuch, der NICHT geholfen hat, und warum das lehrreich ist:**
+Naheliegend war, bei einer Tabufläche auf die andere Seite zurückzufallen
+(`_auf_tabu` gibt es bereits). Es änderte **nichts** — die beanstandete
+Beschriftung sitzt bei y = 2,12 und wird von Pass 6d gar nicht angefasst; die
+Kollision entsteht weiter hinten in der Kette. *Wer eine Nebenwirkung dort
+reparieren will, wo er die Ursache vermutet, muss zuerst nachsehen, ob die
+Stelle den Fall überhaupt anfasst.* Der Rückfall bleibt als Absicherung
+stehen, weil er für Labels, die Pass 6d **wirklich** dreht, richtig ist.
+
+**Prüfstein:** `tests/test_ring_geometrie.py` **Schritt 6**, mit Obergrenzen
+**je Familie** statt einer Gesamtquote — vier Familien auf der harten Null,
+Thema auf 2. Eine Null bricht sichtbar; eine Quote lässt sich wegmitteln.
+**Gegenprobe:** gegen Broschüren, die mit dem Stand davor gebaut wurden, meldet
+Schritt 6 alle fünf Familien rot.
+
 #### Ansatzpunkte, falls das Thema wieder aufgemacht wird
 
 1. **Kopfluft datenbasiert** statt fix 0,30" — größter gemessener Hebel, kleinster Eingriff. Offene Frage: wie nah dürfen Zahlen optisch an den Balken?

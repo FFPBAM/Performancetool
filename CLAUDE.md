@@ -155,6 +155,15 @@ prüfte statt gegen eine Schwelle (#47).
   `$ppt = New-Object -ComObject PowerPoint.Application` →
   `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`. Das ist
   #16/#28 mit anderen Mitteln — und ein Test kann es selbst erzeugen.
+- **Die Seite eines Ring-Labels kommt aus dem SEGMENTWINKEL, nicht aus seiner
+  aktuellen Position** (#44, 26.08.2026). Pass 6d in
+  `ring_labels_aussen_dynamisch` las bis dahin `dx0`, also eine x-Position, die
+  die Pässe davor schon verschoben hatten — ein tangentialer Schubs von 0,24"
+  kippte damit eine 65°-Entscheidung, und die Führungslinie lief quer über den
+  Ringkopf. Gemessen: 22,4 % → 8,4 % falsch stehende Linien, vier Familien auf
+  null. Festgenagelt in `tests/test_ring_geometrie.py` **Schritt 6**, mit
+  Obergrenzen **je Familie** — eine harte Null bricht sichtbar, eine Gesamtquote
+  lässt sich wegmitteln.
 - **Die Broschüre führt IMMER NUR die oben gewählte Strategie**
   (Entscheidung Philip, 26.08.2026). Der Haken „Vergleichsportfolio" wirkt auf
   den Bildschirm, nicht auf das Dokument — bei CVV/ESG/ETF/comdirect war das

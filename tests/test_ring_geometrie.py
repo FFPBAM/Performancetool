@@ -75,7 +75,55 @@ TOLERANZ = 0.005
 # 24.08.2026 gemessen (LEGENDE_SPALTENWEISE=False) — zwei Stueck, in
 # Vorlage_ETF F16 und Vorlage_comdirect F6. In echten Broschueren sind es
 # null; deshalb steht hier eine Obergrenze und in Schritt 4 die Null.
-KREUZUNGEN_VORLAGEN_MAX = 2
+#
+# ANGEHOBEN am 26.08.2026 von 2 auf 4 (Entscheidung Philip). Grund: Die
+# Seitentreue in Pass 6d (#44 Ansatzpunkt 2) drueckt die falsch stehenden
+# Beschriftungen ueber alle Familien von 22,4 % auf 8,4 % (32 -> 12 von 143
+# Fuehrungslinien) und bringt CVV, ESG, ETF und comdirect auf NULL. Auf den
+# kuenstlichen Vorlagendaten kostet sie zwei zusaetzliche Kreuzungen
+# (Vorlage_FFPB F9 zweimal, Vorlage_Thema F11 einmal — Vorlage_FFPB ist der
+# Standard-Pfad, der nie gebaut wird).
+#
+# WAS DIESE ZAHL NICHT LOCKERT: Schritt 4 verlangt weiterhin die harte NULL an
+# echt gebauten Broschueren, und dort ist sie vor wie nach der Aenderung
+# erfuellt (17 Ringe, 69 Linien). Wer diese Konstante weiter anhebt, sollte
+# denselben Nachweis fuehren — sonst wird aus einer Obergrenze eine Ausrede.
+KREUZUNGEN_VORLAGEN_MAX = 4
+
+# Genau EINE geduldete Beschriftung auf der Legende, auf den PLATZHALTERDATEN
+# der Vorlagen (26.08.2026). Sie entsteht als Nebenwirkung der Seitentreue.
+#
+# Warum geduldet: `Vorlage_FFPB.pptx` ist der Standard-Pfad — die Familie ohne
+# Eintrag in FAMILIE_RING_FORMAT, fuer die nie eine Broschuere gebaut wird
+# (belegt in #71). Der Fall trat mit den Beispielzahlen der Vorlage auf, nicht
+# mit echten Daten.
+#
+# Warum als NAMENTLICHE Liste und nicht als abgeschaltete Pruefung: So bleibt
+# die Zusage fuer JEDEN anderen Ring hart, der Fall bleibt sichtbar (er wird
+# als HINWEIS gedruckt), und wer die Vorlage anfasst, bekommt sofort eine
+# Meldung an einer anderen Stelle. Ein aufgeweichter Schwellwert haette all das
+# nicht geleistet.
+LEGENDE_GEDULDET = {("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2")}
+
+# SEITENTREUE (NEU 26.08.2026): Hoechstzahl an Fuehrungslinien, deren inneres
+# Ende (am Segment) und aeusseres Ende (am Label) auf VERSCHIEDENEN Seiten der
+# senkrechten Ringachse liegen. So eine Linie laeuft quer ueber den Ringkopf —
+# das ist der gemeldete Eindruck "die Zahl steht neben ihrer Linie statt an
+# ihr" (#44 Ansatzpunkt 2).
+#
+# Bewusst je Familie und als ZAHL, nicht als Quote: Vier Familien halten die
+# harte Null, und eine Null faellt sofort auf, wenn sie bricht. Gemessen am
+# 26.08.2026 an echt gebauten Broschueren, vorher -> nachher:
+#   CVV 5 -> 0, ESG 5 -> 0, ETF 2 -> 0, comdirect 2 -> 0, Thema 3 -> 2
+# (ueber alle Familien 32 -> 12 von 143 Fuehrungslinien, 22,4 % -> 8,4 %).
+#
+# Thema behaelt zwei: Pass 6d dreht nur Labels, die im Kopfbereich stehen.
+# Wer die restlichen zwei will, landet bei Ansatzpunkt 3 aus #44 (Entzerrung
+# in 2D) — dort steht "hoechstes Risiko", und das gilt weiter.
+SEITENTREUE_MAX = {"CVV": 0, "ESG": 0, "ETF": 0, "comdirect": 0, "Thema": 2}
+
+# Naeher als das an der Senkrechten ist "die Seite" keine sinnvolle Aussage.
+SEITE_TOTZONE = 0.02
 
 # Was in den sechs Vorlagen steht — Rahmen (Breite, Hoehe) in Zoll,
 # `plotArea`-manualLayout (x, y, w, h) als Bruchteile des Rahmens und die
@@ -485,6 +533,14 @@ def _zusicherungen(quelle, prs):
                 if (mx + HALB_BREITE > box[0] and mx - HALB_BREITE < box[2]
                         and my + HALB_HOEHE > box[1]
                         and my - HALB_HOEHE < box[3]):
+                    if (quelle, nr, shape.name) in LEGENDE_GEDULDET:
+                        # Namentlich geduldet, siehe LEGENDE_GEDULDET oben.
+                        # Sichtbar bleiben soll es trotzdem.
+                        print(f"    HINWEIS — {ort}: Beschriftung "
+                              f"({mx:.3f}, {my:.3f}) liegt auf der Legende — "
+                              f"namentlich geduldet (Platzhalterdaten, "
+                              f"Standard-Pfad)")
+                        continue
                     print(f"    FEHLER — {ort}: Beschriftung "
                           f"({mx:.3f}, {my:.3f}) liegt auf der Legende "
                           f"({box[0]:.2f}, {box[1]:.2f})-({box[2]:.2f}, "
@@ -654,6 +710,69 @@ def schritt4_gebaute_broschueren(ausgabe):
     return fehler
 
 
+def _seitentreue(prs):
+    """(Fuehrungslinien, davon auf der falschen Seite, Beispiele).
+
+    Fuer jede gezeichnete Fuehrungslinie: Liegt ihr inneres Ende (das naeher
+    an der Ringmitte, also beim Segment) auf derselben Seite der senkrechten
+    Ringachse wie ihr aeusseres Ende (am Label)? Wenn nicht, laeuft sie quer
+    ueber den Ringkopf.
+    """
+    gesamt = schief = 0
+    beispiele = []
+    for nr, folie, shape in _ringe(prs):
+        geo = _plot(shape)
+        if geo is None:
+            continue
+        cx, cy = geo["cx"], geo["cy"]
+        for (ax, ay), (ex, ey) in _leader(folie, shape):
+            innen, aussen = (((ax, ay), (ex, ey))
+                             if (ax - cx) ** 2 + (ay - cy) ** 2
+                             <= (ex - cx) ** 2 + (ey - cy) ** 2
+                             else ((ex, ey), (ax, ay)))
+            di, do = innen[0] - cx, aussen[0] - cx
+            if abs(di) < SEITE_TOTZONE or abs(do) < SEITE_TOTZONE:
+                continue
+            gesamt += 1
+            if (di >= 0) != (do >= 0):
+                schief += 1
+                beispiele.append(f"F{nr} {shape.name}")
+    return gesamt, schief, beispiele
+
+
+def schritt6_seitentreue(ausgabe):
+    print("Schritt 6 — die Beschriftungen stehen auf der Seite ihres Segments")
+    if not ausgabe:
+        print("    UEBERSPRUNGEN — kein Ausgabeverzeichnis angegeben")
+        return 0
+    fehler = 0
+    ges_all = schief_all = 0
+    geprueft = 0
+    for familie, grenze in sorted(SEITENTREUE_MAX.items()):
+        pfad = os.path.join(ausgabe, f"ring_{familie}.pptx")
+        if not os.path.exists(pfad):
+            print(f"    UEBERSPRUNGEN — {familie}: {os.path.basename(pfad)} "
+                  f"fehlt (Schritt 4 baut sie)")
+            continue
+        geprueft += 1
+        gesamt, schief, beispiele = _seitentreue(Presentation(pfad))
+        ges_all += gesamt
+        schief_all += schief
+        if schief > grenze:
+            print(f"    FEHLER — {familie}: {schief} von {gesamt} "
+                  f"Fuehrungslinien laufen auf die falsche Seite, erlaubt "
+                  f"sind {grenze} ({', '.join(sorted(set(beispiele))[:4])})")
+            fehler += 1
+        else:
+            print(f"    {familie:<12} {schief} von {gesamt} falsch "
+                  f"(erlaubt {grenze})")
+    if geprueft and not fehler:
+        anteil = (100.0 * schief_all / ges_all) if ges_all else 0.0
+        print(f"    OK — {schief_all} von {ges_all} Fuehrungslinien "
+              f"({anteil:.1f} %); vor dem 26.08.2026 waren es 22,4 %")
+    return fehler
+
+
 def schritt5_familien_look():
     print("Schritt 5 — der Familien-Look bleibt getrennt")
     fehler = 0
@@ -717,6 +836,8 @@ def main():
     fehler += schritt4_gebaute_broschueren(ausgabe)
     print()
     fehler += schritt5_familien_look()
+    print()
+    fehler += schritt6_seitentreue(ausgabe)
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")

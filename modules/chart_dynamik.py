@@ -1257,35 +1257,77 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 r_i = math.hypot(dx0, dy0)
                 if r_i < 1e-6:
                     continue
-                seite = 1.0 if dx0 >= 0 else -1.0           # Seite beibehalten
+                # SEITENTREUE (NEU 26.08.2026, #44 Ansatzpunkt 2): Die Seite
+                # kommt aus dem SEGMENTWINKEL, nicht aus der aktuellen
+                # x-Position des Labels.
+                #
+                # Vorher stand hier `1.0 if dx0 >= 0 else -1.0`, also die Seite,
+                # auf der das Label GERADE liegt. Die ist aber schon von den
+                # Paessen davor verschoben: Ein tangentialer Schubs von 0,24"
+                # kann ein Label ueber die Senkrechte druecken, und dann dreht
+                # dieser Pass es die FALSCHE Seite hinunter — die Fuehrungslinie
+                # laeuft quer ueber den Ringkopf zu ihrem Segment zurueck.
+                # #44 rechnet den Fall an ESG F16 vor (LIQUIDITAET, 65 % daneben).
+                #
+                # `mids[i]` ist der Mittelwinkel des Segments ab 12 Uhr im
+                # Uhrzeigersinn und wird nirgends veraendert (gebildet oben,
+                # `label_ang` ist eine eigene Reihe). sin > 0 heisst: das Segment
+                # liegt rechts der senkrechten Ringachse, also gehoert das Label
+                # dorthin.
+                #
+                # Gemessen ueber alle Familien: 19,7 % der Fuehrungslinien liefen
+                # vorher auf die falsche Seite (69 von 351).
+                _sx_seg = math.sin(math.radians(mids[i]))
+                if abs(_sx_seg) > 1e-6:
+                    seite = 1.0 if _sx_seg > 0 else -1.0
+                else:
+                    # Segment genau auf der Senkrechten (12 oder 6 Uhr): Dort gibt
+                    # es keine richtige Seite. Dann bleibt es bei der bisherigen —
+                    # eine willkuerliche Wahl waere hier schlechter als Stetigkeit.
+                    seite = 1.0 if dx0 >= 0 else -1.0
                 # Winkel UND Radius gemeinsam lösen: beim Herunterdrehen zeigt die
                 # Textbox stärker mit ihrer BREITE zum Ring (HALB_W statt HALB_H),
                 # der Radius muss also mitwachsen — sonst berührt das Label den Ring.
-                r = r_i
-                gefunden = False
-                for _ in range(8):
-                    c = (cy - y_soll) / r
-                    if abs(c) > 1.0:
-                        break
-                    a = math.acos(max(-1.0, min(1.0, c)))
-                    sx, sy = seite * math.sin(a), -math.cos(a)
-                    r_noetig = R_out + gap_in + HALB_W * abs(sx) + HALB_H * abs(sy)
-                    r_neu = max(r, r_noetig)
-                    if abs(r_neu - r) < 1e-4:
-                        gefunden = True
-                        break
-                    r = r_neu
-                if not gefunden and abs((cy - y_soll) / r) > 1.0:
-                    # Radius reicht nicht: so tief wie möglich (waagerecht daneben)
-                    ziel[i][1] = cy
-                    ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
-                                                  cx + seite * r))
-                    continue
-                c = max(-1.0, min(1.0, (cy - y_soll) / r))
-                a = math.acos(c)
-                ziel[i][0] = max(rand_in, min(frame_w_in - rand_in,
-                                              cx + seite * r * math.sin(a)))
-                ziel[i][1] = cy - r * c
+                def _kopf_ziel(_seite, _r_start=r_i):
+                    r = _r_start
+                    gefunden = False
+                    for _ in range(8):
+                        c = (cy - y_soll) / r
+                        if abs(c) > 1.0:
+                            break
+                        a = math.acos(max(-1.0, min(1.0, c)))
+                        sx, sy = _seite * math.sin(a), -math.cos(a)
+                        r_noetig = (R_out + gap_in
+                                    + HALB_W * abs(sx) + HALB_H * abs(sy))
+                        r_neu = max(r, r_noetig)
+                        if abs(r_neu - r) < 1e-4:
+                            gefunden = True
+                            break
+                        r = r_neu
+                    if not gefunden and abs((cy - y_soll) / r) > 1.0:
+                        # Radius reicht nicht: so tief wie möglich (waagerecht
+                        # daneben)
+                        return (max(rand_in, min(frame_w_in - rand_in,
+                                                 cx + _seite * r)), cy)
+                    c = max(-1.0, min(1.0, (cy - y_soll) / r))
+                    a = math.acos(c)
+                    return (max(rand_in, min(frame_w_in - rand_in,
+                                             cx + _seite * r * math.sin(a))),
+                            cy - r * c)
+
+                x_neu, y_neu = _kopf_ziel(seite)
+                # Die segmenttreue Seite kann in eine TABUFLAECHE laufen (Legende
+                # unten links, Quellenangabe) — dort ist die andere Seite die
+                # bessere Antwort, auch wenn sie weiter vom Segment weg zeigt.
+                # Ohne diesen Rueckfall setzte Vorlage_FFPB F9 eine Beschriftung
+                # auf die Legende (gemessen 26.08.2026, Schritt 3 des
+                # Ring-Pruefsteins). Die Tabuflaechen kennt `_auf_tabu` bereits;
+                # hier wird sie nur gefragt.
+                if _auf_tabu(x_neu, y_neu):
+                    x_alt, y_alt = _kopf_ziel(-seite)
+                    if not _auf_tabu(x_alt, y_alt):
+                        seite, x_neu, y_neu = -seite, x_alt, y_alt
+                ziel[i][0], ziel[i][1] = x_neu, y_neu
 
             # Entzerren (nur nach unten) und radiales Ausschieben BEEINFLUSSEN
             # SICH GEGENSEITIG: das Nach-unten-Schieben drückt Labels auf den Ring,

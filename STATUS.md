@@ -7,7 +7,9 @@
 Sub-Teile statt eigene zu bekommen; **in echtem PowerPoint bewiesen, vorher
 und nachher**. Zwei neue Prüfsteine (`test_pptx_integritaet.py`,
 `test_broschuere_auswahl.py`); die Thema-Broschüre führt jetzt **nur die obere
-Strategie** (Entscheidung Philip, nach der Behebung bestätigt).
+Strategie** (Entscheidung Philip, nach der Behebung bestätigt). Dazu **Punkt 1
+erledigt**: die Ring-Beschriftungen stehen auf der Seite ihres Segments —
+22,4 % falsche Führungslinien auf **8,4 %**, vier Familien auf null.
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
 > ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
@@ -82,6 +84,53 @@ Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 > `tests/test_broschuere_auswahl.py` (33. Suite), inklusive Gegenprobe: Zwei
 > Portfolios ergäben **25 statt 21 Folien** — der Unterschied ist also messbar
 > und die Zusicherung nicht leer. **Zurück geht es mit einer Zeile.**
+>
+> ---
+>
+> ### Punkt 1 erledigt: die Beschriftungen stehen auf der richtigen Seite
+>
+> **Dein Befund an *Pro* Folie 11 war eine Zahl, keine Ahnung** — und die Zahl
+> ist jetzt kleiner. Pass 6d leitet die Seite des Labels aus dem
+> **Segmentwinkel** ab statt aus seiner aktuellen x-Position. Das ist genau der
+> Ansatzpunkt 2 aus #44, den das Projekt selbst mit „~10 Zeilen" beziffert hat.
+>
+> | Familie | vorher | nachher |
+> |---|---:|---:|
+> | CVV | 5 von 17 | **0** |
+> | ESG | 5 von 16 | **0** |
+> | ETF | 2 von 8 | **0** |
+> | comdirect | 2 von 11 | **0** |
+> | Thema | 3 von 17 | **2** |
+> | **gesamt** | **32 von 143 (22,4 %)** | **12 (8,4 %)** |
+>
+> **Thema behält zwei, und das ist Absicht:** Pass 6d dreht nur Labels im
+> Kopfbereich. Die letzten zwei lägen bei Ansatzpunkt 3 (Entzerrung in 2D) —
+> dort steht in #44 „höchstes Risiko", und daran halte ich mich.
+>
+> **Der Preis, den du bewusst freigegeben hast:** Auf den **Platzhalterdaten
+> der Vorlagen** kostet die Änderung zwei zusätzliche kreuzende Linien und eine
+> Beschriftung auf der Legende — beides überwiegend in `Vorlage_FFPB.pptx` F9,
+> dem Standard-Pfad, der nie gebaut wird. An **echt gebauten** Broschüren ist
+> alles unverändert grün: 17 Ringe, gleiche Durchmesser, **null** Kreuzungen.
+>
+> **Unterwegs habe ich einmal falsch repariert.** Ich wollte die
+> Legenden-Kollision lokal abfangen (Rückfall auf die andere Seite bei
+> Tabuflächen) — es änderte **nichts**, weil die beanstandete Beschriftung von
+> Pass 6d gar nicht angefasst wird. Danach habe ich nach eurer Regel hart
+> zurückgesetzt statt weiter zu flicken, den Stand als Patch gesichert und dir
+> die Entscheidung vorgelegt.
+>
+> **Neuer Schritt 6 im Ring-Prüfstein**, mit Obergrenzen **je Familie** statt
+> einer Gesamtquote: Vier Familien stehen auf der harten Null. **Gegenprobe:**
+> Gegen Broschüren, die mit dem Stand davor gebaut wurden, meldet er alle fünf
+> Familien rot.
+>
+> **Zum Ansehen** liegen sechs Dateien in
+> `H:\Entwicklung\Forschung_Claude\Performancetool\_seitentreue\` (ESG, CVV,
+> Thema — je `_1_vorher` und `_2_nachher`). **Bitte in echtem PowerPoint** —
+> die Zahl sagt, dass es richtiger ist, nicht, dass es besser aussieht.
+>
+> ---
 >
 > **Erledigt und nur noch notiert:** Sharpe-Tooltip gesichtet, neuer Text
 > steht, 3-Monats-Euribor als risikofreier Referenzzinssatz bestätigt.
@@ -2846,7 +2895,16 @@ Folien**) — sonst wäre Schritt 1 grün, ohne etwas zu bedeuten.
 *Zurückdrehen ist eine Zeile* (`portfolioanalyse.py`, Zusammenbau von
 `portfolios` vor dem Export); die Fundstellen stehen als Kommentar dort.
 
-**NEU 25.08.2026 — die Seitentreue der Beschriftungen.** Gemeldet von Philip
+**ERLEDIGT am 26.08.2026 — die Seitentreue der Beschriftungen.** Pass 6d
+leitet die Seite jetzt aus dem Segmentwinkel ab; 22,4 % → 8,4 %, vier Familien
+auf null, Prüfstein `test_ring_geometrie.py` Schritt 6 mit Obergrenzen je
+Familie. Einzelheiten im Sitzungsbericht oben und in `PROJEKT_DOKUMENTATION.md`
+#44 (Nachtrag 26.08.2026). **Offen bleibt allein Punkt 1 des Befundes** — die
+feste Textbox-Breite `HALB_BREITE = 0.33"`, wegen der eine Linie 3 mm hinter
+dem letzten Zeichen ansetzt. Betrifft jede kurze Zahl in jeder Familie und ist
+eine eigene Entscheidung. Der ursprüngliche Befund steht darunter:
+
+*(War:)* Gemeldet von Philip
 an *Pro* Folie 11: Die Zahl „8,27 %" wirkt neben ihrer Führungslinie statt an
 ihr. **Geometrisch ist nichts falsch** — jede Linie endet exakt an der Kante
 ihrer Textbox, nichts kreuzt sich, keine der sieben Prüfklassen bricht. Zwei
