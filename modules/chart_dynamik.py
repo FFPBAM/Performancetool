@@ -103,6 +103,46 @@ PUNKT_DURCHMESSER   = 0.055      # Zoll
 # ── Label-Text ─────────────────────────────────────────────────────────────
 LABEL_SCHRIFTFARBE  = "000000"   # Prozentzahlen IMMER schwarz
 
+# ── Buendige Anbindung der Zahl an ihre Fuehrungslinie (NEU 26.08.2026) ────
+# Punkt 1 des Befundes vom 25.08.2026. Ohne diese Behandlung schreibt das
+# manualLayout eines Labels nur x/y mit xMode/yMode="edge" — also die LINKE
+# OBERE ECKE — und PowerPoint dimensioniert die Box selbst auf den Text.
+# Die Fuehrungslinie endet aber bei `mx -+ HALB_W`, also an einer GEDACHTEN
+# Kante von 0,66 Zoll Breite. Folge, an echten Broschueren in echtem
+# PowerPoint gemessen (COM, DataLabel + Punkt-Shape):
+#   Label RECHTS des Rings: Linie endet 1,1 mm vor dem ersten Zeichen — eng.
+#   Label LINKS  des Rings: Linie endet 6,6 bis 8,6 mm HINTER dem letzten
+#                           Zeichen. Am Bild nachgemessen: 5,1 mm Luecke.
+# Der Mangel ist also ASYMMETRISCH und trifft nur die linke Seite.
+#
+# DIE BEHEBUNG BRAUCHT KEINE ZEICHENBREITE. Statt die Textbreite zu schaetzen
+# (was CLAUDE.md seit dem 17.08.2026 verbietet und was bei Noto Sans, das
+# weder im Repo liegt noch hier installiert ist, ohnehin unsicher waere),
+# bekommt die Box eine FESTE Breite und der Text eine AUSRICHTUNG zur
+# Ringseite. Damit ist die ringzugewandte Textkante berechenbar:
+#   rechts:  Boxlinks  + LABEL_INSET_IN
+#   links:   Boxrechts - LABEL_INSET_IN
+# und die Linie endet um LABEL_LUFT_IN davor.
+#
+# DREI DINGE, DIE DER RENDERER ENTSCHIEDEN HAT UND KEIN SCHEMA (Spike am
+# 26.08.2026, echtes PowerPoint, #29):
+#   * `wMode="edge"` ist FALSCH — PowerPoint liest `w` dann als rechte KANTE,
+#     nicht als Breite; alle Labels landen uebereinander. Richtig: "factor".
+#   * `w` OHNE `h` laesst die Beschriftungen beim Rendern VERSCHWINDEN. Im
+#     XML und ueber COM sind sie da, im Bild nicht. Beide zusammen rendern.
+#   * `algn` gehoert in `a:pPr` UND in `a:lstStyle/a:lvl1pPr`: der Absatz
+#     traegt keinen Textlauf, PowerPoint erzeugt die Zahl selbst.
+LABEL_INSET_IN      = 0.10       # lIns/rIns der Label-Box in Zoll. Das ist
+                                 # PowerPoints Vorgabe (gemessen: MarginLeft
+                                 # = MarginRight = 7,2 pt) — sie wird
+                                 # AUSDRUECKLICH geschrieben, damit die Zahl
+                                 # unsere ist und nicht eine Vorgabe, die
+                                 # sich mit einer Office-Version aendern darf.
+LABEL_LUFT_IN       = 0.045      # Luft zwischen Linienende und Zeichen
+                                 # (1,14 mm). Das ist der Abstand, den die
+                                 # RECHTE Seite heute schon hat und den
+                                 # niemand beanstandet hat.
+
 # ── Datumsachse der Linien-Charts (NEU 12.08.2026) ─────────────────────────
 # Schrittweite der Achsenbeschriftung, abhängig von der Länge der Historie.
 # (Obergrenze der Spanne in Monaten, Schritt in Monaten) — die erste passende
@@ -277,6 +317,10 @@ _RING_KRAEFTIG = {
     "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
     "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
     "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
+    "label_buendig": True,      # AUSDRUECKLICH ein (26.08.2026): Punkt 1 des
+                                # Befundes. Fuer alle fuenf Familien
+                                # beauftragt und in echtem PowerPoint
+                                # angesehen. Siehe LABEL_INSET_IN oben.
     "seitentreue": False,       # AUS (26.08.2026 abends) — nach der zweiten,
                                 # genaueren Sichtpruefung von Philip an
                                 # CVV und ESG in echtem PowerPoint: "die
@@ -350,6 +394,13 @@ _RING_FORMAT_DEFAULT = {
     "leader_start_tiefe": 0.0,      # 0.0 = Ansatz am Außenrand (bisheriges Verhalten)
     "leader_gerade": False,         # False = bisherige geknickte Führung
     "label_gap_in": None,           # None → der label_gap_in-Parameter von nachbearbeiten
+    "label_buendig": False,         # Feste Boxbreite + Ausrichtung zur
+                                    # Ringseite, damit die Fuehrungslinie am
+                                    # ZEICHEN endet (Punkt 1, 26.08.2026).
+                                    # VOREINSTELLUNG AUS, aus demselben Grund
+                                    # wie die beiden Schalter darunter: eine
+                                    # Familie bekommt eine Optik-Aenderung
+                                    # erst, wenn sie DORT angesehen wurde.
     "seitentreue": False,           # Seite des Labels aus dem SEGMENTWINKEL
                                     # statt aus seiner aktuellen x-Position
                                     # (Pass 6d, #44 Ansatzpunkt 2).
@@ -1018,7 +1069,7 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                  gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
                                  tangential_in=0.14, rand_oben_in=None,
                                  kopf_frei_in=None, rueckkopplung=True,
-                                 seitentreue=False):
+                                 seitentreue=False, buendig=False):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -1816,10 +1867,26 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
         if ml is not None:
             layout.remove(ml)
         ml = etree.SubElement(layout, _q("manualLayout"))
-        for tag, val in (("xMode", "edge"), ("yMode", "edge")):
+        moden = [("xMode", "edge"), ("yMode", "edge")]
+        werte = [("x", x_edge), ("y", y_edge)]
+        if buendig:
+            # "factor", NICHT "edge": mit "edge" liest PowerPoint w als rechte
+            # KANTE statt als Breite (im Spike am 26.08.2026 gesehen — alle
+            # Labels landeten uebereinander). Und h MUSS mit: mit w allein
+            # rendert PowerPoint die Beschriftungen gar nicht mehr, obwohl sie
+            # im XML und ueber COM da sind.
+            moden += [("wMode", "factor"), ("hMode", "factor")]
+            werte += [("w", 2.0 * HALB_W / frame_w_in),
+                      ("h", 2.0 * HALB_H / frame_h_in)]
+        for tag, val in moden:
             e = etree.SubElement(ml, _q(tag)); e.set("val", val)
-        for tag, val in (("x", x_edge), ("y", y_edge)):
+        for tag, val in werte:
             e = etree.SubElement(ml, _q(tag)); e.set("val", f"{val:.5f}")
+        if buendig:
+            # Die Zahl an die RINGZUGEWANDTE Kante ihrer Box ziehen. Damit ist
+            # diese Kante berechenbar, ohne eine Zeichenbreite zu kennen — und
+            # `ring_leader_zeichnen` kann die Linie genau davor enden lassen.
+            _label_buendig_setzen(d, "l" if tx >= cx else "r")
     # überzählige Label-Slots (idx >= Segmentzahl) entfernen
     for idx, d in list(dlbls.items()):
         if idx >= len(vals):
@@ -1827,6 +1894,71 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
     return {"segmente": len(vals), "R_out": round(R_out, 3),
             "versuche": versuche}
 
+
+
+def _txPr_sicherstellen(dLbl):
+    """Gibt das `c:txPr` eines Datenlabels zurueck und legt es an, wenn es fehlt.
+
+    Die Vorlagen liefern ihre `dLbl` OHNE `txPr` — wer Schrift, Ausrichtung oder
+    Innenabstaende setzen will, muss es also selbst anlegen. Das taten frueher
+    `ring_label_schriftfarbe` (ganz am Ende der Kette) und sonst niemand. Seit
+    der buendigen Anbindung (26.08.2026) braucht es auch
+    `ring_labels_aussen_dynamisch`, schon beim Schreiben des Layouts — und
+    damit gaebe es zwei Fassungen derselben Anlegeregel.
+
+    ZUR EINFUEGESTELLE: `CT_DLbl` verlangt idx, layout, tx, numFmt, spPr, txPr,
+    dLblPos, ... Die Vorlagen liefern kein `spPr`, deshalb greift fast immer
+    der Else-Zweig. Dass er das `txPr` VOR das `layout` schiebt, ist der seit
+    dem 26.08.2026 in STATUS.md offene Punkt — er wird hier BEWUSST NICHT
+    mitbehoben, weil er das Chart-XML aller Familien anfasst und eine eigene
+    Sichtpruefung verdient. Wer ihn angeht, hat mit dieser Funktion jetzt
+    genau EINE Stelle zu aendern statt zwei.
+    """
+    from lxml import etree
+    txPr = dLbl.find(_q("txPr"))
+    if txPr is not None:
+        return txPr
+    txPr = etree.Element(_q("txPr"))
+    etree.SubElement(txPr, _A + "bodyPr")
+    etree.SubElement(txPr, _A + "lstStyle")
+    p = etree.SubElement(txPr, _A + "p")
+    pPr = etree.SubElement(p, _A + "pPr")
+    etree.SubElement(pPr, _A + "defRPr")
+    etree.SubElement(p, _A + "endParaRPr")
+    spPr = dLbl.find(_q("spPr"))
+    (spPr.addnext(txPr) if spPr is not None
+     else dLbl.find(_q("idx")).addnext(txPr))
+    return txPr
+
+
+def _label_buendig_setzen(dLbl, algn):
+    """Richtet den Labeltext aus und legt die Innenabstaende ausdruecklich fest.
+
+    ZWEI STELLEN, EINE WIRKUNG: `a:pPr` allein genuegt nicht verlaesslich, weil
+    der Absatz KEINEN Textlauf enthaelt — PowerPoint erzeugt die Prozentzahl
+    selbst und holt sich die Ausrichtung aus dem LISTENSTIL. Deshalb steht
+    `algn` in `a:pPr` UND in `a:lstStyle/a:lvl1pPr`. Am 26.08.2026 in echtem
+    PowerPoint nachgesehen.
+
+    Die Innenabstaende (`lIns`/`rIns`) werden AUSDRUECKLICH geschrieben, auch
+    wenn 0,1 Zoll PowerPoints Vorgabe ist: Nur so ist die Textkante eine Zahl,
+    die dieser Code kennt, und keine, die eine Office-Version aendern darf.
+    """
+    from lxml import etree
+    txPr = _txPr_sicherstellen(dLbl)
+    bodyPr = txPr.find(_A + "bodyPr")
+    if bodyPr is not None:
+        ins = str(int(round(LABEL_INSET_IN * 914400)))
+        bodyPr.set("lIns", ins)
+        bodyPr.set("rIns", ins)
+    for pPr in txPr.iter(_A + "pPr"):
+        pPr.set("algn", algn)
+    lst = txPr.find(_A + "lstStyle")
+    if lst is not None:
+        lvl = lst.find(_A + "lvl1pPr")
+        if lvl is None:
+            lvl = etree.SubElement(lst, _A + "lvl1pPr")
+        lvl.set("algn", algn)
 
 
 def kopf_sperre_aus_usershapes(chart, frame_h_in, luft_in=0.30):
@@ -2342,7 +2474,17 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
         #   e_x = die dem Ring ZUGEWANDTE Seitenkante der Zahl-Box → der Stub
         #   setzt immer auf der richtigen Seite an.
         side = 1.0 if mx >= cx else -1.0
-        e_x = mx - side * HALB_W
+        # Wie weit von der Box-MITTE endet die Linie? Ohne buendige Anbindung
+        # an der Boxkante (HALB_W) — das ist bei einer Box, die PowerPoint auf
+        # den Text schrumpft, links bis zu 8,6 mm hinter der letzten Ziffer.
+        # Mit buendiger Anbindung hat die Box eine feste Breite und der Text
+        # klebt an der ringzugewandten Kante: dann ist die Textkante genau
+        # HALB_W - LABEL_INSET_IN von der Mitte entfernt, und LABEL_LUFT_IN
+        # davor endet die Linie.
+        _abstand = HALB_W
+        if ml.find(_q("w")) is not None:
+            _abstand = HALB_W - LABEL_INSET_IN + LABEL_LUFT_IN
+        e_x = mx - side * _abstand
         e_y = my
 
         # Knick auf dem RADIALSTRAHL des Segments, auf Label-Höhe: so ist Teil 1
@@ -2427,18 +2569,7 @@ def ring_label_schriftfarbe(chart, farbe=LABEL_SCHRIFTFARBE, fett=False):
         if dLbl.find(_q("idx")) is None:
             continue
         # CT_DLbl-Reihenfolge: idx, layout, tx, numFmt, spPr, txPr, dLblPos, …
-        txPr = dLbl.find(_q("txPr"))
-        if txPr is None:
-            txPr = etree.Element(_q("txPr"))
-            etree.SubElement(txPr, _A + "bodyPr")
-            etree.SubElement(txPr, _A + "lstStyle")
-            p = etree.SubElement(txPr, _A + "p")
-            pPr = etree.SubElement(p, _A + "pPr")
-            etree.SubElement(pPr, _A + "defRPr")
-            etree.SubElement(p, _A + "endParaRPr")
-            spPr = dLbl.find(_q("spPr"))
-            (spPr.addnext(txPr) if spPr is not None
-             else dLbl.find(_q("idx")).addnext(txPr))
+        txPr = _txPr_sicherstellen(dLbl)
         for rpr in txPr.iter(_A + "defRPr"):
             for tag in _FILL_TAGS:
                 for el in rpr.findall(_A + tag):
@@ -2573,7 +2704,8 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                                  rand_oben_in=_rand_oben,
                                                  kopf_frei_in=_kopf,
                                                  rueckkopplung=_fmt["rueckkopplung"],
-                                                 seitentreue=_fmt["seitentreue"])
+                                                 seitentreue=_fmt["seitentreue"],
+                                                 buendig=_fmt["label_buendig"])
 
                     # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
                     # stattdessen EIGENE Linien als Connector zeichnen — die

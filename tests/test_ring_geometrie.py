@@ -16,6 +16,7 @@ Ein unbeabsichtigter Eingriff faellt sonst erst in einer Kundenbroschuere auf.
      sowie: jede Fuehrungslinie traegt ihren Punkt am Label-Ende
   5. Der Familien-Look und wo Rueckkopplung und Seitentreue laufen
   6. Die Seite der Beschriftungen an ECHT GEBAUTEN Broschueren
+  7. Die buendige Anbindung der Zahl an ihre Fuehrungslinie
 
 SCHRITT 1 HAENGT AM ARTEFAKT. Die Ringgeometrie kommt zu 100 Prozent aus der
 .pptx-Vorlage — kein Code setzt jemals die Groesse eines Chart-Rahmens. Wer
@@ -836,6 +837,118 @@ def schritt6_seitentreue(ausgabe):
     return fehler
 
 
+def _buendig_pruefen(pfad):
+    """(geprueft, Meldungen) — die buendige Anbindung an einer Broschuere.
+
+    WARUM DIESER SCHRITT UEBERHAUPT NOETIG IST: Der uebrige Pruefstein ist fuer
+    Punkt 1 BLIND und war es auch vorher. Er rechnet mit Label-MITTEN, und die
+    bewegen sich nicht. Der Fehler sass in der Breite der Box: Ohne `w`
+    dimensioniert PowerPoint sie auf den Text, waehrend die Fuehrungslinie an
+    einer gedachten Kante von 0,66 Zoll endete — links bis zu 8,6 mm hinter
+    der letzten Ziffer. Ein gruener Lauf bedeutete hier also nichts.
+
+    Geprueft wird deshalb am Artefakt, was die Anbindung traegt:
+      1. `wMode`/`hMode` stehen auf "factor". Mit "edge" liest PowerPoint `w`
+         als rechte KANTE, und alle Labels landen uebereinander.
+      2. `w` mal Rahmenbreite ist 2 x HALB_BREITE. Damit ist die Textkante
+         berechenbar, und `ring_leader_zeichnen` rechnet mit derselben Zahl.
+      3. `h` ist da. Mit `w` ALLEIN rendert PowerPoint die Beschriftungen gar
+         nicht mehr — im XML und ueber COM sind sie da, im Bild nicht.
+      4. Die Ausrichtung passt zur Ringseite und steht an BEIDEN Stellen
+         (`a:pPr` und `a:lstStyle/a:lvl1pPr`); der Absatz traegt keinen
+         Textlauf, deshalb entscheidet der Listenstil.
+      5. Die Innenabstaende stehen ausdruecklich im `bodyPr`.
+    Die Punkte 1 und 3 hat der Renderer entschieden, nicht das Schema — sie
+    stehen hier, damit das niemand ein zweites Mal herausfinden muss.
+    """
+    prs = Presentation(pfad)
+    meldungen = []
+    geprueft = 0
+    for nr, _folie, shape in _ringe(prs):
+        root = cd._root(shape.chart)
+        pl = root.find(".//" + cd._q("plotArea") + "/" + cd._q("layout")
+                       + "/" + cd._q("manualLayout"))
+        if pl is None:
+            continue
+        mitte = (float(pl.find(cd._q("x")).get("val"))
+                 + float(pl.find(cd._q("w")).get("val")) / 2.0)
+        fw = shape.width / 914400.0
+        for d in root.iter(cd._q("dLbl")):
+            ml = d.find(".//" + cd._q("manualLayout"))
+            if ml is None or ml.find(cd._q("x")) is None:
+                continue
+            geprueft += 1
+            wo = f"F{nr} {shape.name} idx {d.find(cd._q('idx')).get('val')}"
+            we = ml.find(cd._q("w"))
+            he = ml.find(cd._q("h"))
+            if we is None or he is None:
+                meldungen.append(f"{wo}: manualLayout ohne w bzw. h — ohne "
+                                 f"beide endet die Linie an einer gedachten "
+                                 f"Kante (bzw. verschwindet die Zahl)")
+                continue
+            for tag in ("wMode", "hMode"):
+                me = ml.find(cd._q(tag))
+                if me is None or me.get("val") != "factor":
+                    meldungen.append(f"{wo}: {tag} ist "
+                                     f"{me.get('val') if me is not None else 'nicht gesetzt'}"
+                                     f" statt 'factor' — PowerPoint liest den "
+                                     f"Wert dann als Kante, nicht als Mass")
+            breite = float(we.get("val")) * fw
+            if abs(breite - 2 * HALB_BREITE) > TOLERANZ:
+                meldungen.append(f"{wo}: Boxbreite {breite:.3f}\" statt "
+                                 f"{2 * HALB_BREITE:.3f}\" — dann rechnet "
+                                 f"ring_leader_zeichnen mit einer anderen "
+                                 f"Kante als PowerPoint zeichnet")
+            soll = "l" if float(ml.find(cd._q("x")).get("val")) \
+                + float(we.get("val")) / 2.0 >= mitte else "r"
+            txPr = d.find(cd._q("txPr"))
+            if txPr is None:
+                meldungen.append(f"{wo}: kein txPr — keine Ausrichtung")
+                continue
+            gefunden = [p.get("algn") for p in txPr.iter(cd._A + "pPr")]
+            lvl = txPr.find(cd._A + "lstStyle/" + cd._A + "lvl1pPr")
+            gefunden.append(lvl.get("algn") if lvl is not None else None)
+            if any(g != soll for g in gefunden):
+                meldungen.append(f"{wo}: Ausrichtung {gefunden} statt "
+                                 f"{soll!r} an beiden Stellen")
+            bodyPr = txPr.find(cd._A + "bodyPr")
+            ins = str(int(round(cd.LABEL_INSET_IN * 914400)))
+            if bodyPr is None or bodyPr.get("lIns") != ins \
+                    or bodyPr.get("rIns") != ins:
+                meldungen.append(f"{wo}: lIns/rIns nicht ausdruecklich auf "
+                                 f"{ins} — dann ist die Textkante eine "
+                                 f"Vorgabe und keine bekannte Zahl")
+    return geprueft, meldungen
+
+
+def schritt7_buendige_anbindung(ausgabe):
+    print("Schritt 7 — die Zahl klebt an ihrer Fuehrungslinie")
+    if not ausgabe:
+        print("    UEBERSPRUNGEN — kein Ausgabeverzeichnis angegeben")
+        return 0
+    fehler = 0
+    for familie in sorted(SEITENTREUE_MAX):
+        pfad = os.path.join(ausgabe, f"ring_{familie}.pptx")
+        if not os.path.exists(pfad):
+            print(f"    UEBERSPRUNGEN — {familie}: "
+                  f"{os.path.basename(pfad)} fehlt (Schritt 4 baut sie)")
+            continue
+        n, meldungen = _buendig_pruefen(pfad)
+        for m in meldungen[:4]:
+            print(f"    FEHLER — {familie}: {m}")
+        if meldungen:
+            fehler += 1
+        else:
+            print(f"    {familie:<12} {n} Beschriftungen buendig angebunden")
+    if not fehler:
+        print("    OK — feste Boxbreite, Ausrichtung zur Ringseite, "
+              "ausdrueckliche Innenabstaende")
+        print("    HINWEIS — das beweist die OPTIK nicht. Gemessen am Bild "
+              "(PNG-Export, CVV F7): Luecke links 5,14 -> 1,51 mm, "
+              "rechts 0 -> 1,66 mm.")
+    return fehler
+
+
 def schritt5_familien_look():
     print("Schritt 5 — der Familien-Look bleibt getrennt")
     fehler = 0
@@ -909,6 +1022,26 @@ def schritt5_familien_look():
         print("    OK — die Seitentreue ist ueberall aus (Sichtpruefung "
               "26.08.2026)")
     fehler += st_fehler
+
+    # Und dieselbe Frage fuer die BUENDIGE ANBINDUNG (Punkt 1, 26.08.2026).
+    # Sie ist fuer alle fuenf Familien beauftragt und in echtem PowerPoint
+    # angesehen; der Standard-Pfad (None) bleibt aus. Die None-Zeile ist auch
+    # hier die eigentliche Waechterin: Sie ist bei der Rueckkopplung am
+    # 25.08.2026 einmal gefehlt, und die Standard-Broschuere erbte eine
+    # Aenderung ungeprueft mit.
+    bu_fehler = 0
+    SOLL_BU = {"CVV": True, "ESG": True, "ETF": True, "comdirect": True,
+               "Thema": True, None: False}
+    for familie, soll in sorted(SOLL_BU.items(), key=lambda p: str(p[0])):
+        ist = cd._ring_format(familie, 79, 0.14)["label_buendig"]
+        if ist != soll:
+            bez = familie if familie is not None else "Standard (ohne Familie)"
+            print(f"    FEHLER — {bez}: label_buendig {ist} statt {soll}")
+            bu_fehler += 1
+    if not bu_fehler:
+        print("    OK — die buendige Anbindung laeuft in den fuenf Familien; "
+              "Standard bleibt aus")
+    fehler += bu_fehler
     return fehler
 
 
@@ -925,6 +1058,8 @@ def main():
     fehler += schritt5_familien_look()
     print()
     fehler += schritt6_seitentreue(ausgabe)
+    print()
+    fehler += schritt7_buendige_anbindung(ausgabe)
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
