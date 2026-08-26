@@ -77,34 +77,37 @@ TOLERANZ = 0.005
 # Vorlage_ETF F16 und Vorlage_comdirect F6. In echten Broschueren sind es
 # null; deshalb steht hier eine Obergrenze und in Schritt 4 die Null.
 #
-# ANGEHOBEN am 26.08.2026 von 2 auf 4 (Entscheidung Philip). Grund: Die
-# Seitentreue in Pass 6d (#44 Ansatzpunkt 2) drueckt die falsch stehenden
-# Beschriftungen ueber alle Familien von 22,4 % auf 8,4 % (32 -> 12 von 143
-# Fuehrungslinien) und bringt CVV, ESG, ETF und comdirect auf NULL. Auf den
-# kuenstlichen Vorlagendaten kostet sie zwei zusaetzliche Kreuzungen
-# (Vorlage_FFPB F9 zweimal, Vorlage_Thema F11 einmal — Vorlage_FFPB ist der
-# Standard-Pfad, der nie gebaut wird).
+# Am 26.08.2026 mittags stand hier fuer wenige Stunden eine 4: Die Seitentreue
+# kostete auf den Vorlagendaten zwei zusaetzliche Kreuzungen. Mit ihrer
+# Ruecknahme am selben Abend sind sie weg — nachgemessen sind es wieder ZWEI
+# (Vorlage_FFPB F9 C_Kennzahlen1 und Vorlage_Thema F11 C_Kennzahlen2).
 #
-# WAS DIESE ZAHL NICHT LOCKERT: Schritt 4 verlangt weiterhin die harte NULL an
-# echt gebauten Broschueren, und dort ist sie vor wie nach der Aenderung
-# erfuellt (17 Ringe, 69 Linien). Wer diese Konstante weiter anhebt, sollte
-# denselben Nachweis fuehren — sonst wird aus einer Obergrenze eine Ausrede.
-KREUZUNGEN_VORLAGEN_MAX = 4
+# WER EINE OPTIK-AENDERUNG ZURUECKNIMMT, NIMMT IHREN PREIS MIT ZURUECK.
+# Eine angehobene Obergrenze, die nach dem Ruecknehmen stehen bleibt, deckt
+# ab jetzt etwas ab, wofuer sie nie beschlossen wurde — und niemand merkt es,
+# weil der Test gruen ist. Genau das ist der Grund, aus dem diese Zeile hier
+# wieder auf 2 steht.
+#
+# WAS DIESE ZAHL NICHT LOCKERT: Schritt 4 verlangt die harte NULL an echt
+# gebauten Broschueren (17 Ringe, 69 Linien). Wer diese Konstante anhebt,
+# sollte denselben Nachweis fuehren — sonst wird aus einer Obergrenze eine
+# Ausrede.
+KREUZUNGEN_VORLAGEN_MAX = 2
 
-# Genau EINE geduldete Beschriftung auf der Legende, auf den PLATZHALTERDATEN
-# der Vorlagen (26.08.2026). Sie entsteht als Nebenwirkung der Seitentreue.
+# Namentlich geduldete Beschriftungen auf der Legende, auf den PLATZHALTERDATEN
+# der Vorlagen. WIEDER LEER seit dem 26.08.2026 abends.
 #
-# Warum geduldet: `Vorlage_FFPB.pptx` ist der Standard-Pfad — die Familie ohne
-# Eintrag in FAMILIE_RING_FORMAT, fuer die nie eine Broschuere gebaut wird
-# (belegt in #71). Der Fall trat mit den Beispielzahlen der Vorlage auf, nicht
-# mit echten Daten.
+# Am Mittag stand hier ein Eintrag (Vorlage_FFPB F9 C_Kennzahlen2): Die
+# Seitentreue schob dort eine Beschriftung auf die Legende. Mit der Ruecknahme
+# der Seitentreue ist der Fall verschwunden — nachgemessen meldet Schritt 3
+# keine Legenden-Beruehrung mehr. Aus demselben Grund wie bei
+# KREUZUNGEN_VORLAGEN_MAX: der Preis geht mit der Aenderung zurueck.
 #
-# Warum als NAMENTLICHE Liste und nicht als abgeschaltete Pruefung: So bleibt
-# die Zusage fuer JEDEN anderen Ring hart, der Fall bleibt sichtbar (er wird
-# als HINWEIS gedruckt), und wer die Vorlage anfasst, bekommt sofort eine
-# Meldung an einer anderen Stelle. Ein aufgeweichter Schwellwert haette all das
-# nicht geleistet.
-LEGENDE_GEDULDET = {("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2")}
+# Die Bauform bleibt stehen, weil sie die richtige ist, falls je wieder ein
+# Fall geduldet werden muss: eine NAMENTLICHE Liste, keine abgeschaltete
+# Pruefung. So bleibt die Zusage fuer jeden anderen Ring hart und der geduldete
+# Fall sichtbar (er wird als HINWEIS gedruckt).
+LEGENDE_GEDULDET = set()
 
 # SEITENTREUE (NEU 26.08.2026): Hoechstzahl an Fuehrungslinien, deren inneres
 # Ende (am Segment) und aeusseres Ende (am Label) auf VERSCHIEDENEN Seiten der
@@ -112,31 +115,23 @@ LEGENDE_GEDULDET = {("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2")}
 # das ist der gemeldete Eindruck "die Zahl steht neben ihrer Linie statt an
 # ihr" (#44 Ansatzpunkt 2).
 #
-# Bewusst je Familie und als ZAHL, nicht als Quote: Vier Familien halten die
-# harte Null, und eine Null faellt sofort auf, wenn sie bricht. Gemessen am
-# 26.08.2026 an echt gebauten Broschueren, vorher -> nachher:
-#   CVV 5 -> 0, ESG 5 -> 0, ETF 2 -> 0, comdirect 2 -> 0, Thema 3 -> 2
-# (ueber alle Familien 32 -> 12 von 143 Fuehrungslinien, 22,4 % -> 8,4 %).
+# Bewusst je Familie und als ZAHL, nicht als Quote: Eine Zahl je Familie zeigt,
+# WO es schlechter wird; eine Gesamtquote laesst sich wegmitteln.
 #
-# THEMA STEHT SEIT DEM 26.08.2026 ABENDS WIEDER AUF DREI — und das ist kein
-# Rueckschritt, sondern eine Entscheidung nach Augenschein. Philip hat die
-# Vorher/Nachher-Broschueren in echtem PowerPoint verglichen: Bei ESG und CVV
-# ist die neue Anordnung "wesentlich besser, natuerlicher und
-# uebersichtlicher", bei Thema schlechter (F10 Assetallokation gefaellt in der
-# alten Fassung besser, auf F11 sitzen die Regionen-Zahlen nicht mehr sauber
-# an ihren Strichen). Thema laeuft deshalb mit `seitentreue=False` und ist
-# damit exakt auf dem Stand von vor der Aenderung — nachgewiesen ueber
-# BYTEGLEICHE Chart-XML gegen Commit 3b19ae6, 27 Teile.
+# SEIT DEM 26.08.2026 ABENDS STEHEN HIER WIEDER DIE ALTEN ZAHLEN — die
+# Seitentreue ist ueberall abgeschaltet (Sichtpruefung Philip, Begruendung im
+# `seitentreue`-Kommentar in `chart_dynamik._RING_KRAEFTIG`). Die Grenzen sind
+# deshalb der Stand VOR der Aenderung, an echten Broschueren gemessen.
 #
-# Die Zahl passt zur Sichtpruefung, statt ihr zu widersprechen: Bei den vier
-# Familien mit Anlagestrategie-Folien faellt sie auf NULL, bei Thema waere sie
-# nur von 3 auf 2 gefallen — dort sortiert der Pass mehr um, als er heilt.
-# Thema hat keine Anlagestrategie-Folie, seine Ringe sind groesser (8,51 cm)
-# und tragen mehr Segmente; die Ausgangslage ist eine andere.
-#
-# Wer Thema doch noch verbessern will, landet bei Ansatzpunkt 3 aus #44
-# (Entzerrung in 2D) — dort steht "hoechstes Risiko", und das gilt weiter.
-SEITENTREUE_MAX = {"CVV": 0, "ESG": 0, "ETF": 0, "comdirect": 0, "Thema": 3}
+# DIESER SCHRITT BLEIBT TROTZDEM STEHEN, und zwar mit Absicht: Er ist jetzt
+# eine MESSUNG mit Deckel, kein Erfolgsnachweis. Er zeigt sofort, wenn ein
+# kuenftiger Eingriff die Zahl VERSCHLECHTERT — und er ist der Ort, an dem die
+# Verbesserung wieder sichtbar wuerde, falls die Seitentreue nach der
+# Behebung der Anbindung (Punkt 1) ein zweites Mal angesehen und eingeschaltet
+# wird. Gemessen am 26.08.2026 an echt gebauten Broschueren waeren die Zahlen
+# MIT Schalter: CVV 5 -> 0, ESG 5 -> 0, ETF 2 -> 0, comdirect 2 -> 0,
+# Thema 3 -> 2; ueber alle Broschueren 32 -> 12 von 143 (22,4 % -> 8,4 %).
+SEITENTREUE_MAX = {"CVV": 5, "ESG": 5, "ETF": 2, "comdirect": 2, "Thema": 3}
 
 # Naeher als das an der Senkrechten ist "die Seite" keine sinnvolle Aussage.
 SEITE_TOTZONE = 0.02
@@ -784,8 +779,13 @@ def schritt6_seitentreue(ausgabe):
                   f"(erlaubt {grenze})")
     if geprueft and not fehler:
         anteil = (100.0 * schief_all / ges_all) if ges_all else 0.0
+        # Die Zahl NICHT gegen die 22,4 % aus dem Sitzungsbericht halten: die
+        # sind ueber ALLE gebauten Broschueren gemessen (143 Linien), hier
+        # laufen nur die fuenf `ring_<Familie>.pptx` (69 Linien). Zwei
+        # Grundgesamtheiten, eine Prozentzahl — genau so entstehen Vergleiche,
+        # die stimmen wollen und nicht stimmen.
         print(f"    OK — {schief_all} von {ges_all} Fuehrungslinien "
-              f"({anteil:.1f} %); vor dem 26.08.2026 waren es 22,4 %")
+              f"({anteil:.1f} %), jede Familie unter ihrer Obergrenze")
     return fehler
 
 
@@ -839,17 +839,18 @@ def schritt5_familien_look():
         print("    OK — die Rueckkopplung laeuft in den fuenf vermessenen "
               "Familien; Standard bleibt aus")
 
-    # Und dieselbe Frage fuer die SEITENTREUE (Pass 6d, seit 26.08.2026).
-    # Sie steht nur dort, wo sie beauftragt UND ANGESEHEN ist: bei den vier
-    # Familien mit Anlagestrategie-Folien. Thema ist ausgenommen, weil die
-    # Sichtpruefung dort gegen sie ausfiel — das ist der einzige Punkt, in dem
-    # Thema von den uebrigen abweicht, und genau deshalb steht er hier.
-    # Der Standard-Pfad (None) bleibt aus: was niemand gesehen hat, bekommt
-    # nichts geschenkt. Ohne diese Zeile faellt ein versehentliches Umlegen
-    # der Voreinstellung nur ueber Schritt 6 auf — und der braucht ein
-    # Ausgabeverzeichnis, das nicht jeder Lauf hat.
+    # Und dieselbe Frage fuer die SEITENTREUE (Pass 6d, 26.08.2026).
+    # Sie steht seit dem Abend des 26.08.2026 UEBERALL AUS: Die Sichtpruefung
+    # fiel bei allen angesehenen Familien gegen sie aus (Begruendung im
+    # `seitentreue`-Kommentar in `chart_dynamik._RING_KRAEFTIG`).
+    #
+    # Die Zeile ist damit keine Formalie, sondern der Waechter ueber eine
+    # Entscheidung nach Augenschein: Wer den Schalter umlegt, ohne dass jemand
+    # das Ergebnis angesehen hat, bricht hier. Ohne sie fiele es nur ueber
+    # Schritt 6 auf — und der braucht ein Ausgabeverzeichnis, das nicht jeder
+    # Lauf hat.
     st_fehler = 0
-    SOLL_ST = {"CVV": True, "ESG": True, "ETF": True, "comdirect": True,
+    SOLL_ST = {"CVV": False, "ESG": False, "ETF": False, "comdirect": False,
                "Thema": False, None: False}
     for familie, soll in sorted(SOLL_ST.items(), key=lambda p: str(p[0])):
         ist = cd._ring_format(familie, 79, 0.14)["seitentreue"]
@@ -858,8 +859,8 @@ def schritt5_familien_look():
             print(f"    FEHLER — {bez}: Seitentreue {ist} statt {soll}")
             st_fehler += 1
     if not st_fehler:
-        print("    OK — die Seitentreue laeuft in den vier angesehenen "
-              "Familien; Thema und Standard bleiben aus")
+        print("    OK — die Seitentreue ist ueberall aus (Sichtpruefung "
+              "26.08.2026)")
     fehler += st_fehler
     return fehler
 
