@@ -1,11 +1,13 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 26.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **32 von 32 Suiten grün**, `pyflakes` bei null ·
+**Nicht gemergt** · **33 von 33 Suiten grün**, `pyflakes` bei null ·
 **die unlesbaren Broschüren sind behoben** — beim Duplizieren einer Folie
 (Vergleichsportfolio, Familie *Thema*) teilten sich zwei Charts dieselben
 Sub-Teile statt eigene zu bekommen; **in echtem PowerPoint bewiesen, vorher
-und nachher**. Neuer Prüfstein `tests/test_pptx_integritaet.py` (32. Suite).
+und nachher**. Zwei neue Prüfsteine (`test_pptx_integritaet.py`,
+`test_broschuere_auswahl.py`); die Thema-Broschüre führt jetzt **nur die obere
+Strategie** (Entscheidung Philip, nach der Behebung bestätigt).
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
 > ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
@@ -72,10 +74,14 @@ Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 > *(In diesem Fall flog übrigens keine — ich hatte vermutet, eine verschluckte
 > Ausnahme habe die alten Broschüren gerettet. Gemessen, widerlegt, verworfen.)*
 >
-> **Noch zu entscheiden:** Du hattest festgelegt, die Thema-Broschüre solle nur
-> die obere Strategie führen. Das war unter der Annahme, dass der Haken die
-> Broschüre zerstört. Der Vergleichsblock funktioniert jetzt — die Entscheidung
-> steht deshalb neu an und ist **nicht** umgesetzt.
+> **Umgesetzt: die Broschüre führt nur die obere Strategie.** Ich habe die
+> Entscheidung nach der Behebung noch einmal vorgelegt — also in Kenntnis
+> dessen, dass der Vergleichsblock inzwischen sauber gebaut wird — und du hast
+> sie bestätigt. Am Bildschirm ändert sich nichts; neu ist ein Satz unter der
+> Schaltfläche, der den Unterschied ausspricht. Prüfstein
+> `tests/test_broschuere_auswahl.py` (33. Suite), inklusive Gegenprobe: Zwei
+> Portfolios ergäben **25 statt 21 Folien** — der Unterschied ist also messbar
+> und die Zusicherung nicht leer. **Zurück geht es mit einer Zeile.**
 >
 > **Erledigt und nur noch notiert:** Sharpe-Tooltip gesichtet, neuer Text
 > steht, 3-Monats-Euribor als risikofreier Referenzzinssatz bestätigt.
@@ -2817,14 +2823,28 @@ von `dLbls`, `dispBlanksAs` ans Ende von `<c:chart>`). **Nicht gemacht**, weil
 er das Chart-XML **aller** Familien anfasst und damit eine eigene Sichtprüfung
 verdient — nicht als Beifang einer Fehlerbehebung.
 
-**NEU 26.08.2026 — Entscheidung steht neu an: Vergleichsportfolio in der
-Thema-Broschüre.** Philip hatte am 26.08. festgelegt, die Broschüre solle **nur
-die obere Strategie** führen. Grundlage war die Annahme, der Haken zerstöre die
-Datei. Das stimmt nicht mehr: Der Vergleichsblock wird korrekt gebaut und
-öffnet. **Nicht umgesetzt** — die Entscheidung ist fachlich, nicht technisch.
-Wer sie umsetzt: `portfolioanalyse.py` (Zusammenbau von `portfolios` vor dem
-Export), plus ein Satz in `_render_familien_hinweis` und ein Prüfstein auf die
-Folienzahl.
+**ERLEDIGT am 26.08.2026 — Vergleichsportfolio in der Thema-Broschüre.**
+Philip hat die Entscheidung **nach** der Fehlerbehebung noch einmal bestätigt,
+also in Kenntnis dessen, dass der Vergleichsblock inzwischen sauber gebaut wird:
+Die Broschüre führt **nur die obere Strategie**. Damit gilt für Thema dieselbe
+Regel wie für CVV/ESG/ETF/comdirect, die die Vergleichsauswahl seit jeher
+ignorieren.
+
+Am Bildschirm ändert sich **nichts** — das zweite Portfolio wird weiter
+angezeigt. Neu ist ein Satz unter der Schaltfläche, der den Unterschied
+ausspricht: *„Die Broschüre enthält nur ‚…'. Das Vergleichsportfolio wird am
+Bildschirm gezeigt, aber nicht in die PowerPoint übernommen."* Ohne ihn wäre
+der Unterschied zwischen Bildschirm und Dokument unsichtbar — und genau solche
+stillen Unterschiede sind hier mehrfach als Fehler zurückgekommen (#46, #51).
+
+Prüfstein `tests/test_broschuere_auswahl.py` (33. Suite), drei Schritte an der
+**laufenden** App: Der Export bekommt trotz gesetztem Haken genau ein Portfolio;
+der Hinweis erscheint mit Haken und fehlt ohne; und die **Gegenprobe** zeigt,
+dass zwei Portfolios eine messbar andere Broschüre ergäben (**25 statt 21
+Folien**) — sonst wäre Schritt 1 grün, ohne etwas zu bedeuten.
+
+*Zurückdrehen ist eine Zeile* (`portfolioanalyse.py`, Zusammenbau von
+`portfolios` vor dem Export); die Fundstellen stehen als Kommentar dort.
 
 **NEU 25.08.2026 — die Seitentreue der Beschriftungen.** Gemeldet von Philip
 an *Pro* Folie 11: Die Zahl „8,27 %" wirkt neben ihrer Führungslinie statt an

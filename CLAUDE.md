@@ -155,6 +155,14 @@ prüfte statt gegen eine Schwelle (#47).
   `$ppt = New-Object -ComObject PowerPoint.Application` →
   `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`. Das ist
   #16/#28 mit anderen Mitteln — und ein Test kann es selbst erzeugen.
+- **Die Broschüre führt IMMER NUR die oben gewählte Strategie**
+  (Entscheidung Philip, 26.08.2026). Der Haken „Vergleichsportfolio" wirkt auf
+  den Bildschirm, nicht auf das Dokument — bei CVV/ESG/ETF/comdirect war das
+  ohnehin so (sie überschreiben `portfolios` mit allen Strategien ihrer
+  Familie), seit dem 26.08.2026 gilt es auch für *Thema*. Wo Bildschirm und
+  Dokument auseinandergehen, gehört ein **Satz in die Oberfläche**, der es
+  ausspricht (`_render_familien_hinweis`). Prüfstein
+  `tests/test_broschuere_auswahl.py`.
 - **Eine Broschüre, die python-pptx wieder öffnet, ist nicht in Ordnung**
   (#72, 26.08.2026). python-pptx ist tolerant gegen die eigene Korruption: Es
   las die unlesbare SCHWEIZ-Broschüre klaglos ein, PowerPoint verweigerte sie.
@@ -403,6 +411,7 @@ python tests/test_wertentwicklung_platzhalter.py  # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 python tests/test_ring_geometrie.py [<ordner>]   # + python-pptx, Schritt 4 streamlit
 python tests/test_pptx_integritaet.py [<ordner>]  # + python-pptx, lxml, streamlit
+python tests/test_broschuere_auswahl.py       # + streamlit (AppTest), python-pptx
 ```
 
 Dazu ein Werkzeug, kein Test — für den Beweis nach einem UI-Umbau:

@@ -1072,25 +1072,37 @@ def _export_dateiname(name_mapping, strategie, datum, fallback_tag) -> str:
     return _export_name_saeubern(name) + ".pptx"
 
 
-def _render_familien_hinweis(name_mapping, strategie):
-    """Zeigt NUR bei Familien-Strategien einen Hinweis, dass die Broschüre immer
-    ALLE Strategien der Familie enthält — auch wenn nur eine ausgewählt ist.
-    Kontextbezogen (nennt Familie + alle Strategien). Bei Einzel-Strategien
-    (keine Familie in FAMILIE_ALLE_STRATEGIEN) wird nichts angezeigt."""
+def _render_familien_hinweis(name_mapping, strategie, vergleich_aktiv=False):
+    """Sagt, welche Strategien in der Broschüre landen — und welche nicht.
+
+    Zwei Fälle, beide kontextbezogen:
+      • Familien-Strategie (CVV/ESG/ETF/comdirect): Die Broschüre enthält immer
+        ALLE Strategien der Familie, auch wenn oben nur eine gewählt ist.
+      • Vergleichsportfolio angehakt: Die Broschüre führt trotzdem nur die
+        obere Strategie (Entscheidung Philip, 26.08.2026). Ohne diesen Satz
+        wäre der Unterschied zwischen Bildschirm und Dokument unsichtbar —
+        und genau solche stillen Unterschiede sind in diesem Projekt schon
+        mehrfach als Fehler zurückgekommen.
+    """
     import streamlit as st
     try:
         familie = _familie_fuer_strategie(name_mapping, strategie) or ""
     except Exception:
         familie = ""
     strategien = FAMILIE_ALLE_STRATEGIEN.get(familie)
-    if not strategien:
-        return
-    liste = ", ".join(strategien)
-    st.info(
-        f'**{familie}-Broschüre:** Enthält immer **alle '
-        f'{len(strategien)} Strategien** der {familie}-Familie ({liste}) — '
-        f'auch wenn oben nur „{strategie}“ ausgewählt ist.'
-    )
+    if strategien:
+        liste = ", ".join(strategien)
+        st.info(
+            f'**{familie}-Broschüre:** Enthält immer **alle '
+            f'{len(strategien)} Strategien** der {familie}-Familie ({liste}) — '
+            f'auch wenn oben nur „{strategie}“ ausgewählt ist.'
+        )
+    elif vergleich_aktiv:
+        st.info(
+            f'**Die Broschüre enthält nur „{strategie}“.** Das '
+            f'Vergleichsportfolio wird am Bildschirm gezeigt, aber **nicht** '
+            f'in die PowerPoint übernommen.'
+        )
 
 
 def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
@@ -1191,9 +1203,20 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         # Button zum Generieren
         if st.button("PowerPoint erstellen", key="pf_pptx_btn", width="stretch",
                      help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Folien 7-10)."):
+            # Die Broschuere fuehrt IMMER NUR die oben gewaehlte Strategie
+            # (Entscheidung Philip, 26.08.2026). Das Vergleichsportfolio ist
+            # eine Sache des Bildschirms; die Familien CVV/ESG/ETF/comdirect
+            # ignorieren es ohnehin seit jeher (sie ueberschreiben `portfolios`
+            # weiter unten mit allen Strategien ihrer Familie). Damit ist die
+            # Regel jetzt fuer ALLE Familien dieselbe.
+            #
+            # HISTORIE: Bis zum 26.08.2026 wurde `pf_sel_2` hier angehaengt und
+            # die Familie "Thema" baute daraus einen zweiten Folienblock. Das
+            # ist technisch in Ordnung und seit d9105c1 auch fehlerfrei — die
+            # Entscheidung ist fachlich, nicht technisch. Wer sie umdreht,
+            # haengt hier wieder an und passt `tests/test_broschuere_auswahl.py`
+            # sowie `_render_familien_hinweis` an.
             portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
-            if show_compare_pf and df_pf_2 is not None:
-                portfolios.append((pf_sel_2, df_pf_2, ad2, dur_2))
 
             # ── CVV: IMMER alle fünf Strategien (NEU 09.07.2026) ────────
             # Die CVV-Vorlage ist ein Gesamtdokument über alle fünf
@@ -1379,7 +1402,9 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         # Anpassungen am Download passieren NUR dort, nicht hier.
         download_bereich(st.session_state["pf_pptx_bytes"], _dateiname)
     # Kontextbezogener Familien-Hinweis (immer unter dem Button).
-    _render_familien_hinweis(name_mapping, pf_sel_1)
+    _render_familien_hinweis(name_mapping, pf_sel_1,
+                             vergleich_aktiv=bool(show_compare_pf
+                                                  and df_pf_2 is not None))
 
     # Render
     _render_single_portfolio(pf_sel_1, df_pf_1, ad1, anlagevolumen, use_volume, show_ytd, dur_1, suffix="pf1")
