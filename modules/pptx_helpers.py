@@ -241,50 +241,86 @@ def load_template(path: Optional[str] = None) -> Presentation:
 # Slide-Manipulation: Duplikation, Reorder, Remove, Reload
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Sub-Teile eines Charts, die beim Duplizieren MITKOPIERT werden müssen statt
+# geteilt zu werden (26.08.2026). Alles andere — vor allem Bilder und Themes —
+# wird weiterhin bewusst geteilt: Es wird nie verändert und würde die Datei nur
+# aufblähen.
+_KLON_PRAEFIXE = ("/ppt/charts/", "/ppt/drawings/", "/ppt/embeddings/")
+
+
+def _naechste_partname(package, quell_partname):
+    """Nächste freie URI nach dem Muster der Quelle.
+
+    `/ppt/drawings/drawing2.xml` → `/ppt/drawings/drawing7.xml` (o. Ä.).
+    Der Zahlteil am Ende des Dateinamens wird hochgezählt; hat die Quelle
+    keinen, wird einer angehängt.
+    """
+    quelle = str(quell_partname)
+    m = re.match(r'^(?P<rumpf>.*?)(?P<nr>\d*)(?P<ext>\.[^./]+)$', quelle)
+    rumpf, ext = m.group("rumpf"), m.group("ext")
+    belegt = set()
+    muster = re.compile(r'^' + re.escape(rumpf) + r'(\d+)' + re.escape(ext) + r'$')
+    for part in package.iter_parts():
+        t = muster.match(str(part.partname))
+        if t:
+            belegt.add(int(t.group(1)))
+    n = 1
+    while n in belegt:
+        n += 1
+    return PackURI(f"{rumpf}{n}{ext}")
+
+
+def _klon_part_rekursiv(package, quell_part, _tiefe=0):
+    """Kopiert einen Part samt seiner kopierpflichtigen Sub-Parts.
+
+    Bilder/Themes werden geteilt (sie werden nie verändert), alles unter
+    `_KLON_PRAEFIXE` bekommt eine eigene Kopie mit eigener URI.
+    """
+    neu = type(quell_part).load(
+        _naechste_partname(package, quell_part.partname),
+        quell_part.content_type,
+        package,
+        quell_part.blob,
+    )
+    if _tiefe > 4:      # Reißleine gegen zyklische Paketgraphen
+        return neu
+    for rel in quell_part.rels.values():
+        if rel.is_external:
+            neu.rels.get_or_add_ext_rel(rel.reltype, rel.target_ref)
+        elif str(rel.target_part.partname).startswith(_KLON_PRAEFIXE):
+            neu.relate_to(_klon_part_rekursiv(package, rel.target_part, _tiefe + 1),
+                          rel.reltype)
+        else:
+            neu.relate_to(rel.target_part, rel.reltype)
+    return neu
+
+
 def clone_chart_part(prs, source_chart_part):
     """Erstellt eine tiefe Kopie eines Chart-Parts mit eigener URI.
 
-    Kopiert auch die Sub-Relationships (z.B. embeddings zu XLSX).
-    Wird von `duplicate_slide` aufgerufen, kann auch standalone genutzt werden.
+    Kopiert auch die Sub-Parts (chartUserShapes, eingebettete XLSX, style/
+    colors) — jeder bekommt eine EIGENE URI.
+
+    KORRIGIERT AM 26.08.2026 — vorher stand hier `relate_to(rel.target_part)`,
+    also eine geteilte Referenz statt einer Kopie. Der Docstring behauptete
+    schon damals "eigene Sub-Relationships"; der Code tat es nicht. Gemessen an
+    einer Zwei-Strategien-Broschüre der Familie Thema: Zwei Charts zeigten auf
+    DASSELBE `chartUserShapes`-Drawing, dieselbe eingebettete Excel-Mappe und
+    dieselben style/colors-Teile. In der Vorlage ist diese Zuordnung 1:1.
+
+    **PowerPoint verweigert eine solche Datei** ("PowerPoint kann … leider nicht
+    lesen") — nachgewiesen per COM an gebauten Broschüren, mit und ohne den
+    Fehler. python-pptx öffnet sie dagegen anstandslos; ein Round-Trip durch
+    dieselbe Bibliothek ist deshalb KEINE Validierung (Transferwissen #16).
 
     Args:
         prs: Presentation-Objekt
         source_chart_part: Der zu klonende Chart-Part
 
     Returns:
-        Der neue Chart-Part (eigene URI, eigene Sub-Relationships).
+        Der neue Chart-Part (eigene URI, eigene Sub-Parts).
     """
-    package = source_chart_part.package
-
-    # Neue URI finden (nächste freie chartN.xml)
-    existing_nums = set()
-    for part in package.iter_parts():
-        partname_str = str(part.partname)
-        m = re.search(r'/ppt/charts/chart(\d+)\.xml$', partname_str)
-        if m:
-            existing_nums.add(int(m.group(1)))
-    n = 1
-    while n in existing_nums:
-        n += 1
-    new_partname = PackURI(f"/ppt/charts/chart{n}.xml")
-
-    # Chart-Part-Klasse nutzen und neuen Part mit neuer URI erstellen
-    chart_part_cls = type(source_chart_part)
-    new_chart_part = chart_part_cls.load(
-        new_partname,
-        source_chart_part.content_type,
-        package,
-        source_chart_part.blob,
-    )
-
-    # Sub-Relationships kopieren (z.B. Excel-Embedding)
-    for rel in source_chart_part.rels.values():
-        if rel.is_external:
-            new_chart_part.rels.get_or_add_ext_rel(rel.reltype, rel.target_ref)
-        else:
-            new_chart_part.relate_to(rel.target_part, rel.reltype)
-
-    return new_chart_part
+    return _klon_part_rekursiv(source_chart_part.package, source_chart_part)
 
 
 def duplicate_slide(prs, source_idx: int):

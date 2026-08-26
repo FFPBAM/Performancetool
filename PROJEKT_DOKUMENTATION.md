@@ -2634,6 +2634,112 @@ Typen.
 
 ---
 
+### #72 — Ein Round-Trip durch dieselbe Bibliothek ist keine Validierung (BUG, NEU 26.08.2026) ⭐
+
+**Gemeldet wurde:** Broschüren laden herunter, lassen sich aber nicht öffnen —
+*„PowerPoint kann `Schweiz_aktienorientiert Broschüre_23.08.2026.pptx` leider
+nicht lesen."* **Ohne** Reparatur-Angebot. Kundendokumente.
+
+**Der Fehler:** `pptx_helpers.clone_chart_part` hat beim Duplizieren einer Folie
+die Sub-Parts eines Charts **geteilt statt kopiert**:
+
+```python
+for rel in source_chart_part.rels.values():
+    ...
+    new_chart_part.relate_to(rel.target_part, rel.reltype)   # <- geteilte Referenz
+```
+
+Gemessen an einer Zwei-Strategien-Broschüre der Familie *Thema*: Je zwei Charts
+hingen an **demselben** `chartUserShapes`-Drawing, **derselben** eingebetteten
+Excel-Mappe und **denselben** style/colors-Teilen. In allen sechs Vorlagen ist
+diese Zuordnung **1:1**. PowerPoint verweigert die Datei.
+
+**Der Docstring behauptete seit Juni das Richtige** („Kopiert auch die
+Sub-Relationships") — der Code tat es nicht. Dieselbe Klasse wie #50: eine
+Zusage, die niemand gemessen hat.
+
+**Warum es niemand gemerkt hat — und das ist der eigentliche Lehrsatz.** Vier
+Suiten bauten genau diese Datei und meldeten grün. Alle vier lasen sie mit
+**python-pptx** zurück:
+
+| Prüfung | Urteil |
+|---|---|
+| `zipfile.testzip()` | in Ordnung |
+| XML-Parse aller 202 Teile | in Ordnung |
+| `[Content_Types].xml`, Relationship-Ziele | in Ordnung |
+| `pptx.Presentation()` — der Round-Trip | **öffnet klaglos** |
+| **echtes PowerPoint** | **verweigert** |
+
+**python-pptx ist tolerant gegen die eigene Korruption** (#16 sagt das seit Juli
+für Bug 2; es gilt allgemeiner). Wer eine Datei mit derselben Bibliothek
+zurückliest, die sie geschrieben hat, prüft die Bibliothek, nicht die Datei.
+
+**Die Diagnose, die zählt, ist ein Vergleich zweier Artefakte.** Entscheidend
+war nicht das Lesen des Codes, sondern eine Matrix aus gebauten Dateien:
+
+| Fall | öffnet in PowerPoint |
+|---|---|
+| SCHWEIZ, eine Strategie | **ja** |
+| SCHWEIZ + Vergleichsportfolio (2 Strategien) | **nein** |
+| Pro, eine Strategie | **ja** |
+| Pro + Offensiv (2 Strategien) | **nein** |
+
+Eine Zeile Unterschied — die Duplikation — statt einer Vermutung.
+
+**Zwei Fehlspuren, die gut aussahen und falsch waren.** Beide seien genannt,
+weil sie wiederkommen:
+
+1. **`nan`/`inf` als `xsd:double`.** `chart_dynamik` schreibt Koordinaten mit
+   `"%.5f"`, ohne Endlichkeit zu prüfen, und `total = sum(vals) or 1.0` fängt
+   die Null, nicht das NaN. Ein sauberer Weg zu `val="nan"` — **in der echten
+   Datei stand keins.** Der Weg existiert, er war hier nur nicht gegangen.
+2. **Die `CT_DLbl`-Reihenfolge.** In der kaputten Datei standen **30 von 30**
+   Ring-Beschriftungen als `idx → txPr → layout` statt `idx → layout → … →
+   txPr` (`chart_dynamik.py`, `ring_label_schriftfarbe`: fehlt `<c:spPr>`,
+   landet `<c:txPr>` hinter `<c:idx>` — und die Vorlagen liefern ihre `dLbl`
+   durchweg **ohne** `spPr`, der Ausnahmezweig ist also der Normalfall). Eine
+   echte Schemaverletzung, sauber messbar, **und trotzdem nicht die Ursache**:
+   Broschüren mit 14 bzw. 19 solchen Verstößen öffnen in echtem PowerPoint
+   anstandslos. Sie steht als eigener offener Punkt.
+
+Was die zweite Spur so überzeugend machte, war eine **schlechte Gegenprobe**:
+Zwei funktionierende Broschüren zeigten null Verstöße. Sie waren mit 24 und
+58 MB aber um ein Vielfaches größer als ein frischer Bau (4,1 MB) — von
+PowerPoint geöffnet und **neu gespeichert**, also normalisiert. *Ein
+Vergleichsartefakt muss aus derselben Quelle stammen wie das verdächtige.*
+
+**Der Prüfstein: `tests/test_pptx_integritaet.py`.** Sechs Schichten direkt am
+ZIP und am XML, über alle Familien, **beide SCHWEIZ-Strategien** (die der
+Smoke-Test konstruktiv nie baut) und die Duplikat-Fälle. Die tragende Zusicherung
+ist **L5: jeder Chart-Sub-Teil hängt an genau einem Chart.**
+
+**Gegenprobe im Prüfstein selbst.** Schritt 2 stellt das Teilen-statt-Kopieren im
+Arbeitsspeicher wieder her und verlangt, dass L5 rot wird (gemessen: **15**
+geteilte Teile). Beim ersten Versuch blieb sie still — sie hatte sich den
+**CVV**-Fall gegriffen, der zwar fünf Strategien führt, seine Folien aber fest
+in der Vorlage hat und deshalb **gar nicht dupliziert**. *Eine Gegenprobe muss
+den Pfad treffen, den sie prüfen will; „mehrere Strategien" war nicht dasselbe
+wie „dupliziert".*
+
+**Und der Grund, warum es überhaupt so lange dauern konnte:**
+`chart_dynamik.nachbearbeiten` schluckte jede Ausnahme mit `except Exception:
+pass` — hinter **sieben schreibenden** Schritten ohne Transaktion. Der Kommentar
+dort sagte, das Chart bleibe „wie gehabt"; richtig ist, dass bis zu sechs
+Schritte bereits im Dokument stehen. Ein halbfertiger Ring ist das Ergebnis,
+kein unveränderter. Die Ausnahmen gehen jetzt an `LAST_BUILD_ERRORS` plus
+Traceback. *(Gemessen: In diesem Fall flog gar keine — die Vermutung, eine
+verschluckte Ausnahme habe die alten Broschüren gerettet, war falsch und wurde
+verworfen, statt sie zu erzählen.)*
+
+**Merksätze:**
+- Ein Round-Trip durch die schreibende Bibliothek validiert nichts.
+- Wo das Endprodukt eine fremde Anwendung ist, ist diese Anwendung die
+  Wahrheit — hier PowerPoint per COM, `Presentations.Open(…, WithWindow:=False)`.
+- Eine 1:1-Beziehung in der Vorlage ist eine Zusicherung. Wer dupliziert, muss
+  sie mitkopieren.
+
+---
+
 ### #71 — Was aussieht wie eine verstellte Größe, ist der Preis einer anderen Zusage (NEU 25.08.2026) ⭐
 
 **Gemeldet wurde:** Das Ringdiagramm auf der Anlagestrategie-Folie sei in der

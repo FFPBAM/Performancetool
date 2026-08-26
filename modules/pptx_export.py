@@ -1132,7 +1132,12 @@ def generate_portfolioanalyse_pptx(
     # Slide-Operationen, VOR dem Speichern. Balken (catAx) bleiben unberührt.
     # Rührt die Download-Logik NICHT an — arbeitet ausschließlich an Chart-XML.
     try:
-        _charts_nachbearbeiten(prs)
+        _stat = _charts_nachbearbeiten(prs)
+        # NEU 26.08.2026: Einzel-Charts, die unterwegs abgebrochen sind, melden
+        # sich jetzt selbst. Vorher verschluckte chart_dynamik sie spurlos —
+        # und lieferte halbfertige Ringe aus (siehe Kommentar dort).
+        for _m in (_stat or {}).get("fehler", []):
+            LAST_BUILD_ERRORS.append(_m)
     except Exception as _ex:
         # Chart-Kosmetik darf den Export nie abbrechen.
         LAST_BUILD_ERRORS.append(f"Chart-Nachbearbeitung übersprungen: {_ex}")

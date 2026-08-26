@@ -155,6 +155,23 @@ prüfte statt gegen eine Schwelle (#47).
   `$ppt = New-Object -ComObject PowerPoint.Application` →
   `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`. Das ist
   #16/#28 mit anderen Mitteln — und ein Test kann es selbst erzeugen.
+- **Eine Broschüre, die python-pptx wieder öffnet, ist nicht in Ordnung**
+  (#72, 26.08.2026). python-pptx ist tolerant gegen die eigene Korruption: Es
+  las die unlesbare SCHWEIZ-Broschüre klaglos ein, PowerPoint verweigerte sie.
+  Vier Suiten meldeten deshalb grün. Wo das Endprodukt eine fremde Anwendung
+  ist, ist **diese** die Wahrheit — PowerPoint per COM,
+  `$ppt.Presentations.Open($pfad, $true, $false, $false)`; eine Ausnahme heißt
+  „öffnet nicht". Strukturell prüft `tests/test_pptx_integritaet.py` sechs
+  Schichten am ZIP/XML; die tragende ist **L5: jeder Chart-Sub-Teil
+  (chartUserShapes, eingebettete XLSX, style/colors) hängt an GENAU EINEM
+  Chart**. Genau das hatte `clone_chart_part` beim Duplizieren verletzt — es
+  teilte die Sub-Parts, statt sie zu kopieren, obwohl sein Docstring das
+  Gegenteil versprach.
+- **Wer eine verdächtige Datei mit einer heilen vergleicht, muss beide gleich
+  erzeugt haben** (#72). Zwei „funktionierende" Broschüren zeigten null
+  Verstöße — sie waren aber von PowerPoint geöffnet und **neu gespeichert**
+  worden (24 bzw. 58 MB statt 4,1 MB) und damit normalisiert. Der Vergleich
+  bewies nichts. Erkennungszeichen ist die **Dateigröße**.
 - **Ein Eintrag in `Mapping_Anlagekriterien.xlsx` kann in einer Kundenbroschüre
   landen** (12.08.2026). `pptx_export` ruft `fill_anlagekriterien_slide` für
   **jede** Familie auf — ob gedruckt wird, entscheidet allein, ob die Vorlage
@@ -385,6 +402,7 @@ python tests/test_export_smoke.py <ordner>   # + python-pptx, streamlit
 python tests/test_wertentwicklung_platzhalter.py  # + python-pptx, streamlit
 python tests/test_trennstriche.py <ordner>   # + python-pptx
 python tests/test_ring_geometrie.py [<ordner>]   # + python-pptx, Schritt 4 streamlit
+python tests/test_pptx_integritaet.py [<ordner>]  # + python-pptx, lxml, streamlit
 ```
 
 Dazu ein Werkzeug, kein Test — für den Beweis nach einem UI-Umbau:

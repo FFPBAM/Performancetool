@@ -4,6 +4,7 @@ Aufruf jeweils NACH dem Daten-Schreiben (replace_chart_data)."""
 import math
 import datetime as dt
 import re
+import traceback
 
 _C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 def _q(t): return f"{{{_C}}}{t}"
@@ -2392,7 +2393,7 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
     Gibt eine kleine Statistik zurück (für optionales Logging).
     """
     stat = {"ringe": 0, "linien": 0, "ringe_gefaerbt": 0, "labels_schwarz": 0,
-            "punkte": 0, "stub_fix": 0}
+            "punkte": 0, "stub_fix": 0, "fehler": []}
     # Familie EINMAL bestimmen (für die Punkt-Regel: Punkte nur in Thema).
     ist_thema = _ist_thema_familie(prs)
     # Familienspezifische Ring-Optik EINMAL bestimmen (Wunsch 27.07.: CVV
@@ -2504,8 +2505,26 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                 elif "LINE" in typ and _hat_dateax(chart):
                     datumsachse_an_daten(chart)
                     stat["linien"] += 1
-            except Exception:
+            except Exception as _ex:
                 # Ein einzelnes problematisches Chart darf den Export nie
-                # abbrechen — schlimmstenfalls bleibt dieses Chart wie gehabt.
-                pass
+                # abbrechen. ACHTUNG, der frühere Kommentar hier war falsch:
+                # das Chart bleibt NICHT "wie gehabt". Oben stehen sieben
+                # SCHREIBENDE Schritte ohne Transaktion — bricht der fünfte ab,
+                # sind die ersten vier bereits im Dokument. Ein halbfertiger
+                # Ring ist das Ergebnis, kein unveränderter (26.08.2026).
+                #
+                # Deshalb wird die Ausnahme nicht mehr verschluckt: Sie geht als
+                # Meldung an den Aufrufer (pptx_export hängt sie an
+                # LAST_BUILD_ERRORS — der einzige Kanal, der beim Berater
+                # ankommt) und der Traceback auf die Konsole. Genau diese Spur
+                # hat bei der unlesbaren SCHWEIZ-Broschüre gefehlt.
+                try:
+                    _fname = getattr(shape, "name", "?")
+                except Exception:
+                    _fname = "?"
+                stat["fehler"].append(
+                    "Chart-Nachbearbeitung abgebrochen (Shape '%s', Typ %s): "
+                    "%s: %s — die Folie kann einen halbfertigen Ring tragen."
+                    % (_fname, typ or "?", type(_ex).__name__, _ex))
+                traceback.print_exc()
     return stat

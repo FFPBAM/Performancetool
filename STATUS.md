@@ -1,13 +1,87 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 25.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **31 von 31 Suiten grün**, `pyflakes` bei null ·
-**die Ringe der Anlagestrategie-Folien
-tragen jetzt die Geometrie der alten Makro-PowerPoint** — 5,34 cm bei
-0,56 cm Bandstärke, alle 14, **an den Broschüren abgenommen** (Philip,
-25.08.2026). Dazu der ESG-Dateiname korrigiert. Stand davor: gepusht und an der
-Cloud-App abgenommen (Philip, 24.08.2026), DRACOON nachgezogen.
+**Letzte Sitzung:** 26.08.2026 · **Branch:** `verbesserungen` ·
+**Nicht gemergt** · **32 von 32 Suiten grün**, `pyflakes` bei null ·
+**die unlesbaren Broschüren sind behoben** — beim Duplizieren einer Folie
+(Vergleichsportfolio, Familie *Thema*) teilten sich zwei Charts dieselben
+Sub-Teile statt eigene zu bekommen; **in echtem PowerPoint bewiesen, vorher
+und nachher**. Neuer Prüfstein `tests/test_pptx_integritaet.py` (32. Suite).
+Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
+> ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
+>
+> **Die Broschüren, die sich nicht öffnen ließen, öffnen wieder.** Und die
+> Ursache ist nicht die, die ich zuerst gefunden zu haben glaubte.
+>
+> **Dein Testuser hatte recht.** Der Haken bei *Vergleichsportfolio* ist die
+> Ursache — nicht eine Begleiterscheinung. Gemessen an echten Dateien, in
+> echtem PowerPoint geöffnet:
+>
+> | Fall | öffnet |
+> |---|---|
+> | SCHWEIZ, eine Strategie | **ja** |
+> | SCHWEIZ + Vergleichsportfolio | **nein** |
+> | Pro, eine Strategie | **ja** |
+> | Pro + Offensiv | **nein** |
+>
+> **Der Fehler in einem Satz:** Beim Duplizieren einer Folie bekommt jedes
+> Chart eine eigene Kopie — seine *Bestandteile* aber nicht. Zwei Charts hingen
+> danach an **derselben** Zeichnung, **derselben** eingebetteten Excel-Mappe und
+> **denselben** Formatteilen. In jeder Vorlage gehört das 1:1 zusammen;
+> PowerPoint verweigert die Datei. Eine Funktion in `pptx_helpers.py`, deren
+> Beschreibung seit Juni das Richtige versprach — und deren Code es nicht tat.
+>
+> **Es war keine Regression von gestern.** Mit dem Code vom 24.08. gebaut
+> passiert genau dasselbe. Der Punkt fiel nur nie auf, weil das
+> Vergleichsportfolio in einer Broschüre offenbar selten benutzt wurde.
+>
+> **Warum kein Test das gefunden hat — das ist der eigentliche Fund.** Vier
+> Suiten bauen genau diese Datei und melden grün. Alle vier lesen sie mit
+> **python-pptx** zurück, und python-pptx öffnet sie klaglos. Es ist tolerant
+> gegen die eigene Korruption. Ein Round-Trip durch dieselbe Bibliothek, die
+> die Datei geschrieben hat, prüft die Bibliothek — nicht die Datei.
+>
+> **Neuer Prüfstein `tests/test_pptx_integritaet.py` (32. Suite).** Sechs
+> Schichten direkt am ZIP und am XML, über alle Familien, **beide
+> SCHWEIZ-Strategien** (die der Smoke-Test konstruktiv nie baut) und die
+> Duplikat-Fälle. **Gegenprobe:** Schritt 2 dreht den alten Fehler im
+> Arbeitsspeicher zurück und verlangt, dass die Prüfung rot wird — sie meldet
+> dann **15** geteilte Teile, und die so gebaute Datei lässt sich in
+> PowerPoint **nicht** öffnen. Beide Richtungen belegt.
+>
+> **Zweimal habe ich mich unterwegs geirrt, beides steht hier, weil es
+> wiederkommen kann:**
+>
+> 1. **Ich hielt die Reihenfolge der Beschriftungs-Elemente für die Ursache.**
+>    30 von 30 Ring-Beschriftungen in deiner kaputten Datei verletzen die
+>    Schema-Reihenfolge (`txPr` vor `layout`). Das stimmt und ist ein echter
+>    Mangel — **aber es ist nicht die Ursache**: Broschüren mit 14 bzw. 19
+>    solchen Verstößen öffnen anstandslos. Steht jetzt unter „Offene Punkte".
+> 2. **Meine Gegenprobe taugte nichts.** Die beiden funktionierenden
+>    Broschüren in `H:` zeigten null Verstöße — sie waren aber mit 24 und 58 MB
+>    ein Vielfaches eines frischen Baus (4,1 MB), also von PowerPoint geöffnet
+>    und neu gespeichert. Damit war die XML normalisiert und der Vergleich
+>    wertlos. **Ein Vergleichsstück muss aus derselben Quelle stammen wie das
+>    verdächtige** — die Dateigröße verrät es.
+>
+> **Nebenbei repariert: der Kanal, der das hätte melden können.**
+> `chart_dynamik` verschluckte jede Ausnahme mit `except: pass` — hinter
+> **sieben schreibenden** Schritten. Der Kommentar dort behauptete, das Chart
+> bleibe „wie gehabt"; tatsächlich stehen dann bis zu sechs Schritte schon im
+> Dokument. Ausnahmen gehen jetzt an `LAST_BUILD_ERRORS` plus Traceback.
+> *(In diesem Fall flog übrigens keine — ich hatte vermutet, eine verschluckte
+> Ausnahme habe die alten Broschüren gerettet. Gemessen, widerlegt, verworfen.)*
+>
+> **Noch zu entscheiden:** Du hattest festgelegt, die Thema-Broschüre solle nur
+> die obere Strategie führen. Das war unter der Annahme, dass der Haken die
+> Broschüre zerstört. Der Vergleichsblock funktioniert jetzt — die Entscheidung
+> steht deshalb neu an und ist **nicht** umgesetzt.
+>
+> **Erledigt und nur noch notiert:** Sharpe-Tooltip gesichtet, neuer Text
+> steht, 3-Monats-Euribor als risikofreier Referenzzinssatz bestätigt.
+>
+> ---
+>
 > ### Für Philip: was diese Sitzung geändert hat (25.08.2026)
 >
 > **Der Ring auf den Anlagestrategie-Folien ist größer geworden** — nach
@@ -2722,6 +2796,36 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
+**NEU 26.08.2026 — die Reihenfolge der Beschriftungs-Elemente ist verletzt,
+aber folgenlos.** In jeder gebauten Broschüre stehen die `<c:dLbl>` der Ringe
+als `idx → txPr → layout`; `CT_DLbl` verlangt `idx → layout → … → txPr`.
+Fundstelle: `chart_dynamik.ring_label_schriftfarbe` hängt ein fehlendes
+`<c:txPr>` hinter `<c:spPr>` — und weil die Vorlagen ihre `dLbl` durchweg
+**ohne** `spPr` liefern, greift immer der Else-Zweig `idx.addnext(txPr)` und
+schiebt es vor das `layout`.
+
+**Warum es trotzdem nicht dringt:** Gemessen an gebauten Broschüren mit 14 bzw.
+19 solchen Verstößen — sie öffnen in echtem PowerPoint **anstandslos**. Es ist
+ein Verstoß gegen das Schema, kein Schaden am Endprodukt. Der Punkt steht hier,
+weil er auf dem Weg zur echten Ursache (#72) aufgefallen ist und weil eine
+Bibliothek, die strenger liest, ihn morgen ablehnen kann.
+
+*Der Eingriff wäre klein* — eine Hilfsfunktion, die ein Element anhand der
+Schema-Sequenz einsetzt, statt sich auf ein Nachbarelement zu verlassen; sie
+räumte zugleich zwei gleichartige Stellen mit auf (`showLeaderLines` ans Ende
+von `dLbls`, `dispBlanksAs` ans Ende von `<c:chart>`). **Nicht gemacht**, weil
+er das Chart-XML **aller** Familien anfasst und damit eine eigene Sichtprüfung
+verdient — nicht als Beifang einer Fehlerbehebung.
+
+**NEU 26.08.2026 — Entscheidung steht neu an: Vergleichsportfolio in der
+Thema-Broschüre.** Philip hatte am 26.08. festgelegt, die Broschüre solle **nur
+die obere Strategie** führen. Grundlage war die Annahme, der Haken zerstöre die
+Datei. Das stimmt nicht mehr: Der Vergleichsblock wird korrekt gebaut und
+öffnet. **Nicht umgesetzt** — die Entscheidung ist fachlich, nicht technisch.
+Wer sie umsetzt: `portfolioanalyse.py` (Zusammenbau von `portfolios` vor dem
+Export), plus ein Satz in `_render_familien_hinweis` und ein Prüfstein auf die
+Folienzahl.
+
 **NEU 25.08.2026 — die Seitentreue der Beschriftungen.** Gemeldet von Philip
 an *Pro* Folie 11: Die Zahl „8,27 %" wirkt neben ihrer Führungslinie statt an
 ihr. **Geometrisch ist nichts falsch** — jede Linie endet exakt an der Kante
@@ -2806,11 +2910,15 @@ heraus, die im Befund oben noch nicht standen: `_build_rollierend_data`
 17.08.2026 abends **erledigt** und bleibt nur als Beleg stehen. Zwei weitere
 Punkte sind **bewusst zurückgestellt** und stehen darunter.
 
-**NEU 18.08.2026 — Sichtprüfung der beiden Tooltips.** Im Performance-Reiter
-die Fragezeichen von *Calmar Ratio* und *Sharpe Ratio* aufziehen: Bricht der
-Sharpe-Text sauber um? Er ist von 232 auf 297 Zeichen gewachsen. Bewusst
-übersprungen (Michael, 18.08.2026) — und deshalb hier genannt und nicht
-stillschweigend weggelassen. Der Wortlaut selbst ist per
+**ERLEDIGT am 26.08.2026 — Sichtprüfung der beiden Tooltips.** Philip hat
+gegengesehen: *„neuer Text ist da"*, und der **3-Monats-Euribor** ist als
+risikofreier Referenzzinssatz ausdrücklich bestätigt. Der ursprüngliche Punkt
+bleibt darunter stehen, weil die Begründung mehr wert ist als die Aufgabe.
+
+*(War: Im Performance-Reiter die Fragezeichen von* Calmar Ratio *und* Sharpe
+Ratio *aufziehen — bricht der Sharpe-Text sauber um? Er ist von 232 auf 297
+Zeichen gewachsen. Bewusst übersprungen (Michael, 18.08.2026) — und deshalb
+genannt und nicht stillschweigend weggelassen.)* Der Wortlaut selbst ist per
 `tests/test_kennzahlen_hinweise.py` festgenagelt; zu beurteilen ist allein das
 Schriftbild.
 
