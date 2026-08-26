@@ -79,37 +79,46 @@ TOLERANZ = 0.005
 # Vorlage_ETF F16 und Vorlage_comdirect F6. In echten Broschueren sind es
 # null; deshalb steht hier eine Obergrenze und in Schritt 4 die Null.
 #
-# Am 26.08.2026 mittags stand hier fuer wenige Stunden eine 4: Die Seitentreue
-# kostete auf den Vorlagendaten zwei zusaetzliche Kreuzungen. Mit ihrer
-# Ruecknahme am selben Abend sind sie weg — nachgemessen sind es wieder ZWEI
-# (Vorlage_FFPB F9 C_Kennzahlen1 und Vorlage_Thema F11 C_Kennzahlen2).
+# DIE ZAHL IST AM 26.08.2026 ZWEIMAL GEWANDERT, und beide Male aus gutem Grund:
+#   Ausgangswert 25.08.  2 (Vorlage_ETF F16, Vorlage_comdirect F6)
+#   mittags              4 — die Seitentreue kostete zwei zusaetzliche
+#   abends               2 — Seitentreue zurueckgenommen, Preis mit zurueck
+#   danach               1 — Seitentreue wieder ein, ABER mit der buendigen
+#                        Anbindung aus Punkt 1: jetzt kreuzt sich nur noch EIN
+#                        Paar (Vorlage_FFPB F9 C_Kennzahlen2).
 #
-# WER EINE OPTIK-AENDERUNG ZURUECKNIMMT, NIMMT IHREN PREIS MIT ZURUECK.
-# Eine angehobene Obergrenze, die nach dem Ruecknehmen stehen bleibt, deckt
-# ab jetzt etwas ab, wofuer sie nie beschlossen wurde — und niemand merkt es,
-# weil der Test gruen ist. Genau das ist der Grund, aus dem diese Zeile hier
-# wieder auf 2 steht.
+# Die 1 steht hier, weil sie GEMESSEN ist und nicht gewuenscht. Die
+# Vorlagendaten sind fest — der Wert schwankt nicht mit dem Bestand, also darf
+# die Grenze eng sein. Wer eine Aenderung baut, die wieder auf 2 geht, soll
+# das begruenden muessen.
 #
-# WAS DIESE ZAHL NICHT LOCKERT: Schritt 4 verlangt die harte NULL an echt
-# gebauten Broschueren (17 Ringe, 69 Linien). Wer diese Konstante anhebt,
-# sollte denselben Nachweis fuehren — sonst wird aus einer Obergrenze eine
-# Ausrede.
-KREUZUNGEN_VORLAGEN_MAX = 2
+# WER SIE ANHEBT, FUEHRT DEN NACHWEIS MIT: Schritt 4 verlangt die harte NULL
+# an echt gebauten Broschueren (17 Ringe, 68 Linien) — sonst wird aus einer
+# Obergrenze eine Ausrede.
+KREUZUNGEN_VORLAGEN_MAX = 1
 
 # Namentlich geduldete Beschriftungen auf der Legende, auf den PLATZHALTERDATEN
-# der Vorlagen. WIEDER LEER seit dem 26.08.2026 abends.
+# der Vorlagen. Ein Eintrag, seit die Seitentreue laeuft (26.08.2026).
 #
-# Am Mittag stand hier ein Eintrag (Vorlage_FFPB F9 C_Kennzahlen2): Die
-# Seitentreue schob dort eine Beschriftung auf die Legende. Mit der Ruecknahme
-# der Seitentreue ist der Fall verschwunden — nachgemessen meldet Schritt 3
-# keine Legenden-Beruehrung mehr. Aus demselben Grund wie bei
-# KREUZUNGEN_VORLAGEN_MAX: der Preis geht mit der Aenderung zurueck.
+# Warum geduldet: Der Fall tritt mit den BEISPIELZAHLEN der Vorlage auf, nicht
+# mit echten Daten — Schritt 4 misst dieselbe Zusage an echt gebauten
+# Broschueren und meldet dort null Verletzungen. Und `Vorlage_FFPB.pptx` wird
+# zu keiner Kundenbroschuere gebaut; die fuenf gebauten Familien benutzen
+# andere Vorlagen (CVV etwa `Vorlage_cVV_Infoboard.pptx`).
 #
-# Die Bauform bleibt stehen, weil sie die richtige ist, falls je wieder ein
-# Fall geduldet werden muss: eine NAMENTLICHE Liste, keine abgeschaltete
-# Pruefung. So bleibt die Zusage fuer jeden anderen Ring hart und der geduldete
-# Fall sichtbar (er wird als HINWEIS gedruckt).
-LEGENDE_GEDULDET = set()
+# KORREKTUR EINER FRUEHEREN BEHAUPTUNG (26.08.2026): In STATUS.md stand, diese
+# Vorlage sei "der Standard-Pfad, die Familie OHNE Eintrag in
+# FAMILIE_RING_FORMAT". Das ist falsch — `_familie_aus_prs` erkennt sie an
+# ihren Folientiteln als **CVV** und gibt ihr damit die volle CVV-Optik.
+# Nachgemessen mit `cd._familie_aus_prs(Presentation("Vorlage/Vorlage_FFPB.pptx"))`.
+# Der Fall ist also nicht deshalb harmlos, weil kein Familien-Format greift,
+# sondern weil aus dieser Vorlage keine Broschuere entsteht.
+#
+# Warum als NAMENTLICHE Liste und nicht als abgeschaltete Pruefung: So bleibt
+# die Zusage fuer JEDEN anderen Ring hart, der Fall bleibt sichtbar (er wird
+# als HINWEIS gedruckt), und wer die Vorlage anfasst, bekommt sofort eine
+# Meldung an anderer Stelle.
+LEGENDE_GEDULDET = {("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2")}
 
 # SEITENTREUE (NEU 26.08.2026): Hoechstzahl an Fuehrungslinien, deren inneres
 # Ende (am Segment) und aeusseres Ende (am Label) auf VERSCHIEDENEN Seiten der
@@ -120,20 +129,15 @@ LEGENDE_GEDULDET = set()
 # Bewusst je Familie und als ZAHL, nicht als Quote: Eine Zahl je Familie zeigt,
 # WO es schlechter wird; eine Gesamtquote laesst sich wegmitteln.
 #
-# SEIT DEM 26.08.2026 ABENDS STEHEN HIER WIEDER DIE ALTEN ZAHLEN — die
-# Seitentreue ist ueberall abgeschaltet (Sichtpruefung Philip, Begruendung im
-# `seitentreue`-Kommentar in `chart_dynamik._RING_KRAEFTIG`). Die Grenzen sind
-# deshalb der Stand VOR der Aenderung, an echten Broschueren gemessen.
+# DIE VIER FAMILIEN MIT ANLAGESTRATEGIE-FOLIEN HALTEN DIE HARTE NULL, Thema
+# steht auf 3. Das ist der Stand nach der dritten Sichtpruefung (26.08.2026):
+# Die Seitentreue laeuft dort, wo sie angesehen und fuer besser befunden wurde,
+# und ist bei Thema ausdruecklich aus.
 #
-# DIESER SCHRITT BLEIBT TROTZDEM STEHEN, und zwar mit Absicht: Er ist jetzt
-# eine MESSUNG mit Deckel, kein Erfolgsnachweis. Er zeigt sofort, wenn ein
-# kuenftiger Eingriff die Zahl VERSCHLECHTERT — und er ist der Ort, an dem die
-# Verbesserung wieder sichtbar wuerde, falls die Seitentreue nach der
-# Behebung der Anbindung (Punkt 1) ein zweites Mal angesehen und eingeschaltet
-# wird. Gemessen am 26.08.2026 an echt gebauten Broschueren waeren die Zahlen
-# MIT Schalter: CVV 5 -> 0, ESG 5 -> 0, ETF 2 -> 0, comdirect 2 -> 0,
-# Thema 3 -> 2; ueber alle Broschueren 32 -> 12 von 143 (22,4 % -> 8,4 %).
-SEITENTREUE_MAX = {"CVV": 5, "ESG": 5, "ETF": 2, "comdirect": 2, "Thema": 3}
+# Eine NULL ist hier mehr wert als eine Quote: Sie bricht sofort und sichtbar,
+# waehrend sich eine Quote wegmitteln laesst. Bei Thema steht die 3, weil dort
+# kein Schalter laeuft — sie ist eine Messung mit Deckel, kein Zielwert.
+SEITENTREUE_MAX = {"CVV": 0, "ESG": 0, "ETF": 0, "comdirect": 0, "Thema": 3}
 
 # Naeher als das an der Senkrechten ist "die Seite" keine sinnvolle Aussage.
 SEITE_TOTZONE = 0.02
@@ -1017,17 +1021,18 @@ def schritt5_familien_look():
               "Familien; Standard bleibt aus")
 
     # Und dieselbe Frage fuer die SEITENTREUE (Pass 6d, 26.08.2026).
-    # Sie steht seit dem Abend des 26.08.2026 UEBERALL AUS: Die Sichtpruefung
-    # fiel bei allen angesehenen Familien gegen sie aus (Begruendung im
-    # `seitentreue`-Kommentar in `chart_dynamik._RING_KRAEFTIG`).
+    # Sie laeuft in den VIER Familien mit Anlagestrategie-Folien und ist bei
+    # THEMA ausdruecklich aus — dort hat Philip sie zweimal angesehen und
+    # zweimal abgelehnt. Die ganze Begruendung samt der drei Kehrtwenden eines
+    # Tages steht im `seitentreue`-Kommentar in `chart_dynamik._RING_KRAEFTIG`.
     #
-    # Die Zeile ist damit keine Formalie, sondern der Waechter ueber eine
+    # Die Zeile ist keine Formalie, sondern der Waechter ueber eine
     # Entscheidung nach Augenschein: Wer den Schalter umlegt, ohne dass jemand
-    # das Ergebnis angesehen hat, bricht hier. Ohne sie fiele es nur ueber
-    # Schritt 6 auf — und der braucht ein Ausgabeverzeichnis, das nicht jeder
-    # Lauf hat.
+    # das Ergebnis angesehen hat, bricht hier. Und die None-Zeile ist der
+    # eigentliche Waechter — bei der Rueckkopplung hat genau sie am 25.08.2026
+    # gefehlt, und die Standard-Broschuere erbte eine Aenderung ungeprueft mit.
     st_fehler = 0
-    SOLL_ST = {"CVV": False, "ESG": False, "ETF": False, "comdirect": False,
+    SOLL_ST = {"CVV": True, "ESG": True, "ETF": True, "comdirect": True,
                "Thema": False, None: False}
     for familie, soll in sorted(SOLL_ST.items(), key=lambda p: str(p[0])):
         ist = cd._ring_format(familie, 79, 0.14)["seitentreue"]
@@ -1036,8 +1041,8 @@ def schritt5_familien_look():
             print(f"    FEHLER — {bez}: Seitentreue {ist} statt {soll}")
             st_fehler += 1
     if not st_fehler:
-        print("    OK — die Seitentreue ist ueberall aus (Sichtpruefung "
-              "26.08.2026)")
+        print("    OK — die Seitentreue laeuft in den vier "
+              "Anlagestrategie-Familien; Thema und Standard bleiben aus")
     fehler += st_fehler
 
     # Und dieselbe Frage fuer die BUENDIGE ANBINDUNG (Punkt 1, 26.08.2026).

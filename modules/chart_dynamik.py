@@ -321,29 +321,41 @@ _RING_KRAEFTIG = {
                                 # Befundes. Fuer alle fuenf Familien
                                 # beauftragt und in echtem PowerPoint
                                 # angesehen. Siehe LABEL_INSET_IN oben.
-    "seitentreue": False,       # AUS (26.08.2026 abends) — nach der zweiten,
-                                # genaueren Sichtpruefung von Philip an
-                                # CVV und ESG in echtem PowerPoint: "die
-                                # Fuehrungslinienverteilung und Anbindung der
-                                # Zahlen war [vorher] deutlich besser".
+    "seitentreue": True,        # WIEDER EIN (26.08.2026, dritte Sichtpruefung)
+                                # — und diesmal mit der Begruendung, die beim
+                                # ersten Mal gefehlt hat.
                                 #
-                                # DIE MESSUNG SAGT DASSELBE, wenn man die
-                                # richtige Groesse misst. Falsch stehende
-                                # Fuehrungslinien gingen mit dem Schalter auf
-                                # NULL — aber er schob die Zahlen dafuer auf
-                                # die LINKE Ringseite: CVV 7 -> 12 von 17,
-                                # ESG 7 -> 12 von 16, ETF 4 -> 6 von 8,
-                                # comdirect 6 -> 8 von 11. Und links ist genau
-                                # die Seite, auf der die Linie NICHT am
-                                # Zeichen ansetzt, sondern an der nominellen
-                                # Boxkante rund 5 mm dahinter (der Mangel ist
-                                # asymmetrisch, siehe ring_leader_zeichnen).
-                                # Der Schalter hat also die Zahl der sichtbar
-                                # schlecht angebundenen Zahlen verdoppelt.
+                                # DIE GESCHICHTE IN DREI SCHRITTEN, weil sie
+                                # sonst wie Unentschlossenheit aussieht:
+                                #   mittags  ein. Messung: falsch stehende
+                                #            Fuehrungslinien auf NULL.
+                                #   abends   AUS. Philip sah CVV und ESG an:
+                                #            "die Anbindung der Zahlen war
+                                #            [vorher] deutlich besser". Der
+                                #            Schalter schob die Zahlen auf die
+                                #            LINKE Ringseite (CVV 7 -> 12 von
+                                #            17, ESG 7 -> 12 von 16) — und
+                                #            links lag damals die 5-mm-Luecke
+                                #            zwischen Linie und Ziffer.
+                                #   danach   Punkt 1 behoben: beide Seiten
+                                #            haben jetzt 1,5 mm. Der Grund,
+                                #            aus dem die Seitentreue schlechter
+                                #            aussah, ist damit weg.
                                 #
-                                # ER BLEIBT EINGEBAUT. Sobald die Anbindung
-                                # sauber ist, gehoert er noch einmal
-                                # angesehen — dann ist "ein" eine Zeile.
+                                # DER AUSLOESER war ein konkreter Fund von
+                                # Philip: Auf ESG Offensiv (F22) laeuft eine
+                                # Fuehrungslinie quer ueber den Ringkopf —
+                                # EDELMETALLE sitzt bei 332,8 Grad (oben
+                                # links), die Zahl stand bei 55,5 Grad (oben
+                                # rechts), Abweichung +82,7 Grad, Linienlaenge
+                                # 1,39 Zoll gegen sonst 0,4 bis 0,5. Genau
+                                # dieser Fall ist das, wofuer Pass 6d gebaut
+                                # wurde. Mit Schalter stehen die drei kleinen
+                                # Zahlen sauber links untereinander.
+                                #
+                                # THEMA BLEIBT AUSGENOMMEN — dort hat Philip
+                                # sie zweimal abgelehnt, und auf F11 haette sie
+                                # ohnehin nichts geholfen (nachgemessen).
     "rueckkopplung": True,      # AUSDRUECKLICH ein (25.08.2026): CVV, ESG,
                                 # ETF und comdirect sind die vier Familien mit
                                 # Anlagestrategie-Folien, fuer die die
@@ -359,22 +371,30 @@ _RING_KRAEFTIG = {
 # Anlagestrategie-Folien. Thema hat gar keine solche Folie und soll seine
 # heutige Bandstaerke behalten — deshalb eine Kopie mit festem hole 68, die
 # von einer Aenderung an _RING_KRAEFTIG unberuehrt bleibt.
-# Thema teilt seit dem 25.08.2026 abends die Optik der anderen Familien und
-# braucht deshalb keinen eigenen Block. Der Name bleibt stehen, damit die
-# Zuordnung unten lesbar ist und ein kuenftiges Abweichen einen Ort hat.
+# Thema weicht in GENAU EINEM Punkt ab: `seitentreue`. Deshalb steht hier ein
+# eigener Block, so wie es der Kommentar ueber _RING_KRAEFTIG vorsieht.
 #
-# HISTORIE, damit die drei Kehrtwenden eines Tages nachvollziehbar bleiben:
+# WARUM THEMA SIE NICHT BEKOMMT: Philip hat sie dort zweimal angesehen und
+# zweimal abgelehnt — auf F10 gefaellt die alte Anordnung besser, auf F11
+# sassen die Regionen-Zahlen nicht sauber an ihren Strichen. Nachgemessen
+# haette sie bei Thema auch wenig gebracht: 3 falsch stehende Linien werden 2,
+# waehrend die vier anderen Familien glatt auf NULL gehen. Thema hat keine
+# Anlagestrategie-Folie; seine Ringe sind groesser (8,51 cm) und tragen mehr
+# Segmente.
+#
+# HISTORIE, damit die Kehrtwenden eines Tages nachvollziehbar bleiben:
 #   25.08. nachmittags  `hole=68, rueckkopplung=False` — Thema war bewusst
 #                       ausgenommen; die Unberuehrtheit war bytegleich belegt.
 #   25.08. abends       Philip legte die Makro-Fassung der Pro-Broschuere vor
 #                       (F10: 8,51 cm bei 0,89 cm Band). Genau das liefert der
 #                       gemeinsame Block — Thema uebernahm ihn.
-#   26.08. mittags      Die Seitentreue kam fuer alle vier Anlagestrategie-
+#   26.08. mittags      Die Seitentreue kam fuer die vier Anlagestrategie-
 #                       Familien, Thema nahm sie als einziges nicht.
-#   26.08. abends       Die Seitentreue ist ueberall aus (siehe der Kommentar
-#                       in _RING_KRAEFTIG). Damit gibt es wieder keinen
-#                       Unterschied, und der eigene Block faellt weg.
-_RING_THEMA = _RING_KRAEFTIG
+#   26.08. abends       Die Seitentreue ging ueberall aus — die Ursache dafuer
+#                       war aber Punkt 1 und nicht der Pass selbst.
+#   26.08. danach       Punkt 1 behoben, Seitentreue fuer die vier Familien
+#                       wieder ein. Thema bleibt als einziges ohne.
+_RING_THEMA = dict(_RING_KRAEFTIG, seitentreue=False)
 FAMILIE_RING_FORMAT = {
     "CVV": _RING_KRAEFTIG,
     "ESG": _RING_KRAEFTIG,
