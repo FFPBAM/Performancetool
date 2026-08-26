@@ -9,7 +9,8 @@ und nachher**. Zwei neue Prüfsteine (`test_pptx_integritaet.py`,
 `test_broschuere_auswahl.py`); die Thema-Broschüre führt jetzt **nur die obere
 Strategie** (Entscheidung Philip, nach der Behebung bestätigt).
 
-**Am Abend kam die Ring-Optik in fünf Schritten zum Abschluss:**
+**Am Abend kam die Ring-Optik in sechs Schritten zum Abschluss — von Philip
+in echtem PowerPoint abgenommen ("sieht super aus"):**
 **Punkt 1 ist behoben** — die Zahl klebt an ihrer Führungslinie: am Bild
 gemessen links 5,14 → **1,51 mm**, rechts 0 → **1,66 mm**. **Der
 Regionen-Ring bekommt seine Punkte** (Thema 10 von 17 → 17/17; er war der
@@ -19,7 +20,13 @@ fällt die längste Führungslinie von 1,39 auf 0,71 Zoll. **Steile Linien
 setzen unten an** statt seitlich (zwei Labels auf Thema F11). **Und nahe der
 Senkrechten hat ein Segment keine Seite mehr** — 13 von 17 Ringen gehen damit
 von 3:1 auf 2:2, ohne dass die schweren Achsenüberstiege zurückkommen.
+Dazu **ein Fehler aus dem eigenen Eingriff**, den erst der PNG-Export zeigte:
+die feste Label-Box kürzte längere Zahlen zu „37,1…".
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
+
+**Nächster Schritt:** Der Branch ist **nicht gemergt**. Fachlich offen ist nur
+noch die *Ursache* hinter der Label-Verteilung (Kopfsperre deckelt die
+Label-Höhe auf die Ringoberkante) — siehe „Offene Punkte".
 
 > ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
 >
