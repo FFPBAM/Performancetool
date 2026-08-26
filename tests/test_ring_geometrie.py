@@ -17,6 +17,7 @@ Ein unbeabsichtigter Eingriff faellt sonst erst in einer Kundenbroschuere auf.
   5. Der Familien-Look und wo Rueckkopplung und Seitentreue laufen
   6. Die Seite der Beschriftungen an ECHT GEBAUTEN Broschueren
   7. Die buendige Anbindung der Zahl an ihre Fuehrungslinie
+  8. Steile Linien setzen an der Unterkante an, nicht seitlich
 
 SCHRITT 1 HAENGT AM ARTEFAKT. Die Ringgeometrie kommt zu 100 Prozent aus der
 .pptx-Vorlage — kein Code setzt jemals die Groesse eines Chart-Rahmens. Wer
@@ -942,6 +943,111 @@ def _buendig_pruefen(pfad):
     return geprueft, meldungen
 
 
+def _senkrecht_pruefen(pfad):
+    """(geprueft, senkrecht, Meldungen) — die senkrechte Anbindung.
+
+    Geprueft wird die REGEL, nicht eine Stueckzahl: Eine Fuehrungslinie setzt
+    GENAU DANN senkrecht an (Ende mittig unter/ueber der Zahl), wenn sie
+    mindestens `LEADER_SENKRECHT_STEIL` mal so steil wie breit ankommt.
+
+    Warum die Regel und nicht die Zahl: Wie viele Labels betroffen sind, haengt
+    am Bestand — heute sind es zwei (Thema F11, beide Ringe, je das Label ueber
+    dem Ring). Eine feste Zahl muesste bei jeder Datenaenderung nachgezogen
+    werden und saehe dann aus wie ein Messwert.
+
+    Die Schwelle selbst ist gemessen: Median der Steilheit ueber alle 69
+    Fuehrungslinien 0,23; die beiden beanstandeten Labels 13,1 und 11,3; der
+    naechsthoehere Wert im Produkt 3,3. Ein erster Versuch mit "steiler als
+    45 Grad" traf zwoelf Labels und machte diagonale wie CVV F13 SCHLECHTER.
+    """
+    prs = Presentation(pfad)
+    meldungen = []
+    geprueft = senkrecht = 0
+    for nr, folie, shape in _ringe(prs):
+        geo = _plot(shape)
+        if geo is None:
+            continue
+        cx, cy = geo["cx"], geo["cy"]
+        root = cd._root(shape.chart)
+        fsa_el = root.find(".//" + cd._q("firstSliceAng"))
+        fsa = float(fsa_el.get("val")) if fsa_el is not None else 0.0
+        vals = [float(v.text) for v in root.findall(
+            ".//" + cd._q("val") + "//" + cd._q("pt") + "/" + cd._q("v"))]
+        if not vals:
+            continue
+        tot = sum(vals) or 1.0
+        mids, kum = [], 0.0
+        for v in vals:
+            f = v / tot
+            mids.append((fsa + (kum + f / 2) * 360) % 360)
+            kum += f
+        fw, fh = shape.width / 914400.0, shape.height / 914400.0
+        boxen = {}
+        for d in root.iter(cd._q("dLbl")):
+            ml = d.find(".//" + cd._q("manualLayout"))
+            if ml is None or ml.find(cd._q("x")) is None:
+                continue
+            boxen[int(d.find(cd._q("idx")).get("val"))] = (
+                float(ml.find(cd._q("x")).get("val")) * fw + HALB_BREITE,
+                float(ml.find(cd._q("y")).get("val")) * fh + HALB_HOEHE)
+        # R_start wie in ring_leader_zeichnen: Mitte des Bandes
+        R_out = geo["r"]
+        R_in = R_out * 0.79
+        R_start = R_out - 0.5 * (R_out - R_in)
+        for sh in folie.shapes:
+            n = sh.name or ""
+            if not n.startswith("RingLeaderDot_" + shape.name + "_"):
+                continue
+            idx = int(n.rsplit("_", 1)[1])
+            if idx not in boxen or idx >= len(mids):
+                continue
+            geprueft += 1
+            mx, my = boxen[idx]
+            sm = math.radians(mids[idx])
+            sx = cx + R_start * math.sin(sm)
+            sy = cy - R_start * math.cos(sm)
+            steil = abs(my - sy) / max(abs(mx - sx), 1e-6)
+            ist_senkrecht = abs(
+                (sh.left + sh.width / 2) / 914400.0
+                - shape.left / 914400.0 - mx) < 0.01
+            soll_senkrecht = steil > cd.LEADER_SENKRECHT_STEIL
+            if ist_senkrecht:
+                senkrecht += 1
+            if ist_senkrecht != soll_senkrecht:
+                meldungen.append(
+                    f"F{nr} {shape.name} idx {idx}: Steilheit {steil:.2f}, "
+                    f"also {'senkrecht' if soll_senkrecht else 'seitlich'} "
+                    f"erwartet — gezeichnet ist "
+                    f"{'senkrecht' if ist_senkrecht else 'seitlich'}")
+    return geprueft, senkrecht, meldungen
+
+
+def schritt8_senkrechte_anbindung(ausgabe):
+    print("Schritt 8 — steile Linien setzen unten an, nicht seitlich")
+    if not ausgabe:
+        print("    UEBERSPRUNGEN — kein Ausgabeverzeichnis angegeben")
+        return 0
+    fehler = 0
+    for familie in sorted(SEITENTREUE_MAX):
+        pfad = os.path.join(ausgabe, f"ring_{familie}.pptx")
+        if not os.path.exists(pfad):
+            print(f"    UEBERSPRUNGEN — {familie}: "
+                  f"{os.path.basename(pfad)} fehlt (Schritt 4 baut sie)")
+            continue
+        n, senk, meldungen = _senkrecht_pruefen(pfad)
+        for m in meldungen[:4]:
+            print(f"    FEHLER — {familie}: {m}")
+        if meldungen:
+            fehler += 1
+        else:
+            print(f"    {familie:<12} {senk} von {n} Linien senkrecht "
+                  f"(Schwelle {cd.LEADER_SENKRECHT_STEIL:.0f})")
+    if not fehler:
+        print("    OK — die Regel gilt fuer jede Linie: senkrecht genau dann, "
+              "wenn sie steil genug ankommt")
+    return fehler
+
+
 def schritt7_buendige_anbindung(ausgabe):
     print("Schritt 7 — die Zahl klebt an ihrer Fuehrungslinie")
     if not ausgabe:
@@ -1064,6 +1170,22 @@ def schritt5_familien_look():
         print("    OK — die buendige Anbindung laeuft in den fuenf Familien; "
               "Standard bleibt aus")
     fehler += bu_fehler
+
+    # Und fuer die SENKRECHTE ANBINDUNG (26.08.2026): Steht die Zahl fast
+    # senkrecht ueber ihrem Segment, setzt die Linie unten an statt seitlich.
+    sk_fehler = 0
+    SOLL_SK = {"CVV": True, "ESG": True, "ETF": True, "comdirect": True,
+               "Thema": True, None: False}
+    for familie, soll in sorted(SOLL_SK.items(), key=lambda p: str(p[0])):
+        ist = cd._ring_format(familie, 79, 0.14)["leader_senkrecht"]
+        if ist != soll:
+            bez = familie if familie is not None else "Standard (ohne Familie)"
+            print(f"    FEHLER — {bez}: leader_senkrecht {ist} statt {soll}")
+            sk_fehler += 1
+    if not sk_fehler:
+        print("    OK — die senkrechte Anbindung laeuft in den fuenf "
+              "Familien; Standard bleibt aus")
+    fehler += sk_fehler
     return fehler
 
 
@@ -1082,6 +1204,8 @@ def main():
     fehler += schritt6_seitentreue(ausgabe)
     print()
     fehler += schritt7_buendige_anbindung(ausgabe)
+    print()
+    fehler += schritt8_senkrechte_anbindung(ausgabe)
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")

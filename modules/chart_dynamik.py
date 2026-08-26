@@ -143,6 +143,55 @@ LABEL_LUFT_IN       = 0.045      # Luft zwischen Linienende und Zeichen
                                  # RECHTE Seite heute schon hat und den
                                  # niemand beanstandet hat.
 
+# ── Senkrechte Anbindung im Kopf- und Fussbereich (NEU 26.08.2026) ─────────
+# Gemeldet von Philip an der Themen-Broschuere F11: Bei "5,14 %" sitzt der
+# Punkt RECHTS von der Zahl, das zugehoerige Segment aber LINKS UNTEN — die
+# Linie laeuft also unter der Zahl hindurch zurueck und wirkt, als gehoere sie
+# nicht dazu.
+#
+# Die Zahl steht dabei auf der RICHTIGEN Seite; der Fehler liegt woanders:
+# `ring_leader_zeichnen` setzte die Linie IMMER an der linken oder rechten
+# Kante an. Steht eine Zahl fast senkrecht ueber (oder unter) ihrem Segment,
+# ist die seitliche Kante die falsche Wahl — richtig ist die waagerechte.
+#
+# WANN "fast senkrecht"? Nicht ueber die Lage der Zahl, sondern ueber die
+# RICHTUNG DER LINIE: Ist ihr senkrechter Anteil groesser als ihr
+# waagerechter, kommt sie von unten oder oben — dann gehoert sie an die
+# Unter- bzw. Oberkante. Das ist selbsterklaerend, braucht keine Schwelle in
+# Zoll und gilt fuer jede Ringgroesse.
+#
+# WIE VIELE LABELS DAS BETRIFFT: vier im ganzen Produkt, alle auf Thema F11
+# (gemessen 26.08.2026 ueber alle fuenf Familien). Die uebrigen Ringe haben
+# keine Zahl, die so weit oben oder unten steht. Der Schalter steht trotzdem
+# je Familie — eine andere Bestandsverteilung kann das aendern.
+LEADER_SENKRECHT_STEIL = 4.0     # Ab welcher Steilheit |dy|/|dx| die Linie
+                                 # als "kommt von unten/oben" gilt.
+                                 #
+                                 # DIE ZAHL KOMMT AUS EINER MESSUNG, nicht aus
+                                 # einem Gefuehl. Ueber alle 69 Fuehrungslinien
+                                 # des Produkts gemessen (26.08.2026) liegt die
+                                 # Steilheit im Median bei 0,23. Die beiden von
+                                 # Philip beanstandeten Labels (Thema F11,
+                                 # Regionen und Branchen, je das Label ueber
+                                 # dem Ring) stehen bei 13,1 und 11,3. Der
+                                 # naechsthoehere Wert im ganzen Produkt ist
+                                 # 3,3. In dieser Luecke liegt die 4.
+                                 #
+                                 # WARUM NICHT EINFACH "steiler als 45 Grad"
+                                 # (also 1,0): Das war der erste Versuch und
+                                 # war falsch. Es traf zwoelf Labels statt
+                                 # zwei — darunter diagonale wie CVV F13
+                                 # "65,82 %" (Steilheit 1,17), die dadurch
+                                 # SCHLECHTER aussahen: Bei einer Diagonalen
+                                 # ist keine der beiden Kanten die richtige,
+                                 # und die Regel kippte an einer willkuerlichen
+                                 # Stelle. Am Bild gesehen, nicht gerechnet.
+LABEL_LUFT_V_IN     = 0.030      # Luft unter/ueber der Zahl in Zoll
+                                 # (0,76 mm). KLEINER als LABEL_LUFT_IN:
+                                 # Ziffern haben keine Unterlaenge, ihre
+                                 # sichtbare Unterkante liegt schon ueber der
+                                 # Boxkante. Am Bild kalibriert.
+
 # ── Datumsachse der Linien-Charts (NEU 12.08.2026) ─────────────────────────
 # Schrittweite der Achsenbeschriftung, abhängig von der Länge der Historie.
 # (Obergrenze der Spanne in Monaten, Schritt in Monaten) — die erste passende
@@ -317,6 +366,10 @@ _RING_KRAEFTIG = {
     "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
     "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
     "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
+    "leader_senkrecht": True,   # AUSDRUECKLICH ein (26.08.2026): Steht die
+                                # Zahl fast senkrecht ueber ihrem Segment,
+                                # setzt die Linie unten an statt seitlich.
+                                # Beauftragt nach Philips Fund an Thema F11.
     "label_buendig": True,      # AUSDRUECKLICH ein (26.08.2026): Punkt 1 des
                                 # Befundes. Fuer alle fuenf Familien
                                 # beauftragt und in echtem PowerPoint
@@ -414,6 +467,10 @@ _RING_FORMAT_DEFAULT = {
     "leader_start_tiefe": 0.0,      # 0.0 = Ansatz am Außenrand (bisheriges Verhalten)
     "leader_gerade": False,         # False = bisherige geknickte Führung
     "label_gap_in": None,           # None → der label_gap_in-Parameter von nachbearbeiten
+    "leader_senkrecht": False,      # Linie an der WAAGERECHTEN Boxkante,
+                                    # wenn sie steiler als 45 Grad ankommt
+                                    # (26.08.2026). VOREINSTELLUNG AUS, wie
+                                    # bei jeder Optik-Aenderung.
     "label_buendig": False,         # Feste Boxbreite + Ausrichtung zur
                                     # Ringseite, damit die Fuehrungslinie am
                                     # ZEICHEN endet (Punkt 1, 26.08.2026).
@@ -2421,7 +2478,7 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
                          punkt_farbe=PUNKT_FARBE,
                          punkt_durchmesser=PUNKT_DURCHMESSER,
                          start_tiefe=0.0,
-                         gerade=False):
+                         gerade=False, senkrecht=False):
     """Zeichnet für jedes Ring-Label eine EIGENE Führungslinie als Connector.
 
     Läuft vom Außenrand des Segments (R_out am Segment-Mittelwinkel) zur der
@@ -2537,6 +2594,25 @@ def ring_leader_zeichnen(slide, shape, chart, farbe=LEADER_FARBE,
             _abstand = HALB_W - LABEL_INSET_IN + LABEL_LUFT_IN
         e_x = mx - side * _abstand
         e_y = my
+
+        # SENKRECHTE ANBINDUNG, wenn die Linie steiler als 45 Grad ankommt.
+        # Entschieden wird an der RICHTUNG der Linie (Segment -> Zahl), nicht
+        # an der Lage der Zahl: Ist sie mindestens LEADER_SENKRECHT_STEIL mal
+        # so steil wie breit, kommt sie von unten oder oben — dann gehoert sie
+        # an die Unter- bzw. Oberkante der Box und mittig unter die Zahl.
+        # Bei einer DIAGONALEN ist keine der beiden Kanten die richtige;
+        # deshalb steht die Schwelle hoch und nicht bei 45 Grad.
+        #
+        # Ohne das setzte die Linie auch bei einer Zahl, die senkrecht ueber
+        # ihrem Segment steht, an der SEITE an — sie lief dann unter der Zahl
+        # hindurch zurueck und wirkte, als gehoere sie nicht dazu (gemeldet an
+        # Thema F11, "5,14 %"). Betrifft gemessen vier Labels im ganzen
+        # Produkt, alle auf dieser Folie.
+        _dx, _dy = abs(mx - sx), abs(my - sy)
+        if senkrecht and _dy > LEADER_SENKRECHT_STEIL * max(_dx, 1e-6):
+            oben = 1.0 if sy > my else -1.0    # Segment unterhalb der Zahl?
+            e_x = mx
+            e_y = my + oben * (HALB_H + LABEL_LUFT_V_IN)
 
         # Knick auf dem RADIALSTRAHL des Segments, auf Label-Höhe: so ist Teil 1
         # (S→Knick) echt radial und Teil 2 (Knick→Zahl) exakt horizontal.
@@ -2788,7 +2864,8 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                              punkt_zeichnen=_punkt,
                                              punkt_durchmesser=_fmt["punkt_durchmesser"],
                                              start_tiefe=_fmt["leader_start_tiefe"],
-                                             gerade=_fmt["leader_gerade"])
+                                             gerade=_fmt["leader_gerade"],
+                                             senkrecht=_fmt["leader_senkrecht"])
                         if _punkt:
                             stat["punkte"] += 1
                     if label_schriftfarbe:
