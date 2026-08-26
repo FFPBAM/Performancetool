@@ -13,6 +13,7 @@ Ein unbeabsichtigter Eingriff faellt sonst erst in einer Kundenbroschuere auf.
      Bandstaerke, Ringmitte) gegen eingefrorene Sollwerte
   3. Die ZUSICHERUNGEN, die unabhaengig von den konkreten Zahlen gelten
   4. Dieselben Messungen an ECHT GEBAUTEN Broschueren (nur mit Ordner-Argument)
+     sowie: jede Fuehrungslinie traegt ihren Punkt am Label-Ende
   5. Der Familien-Look und wo Rueckkopplung und Seitentreue laufen
   6. Die Seite der Beschriftungen an ECHT GEBAUTEN Broschueren
 
@@ -697,6 +698,23 @@ def schritt4_gebaute_broschueren(ausgabe):
         # landen. Gemessen am 25.08.2026 ueber 69 Fuehrungslinien, vor und
         # nach der Vergroesserung jeweils null Kreuzungen.
         fehler += f + k
+
+        # JEDE FUEHRUNGSLINIE TRAEGT EINEN PUNKT (NEU 26.08.2026).
+        # Der Punkt am Label-Ende sagt, welche Zahl zu welcher Linie gehoert.
+        # Bis zum 26.08.2026 war der REGIONEN-Ring der Themen-Broschuere als
+        # einziger Ring im ganzen Produkt davon ausgenommen (Entscheidung
+        # 20.07.2026) — gemessen: CVV 17/17, ESG 16/16, ETF 8/8,
+        # comdirect 11/11, Thema nur 10 von 17. Philip meldete genau dort,
+        # die Zuordnung Linie/Zahl sei "nicht gut ersichtlich".
+        #
+        # Die Zusage ist bewusst "alle" und keine Stueckzahl: Eine Stueckzahl
+        # muesste bei jeder Datenaenderung nachgezogen werden und saehe dann
+        # aus wie ein Messwert, waehrend sie nur eine Buchhaltung waere.
+        n_lin, n_pkt = _punkte_je_linie(prs)
+        if n_lin and n_pkt != n_lin:
+            print(f"    FEHLER — {familie}: {n_pkt} von {n_lin} "
+                  f"Fuehrungslinien tragen einen Punkt am Label-Ende")
+            fehler += 1
     # Bei Thema steht der Strategiename IM Folientitel — dort kann die
     # Erkennung je Strategie anders ausfallen. Die vier anderen Familien
     # tragen statische Titel aus der Vorlage und sind mit einem Bau geprueft.
@@ -717,7 +735,8 @@ def schritt4_gebaute_broschueren(ausgabe):
 
     if not fehler:
         print(f"    OK — {gemessen} Ringe in echten Broschueren halten "
-              f"dieselben Zusagen, keine kreuzenden Fuehrungslinien")
+              f"dieselben Zusagen, keine kreuzenden Fuehrungslinien, "
+              f"jede Linie mit Punkt")
     return fehler
 
 
@@ -749,6 +768,34 @@ def _seitentreue(prs):
                 schief += 1
                 beispiele.append(f"F{nr} {shape.name}")
     return gesamt, schief, beispiele
+
+
+def _punkte_je_linie(prs):
+    """(Fuehrungslinien, davon mit Punkt am Label-Ende).
+
+    Gezaehlt werden die Shapes, die `ring_leader_zeichnen` selbst anlegt:
+    `RingLeader_<chart>_<idx>_<teil>` fuer die Linien (eine Linie kann aus
+    ZWEI Teilen bestehen, wenn sie geknickt ist — deshalb wird ueber
+    (chart, idx) entdoppelt) und `RingLeaderDot_<chart>_<idx>` fuer den Punkt.
+
+    DIE FOLIENNUMMER GEHOERT IN DEN SCHLUESSEL. Der Chart-Name ist nur
+    INNERHALB einer Folie eindeutig: Eine CVV-Broschuere traegt auf fuenf
+    Folien fuenf Ringe, die alle "C_Kennzahlen" heissen. Ohne die Folie faellt
+    das auf vier Schluessel zusammen — die Zusage bliebe zufaellig richtig,
+    die gemeldete Zahl waere aber falsch (4 statt 17), und ein Punkt, der auf
+    genau einer Folie fehlt, verschwaende in der Vereinigung.
+    """
+    linien, punkte = set(), set()
+    for nr, folie in enumerate(prs.slides, start=1):
+        for sh in folie.shapes:
+            n = sh.name or ""
+            if n.startswith("RingLeaderDot_"):
+                punkte.add((nr, n[len("RingLeaderDot_"):]))
+            elif n.startswith("RingLeader_"):
+                rest = n[len("RingLeader_"):]
+                # den Teil-Index abwerfen: "<chart>_<idx>_<teil>"
+                linien.add((nr, rest.rsplit("_", 1)[0]))
+    return len(linien), len(linien & punkte)
 
 
 def schritt6_seitentreue(ausgabe):

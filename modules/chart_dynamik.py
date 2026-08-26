@@ -78,8 +78,24 @@ LEADER_GRAU         = LEADER_FARBE
 # 'ANLAGEKLASSEN' (Assetklassen-Ring/Einzeltitel), 'BRANCHEN', 'REGIONEN'.
 # Zum Erweitern einfach den gewünschten Typ ergänzen; für alle Ringe leere
 # Prüfung via PUNKT_ALLE_RINGTYPEN=True; Thema-Bindung über PUNKT_NUR_THEMA.
+#
+# REGIONEN IST SEIT DEM 26.08.2026 DABEI. Bis dahin stand hier „Regionen
+# bewusst OHNE" (Entscheidung 20.07.2026, Transferwissen #31). Philip hat am
+# 26.08.2026 gemeldet, auf der Themen-Broschüre sei bei den Regionen „die
+# Führungslinie mit den Zahlen nicht gut ersichtlich" — unklar war, welche
+# Zahl zu welcher Linie gehört.
+#
+# Nachgezählt an echt gebauten Broschüren war der Regionen-Ring der EINZIGE
+# Ring im ganzen Produkt ohne Punkte: CVV 17 von 17 Führungslinien mit Punkt,
+# ESG 16/16, ETF 8/8, comdirect 11/11 — Thema nur 10 von 17, und die
+# fehlenden sieben waren genau dieser Ring. Die Ausnahme war damit nicht mehr
+# als Absicht erkennbar, sondern wirkte wie ein Fehler. Jetzt: Thema 17/17.
+#
+# Andere Familien bleiben unberührt: `_ring_typ` liefert 'REGIONEN'
+# ausschließlich in der Thema-Familie (F11 `C_Kennzahlen1`) — CVV, ESG, ETF
+# und comdirect haben nur ANLAGEKLASSEN-Ringe.
 PUNKT_AN            = True
-PUNKT_RINGTYPEN     = ("ANLAGEKLASSEN", "BRANCHEN")   # Regionen bewusst OHNE
+PUNKT_RINGTYPEN     = ("ANLAGEKLASSEN", "BRANCHEN", "REGIONEN")
 PUNKT_NUR_THEMA     = True
 PUNKT_FARBE         = "000000"
 PUNKT_DURCHMESSER   = 0.055      # Zoll
