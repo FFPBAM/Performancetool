@@ -7,12 +7,14 @@
 Sub-Teile statt eigene zu bekommen; **in echtem PowerPoint bewiesen, vorher
 und nachher**. Zwei neue Prüfsteine (`test_pptx_integritaet.py`,
 `test_broschuere_auswahl.py`); die Thema-Broschüre führt jetzt **nur die obere
-Strategie** (Entscheidung Philip, nach der Behebung bestätigt). Dazu **Punkt 1
-erledigt**: die Ring-Beschriftungen stehen auf der Seite ihres Segments —
-22,4 % falsche Führungslinien auf **12,6 %**, vier Familien auf null.
-**Nach der Sichtprüfung ist *Thema* davon ausgenommen** (Entscheidung Philip,
-26.08.2026 abends): Bei ESG und CVV ist die neue Anordnung besser, bei Thema
-schlechter. Thema steht damit **bytegleich** auf dem Stand von vorher.
+Strategie** (Entscheidung Philip, nach der Behebung bestätigt).
+
+**Am Abend kamen drei Entscheidungen aus der zweiten Sichtprüfung dazu:**
+**Die Seitentreue ist überall aus** (der Schalter bleibt, ausgeschaltet;
+bytegleich mit dem Stand davor). **Punkt 1 ist behoben** — die Zahl klebt an
+ihrer Führungslinie: am Bild gemessen links 5,14 → **1,51 mm**, rechts
+0 → **1,66 mm**. **Der Regionen-Ring bekommt seine Punkte** — er war der
+einzige Ring im Produkt ohne Punkt am Linienende (Thema 10 von 17 → 17/17).
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
 > ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
@@ -112,7 +114,98 @@ Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 >
 > ---
 >
-> ### Nachtrag am Abend: die Sichtprüfung nimmt Thema wieder heraus
+> ### Abend des 26.08.2026: drei Entscheidungen aus deiner zweiten Durchsicht
+>
+> #### 1. Die Seitentreue ist überall aus — und die Messung gibt dir recht
+>
+> Du hast CVV und ESG noch einmal genauer angesehen: „die
+> Führungslinienverteilung und **Anbindung der Zahlen** war [vorher] deutlich
+> besser". Ich hatte deine erste Rückmeldung anders gelesen und Thema allein
+> zurückgenommen; richtig war, alle Familien zurückzunehmen.
+>
+> **Meine Messung war nicht falsch, sie hat die falsche Größe gemessen.** Die
+> Seitentreue brachte null quer laufende Führungslinien — sie schob die Zahlen
+> dafür massiv auf die **linke** Ringseite:
+>
+> | Familie | Zahlen links, vorher → mit Schalter |
+> |---|---|
+> | CVV | 7 → **12** von 17 |
+> | ESG | 7 → **12** von 16 |
+> | ETF | 4 → **6** von 8 |
+> | comdirect | 6 → **8** von 11 |
+>
+> Und links war genau die Seite mit dem schlechten Anschluss — siehe Punkt 2.
+> Der Schalter hat also die Zahl der sichtbar schlecht angebundenen Zahlen
+> **verdoppelt**. Er bleibt eingebaut und ausgeschaltet; wenn du die Optik mit
+> sauberer Anbindung noch einmal sehen willst, ist „ein" eine Zeile.
+>
+> **Der Preis ging mit zurück.** Die Seitentreue hatte zwei Zugeständnisse
+> gekostet — zwei zusätzliche kreuzende Linien auf den Vorlagendaten und eine
+> geduldete Beschriftung auf der Legende. Beide wären nach der Rücknahme
+> stehen geblieben, ohne dass ein Test rot geworden wäre. Sie sind zurück auf
+> ihren alten Werten.
+>
+> #### 2. Punkt 1: die Zahl klebt an ihrer Führungslinie
+>
+> **Der Mangel war asymmetrisch** — das stand bisher falsch in dieser Datei.
+> Das Layout eines Labels schreibt nur die **linke obere Ecke**; PowerPoint
+> macht die Box dann so breit wie der Text. Die Führungslinie endete aber an
+> einer *gedachten* Kante von 1,68 cm:
+>
+> * Label **rechts** vom Ring: diese Kante ist der Textanfang → die Linie saß
+>   am Zeichen.
+> * Label **links**: die Linie endete hinter der letzten Ziffer, gemessen
+>   6,6 bis 8,6 mm.
+>
+> **Behoben ohne jede Annahme über Zeichenbreiten.** Die Box bekommt eine feste
+> Breite und der Text eine Ausrichtung zur Ringseite; damit ist die
+> ringzugewandte Textkante eine Zahl, die der Code kennt, und die Linie endet
+> genau davor. Am Bild gemessen (CVV Folie 7):
+>
+> | | links | rechts |
+> |---|---|---|
+> | vorher | 5,14 mm | Linie berührt die Ziffer |
+> | jetzt | **1,51 mm** | **1,66 mm** |
+>
+> **Drei Dinge hat der Renderer entschieden, nicht das Schema** — und jedes
+> einzelne wäre durch eine reine XML-Prüfung durchgerutscht: `wMode="edge"`
+> liest PowerPoint als *Kante* statt als Maß; eine Breite **ohne** Höhe lässt
+> die Beschriftungen im Bild ganz verschwinden; und die Ausrichtung muss auch
+> in den Listenstil, weil der Absatz keinen Textlauf trägt.
+>
+> **Und ein Fehler, den erst das Bild gezeigt hat:** Mit der festen Box stand
+> auf der Themen-Broschüre „37,1…" statt „37,13%". Eine Prozentzahl ist ein
+> unteilbares Wort — passt sie nicht, kürzt PowerPoint sie. Im XML stand der
+> volle Text, COM meldete den vollen Text, alle 33 Suiten waren grün. Behoben
+> mit `wrap="none"`. Auf CVV wäre es nie aufgefallen: dort stehen die Labels
+> in 9 pt, in der Themen-Broschüre in 10.
+>
+> #### 3. Der Regionen-Ring bekommt seine Punkte
+>
+> Du hast gemeldet, bei den Regionen sei „die Führungslinie mit den Zahlen
+> nicht gut ersichtlich". Nachgezählt: Der Punkt am Linienende, der die
+> Zuordnung herstellt, saß **überall — außer dort**.
+>
+> | Familie | Führungslinien | davon mit Punkt |
+> |---|---:|---:|
+> | CVV | 17 | 17 |
+> | ESG | 16 | 16 |
+> | ETF | 8 | 8 |
+> | comdirect | 11 | 11 |
+> | **Thema** | 17 | **10** |
+>
+> Die fehlenden sieben waren genau der Regionen-Ring. Die Ausnahme stammte vom
+> 20.07.2026 und war einmal eine Entscheidung; inzwischen war sie nicht mehr
+> als Absicht lesbar. Jetzt: 17 von 17.
+>
+> **Zum Ansehen** liegen in
+> `H:\Entwicklung\Forschung_Claude\Performancetool\_seitentreue\` sechs
+> Dateien (CVV, ESG, Thema — je `_1_vorher` und `_2_endstand`), zwei Bilder
+> der Regionen-Folie und ein `LIESMICH.txt`, das sagt, worauf zu achten ist.
+>
+> ---
+>
+> ### Nachtrag am Mittag: die Sichtprüfung nimmt Thema wieder heraus
 >
 > **Du hast dir die Vorher/Nachher-Broschüren in echtem PowerPoint angesehen —
 > und das Urteil fiel geteilt aus:**
@@ -2965,12 +3058,26 @@ Folien**) — sonst wäre Schritt 1 grün, ohne etwas zu bedeuten.
 *Zurückdrehen ist eine Zeile* (`portfolioanalyse.py`, Zusammenbau von
 `portfolios` vor dem Export); die Fundstellen stehen als Kommentar dort.
 
-**ERLEDIGT am 26.08.2026 — die Seitentreue der Beschriftungen.** Pass 6d
-leitet die Seite jetzt aus dem Segmentwinkel ab; 22,4 % → 12,6 %, vier
-Familien auf null, Prüfstein `test_ring_geometrie.py` Schritt 6 mit
-Obergrenzen je Familie. **Nach der Sichtprüfung ist Thema ausgenommen** und
-steht bytegleich auf dem Stand von vorher — daher 12,6 % statt der 8,4 %, die
-mit Thema gemessen waren. Einzelheiten im Sitzungsbericht oben und in `PROJEKT_DOKUMENTATION.md`
+**ERLEDIGT am 26.08.2026 (abends) — Punkt 1: die Anbindung der Zahl.** Die
+Label-Box bekommt eine feste Breite und der Text eine Ausrichtung zur
+Ringseite; damit ist die ringzugewandte Textkante berechenbar und die
+Führungslinie endet `LABEL_LUFT_IN` davor. Am Bild gemessen: links
+5,14 → 1,51 mm, rechts 0 → 1,66 mm. Familien-Schalter `label_buendig`,
+Prüfstein Schritt 7. Einzelheiten im Sitzungsbericht oben und in
+`PROJEKT_DOKUMENTATION.md` #44.
+
+**ZURÜCKGENOMMEN am 26.08.2026 (abends) — die Seitentreue.** Nach der zweiten
+Sichtprüfung überall aus. Der Schalter bleibt eingebaut; der Stand ist
+bytegleich mit `3b19ae6`. **Offen als Frage, nicht als Aufgabe:** Ob die
+Seitentreue mit der jetzt sauberen Anbindung besser aussieht, ist nicht
+entschieden — sie schob die Zahlen nach links, und links war genau die Seite
+mit dem schlechten Anschluss. Wer das aufmacht, legt Philip ein
+Vorher/Nachher vor und ändert dann eine Zeile.
+
+**NEU 26.08.2026 (abends) — der Ring-Prüfstein sieht die Optik nicht.** Das
+gilt weiter und ist der Grund, warum Schritt 7 seine Zahlen aus dem
+PNG-Export nennt: Er rechnet mit Label-**Mitten**, und die bewegen sich bei
+diesem Fehler nicht. Punkt 1 bestand Wochen, während alle Suiten grün waren. Einzelheiten im Sitzungsbericht oben und in `PROJEKT_DOKUMENTATION.md`
 #44 (Nachtrag 26.08.2026). **Offen bleibt allein Punkt 1 des Befundes** — die
 feste Textbox-Breite `HALB_BREITE = 0.33"`, wegen der eine Linie 3 mm hinter
 dem letzten Zeichen ansetzt. Betrifft jede kurze Zahl in jeder Familie und ist

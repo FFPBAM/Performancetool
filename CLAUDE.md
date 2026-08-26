@@ -155,6 +155,25 @@ prüfte statt gegen eine Schwelle (#47).
   `$ppt = New-Object -ComObject PowerPoint.Application` →
   `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`. Das ist
   #16/#28 mit anderen Mitteln — und ein Test kann es selbst erzeugen.
+- **Eine Änderung am Chart-XML ist erst geprüft, wenn die FOLIE ALS BILD
+  vorliegt** (26.08.2026, teuer gelernt). Bei der buendigen Anbindung der
+  Ring-Zahlen war *alles* grün: Die Datei öffnete in echtem PowerPoint, das
+  XML war schemakonform, COM meldete `DataLabel.Text = "37,13%"`, python-pptx
+  las sie zurück, 33 Suiten liefen durch — und die Broschüre zeigte
+  **„37,1…"**. Der Renderer hat in dieser *einen* Änderung dreimal etwas
+  entschieden, das kein Schema hergibt: `wMode="edge"` gilt für `w` als
+  *Kante* statt als Maß; eine Breite **ohne** Höhe lässt Datenbeschriftungen
+  im Bild verschwinden; und eine Prozentzahl, die nicht in eine feste Box
+  passt, wird gekürzt statt umgebrochen (`wrap="none"` behebt es). *Ein
+  geöffnetes Dokument ist kein Beweis. Ein Bild ist einer.* Der Export geht
+  per COM: `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`.
+- **Wer eine Optik-Änderung zurücknimmt, nimmt ihren PREIS mit zurück**
+  (26.08.2026). Die Seitentreue hatte zwei Zugeständnisse gekostet — eine von
+  2 auf 4 angehobene Obergrenze für kreuzende Linien und eine namentlich
+  geduldete Beschriftung auf der Legende. Nach ihrer Rücknahme wären beide
+  liegen geblieben, **ohne dass ein Test rot geworden wäre**: Eine
+  aufgeweichte Grenze deckt ab dann etwas ab, wofür sie nie beschlossen wurde.
+  Zur Rücknahme gehört die Liste dessen, was die Änderung gelockert hat.
 - **Die Seite eines Ring-Labels kommt aus dem SEGMENTWINKEL, nicht aus seiner
   aktuellen Position** (#44, 26.08.2026). Pass 6d in
   `ring_labels_aussen_dynamisch` las bis dahin `dx0`, also eine x-Position, die

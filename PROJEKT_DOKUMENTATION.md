@@ -1716,6 +1716,88 @@ Standardwert nur in Schritt 6 auf, und der braucht ein Ausgabeverzeichnis, das
 nicht jeder Lauf hat. Dasselbe Muster hatte `rueckkopplung` einen Tag zuvor aus
 demselben Grund bekommen.
 
+##### NACHTRAG desselben Abends, zweiter Teil — Punkt 1, und warum Punkt 2 zurückgenommen wurde
+
+**Philip sah CVV und ESG ein zweites Mal genauer an:** „die
+Führungslinienverteilung und **Anbindung der Zahlen** war [vorher] deutlich
+besser". Die Seitentreue ist daraufhin bei **allen** Familien abgeschaltet
+worden, nicht nur bei Thema.
+
+**Die Messung war nicht falsch — sie hat die falsche Größe gemessen.** Der
+Schalter brachte null quer laufende Führungslinien und schob die Zahlen dafür
+auf die **linke** Ringseite: CVV 7 → 12 von 17, ESG 7 → 12 von 16, ETF 4 → 6
+von 8, comdirect 6 → 8 von 11. Links war genau die Seite mit dem schlechten
+Anschluss (siehe unten) — der Schalter hat also die Zahl der sichtbar schlecht
+angebundenen Zahlen verdoppelt. *Wer eine Kennzahl verbessert, muss prüfen,
+welche andere er dabei verschiebt.*
+
+#### Punkt 1 der Ursachenkette: der Mangel war ASYMMETRISCH
+
+Bisher stand hier, die Textbox sei „fest 1,68 cm breit" und die Linie setze
+„3 mm hinter dem letzten Zeichen" an. Beides trifft es nicht:
+
+`ring_labels_aussen_dynamisch` schreibt ins `manualLayout` nur `x`/`y` mit
+`xMode/yMode="edge"` — also die **linke obere Ecke**. PowerPoint dimensioniert
+die Box dann selbst auf den Text. `ring_leader_zeichnen` endet aber bei
+`mx ∓ HALB_W` mit `HALB_W = 0,33"`, also an einer **gedachten** Kante:
+
+| Lage des Labels | ringzugewandte Kante | Linienende | Spalt |
+|---|---|---|---|
+| **rechts** der Ringmitte | linke Boxkante = Textanfang | ebendort | ~0 |
+| **links** der Ringmitte | rechte Textkante | nominelle rechte Kante | `0,66" − echte_breite` |
+
+**Gemessen** (COM an CVV, 17 Beschriftungen): rechts 1,13 mm konstant, links
+6,63 bis 8,57 mm. **Am PNG-Export** (CVV F7, die belastbarere Zahl, weil sie
+keine Koordinatensysteme mischt): links 5,14 mm, rechts berührten sich Linie
+und Ziffer.
+
+#### Die Behebung braucht keine Zeichenbreite
+
+Eine Breitenschätzung wäre nach `CLAUDE.md` (17.08.2026) unzulässig und bei
+**Noto Sans** — dem Theme-Minorfont der Vorlagen, der weder im Repo liegt noch
+auf dem Entwicklungsrechner installiert ist — ohnehin unsicher. Stattdessen:
+
+1. **Feste Boxbreite und -höhe** im `manualLayout`: `wMode`/`hMode` auf
+   `"factor"`, `w = 2·HALB_W / frame_w`, `h = 2·HALB_H / frame_h`.
+2. **Ausrichtung zur Ringseite** (`algn="l"` rechts, `"r"` links), in `a:pPr`
+   **und** `a:lstStyle/a:lvl1pPr`.
+3. **Innenabstände ausdrücklich**: `lIns`/`rIns` auf `LABEL_INSET_IN`,
+   `tIns`/`bIns` auf 0, `anchor="ctr"`, `wrap="none"`.
+
+Damit ist die ringzugewandte Textkante `Boxkante ∓ LABEL_INSET_IN` — eine Zahl,
+die der Code kennt — und `ring_leader_zeichnen` endet `LABEL_LUFT_IN` davor.
+Ergebnis am Bild: **links 5,14 → 1,51 mm, rechts 0 → 1,66 mm.**
+
+#### VIER Entscheidungen des Renderers, die kein Schema hergibt
+
+Jede einzelne hätte eine reine XML-Prüfung bestanden. Sie stehen hier, damit
+sie niemand ein zweites Mal herausfinden muss:
+
+| Beobachtung | Ursache | Antwort |
+|---|---|---|
+| Alle Labels landen übereinander | `wMode="edge"` lässt PowerPoint `w` als rechte **Kante** lesen | `wMode="factor"` |
+| Beschriftungen **verschwinden** im Bild (im XML und über COM sind sie da) | `w` ohne `h` | `h` immer mitschreiben |
+| Ausrichtung wirkt nicht | Der Absatz trägt **keinen Textlauf**; PowerPoint erzeugt die Zahl selbst und nimmt die Ausrichtung aus dem Listenstil | `algn` zusätzlich in `a:lstStyle/a:lvl1pPr` |
+| „37,1…" statt „37,13%" | Eine Prozentzahl ist ein **unteilbares Wort**; passt sie nicht in die feste Box, kürzt PowerPoint statt umzubrechen | `wrap="none"` |
+
+Die Kürzung trat **nur in der Themen-Broschüre** auf: dort stehen die
+Ring-Labels in 10 pt, in den übrigen Familien in 9.
+
+#### Der Regionen-Ring bekommt seine Punkte (#31 wird aufgehoben)
+
+Gemeldet war, bei den Regionen sei „die Führungslinie mit den Zahlen nicht gut
+ersichtlich". Nachgezählt an echt gebauten Broschüren trug **jede**
+Führungslinie im Produkt ihren Punkt am Label-Ende — außer den sieben des
+Regionen-Rings (CVV 17/17, ESG 16/16, ETF 8/8, comdirect 11/11, Thema 10/17).
+Die Ausnahme aus #31 (20.07.2026) war damit nicht mehr als Absicht lesbar. Der
+Prüfstein sagt jetzt „**jede** Linie trägt einen Punkt" — eine Zusage, keine
+Stückzahl.
+
+*Falle im Zähler, beim Schreiben gefunden:* Der Chart-Name ist nur **innerhalb
+einer Folie** eindeutig. Eine CVV-Broschüre trägt auf fünf Folien fünf Ringe
+namens `C_Kennzahlen`; ohne die Foliennummer im Schlüssel fiel das auf vier
+zusammen und meldete „4 von 4" statt „17 von 17".
+
 #### Ansatzpunkte, falls das Thema wieder aufgemacht wird
 
 1. **Kopfluft datenbasiert** statt fix 0,30" — größter gemessener Hebel, kleinster Eingriff. Offene Frage: wie nah dürfen Zahlen optisch an den Balken?
