@@ -918,6 +918,23 @@ def _buendig_pruefen(pfad):
                 meldungen.append(f"{wo}: lIns/rIns nicht ausdruecklich auf "
                                  f"{ins} — dann ist die Textkante eine "
                                  f"Vorgabe und keine bekannte Zahl")
+            # 6. UMBRUCH AUS. Das ist die Zeile, ohne die PowerPoint die
+            #    laengeren Zahlen KUERZT ("37,1..." statt "37,13%"): Eine
+            #    Prozentzahl ist ein unteilbares Wort, passt sie nicht in die
+            #    feste Box, wird sie abgeschnitten. Am 26.08.2026 auf der
+            #    Themen-Broschuere passiert, wo die Labels in 10 pt stehen
+            #    und nicht in 9. Im XML und ueber COM stand der volle Text —
+            #    gesehen hat es nur der PNG-Export.
+            if bodyPr is None or bodyPr.get("wrap") != "none":
+                meldungen.append(f"{wo}: wrap ist nicht 'none' — PowerPoint "
+                                 f"kuerzt dann laengere Zahlen mit '...'")
+            # 7. Oben/unten kein Innenabstand: die feste Boxhoehe ist knapp,
+            #    und die Zeile soll auf der Boxmitte bleiben — dort rechnet
+            #    `ring_leader_zeichnen` das Linienende hin.
+            if bodyPr is None or bodyPr.get("tIns") != "0" \
+                    or bodyPr.get("bIns") != "0":
+                meldungen.append(f"{wo}: tIns/bIns nicht auf 0 — die Zeile "
+                                 f"sitzt dann nicht auf der Boxmitte")
     return geprueft, meldungen
 
 

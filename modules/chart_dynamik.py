@@ -1943,6 +1943,21 @@ def _label_buendig_setzen(dLbl, algn):
     Die Innenabstaende (`lIns`/`rIns`) werden AUSDRUECKLICH geschrieben, auch
     wenn 0,1 Zoll PowerPoints Vorgabe ist: Nur so ist die Textkante eine Zahl,
     die dieser Code kennt, und keine, die eine Office-Version aendern darf.
+
+    UND OBEN/UNTEN AUF NULL — das ist kein Schoenheitsstrich, sondern die
+    Behebung eines Fehlers, den erst der Renderer gezeigt hat. Die feste
+    Boxhoehe ist 2 x HALB_H = 0,20 Zoll = 14,4 pt. PowerPoints Vorgabe fuer
+    `tIns`/`bIns` ist je 3,6 pt, es blieben also 7,2 pt Textraum. Die
+    Themen-Broschuere setzt ihre Ring-Labels in 10 pt (die uebrigen Familien
+    in 9) — eine 10-pt-Zeile braucht rund 12 pt, passte nicht mehr, und
+    PowerPoint kuerzte die laengeren Zahlen mit einem Auslassungszeichen:
+    "37,1..." statt "37,13%". Im XML und ueber COM stand der volle Text; nur
+    das BILD zeigte es (#16/#28).
+
+    Mit null oben und unten stehen die vollen 14,4 pt zur Verfuegung, und die
+    Zeile bleibt auf der Boxmitte — also genau auf `y + HALB_H`, mit dem
+    `ring_leader_zeichnen` fuer `e_y` rechnet. Eine groessere Boxhoehe haette
+    diese Mitte verschoben.
     """
     from lxml import etree
     txPr = _txPr_sicherstellen(dLbl)
@@ -1951,6 +1966,22 @@ def _label_buendig_setzen(dLbl, algn):
         ins = str(int(round(LABEL_INSET_IN * 914400)))
         bodyPr.set("lIns", ins)
         bodyPr.set("rIns", ins)
+        bodyPr.set("tIns", "0")
+        bodyPr.set("bIns", "0")
+        bodyPr.set("anchor", "ctr")
+        # UMBRUCH AUS — der eigentliche Schluessel, und wieder eine Erkenntnis
+        # aus dem Bild, nicht aus dem Schema. Eine Prozentzahl ist EIN
+        # unteilbares Wort. Passt sie nicht in die Box, kann PowerPoint sie
+        # nicht umbrechen und kuerzt sie mit einem Auslassungszeichen:
+        # "37,1..." statt "37,13%". Genau das ist auf der Themen-Broschuere
+        # passiert (F10/F11, alle sechsstelligen Zahlen), waehrend im XML und
+        # ueber COM der volle Text stand.
+        #
+        # Mit `wrap="none"` bricht und kuerzt PowerPoint nie. Ein Ueberstand
+        # ist ungefaehrlich, weil der Text an der RINGZUGEWANDTEN Kante klebt:
+        # er ragt also immer vom Ring WEG, nie darauf zu. Die Box ist nach
+        # dieser Aenderung nur noch ein Anker fuer die Kante, kein Rahmen.
+        bodyPr.set("wrap", "none")
     for pPr in txPr.iter(_A + "pPr"):
         pPr.set("algn", algn)
     lst = txPr.find(_A + "lstStyle")
