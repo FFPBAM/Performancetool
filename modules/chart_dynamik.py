@@ -261,6 +261,13 @@ _RING_KRAEFTIG = {
     "leader_start_tiefe": 0.5,  # Ansatz auf die MITTE der Ringdicke (im Band)
     "leader_gerade": True,      # ruhige gerade Linien statt harter Haken
     "label_gap_in": 0.18,       # Labels etwas luftiger außerhalb des Rings
+    "seitentreue": True,        # AUSDRUECKLICH ein (26.08.2026): Auf den
+                                # Anlagestrategie-Folien dieser vier Familien
+                                # hat Philip die Aenderung an ESG und CVV
+                                # angesehen und fuer besser befunden
+                                # ("natuerlicher, uebersichtlicher, besser
+                                # verteilt"). Gemessen gehen alle vier auf
+                                # NULL falsch stehende Fuehrungslinien.
     "rueckkopplung": True,      # AUSDRUECKLICH ein (25.08.2026): CVV, ESG,
                                 # ETF und comdirect sind die vier Familien mit
                                 # Anlagestrategie-Folien, fuer die die
@@ -276,17 +283,29 @@ _RING_KRAEFTIG = {
 # Anlagestrategie-Folien. Thema hat gar keine solche Folie und soll seine
 # heutige Bandstaerke behalten — deshalb eine Kopie mit festem hole 68, die
 # von einer Aenderung an _RING_KRAEFTIG unberuehrt bleibt.
-# Thema teilt seit dem 25.08.2026 abends die Optik der anderen Familien und
-# braucht deshalb keinen eigenen Block mehr. Der Name bleibt stehen, damit die
-# Zuordnung unten lesbar ist und ein kuenftiges Abweichen einen Ort hat.
+# Thema teilte seit dem 25.08.2026 abends die Optik der anderen Familien. Seit
+# dem 26.08.2026 weicht es in GENAU EINEM Punkt wieder ab — deshalb steht hier
+# wieder ein eigener Block, so wie es der Kommentar ueber _RING_KRAEFTIG
+# vorsieht ("Soll EINE Familie abweichen, gib ihr einen eigenen dict-Block").
 #
-# HISTORIE, damit die Kehrtwende nachvollziehbar bleibt: Bis zum Nachmittag
-# stand hier `hole=68, rueckkopplung=False` — Thema war bewusst ausgenommen,
-# weil niemand danach gefragt hatte, und die Unberuehrtheit war bytegleich
-# belegt. Am Abend legte Philip die Makro-Fassung der Pro-Broschuere vor:
-# dort steht F10 auf 8,51 cm bei 0,89 cm Band. Genau das liefert der
-# gemeinsame Block mit Deckel 0.37.
-_RING_THEMA = _RING_KRAEFTIG
+# `seitentreue: False` — SICHTPRUEFUNG Philip, 26.08.2026, an Vorher/Nachher in
+# echtem PowerPoint. Bei ESG und CVV ist die Anordnung der Fuehrungslinien
+# "wesentlich besser, natuerlicher und uebersichtlicher". Bei THEMA ist sie
+# schlechter: auf der Assetallokation (F10) gefaellt die alte Fassung besser,
+# und auf F11 sitzen die Regionen-Zahlen nicht mehr sauber an ihren Strichen.
+#
+# Das deckt sich mit der Messung, statt ihr zu widersprechen: Bei CVV, ESG, ETF
+# und comdirect faellt die Zahl falsch stehender Fuehrungslinien auf NULL, bei
+# Thema nur von 3 auf 2 — dort sortiert der Pass mehr um, als er heilt. Thema
+# hat keine Anlagestrategie-Folie; seine Ringe sind groesser (8,51 cm) und
+# tragen mehr Segmente, die Ausgangslage ist also eine andere.
+#
+# HISTORIE, damit die Kehrtwenden nachvollziehbar bleiben: Bis zum 25.08.2026
+# nachmittags stand hier `hole=68, rueckkopplung=False` (Thema war ausgenommen,
+# bytegleich belegt). Am Abend legte Philip die Makro-Fassung der Pro-Broschuere
+# vor, und Thema uebernahm die gemeinsame Optik. Am 26.08.2026 kommt die
+# Seitentreue dazu — und Thema nimmt sie als einziges nicht.
+_RING_THEMA = dict(_RING_KRAEFTIG, seitentreue=False)
 FAMILIE_RING_FORMAT = {
     "CVV": _RING_KRAEFTIG,
     "ESG": _RING_KRAEFTIG,
@@ -306,6 +325,15 @@ _RING_FORMAT_DEFAULT = {
     "leader_start_tiefe": 0.0,      # 0.0 = Ansatz am Außenrand (bisheriges Verhalten)
     "leader_gerade": False,         # False = bisherige geknickte Führung
     "label_gap_in": None,           # None → der label_gap_in-Parameter von nachbearbeiten
+    "seitentreue": False,           # Seite des Labels aus dem SEGMENTWINKEL
+                                    # statt aus seiner aktuellen x-Position
+                                    # (Pass 6d, #44 Ansatzpunkt 2).
+                                    # VOREINSTELLUNG AUS (26.08.2026), aus
+                                    # demselben Grund wie bei `rueckkopplung`
+                                    # darunter: Eine Familie bekommt das erst,
+                                    # wenn es DORT angesehen wurde. Genau das
+                                    # hat sich hier ausgezahlt — siehe der
+                                    # Kommentar ueber _RING_THEMA.
     "rueckkopplung": False,         # Ringgroesse per Rueckkopplung suchen?
                                     # VOREINSTELLUNG AUS (25.08.2026): eine
                                     # Familie bekommt sie erst, wenn sie
@@ -964,7 +992,8 @@ def _legende_rechteck(root, frame_w_in, frame_h_in):
 def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                                  gap_in=0.14, min_gap_deg=24.0, rand_in=0.12,
                                  tangential_in=0.14, rand_oben_in=None,
-                                 kopf_frei_in=None, rueckkopplung=True):
+                                 kopf_frei_in=None, rueckkopplung=True,
+                                 seitentreue=False):
     """Platziert die Ring-Datenlabels GEOMETRISCH exakt außerhalb des Rings.
 
     Liest die echte Ring-Geometrie aus dem plotArea-Layout des Charts
@@ -1278,12 +1307,15 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 # Gemessen ueber alle Familien: 19,7 % der Fuehrungslinien liefen
                 # vorher auf die falsche Seite (69 von 351).
                 _sx_seg = math.sin(math.radians(mids[i]))
-                if abs(_sx_seg) > 1e-6:
+                if seitentreue and abs(_sx_seg) > 1e-6:
                     seite = 1.0 if _sx_seg > 0 else -1.0
                 else:
-                    # Segment genau auf der Senkrechten (12 oder 6 Uhr): Dort gibt
-                    # es keine richtige Seite. Dann bleibt es bei der bisherigen —
-                    # eine willkuerliche Wahl waere hier schlechter als Stetigkeit.
+                    # Zwei Faelle, ein Verhalten — das bisherige:
+                    #   • `seitentreue` aus: Thema und der Standard-Pfad bleiben
+                    #     genau so, wie sie vor dem 26.08.2026 waren.
+                    #   • Segment genau auf der Senkrechten (12 oder 6 Uhr): Dort
+                    #     gibt es keine richtige Seite; eine willkuerliche Wahl
+                    #     waere schlechter als Stetigkeit.
                     seite = 1.0 if dx0 >= 0 else -1.0
                 # Winkel UND Radius gemeinsam lösen: beim Herunterdrehen zeigt die
                 # Textbox stärker mit ihrer BREITE zum Ring (HALB_W statt HALB_H),
@@ -1319,11 +1351,21 @@ def ring_labels_aussen_dynamisch(chart, frame_w_in, frame_h_in,
                 # Die segmenttreue Seite kann in eine TABUFLAECHE laufen (Legende
                 # unten links, Quellenangabe) — dort ist die andere Seite die
                 # bessere Antwort, auch wenn sie weiter vom Segment weg zeigt.
-                # Ohne diesen Rueckfall setzte Vorlage_FFPB F9 eine Beschriftung
-                # auf die Legende (gemessen 26.08.2026, Schritt 3 des
-                # Ring-Pruefsteins). Die Tabuflaechen kennt `_auf_tabu` bereits;
-                # hier wird sie nur gefragt.
-                if _auf_tabu(x_neu, y_neu):
+                #
+                # NUR bei eingeschalteter Seitentreue: Ohne sie waehlt der Pass
+                # die Seite wie seit jeher, und dann darf hier auch nichts
+                # anderes herauskommen als frueher. Genau daran ist es am
+                # 26.08.2026 einmal aufgefallen — der Rueckfall lief zunaechst
+                # bedingungslos und veraenderte Thema und den Standard-Pfad,
+                # obwohl beide unberuehrt bleiben sollten.
+                #
+                # Und die Ehrlichkeit dazu: Den Fall, fuer den er gebaut wurde
+                # (Vorlage_FFPB F9), loest er NICHT — die dortige Beschriftung
+                # steht bei y = 2,12 und erfuellt die Eintrittsbedingung dieses
+                # Passes gar nicht. Er bleibt trotzdem stehen, weil er fuer
+                # Labels, die dieser Pass WIRKLICH dreht, die richtige Antwort
+                # ist.
+                if seitentreue and _auf_tabu(x_neu, y_neu):
                     x_alt, y_alt = _kopf_ziel(-seite)
                     if not _auf_tabu(x_alt, y_alt):
                         seite, x_neu, y_neu = -seite, x_alt, y_alt
@@ -2505,7 +2547,8 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                                                  tangential_in=_tang,
                                                  rand_oben_in=_rand_oben,
                                                  kopf_frei_in=_kopf,
-                                                 rueckkopplung=_fmt["rueckkopplung"])
+                                                 rueckkopplung=_fmt["rueckkopplung"],
+                                                 seitentreue=_fmt["seitentreue"])
 
                     # Führungslinien: PowerPoints Auto-Leader ABSCHALTEN und
                     # stattdessen EIGENE Linien als Connector zeichnen — die

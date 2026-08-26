@@ -160,10 +160,26 @@ prüfte statt gegen eine Schwelle (#47).
   `ring_labels_aussen_dynamisch` las bis dahin `dx0`, also eine x-Position, die
   die Pässe davor schon verschoben hatten — ein tangentialer Schubs von 0,24"
   kippte damit eine 65°-Entscheidung, und die Führungslinie lief quer über den
-  Ringkopf. Gemessen: 22,4 % → 8,4 % falsch stehende Linien, vier Familien auf
+  Ringkopf. Gemessen: 22,4 % → 12,6 % falsch stehende Linien, vier Familien auf
   null. Festgenagelt in `tests/test_ring_geometrie.py` **Schritt 6**, mit
   Obergrenzen **je Familie** — eine harte Null bricht sichtbar, eine Gesamtquote
   lässt sich wegmitteln.
+- **Richtiger heißt nicht schöner — deshalb ist jede Optik-Änderung ein
+  FAMILIEN-SCHALTER mit Voreinstellung AUS** (26.08.2026). Die Seitentreue
+  machte vier Familien messbar besser und *Thema* messbar auch — Philip sah
+  sich beides in echtem PowerPoint an und fand Thema **schlechter**. Seither
+  steht `seitentreue` wie schon `rueckkopplung` in `FAMILIE_RING_FORMAT`:
+  ausdrücklich ein für CVV/ESG/ETF/comdirect, aus für Thema und den
+  Standard-Pfad. **Eine Familie bekommt eine Optik-Änderung erst, wenn sie
+  DORT angesehen wurde** — die Messung sagt, was richtiger ist, nicht, was
+  besser aussieht. Zwei Dinge gehören dazu: der Nachweis, dass die
+  ausgenommenen Pfade **bytegleich** bleiben (Chart-XML gegen den Commit
+  davor), und ein Wächter im Prüfstein, der den **Schalter selbst** hält
+  (Schritt 5) — sonst fällt ein versehentlich umgelegter Standardwert nur in
+  einem Schritt auf, der ein Ausgabeverzeichnis braucht. Und: wer ein
+  Verhalten schaltbar macht, muss **jede Folgezeile mitschalten**, die es
+  voraussetzt — der Tabu-Rückfall lief zunächst weiter und veränderte genau
+  die Pfade, die unberührt bleiben sollten.
 - **Die Broschüre führt IMMER NUR die oben gewählte Strategie**
   (Entscheidung Philip, 26.08.2026). Der Haken „Vergleichsportfolio" wirkt auf
   den Bildschirm, nicht auf das Dokument — bei CVV/ESG/ETF/comdirect war das

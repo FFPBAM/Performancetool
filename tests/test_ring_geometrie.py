@@ -13,7 +13,8 @@ Ein unbeabsichtigter Eingriff faellt sonst erst in einer Kundenbroschuere auf.
      Bandstaerke, Ringmitte) gegen eingefrorene Sollwerte
   3. Die ZUSICHERUNGEN, die unabhaengig von den konkreten Zahlen gelten
   4. Dieselben Messungen an ECHT GEBAUTEN Broschueren (nur mit Ordner-Argument)
-  5. Der Familien-Look und wo die Rueckkopplung ueberhaupt laeuft
+  5. Der Familien-Look und wo Rueckkopplung und Seitentreue laufen
+  6. Die Seite der Beschriftungen an ECHT GEBAUTEN Broschueren
 
 SCHRITT 1 HAENGT AM ARTEFAKT. Die Ringgeometrie kommt zu 100 Prozent aus der
 .pptx-Vorlage — kein Code setzt jemals die Groesse eines Chart-Rahmens. Wer
@@ -117,10 +118,25 @@ LEGENDE_GEDULDET = {("Vorlage_FFPB.pptx", 9, "C_Kennzahlen2")}
 #   CVV 5 -> 0, ESG 5 -> 0, ETF 2 -> 0, comdirect 2 -> 0, Thema 3 -> 2
 # (ueber alle Familien 32 -> 12 von 143 Fuehrungslinien, 22,4 % -> 8,4 %).
 #
-# Thema behaelt zwei: Pass 6d dreht nur Labels, die im Kopfbereich stehen.
-# Wer die restlichen zwei will, landet bei Ansatzpunkt 3 aus #44 (Entzerrung
-# in 2D) — dort steht "hoechstes Risiko", und das gilt weiter.
-SEITENTREUE_MAX = {"CVV": 0, "ESG": 0, "ETF": 0, "comdirect": 0, "Thema": 2}
+# THEMA STEHT SEIT DEM 26.08.2026 ABENDS WIEDER AUF DREI — und das ist kein
+# Rueckschritt, sondern eine Entscheidung nach Augenschein. Philip hat die
+# Vorher/Nachher-Broschueren in echtem PowerPoint verglichen: Bei ESG und CVV
+# ist die neue Anordnung "wesentlich besser, natuerlicher und
+# uebersichtlicher", bei Thema schlechter (F10 Assetallokation gefaellt in der
+# alten Fassung besser, auf F11 sitzen die Regionen-Zahlen nicht mehr sauber
+# an ihren Strichen). Thema laeuft deshalb mit `seitentreue=False` und ist
+# damit exakt auf dem Stand von vor der Aenderung — nachgewiesen ueber
+# BYTEGLEICHE Chart-XML gegen Commit 3b19ae6, 27 Teile.
+#
+# Die Zahl passt zur Sichtpruefung, statt ihr zu widersprechen: Bei den vier
+# Familien mit Anlagestrategie-Folien faellt sie auf NULL, bei Thema waere sie
+# nur von 3 auf 2 gefallen — dort sortiert der Pass mehr um, als er heilt.
+# Thema hat keine Anlagestrategie-Folie, seine Ringe sind groesser (8,51 cm)
+# und tragen mehr Segmente; die Ausgangslage ist eine andere.
+#
+# Wer Thema doch noch verbessern will, landet bei Ansatzpunkt 3 aus #44
+# (Entzerrung in 2D) — dort steht "hoechstes Risiko", und das gilt weiter.
+SEITENTREUE_MAX = {"CVV": 0, "ESG": 0, "ETF": 0, "comdirect": 0, "Thema": 3}
 
 # Naeher als das an der Senkrechten ist "die Seite" keine sinnvolle Aussage.
 SEITE_TOTZONE = 0.02
@@ -822,6 +838,29 @@ def schritt5_familien_look():
     if not fehler:
         print("    OK — die Rueckkopplung laeuft in den fuenf vermessenen "
               "Familien; Standard bleibt aus")
+
+    # Und dieselbe Frage fuer die SEITENTREUE (Pass 6d, seit 26.08.2026).
+    # Sie steht nur dort, wo sie beauftragt UND ANGESEHEN ist: bei den vier
+    # Familien mit Anlagestrategie-Folien. Thema ist ausgenommen, weil die
+    # Sichtpruefung dort gegen sie ausfiel — das ist der einzige Punkt, in dem
+    # Thema von den uebrigen abweicht, und genau deshalb steht er hier.
+    # Der Standard-Pfad (None) bleibt aus: was niemand gesehen hat, bekommt
+    # nichts geschenkt. Ohne diese Zeile faellt ein versehentliches Umlegen
+    # der Voreinstellung nur ueber Schritt 6 auf — und der braucht ein
+    # Ausgabeverzeichnis, das nicht jeder Lauf hat.
+    st_fehler = 0
+    SOLL_ST = {"CVV": True, "ESG": True, "ETF": True, "comdirect": True,
+               "Thema": False, None: False}
+    for familie, soll in sorted(SOLL_ST.items(), key=lambda p: str(p[0])):
+        ist = cd._ring_format(familie, 79, 0.14)["seitentreue"]
+        if ist != soll:
+            bez = familie if familie is not None else "Standard (ohne Familie)"
+            print(f"    FEHLER — {bez}: Seitentreue {ist} statt {soll}")
+            st_fehler += 1
+    if not st_fehler:
+        print("    OK — die Seitentreue laeuft in den vier angesehenen "
+              "Familien; Thema und Standard bleiben aus")
+    fehler += st_fehler
     return fehler
 
 

@@ -1657,6 +1657,65 @@ Thema auf 2. Eine Null bricht sichtbar; eine Quote lässt sich wegmitteln.
 **Gegenprobe:** gegen Broschüren, die mit dem Stand davor gebaut wurden, meldet
 Schritt 6 alle fünf Familien rot.
 
+##### NACHTRAG desselben Abends — die Sichtprüfung nimmt *Thema* wieder heraus
+
+**Die Messung war richtig und trotzdem nicht das letzte Wort.** Philip verglich
+die Vorher/Nachher-Broschüren in echtem PowerPoint: Bei **ESG und CVV** ist die
+neue Anordnung „wesentlich besser, natürlicher und übersichtlicher"; bei
+**Thema** ist sie schlechter — auf F10 (Assetallokation) gefällt die alte
+Fassung besser, auf F11 sitzen die Regionen-Zahlen nicht mehr sauber an ihren
+Strichen.
+
+**Der Widerspruch ist keiner.** Bei den vier Familien mit
+Anlagestrategie-Folien fiel die Zahl auf **null**, bei Thema nur von 3 auf 2 —
+dort sortiert der Pass mehr um, als er heilt. Thema hat keine
+Anlagestrategie-Folie; seine Ringe sind größer (8,51 cm) und tragen mehr
+Segmente, die Ausgangslage ist eine andere. *Eine Messung sagt, was richtiger
+ist, nicht, was besser aussieht.*
+
+**Die Lösung war im Projekt schon vorgezeichnet:** `seitentreue` wird ein
+Eintrag in `FAMILIE_RING_FORMAT`, genau wie `rueckkopplung` einen Tag zuvor.
+Voreinstellung **aus**; ausdrücklich **ein** für CVV/ESG/ETF/comdirect; **aus**
+für Thema (`_RING_THEMA = dict(_RING_KRAEFTIG, seitentreue=False)`) und für den
+Standard-Pfad.
+
+**Ein Fund beim Durchziehen des Schalters:** Der Tabu-Rückfall — bei einer
+Tabufläche auf die andere Seite ausweichen — lief zunächst **unabhängig** vom
+Schalter und veränderte damit genau die Pfade, die unberührt bleiben sollten.
+Er gehört zur Seitentreue und steht jetzt hinter demselben `if`. *Wer ein
+Verhalten schaltbar macht, muss jede Folgezeile mitschalten, die es
+voraussetzt* — sonst ist „aus" nicht mehr der Zustand von vorher.
+
+**Nachgewiesen, nicht behauptet** (Chart-XML gebauter Broschüren, byteweise):
+
+| Prüfung | Erwartung | Ergebnis |
+|---|---|---|
+| Thema gegen `3b19ae6` (vor der Seitentreue) | bytegleich | **bytegleich**, 27 Teile |
+| Thema gegen `ba28b07` (Seitentreue überall) | anders | **anders** |
+| CVV / ESG / ETF / comdirect gegen `ba28b07` | unberührt | **bytegleich** (51/36/18/30) |
+
+Dazu gegen die Dateien, die Philip tatsächlich angesehen hat: der Endstand von
+`Thema` ist bytegleich mit `Thema_1_vorher.pptx`, `CVV` und `ESG` sind
+bytegleich mit ihren `_2_nachher.pptx`.
+
+**Die Quote über alle Broschüren, neu gerechnet statt fortgeschrieben:**
+
+| Stand | falsche Führungslinien |
+|---|---:|
+| vor der Seitentreue | 32 von 143 (22,4 %) |
+| Seitentreue überall | 12 von 143 (8,4 %) |
+| **Endstand, Thema ausgenommen** | **18 von 143 (12,6 %)** |
+
+Die verbleibenden 18 liegen **restlos bei Thema**. Auf den vier Familien mit
+Anlagestrategie-Folien sind es 0 von 52.
+
+**Der Prüfstein trägt beides:** Schritt 6 lässt Thema wieder **3** zu, mit der
+Begründung im Code. Und Schritt 5 bekommt einen Wächter für den **Schalter
+selbst** (`SOLL_ST`) — ohne ihn fiele ein versehentlich umgelegter
+Standardwert nur in Schritt 6 auf, und der braucht ein Ausgabeverzeichnis, das
+nicht jeder Lauf hat. Dasselbe Muster hatte `rueckkopplung` einen Tag zuvor aus
+demselben Grund bekommen.
+
 #### Ansatzpunkte, falls das Thema wieder aufgemacht wird
 
 1. **Kopfluft datenbasiert** statt fix 0,30" — größter gemessener Hebel, kleinster Eingriff. Offene Frage: wie nah dürfen Zahlen optisch an den Balken?

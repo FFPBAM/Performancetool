@@ -9,7 +9,10 @@ und nachher**. Zwei neue Prüfsteine (`test_pptx_integritaet.py`,
 `test_broschuere_auswahl.py`); die Thema-Broschüre führt jetzt **nur die obere
 Strategie** (Entscheidung Philip, nach der Behebung bestätigt). Dazu **Punkt 1
 erledigt**: die Ring-Beschriftungen stehen auf der Seite ihres Segments —
-22,4 % falsche Führungslinien auf **8,4 %**, vier Familien auf null.
+22,4 % falsche Führungslinien auf **12,6 %**, vier Familien auf null.
+**Nach der Sichtprüfung ist *Thema* davon ausgenommen** (Entscheidung Philip,
+26.08.2026 abends): Bei ESG und CVV ist die neue Anordnung besser, bei Thema
+schlechter. Thema steht damit **bytegleich** auf dem Stand von vorher.
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
 > ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
@@ -107,6 +110,71 @@ Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 > Kopfbereich. Die letzten zwei lägen bei Ansatzpunkt 3 (Entzerrung in 2D) —
 > dort steht in #44 „höchstes Risiko", und daran halte ich mich.
 >
+> ---
+>
+> ### Nachtrag am Abend: die Sichtprüfung nimmt Thema wieder heraus
+>
+> **Du hast dir die Vorher/Nachher-Broschüren in echtem PowerPoint angesehen —
+> und das Urteil fiel geteilt aus:**
+>
+> | Familie | Folie | dein Urteil |
+> |---|---|---|
+> | **ESG, CVV** (und damit ETF/comdirect) | Anlagestrategie / Assetallokation | **nachher besser** — natürlicher, übersichtlicher, besser verteilt |
+> | **Thema** | F10 Assetallokation | **vorher besser** |
+> | **Thema** | F11 Regionen | Zahlen sitzen nicht mehr sauber an ihren Strichen |
+>
+> **Umgesetzt genau so:** Die Seitentreue ist jetzt ein **Familien-Schalter**
+> nach dem Muster, das `rueckkopplung` hier schon vorgibt — Voreinstellung
+> **aus**, ausdrücklich **ein** für CVV/ESG/ETF/comdirect, **aus** für Thema
+> und den Standard-Pfad. Eine Familie bekommt sie erst, wenn sie **dort**
+> angesehen wurde.
+>
+> **Deine Wahrnehmung deckt sich mit der Messung, statt ihr zu widersprechen.**
+> Bei den vier Familien mit Anlagestrategie-Folien fiel die Zahl falscher
+> Führungslinien auf **null**; bei Thema nur von 3 auf 2 — dort sortiert der
+> Pass mehr um, als er heilt. Thema hat keine Anlagestrategie-Folie, seine
+> Ringe sind größer (8,51 cm) und tragen mehr Segmente.
+>
+> **Bewiesen statt behauptet** — die Chart-XML gebauter Broschüren, byteweise
+> verglichen:
+>
+> | Prüfung | Erwartung | Ergebnis |
+> |---|---|---|
+> | Thema gegen den Stand **vor** der Seitentreue (`3b19ae6`) | bytegleich | **bytegleich**, 27 Teile |
+> | Thema gegen `ba28b07` (Seitentreue überall) | anders | **anders** |
+> | CVV / ESG / ETF / comdirect gegen `ba28b07` | unberührt | **bytegleich** (51/36/18/30 Teile) |
+>
+> Und gegen **genau die Dateien, die du angesehen hast**: der Endstand von
+> `Thema` ist bytegleich mit deinem `Thema_1_vorher.pptx`, `CVV` und `ESG` sind
+> bytegleich mit deinen `_2_nachher.pptx`. **An ESG und CVV musst du also
+> nichts erneut ansehen.**
+>
+> **Die Quote über alle Broschüren**, ehrlich nachgerechnet statt
+> fortgeschrieben:
+>
+> | Stand | falsche Führungslinien |
+> |---|---:|
+> | vor der Seitentreue | 32 von 143 (22,4 %) |
+> | Seitentreue überall | 12 von 143 (8,4 %) |
+> | **Endstand, Thema ausgenommen** | **18 von 143 (12,6 %)** |
+>
+> Die 18 verbliebenen liegen **restlos bei Thema** — nicht, weil sie nicht
+> lösbar wären, sondern weil die Lösung dort schlechter aussah. Auf den vier
+> Familien mit Anlagestrategie-Folien sind es 0 von 52.
+>
+> **Ein Fund am Rande:** Der Tabu-Rückfall (andere Seite, wenn die
+> segmenttreue in die Legende läuft) lief zunächst **unabhängig** vom Schalter
+> und hätte Thema und den Standard-Pfad mitverändert, obwohl beide unberührt
+> bleiben sollten. Er gehört zur Seitentreue und steht jetzt hinter demselben
+> Schalter.
+>
+> **Prüfstein nachgezogen:** Schritt 6 lässt Thema wieder 3 zu — mit der
+> Begründung im Code, damit die Zahl nicht als Schlamperei gelesen wird. Neu
+> ist ein Wächter in Schritt 5, der den **Schalter selbst** festnagelt
+> (CVV/ESG/ETF/comdirect ein, Thema und Standard aus). Ohne ihn fiele ein
+> versehentliches Umlegen der Voreinstellung nur in Schritt 6 auf — und der
+> braucht ein Ausgabeverzeichnis, das nicht jeder Lauf hat.
+>
 > **Der Preis, den du bewusst freigegeben hast:** Auf den **Platzhalterdaten
 > der Vorlagen** kostet die Änderung zwei zusätzliche kreuzende Linien und eine
 > Beschriftung auf der Legende — beides überwiegend in `Vorlage_FFPB.pptx` F9,
@@ -129,6 +197,8 @@ Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 > `H:\Entwicklung\Forschung_Claude\Performancetool\_seitentreue\` (ESG, CVV,
 > Thema — je `_1_vorher` und `_2_nachher`). **Bitte in echtem PowerPoint** —
 > die Zahl sagt, dass es richtiger ist, nicht, dass es besser aussieht.
+> *(Erledigt am Abend; dazu kamen `Thema_3_endstand.pptx` und ein
+> `LIESMICH.txt`, das sagt, welche Datei jetzt gilt.)*
 >
 > ---
 >
@@ -2896,9 +2966,11 @@ Folien**) — sonst wäre Schritt 1 grün, ohne etwas zu bedeuten.
 `portfolios` vor dem Export); die Fundstellen stehen als Kommentar dort.
 
 **ERLEDIGT am 26.08.2026 — die Seitentreue der Beschriftungen.** Pass 6d
-leitet die Seite jetzt aus dem Segmentwinkel ab; 22,4 % → 8,4 %, vier Familien
-auf null, Prüfstein `test_ring_geometrie.py` Schritt 6 mit Obergrenzen je
-Familie. Einzelheiten im Sitzungsbericht oben und in `PROJEKT_DOKUMENTATION.md`
+leitet die Seite jetzt aus dem Segmentwinkel ab; 22,4 % → 12,6 %, vier
+Familien auf null, Prüfstein `test_ring_geometrie.py` Schritt 6 mit
+Obergrenzen je Familie. **Nach der Sichtprüfung ist Thema ausgenommen** und
+steht bytegleich auf dem Stand von vorher — daher 12,6 % statt der 8,4 %, die
+mit Thema gemessen waren. Einzelheiten im Sitzungsbericht oben und in `PROJEKT_DOKUMENTATION.md`
 #44 (Nachtrag 26.08.2026). **Offen bleibt allein Punkt 1 des Befundes** — die
 feste Textbox-Breite `HALB_BREITE = 0.33"`, wegen der eine Linie 3 mm hinter
 dem letzten Zeichen ansetzt. Betrifft jede kurze Zahl in jeder Familie und ist
