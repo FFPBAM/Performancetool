@@ -1856,6 +1856,64 @@ nachprüfbar.
 Linie setzt genau dann senkrecht an, wenn sie steil genug ankommt. Wie viele
 Labels das heute sind, hängt am Bestand.
 
+##### NACHTRAG, vierte Durchsicht — die Zahlen sind ausgewogen verteilt
+
+**„Bei der Offensiv sind alle Linien und Zahlen sehr nach links
+konzentriert."** Nachgemessen betraf das **13 von 17 Ringen**.
+
+**Die Ursache ist nicht die Seitentreue, sondern eine harte Grenze.** Die
+Kopfsperre erlaubt als höchste Label-Mitte genau die Höhe der
+**Ringoberkante** — kein Label kann je über den Ring. Wessen Segment nahe
+12 Uhr sitzt, wird deshalb seitlich abgedrängt: LIQUIDITÄT auf ESG Offensiv
+liegt bei 350,8°, sein Ansatzpunkt also nur 4 mm links der Ringachse, die Zahl
+wanderte trotzdem fast einen Zoll nach links. Dazu die Datenlage: drei von
+vier Segmenten im oberen linken Viertel.
+
+**Die Lösung ist eine Totzone um die Senkrechte** (`seitentreue_totzone`,
+15°). Dort gibt es keine richtige Seite; die Lage aus den vorherigen Pässen
+entscheidet, und die zeigt auf die freie Seite.
+
+| | falsch stehende Linien | Überstand über die Achse | Ringe mit Schieflage ≥ 2 |
+|---|---:|---|---:|
+| vor allem (25.08.) | 17 von 68 | 1,1 – 10,9 mm | 4 von 17 |
+| streng | 1 von 68 | 4,8 mm | 13 von 17 |
+| **mit Totzone** | 14 von 68 | 1,1 – **4,8 mm** | **4 von 17** |
+
+#### Zähle nicht die Verstöße, miss ihre Schwere
+
+Das ist die übertragbare Lehre. Der Prüfstein deckelte bisher die **Anzahl**
+falsch stehender Führungslinien je Familie. Diese Zahl taugte nicht: Der
+beanstandete Zustand hatte 17 Kreuzungen, der abgenommene hat 14 — und sieht
+deutlich besser aus, weil die **schweren** fehlen.
+
+Der neue Wächter fragt: *Wie weit läuft eine Linie über die Ringachse?* Und
+seine Grenze ist **aus der Regel gerechnet**, nicht eingefroren: Bei
+eingeschalteter Seitentreue darf ein Label nur dann auf der anderen Seite
+stehen, wenn sein Segment in der Totzone liegt — dann ist der Überstand
+höchstens `R_außen × Totzone`. Der Wächter wächst damit mit, wenn jemand an
+der Totzone oder der Ringgröße dreht.
+
+*Gegenprobe:* Gegen die Broschüren vom 25.08. meldet er genau zwei Verstöße —
+ESG F22 mit 10,9 mm (erlaubt 7,5) und Thema F11 mit 6,5 mm (erlaubt 5,1). Das
+ist der gemeldete Fall.
+
+#### Zwei Wege, die NICHT funktionieren
+
+Beide sind gemessen und stehen im Code, damit sie niemand zweimal geht:
+
+1. **„Bei fast senkrechten Segmenten entscheidet die kürzere Linie"** ändert
+   *gar nichts*. Die segmenttreue Seite liefert immer schon die kürzere —
+   das Kriterium ist entartet.
+2. **Weniger Kopfluft** ändert die Anordnung nicht (0,20) oder schaltet die
+   Seitentreue für diese Labels **still ab** (0,15): Pass 6d greift dann gar
+   nicht mehr, und es stehen wieder 12 falsch stehende Linien statt einer.
+   *Eine Regel, die nur innerhalb eines Passes gilt, verschwindet lautlos,
+   wenn der Pass nicht mehr betreten wird.*
+
+**Die Ursache bleibt offen:** Die Kopfsperre deckelt die Label-Höhe weiterhin
+auf die Ringoberkante. Der einzige tragfähige Weg dorthin ist Ansatzpunkt 3
+unten — Entzerrung in 2D.
+
 #### Ansatzpunkte, falls das Thema wieder aufgemacht wird
 
 1. **Kopfluft datenbasiert** statt fix 0,30" — größter gemessener Hebel, kleinster Eingriff. Offene Frage: wie nah dürfen Zahlen optisch an den Balken?

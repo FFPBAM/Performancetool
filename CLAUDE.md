@@ -167,6 +167,17 @@ prüfte statt gegen eine Schwelle (#47).
   passt, wird gekürzt statt umgebrochen (`wrap="none"` behebt es). *Ein
   geöffnetes Dokument ist kein Beweis. Ein Bild ist einer.* Der Export geht
   per COM: `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`.
+- **Zähle nicht die Verstöße, miss ihre SCHWERE** (26.08.2026). Der Prüfstein
+  deckelte die *Anzahl* falsch stehender Führungslinien je Familie. Diese Zahl
+  taugte nicht: Der beanstandete Zustand hatte 17 Kreuzungen, der abgenommene
+  hat 14 — und sieht deutlich besser aus, weil die **schweren** fehlen
+  (Überstand über die Ringachse 10,9 mm gegen höchstens 4,8 mm). Eine Zusage
+  über die Menge lässt sich durch viele kleine Verstöße füllen und bricht bei
+  einem einzigen harmlosen. *Such die Größe, die den gemeldeten Fall von den
+  geduldeten trennt, und sichere die zu.* Und wenn eine Regel im Code die
+  Grenze hergibt, **rechne sie aus dieser Regel** (hier `R_außen × Totzone`)
+  statt sie einzufrieren — dann wächst der Wächter mit, wenn jemand an der
+  Regel dreht.
 - **Eine Schwelle kommt aus der VERTEILUNG, nicht aus der Intuition**
   (26.08.2026). „Die Linie setzt unten an, wenn sie steiler als 45° ankommt"
   klang zwingend — und traf **zwölf** Beschriftungen statt der zwei

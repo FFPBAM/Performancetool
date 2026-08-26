@@ -16,7 +16,9 @@ Regionen-Ring bekommt seine Punkte** (Thema 10 von 17 → 17/17; er war der
 einzige Ring im Produkt ohne). **Die Seitentreue läuft wieder** für die vier
 Anlagestrategie-Familien — Thema bleibt als einziges ohne; auf ESG Offensiv
 fällt die längste Führungslinie von 1,39 auf 0,71 Zoll. **Steile Linien
-setzen unten an** statt seitlich (zwei Labels auf Thema F11).
+setzen unten an** statt seitlich (zwei Labels auf Thema F11). **Und nahe der
+Senkrechten hat ein Segment keine Seite mehr** — 13 von 17 Ringen gehen damit
+von 3:1 auf 2:2, ohne dass die schweren Achsenüberstiege zurückkommen.
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
 > ### Für Philip: was diese Sitzung geändert hat (26.08.2026)
@@ -113,6 +115,70 @@ Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 > **Thema behält zwei, und das ist Absicht:** Pass 6d dreht nur Labels im
 > Kopfbereich. Die letzten zwei lägen bei Ansatzpunkt 3 (Entzerrung in 2D) —
 > dort steht in #44 „höchstes Risiko", und daran halte ich mich.
+>
+> ---
+>
+> ### Nachtrag: die vierte Durchsicht — die Zahlen sind ausgewogen verteilt
+>
+> „Bei der Offensiv sind alle Linien und Zahlen sehr nach links konzentriert."
+>
+> **Nachgemessen war das kein Einzelfall:** 13 von 17 Ringen hatten dieselbe
+> 3:1-Schieflage.
+>
+> #### Die Ursache ist nicht die Seitentreue
+>
+> Es ist eine harte Grenze plus die Datenlage. Die Kopfsperre erlaubt als
+> höchste Label-Mitte **genau die Höhe der Ringoberkante** — kein Label kann
+> je über den Ring. Wessen Segment nahe 12 Uhr sitzt, wird deshalb seitlich
+> abgedrängt: Bei ESG Offensiv liegt LIQUIDITÄT bei 350,8°, sein Ansatzpunkt
+> also nur **4 mm** links der Ringachse — die Zahl wanderte trotzdem fast
+> einen Zoll nach links. Dazu liegen dort **drei von vier** Segmenten im
+> oberen linken Viertel.
+>
+> #### Die Lösung: eine Totzone um die Senkrechte
+>
+> Innerhalb von 15° gibt es keine richtige Seite. Dort entscheidet wieder die
+> Lage aus den vorherigen Pässen — und die zeigt auf die **freie** Seite.
+>
+> | | falsch stehende Linien | Überstand über die Achse | Ringe mit Schieflage ≥ 2 |
+> |---|---:|---|---:|
+> | vor allem (25.08.) | 17 von 68 | 1,1 – **10,9 mm** | 4 von 17 |
+> | streng | 1 von 68 | 4,8 mm | 13 von 17 |
+> | **jetzt (Totzone 15°)** | 14 von 68 | 1,1 – **4,8 mm** | **4 von 17** |
+>
+> **Dein beanstandeter Fall bleibt behoben.** EDELMETALLE liegt bei 332,8°,
+> also weit außerhalb der Totzone. Was zurückkommt, sind ausschließlich milde
+> Fälle. Du hast beide Fassungen als Broschüren in echtem PowerPoint
+> verglichen und B gewählt.
+>
+> #### Der Prüfstein sichert jetzt die SCHWERE zu, nicht die Anzahl
+>
+> Das ist die eigentliche Lehre dieses Schritts: Die Zahl der Kreuzungen ist
+> **kaum kleiner** als vor allem (14 gegen 17) — die Optik ist trotzdem
+> deutlich besser, weil die schweren fehlen. Die Anzahl war nie die richtige
+> Größe.
+>
+> Der neue Wächter fragt: *Wie weit läuft eine Linie über die Ringachse?* Bei
+> eingeschalteter Seitentreue folgt die Grenze **aus der Regel selbst**
+> (`R_außen × Totzone`) — sie wächst also mit, wenn jemand die Totzone oder
+> die Ringgröße ändert, statt eine Zahl einzufrieren. **Gegenprobe:** Gegen
+> die Broschüren vom 25.08. meldet er genau zwei Verstöße — ESG F22 mit
+> 10,9 mm (erlaubt 7,5) und Thema F11 mit 6,5 mm (erlaubt 5,1). Das ist dein
+> Fall.
+>
+> #### Zwei Wege, die nicht funktionieren
+>
+> Beide stehen im Code, damit sie niemand zweimal geht: *„Bei fast senkrechten
+> Segmenten entscheidet die kürzere Linie"* ändert **gar nichts** — die
+> segmenttreue Seite liefert immer schon die kürzere. Und *weniger Kopfluft*
+> ändert die Anordnung nicht (0,20) oder schaltet die Seitentreue für diese
+> Labels **still ab** (0,15), weil Pass 6d dann gar nicht mehr greift.
+>
+> #### Aufgeräumt
+>
+> Die Totzone gibt den Preis früherer Schritte zurück:
+> `KREUZUNGEN_VORLAGEN_MAX` von 1 auf **0** — erstmals eine harte Null, auch
+> auf den Platzhalterdaten der Vorlagen. `LEGENDE_GEDULDET` wieder leer.
 >
 > ---
 >
@@ -3132,6 +3198,21 @@ Fund an ESG Offensiv; die Frage von zuvor ist damit beantwortet.
 `LEADER_SENKRECHT_STEIL = 4`, gemessen aus der Verteilung über alle 69
 Führungslinien. Familien-Schalter `leader_senkrecht`, Prüfstein Schritt 8
 (hält die **Regel** fest, nicht die Stückzahl).
+
+**ERLEDIGT am 26.08.2026 (abends) — die Zahlen sind ausgewogen verteilt.**
+Totzone von 15° um die Senkrechte (`seitentreue_totzone`); 13 von 17 Ringen
+gehen von 3:1 auf 2:2. Der Prüfstein sichert seither die **Schwere** der
+Achsenüberstiege zu statt ihrer Anzahl — Grenze aus der Regel gerechnet, nicht
+eingefroren.
+
+**BEKANNT UND NICHT BEHOBEN — die Kopfsperre deckelt die Label-Höhe auf die
+Ringoberkante.** Kein Label kann je über den Ring; wessen Segment nahe 12 Uhr
+sitzt, wird seitlich abgedrängt. Die Totzone mildert die Folge, beseitigt die
+Ursache aber nicht. *Wer sie aufmacht:* weniger Kopfluft hilft **nicht**
+(0,20 ändert nichts, 0,15 schaltet die Seitentreue still ab, beides
+gemessen); der einzige tragfähige Weg ist die **Entzerrung in 2D**
+(`PROJEKT_DOKUMENTATION.md` #44, Ansatzpunkt 3) — dort steht „höchstes
+Risiko", und das gilt weiter.
 
 **NEU 26.08.2026 (abends) — der Ring-Prüfstein sieht die Optik nicht.** Das
 gilt weiter und ist der Grund, warum Schritt 7 seine Zahlen aus dem
