@@ -29,6 +29,11 @@ zurückgenommen (Sicherheit).**
   `VORLAGEN_STRATEGIE`/`_vorlage_fuer_strategie`; `_THEMA_CONFIG` unverändert,
   kein Eingriff in `pptx_export`. Muster zur Sichtprüfung in
   `Themenvorlageneu\_ergebnis\` auf H:. **Bitte in echtem PowerPoint abnehmen.**
+  - **Nachtrag Bild-Fix (Push `cb1afd9`):** Bei Offensiv fehlte zunächst das
+    Original-Foto der Anfangsfolie — das Bild sitzt auf dem **Layout**, nicht
+    auf der Textfolie. Für Offensiv und Pro Dividende jetzt F2/F3 **samt Layout
+    und Original-Bild** transplantiert; visuell geprüft (Foto korrekt). Deshalb
+    sind beide Dateien deutlich größer (≈ 8,0 / 6,8 MB).
 - **PDF-Fassung der Broschüre.** Neben „PowerPoint erstellen" liefert
   „PDF erstellen" eine **vorbereitete PowerPoint**: ohne die Folie „Ihre
   Ansprechpartner für den Vertrieb" (im PDF nicht austauschbar), Seitenzahlen
@@ -50,6 +55,15 @@ zurückgenommen (Sicherheit).**
     `tests/test_pdf_export.py`.
   - Personenbezogene **Metadaten** aus den Vorlagen entfernt (Ersteller/
     Manager, Kommentar-Autor, Tenant-Kennung).
+  - **Nachtrag Metadaten-Tiefenprüfung (Push `cb1afd9`):** Ein Prüf-Agent vor
+    dem Push fand personenbezogene Autor-Metadaten auch **innerhalb der
+    eingebetteten Excel-Objekte** aller Vorlagen (`ppt/embeddings/*.xlsx`) —
+    von der ersten Bereinigung nicht erfasst. In **allen 8 Vorlagen**
+    normalisiert (Autorfelder auf den Firmennamen); Charts, Zahlen und Optik
+    unverändert, alle Suiten grün. Merke: solche Namen wandern nicht nur ins
+    Repo, sondern in **jede gebaute Broschüre**. **Offen (ISB/DSB):** die Namen
+    stehen noch in der **Git-Historie** und in vor dem Fix ausgelieferten
+    Broschüren — Historien-Bereinigung bleibt gesonderte Entscheidung.
   - Ungenutztes gelöscht: `Zieldaten/` (interne Instrumentenliste) und
     `fonts/` (Microsoft-Schriften, Lizenz).
 - **cVV-Vorlage:** Inhaltsverzeichnis „Rechtliche Hinweise und Impressum"
