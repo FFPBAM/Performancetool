@@ -57,15 +57,16 @@ INHALT_LAYOUT = "Inhaltsverzeichnis"
 """Layoutname der Inhaltsverzeichnis-Folie (cVV, ESG, ETF, comdirect, FFPB)."""
 
 HINWEIS_VERTRIEB = (
-    "Lädt eine PowerPoint für das PDF: ohne die Folie „Ihre Ansprechpartner "
+    "Erstellt das PDF der Broschüre — ohne die Folie „Ihre Ansprechpartner "
     "für den Vertrieb“ (im PDF lassen sich die Bilder nicht austauschen), "
-    "Seitenzahlen und Inhaltsverzeichnis angepasst. In PowerPoint über "
-    "„Speichern unter → PDF“ sichern.")
+    "Seitenzahlen und Inhaltsverzeichnis angepasst. Ist die PDF-Erstellung "
+    "gerade nicht erreichbar, kommt die vorbereitete PowerPoint zum "
+    "Selbst-Speichern.")
 """Tooltip am PDF-Button, wenn die Vorlage der Familie die Folie fuehrt."""
 
 HINWEIS_OHNE_VERTRIEB = (
-    "Lädt dieselbe Broschüre als PowerPoint für das PDF. In PowerPoint über "
-    "„Speichern unter → PDF“ sichern.")
+    "Erstellt das PDF der Broschüre. Ist die PDF-Erstellung gerade nicht "
+    "erreichbar, kommt die vorbereitete PowerPoint zum Selbst-Speichern.")
 """Tooltip am PDF-Button, wenn nichts entfernt wird."""
 
 
