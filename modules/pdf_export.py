@@ -59,14 +59,15 @@ INHALT_LAYOUT = "Inhaltsverzeichnis"
 HINWEIS_VERTRIEB = (
     "Erstellt das PDF der Broschüre — ohne die Folie „Ihre Ansprechpartner "
     "für den Vertrieb“ (im PDF lassen sich die Bilder nicht austauschen), "
-    "Seitenzahlen und Inhaltsverzeichnis angepasst. Ist die PDF-Erstellung "
-    "gerade nicht erreichbar, kommt die vorbereitete PowerPoint zum "
-    "Selbst-Speichern.")
+    "Seitenzahlen und Inhaltsverzeichnis angepasst. Das dauert bis zu einer "
+    "Minute — bitte das Fenster offen lassen. Ist die PDF-Erstellung gerade "
+    "nicht erreichbar, kommt die vorbereitete PowerPoint zum Selbst-Speichern.")
 """Tooltip am PDF-Button, wenn die Vorlage der Familie die Folie fuehrt."""
 
 HINWEIS_OHNE_VERTRIEB = (
-    "Erstellt das PDF der Broschüre. Ist die PDF-Erstellung gerade nicht "
-    "erreichbar, kommt die vorbereitete PowerPoint zum Selbst-Speichern.")
+    "Erstellt das PDF der Broschüre. Das dauert bis zu einer Minute — bitte das "
+    "Fenster offen lassen. Ist die PDF-Erstellung gerade nicht erreichbar, "
+    "kommt die vorbereitete PowerPoint zum Selbst-Speichern.")
 """Tooltip am PDF-Button, wenn nichts entfernt wird."""
 
 
