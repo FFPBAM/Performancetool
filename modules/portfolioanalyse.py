@@ -1466,7 +1466,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             # Familie/Strategie/Datum werden dort zum finalen Namen aufgelöst;
             # ad1 = Auswertungsdatum, date_tag_pf = Fallback (yyMMdd aus UI).
             # Kompletter Download-Bereich (clientseitiger Download für den
-            # Atruvia-Gateway-Scan + klassischer In-Page-Fallback) liegt in
+            # Gateway-Scan + klassischer In-Page-Fallback) liegt in
             # modules/download_helfer.py → download_bereich(). Künftige
             # Anpassungen am Download passieren NUR dort, nicht hier.
             download_bereich(st.session_state["pf_pptx_bytes"],

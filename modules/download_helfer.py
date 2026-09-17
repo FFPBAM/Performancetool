@@ -2,7 +2,7 @@
 """
 Broschüren-Download OHNE Server-Abruf (NEU 07.07.2026).
 
-WARUM (Firmen-Gateway Atruvia / Skyhigh):
+WARUM (firmenseitiges, Download-scannendes Web-Gateway):
     Jeder Download, der die Datei vom Server holt (st.download_button →
     /media/…, oder /app/static/…), läuft durch den Viren-Scanner des
     Gateways. Der scannt, liefert eine progress.htm aus und hält die

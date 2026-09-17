@@ -235,18 +235,24 @@ def main():
         else:
             print("   OK — L1-L6 sauber")
 
-        print("\n5. Alle Vorlagen: keine externe Verknuepfung mehr, Folien nur "
-              "wo noetig entfernt, Paket intakt")
-        # Seit der Sicherheitspruefung 17.09.2026 entfernt pptx_fuer_pdf auch
-        # Diagramm-Verknuepfungen auf externe Mappen (c:externalData, oleObject
-        # External) — sie gehoeren nicht in eine Datei, die weitergegeben wird.
+        print("\n5. Vorlagen frei von externen Verknuepfungen, PDF-Fassung "
+              "ebenso, Folien nur wo noetig, Paket intakt")
+        # Sicherheitspruefung 17.09.2026 (B-03): Die Vorlagen trugen
+        # Diagramm-Verknuepfungen auf einen internen Server (c:externalData,
+        # oleObject External). Sie sind aus den Vorlagen entfernt, damit KEINE
+        # gebaute Broschuere sie mehr traegt; die PDF-Fassung raeumt zusaetzlich
+        # auf, falls eine Vorlage doch wieder eine bekommt.
         if pdf_export.externe_verknuepfungen(pdf):
-            print("   FEHLER — cVV-PDF-Quelle traegt externe Verknuepfungen")
+            print("   FEHLER — cVV-PDF-Fassung traegt externe Verknuepfungen")
             fehler += 1
         for name, soll in sorted(ERWARTET.items()):
             with open(os.path.join("Vorlage", name), "rb") as fh:
                 roh = fh.read()
             vorher = len(pdf_export.externe_verknuepfungen(roh))
+            if vorher:
+                print("   FEHLER — %s traegt %d externe Verknuepfung(en) "
+                      "(gehoert bereinigt, B-03)" % (name, vorher))
+                fehler += 1
             raus, entf, hinw = pdf_export.pptx_fuer_pdf(roh)
             ziel = os.path.join(ausgabe, "quelle_" + name)
             with open(ziel, "wb") as fh:

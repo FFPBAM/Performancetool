@@ -137,10 +137,12 @@ EXCLUDE_SUBSTRINGS = ["Stiftung"]
 # (FONT_DIR/PDF_FONT/PDF_FONT_BOLD/_register_pdf_fonts) für reportlab.
 # Mit dem Wegfall der PDF-Ausgabe in der Performance-Ansicht — die
 # Portfolioanalyse hatte ihre schon im Juli verloren — erzeugt das Tool
-# überhaupt keine PDFs mehr; Kundendokumente entstehen ausschließlich als
-# PowerPoint. Damit sind reportlab UND matplotlib aus requirements.txt
-# verschwunden. Der Ordner `fonts/` bleibt liegen: die Schriftdateien
-# gehören zum Corporate Design und kosten nichts.
+# überhaupt keine PDFs mehr. Damit sind reportlab UND matplotlib aus
+# requirements.txt verschwunden.
+# ENTFERNT 17.09.2026 (Sicherheitsprüfung B-11): Der Ordner `fonts/` mit den
+# Segoe-UI-Dateien lag ungenutzt im öffentlichen Repo — Microsoft-Schriften
+# gehören dort nicht hin (Lizenz). Er ist gelöscht; das Tool braucht keine
+# lokalen Schriftdateien.
 
 
 # ---------------------------------------------------------------------------
