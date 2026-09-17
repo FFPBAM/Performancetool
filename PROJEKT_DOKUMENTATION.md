@@ -2955,22 +2955,25 @@ Typen.
 Desktop-PowerPoint. Auf Streamlit Cloud (Linux) gibt es kein PowerPoint;
 LibreOffice zeichnet die Ringe falsch (Probe am Artefakt, #16/#28/#29).
 
-**Was gebaut wurde und warum es zurückgenommen ist:** Ein automatischer
-Umwandlungsdienst auf einem Windows-Rechner (PowerPoint per COM), der Aufträge
-über einen Cloud-Kanal abholt, wurde entworfen und gehärtet. Eine
-Sicherheitsbewertung zeigte, dass ein Dienst, der Dateien aus dem Netz
-unbeaufsichtigt mit Office öffnet und dazu gespeicherte Zugangsdaten nutzt, in
-einer Bank nicht ohne Freigabe der IT-Sicherheit betrieben werden darf — und
-der lokale Virenschutz stufte die Automatisierung als Schadsoftware ein. **Der
-Weg wurde nicht so umgebaut, dass er an Schutzmechanismen vorbeigeht, sondern
-zurückgenommen.**
+**Was gebaut, zurückgenommen und dann anders gebaut wurde:** Ein erster
+automatischer Umwandlungsdienst (PowerPoint per COM, Aufträge über einen
+Cloud-Kanal) wurde entworfen und *gehärtet* — und genau die Härtungs-Zusätze
+(Makro-Sicherheit per Skript umstellen, Listen ausführbarer Dateitypen) ließen
+den lokalen Virenschutz die Automatisierung als Schadsoftware werten. **Der Weg
+wurde NICHT so umgebaut, dass er am Scanner vorbeischleicht, sondern
+zurückgenommen** und danach als *freundliche Fassung* neu gebaut: nur die
+tatsächlich riskanten Muster weggelassen (keine Makro-Umstellung, kein
+`ExecutionPolicy Bypass`), die echten Schutzmaßnahmen behalten.
 
-**Gewählte Lösung:** „PDF erstellen" liefert eine **vorbereitete PowerPoint**
-(`pdf_export.pptx_fuer_pdf`: Vertriebsfolie raus, Seitenzahlen und
-Inhaltsverzeichnis nachziehen, externe Verknüpfungen entfernen), die der
-Berater in PowerPoint als PDF speichert. Kein Dienst, kein Netzzugriff, keine
-Zugangsdaten, keine Skripte im Repo. Ein Wächter-Test verhindert, dass ein
-Umwandlungsdienst still zurückkommt.
+**Gewählte Lösung (Stand 17.09.2026 abends, live):** „PDF erstellen" schickt die
+bereinigte Quelle (`pdf_export.pptx_fuer_pdf`: Vertriebsfolie raus, Seitenzahlen
+und Inhaltsverzeichnis nachziehen, externe Verknüpfungen entfernen) **signiert
+(HMAC)** an einen Umwandlungs-PC und liefert ein echtes PDF; ist der Dienst
+nicht erreichbar, kommt die **vorbereitete PowerPoint** als Rückfall, die der
+Berater selbst als PDF speichert. Betriebsdetails (Skripte, Schlüssel, Pfade,
+Topologie) liegen **off-repo bzw. intern auf H:**; im öffentlichen Code steht
+nur Logik, der Zugang kommt aus den Secrets. Ein Wächter-Test hält die Auflagen
+fest (keine Skripte/Geheimnisse im Repo, HMAC, Rückfallebene).
 
 **Die übertragbaren Lehren** (Einzelheiten und die technischen Fallen liegen
 **intern** auf H:, nicht im öffentlichen Repo, siehe Wissensbasis P36–P39):
@@ -4898,12 +4901,14 @@ Eingriff in `pptx_export.py`. Tests: `test_folien_config` (Schritt 5),
 `test_kalenderjahre` (Wertentwicklungs-Folie liegt bei SCHWEIZ 2 Positionen
 früher). Muster-Broschüren zur Sichtprüfung: H:\…\Themenvorlageneu\_ergebnis\.
 
-### 17.09.2026 (Nachtrag) – PDF-Fassung; Umwandlungsdienst zurückgenommen; Repo bereinigt
+### 17.09.2026 (Nachtrag) – PDF-Dienst (freundliche Fassung, live); Repo bereinigt
 
-„PDF erstellen" liefert eine vorbereitete PowerPoint (siehe #73). Ein
-automatischer Umwandlungsdienst wurde nach einer Sicherheitsbewertung und der
-Einstufung durch den Virenschutz **zurückgenommen** (nur mit Freigabe der
-IT-Sicherheit). Aus einer vollständigen Sicherheitsprüfung des **öffentlichen**
+„PDF erstellen" liefert ein echtes PDF über einen Umwandlungs-PC, mit Rückfall
+auf die vorbereitete PowerPoint (siehe #73). Der erste, zu auffällige Dienst
+wurde nach der Virenschutz-Einstufung zurückgenommen und am selben Tag als
+**freundliche Fassung** neu gebaut (HMAC-signierte Aufträge, Zugang nur aus
+Secrets, Skripte off-repo, keine Malware-Muster) — abends in der Cloud live
+bestätigt. Aus einer vollständigen Sicherheitsprüfung des **öffentlichen**
 Repos folgte, ohne sichtbare Folieninhalte zu ändern: interne
 Server-Verknüpfungen aus allen Vorlagen und damit aus jeder Broschüre entfernt,
 personenbezogene Metadaten aus den Vorlagen entfernt, `Zieldaten/` und `fonts/`
