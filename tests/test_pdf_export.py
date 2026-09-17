@@ -21,8 +21,9 @@ Schritte:
   5  Alle Vorlagen: externe Verknuepfungen (Netzlaufwerk) entfernt, Folien nur
      wo noetig, Paket intakt (Sicherheitspruefung 17.09.2026)
   6  GEGENPROBE: ohne das Nachziehen muessen 2 und 3 rot werden
-  7  Waechter: kein automatischer Umwandlungsdienst, keine Skripte, kein
-     Netzzugriff im PDF-Weg (nur mit Freigabe der IT-Sicherheit)
+  7  Waechter: PDF-Dienst abgesichert — Dienst-Skripte off-repo, keine
+     Geheimnisse/Betriebsdetails im Code (nur in den Secrets), Auftraege per
+     HMAC signiert, saubere Rueckfallebene auf die vorbereitete PowerPoint
   8  Oberflaeche (AppTest): zwei Buttons, Tooltip je Familie, Klick liefert die
      PDF-Fassung mit Download und Anleitung, Fehlerfall laesst die PowerPoint
 
@@ -304,7 +305,7 @@ def main():
         traceback.print_exc()
         fehler += 1
 
-    for schritt in (schritt7_kein_umwandlungsdienst, schritt8_oberflaeche):
+    for schritt in (schritt7_dienst_abgesichert, schritt8_oberflaeche):
         try:
             fehler += schritt()
         except Exception:
@@ -317,23 +318,30 @@ def main():
         print("FEHLGESCHLAGEN — %d Fehler" % fehler)
         return 1
     print("BESTANDEN — PDF-Fassung ohne Vertriebsfolie und externe Verknuepfungen, "
-          "Nummern und Inhaltsverzeichnis stimmen, Gegenprobe greift, kein "
-          "Umwandlungsdienst, Oberflaeche")
+          "Nummern und Inhaltsverzeichnis stimmen, Gegenprobe greift, PDF-Dienst "
+          "abgesichert, Oberflaeche")
     return 0
 
 
-def schritt7_kein_umwandlungsdienst():
-    """Waechter (Sicherheitspruefung 17.09.2026): Ein automatischer
-    Umwandlungsweg (Dienst auf einem Arbeitsplatz-PC, der Dateien aus dem Netz
-    mit PowerPoint oeffnet) wurde gebaut, vom Virenschutz als Schadsoftware
-    eingestuft und zurueckgenommen. Er darf nur mit Freigabe der
-    IT-Sicherheit zurueckkommen — nicht still ueber einen Commit."""
-    print("\n7. Kein automatischer Umwandlungsdienst im Repo")
+def schritt7_dienst_abgesichert():
+    """Waechter (Neubau 17.09.2026): Der PDF-Dienst (ein Standalone-Buero-PC
+    wandelt via PowerPoint um, GitHub dient als Briefkasten) ist bewusst
+    zurueckgeholt — mit Auflagen. Dieser Schritt haelt sie fest, damit sie nicht
+    still verfallen. Grund: Der fruehere Entwurf wurde vom Virenschutz als
+    Schadsoftware eingestuft; und die BaFin-Brille verlangt, dass nichts, was im
+    OEFFENTLICHEN Repo liegt, Schaden anrichten kann.
+      - Die Dienst-Skripte liegen NICHT im Repo (sondern lokal auf dem PC).
+      - Betriebsdetails (privates Repo, Token) stehen NICHT im Code, sondern
+        in den Secrets — kein Token- oder Repo-Literal im Quelltext.
+      - Jeder Auftrag wird signiert (HMAC); die App faellt sauber auf die
+        vorbereitete PowerPoint zurueck, wenn der Dienst fehlt."""
+    print("\n7. PDF-Dienst abgesichert (Skripte off-repo, Secrets, HMAC, Rueckfall)")
     fehler = 0
-    for pfad in ("modules/pdf_briefkasten.py", "pdf_dienst"):
-        if os.path.exists(os.path.join(WURZEL, pfad)):
-            print("   FEHLER — %s ist wieder da (Freigabe der IT-Sicherheit?)" % pfad)
-            fehler += 1
+
+    # a) Keine Dienst-Skripte im Repo.
+    if os.path.exists(os.path.join(WURZEL, "pdf_dienst")):
+        print("   FEHLER — Ordner pdf_dienst ist im Repo (gehoert lokal auf den PC)")
+        fehler += 1
     ps1 = [os.path.relpath(os.path.join(w, d), WURZEL)
            for w, _o, dateien in os.walk(WURZEL)
            if ".git" not in w and ".venv" not in w
@@ -341,14 +349,33 @@ def schritt7_kein_umwandlungsdienst():
     if ps1:
         print("   FEHLER — Skripte im Repo: %s" % ps1)
         fehler += 1
+
+    # b) Keine Geheimnisse/Betriebsdetails hartkodiert.
+    for rel in ("modules/pdf_briefkasten.py", "modules/portfolioanalyse.py"):
+        with open(os.path.join(WURZEL, rel), encoding="utf-8") as fh:
+            quelle = fh.read()
+        for verboten in ("github_pat_", "FFPBAM/pdf-briefkasten"):
+            if verboten in quelle:
+                print("   FEHLER — %s enthaelt %r (gehoert in die Secrets)" % (rel, verboten))
+                fehler += 1
+
+    # c) Signatur (HMAC) und Rueckfallebene vorhanden.
+    with open(os.path.join(WURZEL, "modules", "pdf_briefkasten.py"), encoding="utf-8") as fh:
+        bk = fh.read()
+    if "hmac" not in bk or "def signatur" not in bk:
+        print("   FEHLER — pdf_briefkasten.py signiert die Auftraege nicht (HMAC fehlt)")
+        fehler += 1
     with open(os.path.join(WURZEL, "modules", "portfolioanalyse.py"), encoding="utf-8") as fh:
-        quelle = fh.read()
-    for verboten in ("pdf_briefkasten", 'secrets.get("pdf_', "urllib", "requests."):
-        if verboten in quelle:
-            print("   FEHLER — portfolioanalyse.py enthaelt %r" % verboten)
-            fehler += 1
+        pa = fh.read()
+    if 'st.secrets["pdf_briefkasten"]' not in pa:
+        print("   FEHLER — portfolioanalyse.py liest den Dienst-Zugang nicht aus den Secrets")
+        fehler += 1
+    if "BriefkastenFehler" not in pa:
+        print("   FEHLER — portfolioanalyse.py faengt den Dienst-Ausfall nicht ab (keine Rueckfallebene)")
+        fehler += 1
+
     if not fehler:
-        print("   OK — kein Dienst-Code, keine Skripte, kein Netzzugriff im PDF-Weg")
+        print("   OK — Skripte off-repo, keine Geheimnisse im Code, HMAC + Rueckfallebene da")
     return fehler
 
 

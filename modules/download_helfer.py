@@ -51,6 +51,9 @@ PPTX_MIMETYPE = (
 DOWNLOAD_ARTEN = {
     "pptx": (PPTX_MIMETYPE, "PowerPoint herunterladen"),
     "pdf_fassung": (PPTX_MIMETYPE, "PowerPoint für PDF herunterladen"),
+    # Echtes PDF vom PDF-Dienst (Neubau 17.09.2026): das fertige Dokument,
+    # nicht die vorbereitete PowerPoint.
+    "pdf": ("application/pdf", "PDF herunterladen"),
 }
 
 
@@ -126,7 +129,16 @@ def download_bereich(daten: bytes, dateiname: str, art: str = "pptx") -> None:
     # key=f"pf_{art}_dl": tests/test_keepalive.py verbietet berechnete Keys an
     # Trigger-Widgets (sie wären in _KEEPALIVE_SPERRE nicht prüfbar).
     with st.expander("Alternativer Download (falls der Button oben nicht lädt)"):
-        if art == "pdf_fassung":
+        if art == "pdf":
+            st.download_button(
+                "Klassischer Download (über den Server)",
+                data=daten,
+                file_name=dateiname,
+                mime=mime,
+                key="pf_pdf_datei_dl",
+                width="stretch",
+            )
+        elif art == "pdf_fassung":
             st.download_button(
                 "Klassischer Download (über den Server)",
                 data=daten,

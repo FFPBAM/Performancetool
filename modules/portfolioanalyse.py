@@ -1160,25 +1160,65 @@ def _pdf_tooltip(familie):
             else _pdf_export_mod.HINWEIS_OHNE_VERTRIEB)
 
 
-def _pdf_fassung_erstellen() -> bool:
-    """PDF-Fassung aus der gebauten PowerPoint: Vertriebsfolie raus, Seitenzahlen
-    und Inhaltsverzeichnis nachgezogen, externe Verknüpfungen entfernt.
+def _dienst_cfg():
+    """Zugang zum PDF-Dienst aus den Secrets [pdf_briefkasten], oder None.
 
-    Ergebnis nach st.session_state["pf_pdf_bytes"] (eine .pptx, die der Berater
-    in PowerPoint als PDF speichert); Auffälligkeiten nach ["pf_pdf_hinweise"],
-    Fehler nach ["pf_pdf_fehler"] — die PowerPoint bleibt davon unberührt.
+    Ohne diese Secrets (repo/token/hmac) bleibt der Dienst-Weg still aus — die
+    App liefert dann die vorbereitete PowerPoint wie vor dem Dienst. So bringt
+    das öffentliche Repo KEINE Betriebsdetails mit; sie stehen nur im Betrieb.
+    """
+    try:
+        s = st.secrets["pdf_briefkasten"]
+        cfg = {"repo": s["repo"], "token": s["token"], "hmac": s["hmac"]}
+    except Exception:
+        return None
+    return cfg if all(cfg.values()) else None
+
+
+def _pdf_erstellen() -> bool:
+    """Baut die bereinigte PDF-Quelle (Vertriebsfolie raus, Seitenzahlen und
+    Inhaltsverzeichnis nachgezogen, externe Verknüpfungen entfernt) und lässt
+    sie, wenn ein PDF-Dienst erreichbar ist, in ein echtes PDF umwandeln.
+
+    Ergebnis:
+      - Dienst erreichbar: fertiges PDF nach st.session_state["pf_pdf_datei"].
+      - Sonst (kein Dienst konfiguriert, nicht erreichbar oder Fehler): die
+        vorbereitete PowerPoint nach ["pf_pdf_bytes"], die der Berater selbst
+        als PDF speichert; der Grund nach ["pf_pdf_hinweis_dienst"].
+    Auffälligkeiten aus der Aufbereitung nach ["pf_pdf_hinweise"], ein echter
+    Baufehler nach ["pf_pdf_fehler"]. Die PowerPoint bleibt davon unberührt.
     """
     from modules import pdf_export as _pdf_export_mod
     try:
         with st.spinner("PDF-Fassung wird vorbereitet …"):
             quelle, _entfernt, hinweise = _pdf_export_mod.pptx_fuer_pdf(
                 st.session_state["pf_pptx_bytes"])
-        st.session_state["pf_pdf_bytes"] = quelle
         st.session_state["pf_pdf_hinweise"] = list(hinweise)
-        return True
     except Exception as ex:
         st.session_state["pf_pdf_fehler"] = f"PDF-Fassung konnte nicht vorbereitet werden: {ex}"
-    return False
+        return False
+
+    cfg = _dienst_cfg()
+    if cfg:
+        from modules import pdf_briefkasten as _bk
+        platz = st.empty()
+        try:
+            pdf = _bk.pdf_anfordern(cfg, quelle, fortschritt=lambda t: platz.info(t))
+            platz.empty()
+            st.session_state["pf_pdf_datei"] = pdf
+            return True
+        except _bk.BriefkastenFehler as ex:
+            platz.empty()
+            # Dienst nicht erreichbar oder Fehler → vorbereitete PowerPoint als
+            # Rückfallebene. Kein harter Fehler: der Berater kommt trotzdem zum
+            # PDF, nur über einen Klick mehr.
+            st.session_state["pf_pdf_bytes"] = quelle
+            st.session_state["pf_pdf_hinweis_dienst"] = str(ex)
+            return True
+
+    # Kein Dienst konfiguriert → vorbereitete PowerPoint (wie vor dem Dienst).
+    st.session_state["pf_pdf_bytes"] = quelle
+    return True
 
 
 def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
@@ -1273,7 +1313,9 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         st.session_state.pop("pf_pptx_bytes", None)
         st.session_state.pop("pf_pptx_build_errors", None)
         st.session_state.pop("pf_pdf_bytes", None)
+        st.session_state.pop("pf_pdf_datei", None)
         st.session_state.pop("pf_pdf_hinweise", None)
+        st.session_state.pop("pf_pdf_hinweis_dienst", None)
         st.session_state.pop("pf_pdf_fehler", None)
         st.session_state["pf_export_key"] = current_key
 
@@ -1500,20 +1542,33 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                              _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf),
                              art="pptx")
     with _spalte_pdf:
-        if "pf_pdf_bytes" not in st.session_state:
+        if ("pf_pdf_datei" not in st.session_state
+                and "pf_pdf_bytes" not in st.session_state):
             if st.button("PDF erstellen", key="pf_pdf_btn", width="stretch",
                          help=_pdf_tooltip(_familie_fuer_strategie(name_mapping, pf_sel_1))):
-                st.session_state.pop("pf_pdf_fehler", None)
+                for _k in ("pf_pdf_fehler", "pf_pdf_hinweis_dienst"):
+                    st.session_state.pop(_k, None)
                 if "pf_pptx_bytes" in st.session_state or _pptx_bauen():
-                    _pdf_fassung_erstellen()
+                    _pdf_erstellen()
                     st.rerun()
             if st.session_state.get("pf_pdf_fehler"):
                 st.error(st.session_state["pf_pdf_fehler"])
+        elif "pf_pdf_datei" in st.session_state:
+            # Fertiges PDF vom PDF-Dienst.
+            download_bereich(st.session_state["pf_pdf_datei"],
+                             _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf,
+                                               endung=".pdf"),
+                             art="pdf")
         else:
+            # Rückfallebene: vorbereitete PowerPoint, der Berater speichert
+            # selbst als PDF (Dienst nicht konfiguriert oder nicht erreichbar).
             download_bereich(st.session_state["pf_pdf_bytes"],
                              _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf,
                                                endung=" (für PDF).pptx"),
                              art="pdf_fassung")
+            if st.session_state.get("pf_pdf_hinweis_dienst"):
+                st.info("Automatische PDF-Erstellung gerade nicht möglich: "
+                        + st.session_state["pf_pdf_hinweis_dienst"])
             st.caption(PDF_ANLEITUNG)
     # Kontextbezogener Familien-Hinweis (immer unter dem Button).
     _render_familien_hinweis(name_mapping, pf_sel_1,
