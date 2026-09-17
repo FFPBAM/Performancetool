@@ -4839,6 +4839,37 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 ## 16. Changelog
 
+### 17.09.2026 – PDF-Export, Stufe 0 und 1: Probe und PDF-Quelle
+
+Auftrag Philip: zusätzlich zur PowerPoint ein PDF der Broschüre — aus derselben
+gebauten PowerPoint, aber ohne die Folie „Ihre Ansprechpartner für den
+Vertrieb" (Fotos im PDF nicht austauschbar). Hebt die Entscheidung vom
+11.08.2026 („Kundendokumente nur als PowerPoint") bewusst auf.
+
+BEFUND: Die Folie gibt es nur in cVV (F30) und in der ungenutzten
+Standardvorlage (F21), beide mit Layout „Ansprechpartner". Das
+Inhaltsverzeichnis trägt eingetippte Seitenzahlen; „Rechtliche Hinweise und
+Impressum 34" war in der cVV-Vorlage schon immer falsch (Impressum = F36) —
+in der Vorlage korrigiert, nur `slide2.xml` geändert, übrige 270 ZIP-Einträge
+byte-gleich belegt.
+
+PROBE (Stufe 0): cVV und Thema mit echtem PowerPoint (COM `SaveAs …, 32`) und
+LibreOffice 7.6 headless umgewandelt. LibreOffice zerstört die Ringe (Zahlen
+lose, Linien ins Leere, dicke Ringe) und lässt auf Thema F11 die Überschriften
+und einen Legendeneintrag weg — auch mit mitgegebenem Noto. Damit scheidet
+LibreOffice in der Cloud aus; bestätigt #16/#28/#29 am PDF. PowerPoint bettet
+echtes Noto ein, obwohl Noto nicht in `C:\Windows\Fonts` liegt.
+Nebenbefunde beim Aufsetzen: LibreOffice 26.x startet mit VC++-Laufzeit 14.28
+nicht (`0xC0000142`); per `msiexec /a` entpackt lädt es Schriften nur aus
+`program\resource\common\fonts`.
+
+STUFE 1: `modules/pdf_export.py` — `vertriebsfolien()` (Layout-Erkennung am
+ZIP, ~10 ms je Vorlage) und `pptx_fuer_pdf()` (entfernen, `update_slide_numbers`
+erneut, Inhaltsverzeichnis-Zahlen `N − #(entfernte < N)` im letzten Lauf mit
+Endziffer). Prüfstein `tests/test_pdf_export.py` inkl. Gegenprobe. Offen:
+Umwandlungsweg (Philip testet PowerPoint für das Web), dann Umwandler und
+Oberfläche (zwei Buttons, Tooltip).
+
 ### 18.08.2026 (Nachtrag 5) – Zwei Hinweistexte im Performance-Reiter
 
 Gemeldet: Der Calmar-Hinweis war ein halber Satz („Je höher, desto besser die

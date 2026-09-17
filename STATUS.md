@@ -1,9 +1,104 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 26.08.2026 · **Branch:** `verbesserungen` ·
+**Letzte Sitzung:** 17.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **33 von 33 Suiten grün**, `pyflakes` bei null ·
-**die unlesbaren Broschüren sind behoben** — beim Duplizieren einer Folie
+unerheblich) · **34 von 34 Suiten grün**, `pyflakes` bei null ·
+**PDF-Export in Arbeit, Stufe 1 fertig und NICHT gepusht** — die
+PDF-Quelle (Broschüre ohne „Ihre Ansprechpartner für den Vertrieb", Seitenzahlen
+und Inhaltsverzeichnis nachgezogen) steht, der **Umwandlungsweg ist offen**:
+LibreOffice ist durch die Probe ausgeschieden, Philip testet die
+Microsoft-365-Umwandlung im Browser. Plan und Stufen im Sitzungsbericht unten.
+
+**Nächster Schritt (17.09.2026):** Philips `CVV_3_PowerPointWeb.pdf` (und
+ggf. `Thema_3_…`) in `H:\Entwicklung\Forschung_Claude\Performancetool\_pdf_probe\`
+gegen `CVV_1_PowerPoint.pdf` vergleichen — Seite für Seite, Ringe zuerst. Danach
+entscheidet Philip den Weg (M365 über IT / PDF-Vorlage + „Speichern unter" /
+lokales Werkzeug). Erst dann Stufe 2 (Umwandler) und Stufe 3 (zwei Buttons).
+
+> ### Für Philip: was diese Sitzung geändert hat (17.09.2026)
+>
+> **Auftrag:** Neben „PowerPoint erstellen" ein Button „PDF erstellen". Das PDF
+> entsteht aus **derselben** gebauten PowerPoint, aber ohne die Folie „Ihre
+> Ansprechpartner für den Vertrieb" (im PDF lassen sich die Fotos nicht
+> tauschen). Seitenzahlen müssen danach stimmen, am Button ein Tooltip.
+>
+> #### Der Befund, bevor etwas gebaut wurde
+>
+> | Familie | Vertriebsfolie |
+> |---|---|
+> | **cVV** | **F30** von 37 |
+> | FFPB-Standard | F21 — Vorlage wird von keiner der 19 Strategien gebaut |
+> | ESG, ETF, Thema, comdirect | **keine** (ESG/ETF/Thema nur ein ungenutztes Layout) |
+>
+> Gemessen an den Vorlagen **und** an echten Broschüren auf H:. Entschieden:
+> nur cVV ist betroffen; erkannt wird die Folie am **Layout „Ansprechpartner"**,
+> nicht an der Nummer — kommt sie in eine weitere Vorlage, greift es von selbst.
+>
+> Zwei Seitenzahl-Arten, zwei Mechanismen: Die Zahl **unten** schreibt
+> `update_slide_numbers` beim Bau als festen Text (neu schreiben genügt). Das
+> **Inhaltsverzeichnis** hat eingetippte Zahlen — die zieht jetzt eigener Code
+> nach. Und dabei fiel auf: **„Rechtliche Hinweise und Impressum 34" war schon
+> immer falsch**, Folie 34 ist das Anschreiben, das Impressum ist F36. In der
+> Vorlage korrigiert (deine Freigabe).
+>
+> #### Stufe 0 — die Probe: LibreOffice scheidet aus
+>
+> Die Cloud hat kein PowerPoint. Deshalb zuerst dieselbe cVV- und
+> Thema-Broschüre zweimal umgewandelt — echtes PowerPoint gegen LibreOffice
+> 7.6 (der Weg, der auf dem Server liefe; Noto-Schriften mitgegeben, damit
+> nur der Renderer verglichen wird):
+>
+> | | PowerPoint | LibreOffice |
+> |---|---|---|
+> | Ringe | wie das Original | Zahlen lose auf der Folie, Linien ins Leere, Ringe dick |
+> | Thema S. 11 | vollständig | Überschriften „REGIONEN"/„Branchen" und Legende „Japan" **fehlen** |
+> | Text, Linien-/Balkencharts | — | weitgehend gleich |
+> | cVV Größe / Dauer | 2,51 MB / 4,6 s | 3,64 MB / 11 s |
+>
+> **Nicht nur hässlicher, sondern inhaltlich unvollständig** — damit ist
+> LibreOffice in der Cloud vom Tisch. PowerPoint bettet übrigens echtes Noto
+> Sans/Serif ein, obwohl Noto nicht in `C:\Windows\Fonts` liegt (Office holt
+> es selbst). Alles zum Ansehen in `_pdf_probe\` mit `LIESMICH.txt`.
+>
+> *Zwei Stolpersteine beim Aufsetzen, damit sie niemand zweimal sucht:*
+> LibreOffice 26.x startet hier nicht (`0xC0000142`, die VC++-Laufzeit im
+> System ist 14.28 von 2020) — 7.6 läuft. Und aus dem MSI entpackt
+> (`msiexec /a`) lädt LibreOffice Schriften aus
+> `program\resource\common\fonts`, **nicht** aus dem mitentpackten `Fonts\`.
+>
+> #### Stufe 1 — die PDF-Quelle (fertig, zwei Commits, nicht gepusht)
+>
+> Neues streamlit-freies Modul `modules/pdf_export.py`:
+> `vertriebsfolien()` und `pptx_fuer_pdf()`. cVV: 37 → 36 Folien,
+> Inhaltsverzeichnis Standorte 31→30, Tradition 33→32, Impressum 36→35.
+> In echtem PowerPoint geöffnet und als PDF gespeichert, im Bild geprüft
+> (`_pdf_probe\CVV_4_ohne_Vertrieb_PowerPoint.pdf`).
+>
+> Prüfstein `tests/test_pdf_export.py` (34. Suite) mit **Gegenprobe**: ohne
+> das Nachziehen zeigt „Unsere Tradition" im PDF aufs Anschreiben und das
+> Impressum auf die Grußfolie — beide Prüfungen werden rot. Die
+> Impressum-Prüfung ist gegen eine Broschüre aus der **alten** Vorlage
+> ebenfalls rot.
+>
+> **Die Entscheidung vom 11.08.2026 („Kundendokumente nur als PowerPoint")
+> ist damit bewusst aufgehoben** — das PDF kommt zusätzlich.
+> `tests/test_bedienung.py::pruefe_kein_pdf` wird in Stufe 3 angepasst
+> (reportlab/matplotlib bleiben verboten).
+>
+> #### Nur gemeldet, nicht geändert
+>
+> - **ESG:** „Rechtliche Hinweise und Impressum 36" zeigt auf die Trennfolie
+>   „Unser Reporting"; außerdem stehen Risikohinweise und Impressum (F34/35)
+>   **vor** den Trennfolien „Unser Reporting"/„Rechtliche Hinweise" (F36/37) —
+>   bei ETF liegt es richtig herum.
+> - **comdirect:** „Honorar 14" zeigt auf die Honorartabelle; der Abschnitt
+>   beginnt bei F12 „Unser Honorar".
+>
+---
+
+### Stand der Sitzung davor (26.08.2026)
+
+**Die unlesbaren Broschüren sind behoben** — beim Duplizieren einer Folie
 (Vergleichsportfolio, Familie *Thema*) teilten sich zwei Charts dieselben
 Sub-Teile statt eigene zu bekommen; **in echtem PowerPoint bewiesen, vorher
 und nachher**. Zwei neue Prüfsteine (`test_pptx_integritaet.py`,
@@ -25,8 +120,8 @@ Dazu **ein Fehler aus dem eigenen Eingriff**, den erst der PNG-Export zeigte:
 die feste Label-Box kürzte längere Zahlen zu „37,1…".
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
-**Nächster Schritt:** Im Code steht nichts an; ein Merge ist **nicht**
-Voraussetzung für irgendetwas (siehe „Wo wir stehen"). Fachlich offen ist nur
+**Nächster Schritt (Stand 26.08.2026):** Im Code stand nichts an; ein Merge ist **nicht**
+Voraussetzung für irgendetwas (siehe „Wo wir stehen"). Fachlich offen war nur
 noch die *Ursache* hinter der Label-Verteilung (Kopfsperre deckelt die
 Label-Höhe auf die Ringoberkante) — siehe „Offene Punkte".
 
@@ -3080,6 +3175,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 | `test_ring_geometrie.py` *(neu 25.08.2026)* | **+ python-pptx**, Schritt 4 zusätzlich **+ streamlit** und ein Ausgabeordner | Die Geometrie der Ringdiagramme, für die es bis dahin **keinen** Prüfstein gab. Schritt 1 die sechs Vorlagen (Rahmen, `holeSize`, `plotArea` aller 22 Ringe — die Geometrie kommt zu 100 % aus der .pptx), Schritt 2 die Ist-Werte **nach** `nachbearbeiten` gegen eingefrorene Maße, Schritt 3 die Zusagen, die auch eine spätere Änderung überleben müssen (keine Beschriftung im Ring, keine Überlappung, nichts aus dem Rahmen, kein Ring in der Legende), Schritt 4 dasselbe an 17 Ringen echter Broschüren, Schritt 5 die Trennung der Familien-Optik (Standard 79, die fünf Familien 68). Seit dem 25.08.2026 zusätzlich: **Flächenprüfung** gegen die Legende (nicht mehr nur die Oberkante) und **kreuzende Führungslinien** — in echten Broschüren null von 69, auf den Platzhalterdaten der Vorlagen höchstens der gemessene Ausgangswert 2. **Gegenprobe belegt:** Dicke zurückgestellt → 22 Fehler, Verkleinerung stillgelegt → 44 Fehler |
+| `test_pdf_export.py` *(neu 17.09.2026)* | **+ python-pptx, lxml**, Schritt 2 **+ streamlit** und die echten Daten | Die PDF-Quelle (`modules/pdf_export.py`). Schritt 1 die Vertriebsfolie je Vorlage (nur cVV F30 und FFPB F21, am Layout „Ansprechpartner“ erkannt), Schritt 2 cVV bauen → 37 → 36 Folien, keine Vertriebsfolie, Seitenzahlen = Position, **Schritt 3 die Zusage**: jeder Inhaltsverzeichnis-Eintrag zeigt im PDF auf dieselbe Folie wie in der PowerPoint, und das Impressum steht auf einer Folie mit Layout „Impressum“ (gegen die alte Vorlage mit „34“ rot), Schritt 4 Paket-Integrität L1–L6, Schritt 5 Familien ohne Vertriebsfolie unverändert, **Schritt 6 Gegenprobe**: ohne Nachziehen werden 2 und 3 rot |
 
 ```
 python tests/test_bedienung.py
@@ -3165,6 +3261,24 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 ## Offene Punkte
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
+
+**NEU 17.09.2026 — PDF-Export: der Umwandlungsweg ist offen.** Stufe 1
+(PDF-Quelle, `modules/pdf_export.py`) ist fertig und lokal committet, **nicht
+gepusht**. Offen:
+1. *Philip:* Browser-Test PowerPoint für das Web → `_pdf_probe\CVV_3_PowerPointWeb.pdf`.
+2. Vergleich mit `CVV_1_PowerPoint.pdf`, danach Entscheidung: Microsoft 365
+   (IT: App-Registrierung) / PDF-Vorlage + „Speichern unter → PDF" beim
+   Berater / lokales Werkzeug. **LibreOffice ist ausgeschieden** (Probe
+   17.09.2026, Ringe und fehlende Überschriften).
+3. Stufe 2 Umwandler, Stufe 3 Oberfläche: zwei Buttons nebeneinander
+   (`pf_pdf_btn`, `pf_pdf_dl` in `_KEEPALIVE_SPERRE`), Tooltip aus
+   `pdf_export.HINWEIS_VERTRIEB`, `download_bereich` mit Dateityp,
+   `test_bedienung.pruefe_kein_pdf` anpassen.
+
+*Nur gemeldet:* ESG-Inhaltsverzeichnis „Rechtliche Hinweise 36" zeigt auf die
+Trennfolie „Unser Reporting" (und F34/35 stehen vor den Trennfolien);
+comdirect „Honorar 14" statt Abschnittsbeginn F12. Beides Vorlagentext —
+Entscheidung bei Philip.
 
 **NEU 26.08.2026 — die Reihenfolge der Beschriftungs-Elemente ist verletzt,
 aber folgenlos.** In jeder gebauten Broschüre stehen die `<c:dLbl>` der Ringe
