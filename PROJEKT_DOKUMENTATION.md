@@ -4871,6 +4871,33 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 ## 16. Changelog
 
+### 17.09.2026 (Nachtrag 2) – Thema: strategie-spezifische Anfangsfolien 2/3
+
+Feedback aus dem Haus: Die Familie „Thema" wird aus EINER Vorlage (der
+Pro-Broschüre) gebaut; deren Folien 2/3 („Unsere Strategie PRO") tragen ALLE
+Thema-Strategien — auch Offensiv, Pro Dividende und die beiden SCHWEIZ (belegt
+an einer gebauten SCHWEIZ-Broschüre). Jetzt strategie-spezifisch:
+- **Offensiv / Pro Dividende:** eigene Vorlagen `Vorlage_Thema_Offensiv.pptx`
+  bzw. `Vorlage_Thema_ProDividende.pptx` — durch Folien-Transplantat erzeugt:
+  in eine Kopie der bereinigten `Vorlage_Thema.pptx` nur F2/F3 aus den
+  (bereinigten) Original-Broschüren übernommen. F2/F3 sind reiner Text, alle
+  Layouts existieren namensgleich. Belegt: nur slide2/slide3 (+rels) weichen ab,
+  keine externen Verknüpfungen, keine Metadaten, Integrität L1–L6.
+- **Schweiz_aktienorientiert / Schweiz_substanzorientiert:** dieselbe
+  Pro-Vorlage mit `entfernen=[2,3]` → Broschüre beginnt nach der Titelfolie
+  direkt mit „Aktien – die guten Jahre überwiegen", **19 statt 21 Folien**.
+- **Pro:** unverändert (Rückfall auf die Familie Thema).
+
+Umgesetzt als `VORLAGEN_STRATEGIE` in `vorlagen_config.py` (strategie- vor
+familien-Auflösung) und `_vorlage_fuer_strategie` in `portfolioanalyse.py`.
+`_THEMA_CONFIG` bleibt bit-identisch (test_folien_config unberührt). Kein
+Eingriff in `pptx_export.py`. Tests: `test_folien_config` (Schritt 5),
+`test_export_smoke` (Teil 3, je Strategie + Gegenprobe externe Verknüpfungen),
+`test_pptx_integritaet` (SCHWEIZ baut 19/23), sowie Whitelist-Nachzug in
+`test_farben`, `test_anlagekriterien` und der Positions-Fix in
+`test_kalenderjahre` (Wertentwicklungs-Folie liegt bei SCHWEIZ 2 Positionen
+früher). Muster-Broschüren zur Sichtprüfung: H:\…\Themenvorlageneu\_ergebnis\.
+
 ### 17.09.2026 (Nachtrag) – PDF-Fassung; Umwandlungsdienst zurückgenommen; Repo bereinigt
 
 „PDF erstellen" liefert eine vorbereitete PowerPoint (siehe #73). Ein

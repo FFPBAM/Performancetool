@@ -21,6 +21,14 @@ zurückgenommen (Sicherheit).**
 
 **Diese Sitzung (17.09.2026):**
 
+- **Thema: strategie-spezifische Anfangsfolien 2/3.** Bisher trugen alle
+  Thema-Strategien die Pro-Folien 2/3. Jetzt: Offensiv/Pro Dividende eigene
+  Vorlagen (`Vorlage_Thema_Offensiv.pptx`, `Vorlage_Thema_ProDividende.pptx` —
+  nur F2/F3 aus den Originalen transplantiert, bereinigt), beide SCHWEIZ ohne
+  F2/F3 (Pro-Vorlage mit `entfernen=[2,3]` → 19 statt 21 Folien). Über
+  `VORLAGEN_STRATEGIE`/`_vorlage_fuer_strategie`; `_THEMA_CONFIG` unverändert,
+  kein Eingriff in `pptx_export`. Muster zur Sichtprüfung in
+  `Themenvorlageneu\_ergebnis\` auf H:. **Bitte in echtem PowerPoint abnehmen.**
 - **PDF-Fassung der Broschüre.** Neben „PowerPoint erstellen" liefert
   „PDF erstellen" eine **vorbereitete PowerPoint**: ohne die Folie „Ihre
   Ansprechpartner für den Vertrieb" (im PDF nicht austauschbar), Seitenzahlen

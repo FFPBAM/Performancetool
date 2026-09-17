@@ -445,6 +445,20 @@ prüfte statt gegen eine Schwelle (#47).
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.
 `vorlagen_config.py` hat bewusst **keine Importe** — das bitte so lassen.
 
+**Folien, die sich JE STRATEGIE unterscheiden** (nicht je Familie): über
+`VORLAGEN_STRATEGIE` in `vorlagen_config.py` (NEU 17.09.2026). Beispiel Thema:
+die Anfangsfolien 2/3 („Unsere Strategie …") sind strategiespezifisch —
+Offensiv/Pro Dividende bekommen eigene `.pptx` (nur F2/F3 anders, gleiche
+Config), beide SCHWEIZ die Pro-Vorlage mit `entfernen=[2,3]` (→ 19 Folien).
+Aufgelöst in `portfolioanalyse._vorlage_fuer_strategie` (erst Strategie, dann
+Familie). Bei Vergleichs-Broschüren bestimmt die Leitstrategie (`pf_sel_1`) die
+Intro-Folien. Neue Thema-Vorlagen entstehen durch Folien-Transplantat in eine
+Kopie der **bereinigten** `Vorlage_Thema.pptx` (F2/F3 sind reiner Text, Layouts
+namensgleich) — **nie** aus den dirty Original-Broschüren committen (interne
+Serververweise/Metadaten). Testverträglich halten: `_THEMA_CONFIG` unverändert,
+neue Vorlagen in `test_pdf_export.ERWARTET`, `test_farben.BEKANNTE_ABWEICHUNG`,
+`test_anlagekriterien.VORLAGEN_OHNE_KASTEN` eintragen.
+
 **Loader oder Mathematik nie duplizieren.** Genau daran krankte die Codebasis
 (zwei Kopien der CSV-Loader, elf Kopien der analytics-Funktionen). Wer etwas
 ohne Streamlit braucht, zieht es in ein UI-freies Modul — er kopiert es nicht.
