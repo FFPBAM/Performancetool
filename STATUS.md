@@ -5,15 +5,27 @@
 unerheblich) · **34 von 34 Suiten grün**, `pyflakes` bei null ·
 **PDF-Export in Arbeit, Stufe 1 fertig und NICHT gepusht** — die
 PDF-Quelle (Broschüre ohne „Ihre Ansprechpartner für den Vertrieb", Seitenzahlen
-und Inhaltsverzeichnis nachgezogen) steht, der **Umwandlungsweg ist offen**:
-LibreOffice ist durch die Probe ausgeschieden, Philip testet die
-Microsoft-365-Umwandlung im Browser. Plan und Stufen im Sitzungsbericht unten.
+und Inhaltsverzeichnis nachgezogen) steht. **Umwandlungsweg entschieden:
+PDF-Briefkasten** — echtes PowerPoint auf Philips Büro-PC, GitHub
+(privates Repo) nur als Briefkasten dazwischen. Repo und Schlüssel sind
+eingerichtet und geprüft. Sitzungsbericht unten.
 
-**Nächster Schritt (17.09.2026):** Philips `CVV_3_PowerPointWeb.pdf` (und
-ggf. `Thema_3_…`) in `H:\Entwicklung\Forschung_Claude\Performancetool\_pdf_probe\`
-gegen `CVV_1_PowerPoint.pdf` vergleichen — Seite für Seite, Ringe zuerst. Danach
-entscheidet Philip den Weg (M365 über IT / PDF-Vorlage + „Speichern unter" /
-lokales Werkzeug). Erst dann Stufe 2 (Umwandler) und Stufe 3 (zwei Buttons).
+> **⏰ FRIST: Die beiden GitHub-Schlüssel des PDF-Briefkastens laufen am
+> 16.12.2026 ab** (`pdf-briefkasten-app` 09:09 UTC, `pdf-briefkasten-pc`
+> 09:11 UTC — ausgelesen aus dem Antwort-Header
+> `github-authentication-token-expiration`, nicht geschätzt). Danach liefert
+> der PDF-Button nichts mehr. **Vorher** beide erneuern: GitHub → Settings →
+> Developer settings → Personal access tokens → Fine-grained tokens → Schlüssel
+> anklicken → *Regenerate token* → neu ablegen (Orte siehe „PDF-Briefkasten"
+> unten). Für den Betrieb ein Ablaufdatum **knapp unter einem Jahr** wählen —
+> **mehr als ein Jahr lehnt GitHub ab, und zwar still: „Generate token" tut
+> dann einfach nichts** (17.09.2026 so passiert, mit 31.12.2027).
+
+**Nächster Schritt (17.09.2026):** Durchstich des PDF-Briefkastens —
+`modules/pdf_briefkasten.py` (Auftrag hochladen, warten, abholen, aufräumen),
+PowerShell-Dienst auf dem Büro-PC mit Lebenszeichen, Messung der Wartezeit
+mit cVV und Thema, **einmal bei gesperrtem Bildschirm**. Erst wenn der trägt:
+Buttons in der App, Autostart des Dienstes, Push.
 
 > ### Für Philip: was diese Sitzung geändert hat (17.09.2026)
 >
@@ -84,6 +96,64 @@ lokales Werkzeug). Erst dann Stufe 2 (Umwandler) und Stufe 3 (zwei Buttons).
 > ist damit bewusst aufgehoben** — das PDF kommt zusätzlich.
 > `tests/test_bedienung.py::pruefe_kein_pdf` wird in Stufe 3 angepasst
 > (reportlab/matplotlib bleiben verboten).
+>
+> #### Die Wende: kein Umwandler in der Cloud — ein „PDF-Briefkasten"
+>
+> Philip hat die Probe-PDFs angesehen: **`CVV_1_PowerPoint.pdf` (Desktop-
+> PowerPoint) ist die gewünschte Qualität.** Auf dem Streamlit-Server ist sie
+> nicht zu haben: Dort läuft Linux, PowerPoint gibt es nur für Windows/Mac,
+> python-pptx kann Dateien schreiben, aber nicht **zeichnen**, und LibreOffice
+> zeichnet die Ringe falsch. Verworfen außerdem: **Microsoft 365** (Umwandlung
+> über den eigenen Mandanten — scheitert an der IT, der Browser-Test entfiel
+> damit), **externe Umwandlungsdienste** (Broschüren bei Fremdanbietern — für
+> eine Bank nicht ratsam), **PDF-Vorlagen** (26 feste cVV-Seiten vorgerendert,
+> die 11 Datenseiten selbst gezeichnet — ein zweiter Zeichenweg, Wochen
+> Aufwand, jede Optik-Änderung doppelt).
+>
+> **Philips Idee, zu Ende gedacht:** Die Umwandlung macht **dieser Büro-PC**
+> (dauerhaft an, nur gesperrt, praktisch nie abgemeldet) mit echtem
+> PowerPoint. GitHub dient nur als Briefkasten dazwischen:
+>
+> ```
+> App baut PowerPoint -> pptx_fuer_pdf -> legt Auftrag in den Briefkasten
+> Büro-PC (PowerShell-Dienst) holt ab -> PowerPoint "Speichern als PDF" -> legt PDF zurück
+> App holt PDF ab, löscht es im Briefkasten -> Download wie heute
+> ```
+>
+> Zwei Korrekturen an der ersten Fassung der Idee („im Repo zwischenspeichern
+> und wieder löschen"), beide wichtig:
+> 1. **Nicht committen und wieder löschen** — Git vergisst nichts, jede
+>    Broschüre bliebe für immer in der Historie und das Repo wüchse um ~10 MB
+>    je PDF. Stattdessen **Release-Anhänge**: hochladen, abholen, löschen —
+>    ohne Historie.
+> 2. **Nicht das öffentliche Performancetool-Repo**, sondern ein eigenes
+>    **privates** Repo.
+>
+> Grenzen, bewusst in Kauf genommen: Ist der PC abgemeldet oder nach einem
+> Update neu gestartet, meldet der Button „nicht erreichbar" (Lebenszeichen
+> des Dienstes). Microsoft empfiehlt PowerPoint nicht als unbeaufsichtigten
+> Dienst — auf einem angemeldeten Arbeitsplatz funktioniert es in der Praxis,
+> Aufträge nacheinander. Gemessen: PowerPoint braucht für cVV 4,6 s; erwartete
+> Wartezeit für den Berater 15–40 s (im Durchstich zu messen).
+>
+> #### PDF-Briefkasten — eingerichtet am 17.09.2026 (Philip)
+>
+> | | |
+> |---|---|
+> | Repo | **`FFPBAM/pdf-briefkasten`**, **privat**, mit README (Standardzweig `main`) |
+> | Schlüssel App | Fine-grained token **`pdf-briefkasten-app`** — nur dieses Repo, *Contents: Read and write* (+ Metadata read-only). Lokal in `.streamlit\secrets.toml`, Block `[pdf_briefkasten]` mit `repo` und `token`; für die Cloud später derselbe Block unter *Manage app → Settings → Secrets*. **Geprüft: privat, Schreibrecht, gültig** |
+> | Schlüssel PC | Fine-grained token **`pdf-briefkasten-pc`**, gleiche Rechte, eigener Schlüssel (einzeln sperrbar). Liegt vorläufig in `C:\Entwicklung\pdf_briefkasten_pc_token.txt`; das Einrichtungsskript verschlüsselt ihn per DPAPI unter dem Windows-Konto und löscht die Textdatei. **Geprüft: privat, Schreibrecht, gültig** |
+> | **Ablauf** | **16.12.2026** — App 09:09 UTC, PC 09:11 UTC (90 Tage) |
+>
+> Die Schlüssel stehen **nirgends im Repo** und nie im Chat; geprüft wurde nur
+> Länge, Form und die Antwort von GitHub. Zwei getrennte Schlüssel auch wegen
+> des Rate-Limits (5.000 Anfragen/Stunde je Schlüssel) — der Dienst fragt alle
+> paar Sekunden.
+>
+> *Zwei Stolpersteine beim Anlegen:* Ablaufdatum 31.12.2027 → der Button
+> reagiert nicht (Grenze ein Jahr, ohne Fehlermeldung); und die erste
+> Schlüsseldatei war nach dem Anlegen **leer** (nicht gespeichert) — GitHub
+> antwortet dann mit 401.
 >
 > #### Nur gemeldet, nicht geändert
 >
@@ -3262,15 +3332,22 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**NEU 17.09.2026 — PDF-Export: der Umwandlungsweg ist offen.** Stufe 1
+**⏰ FRIST 16.12.2026 — GitHub-Schlüssel des PDF-Briefkastens erneuern**
+(`pdf-briefkasten-app` und `pdf-briefkasten-pc`, 90 Tage ab 17.09.2026).
+Anleitung und Fallstrick (Ablaufdatum > 1 Jahr → Button tut still nichts)
+ganz oben und im Sitzungsbericht 17.09.2026.
+
+**NEU 17.09.2026 — PDF-Export: Weg entschieden, Durchstich steht aus.** Stufe 1
 (PDF-Quelle, `modules/pdf_export.py`) ist fertig und lokal committet, **nicht
-gepusht**. Offen:
-1. *Philip:* Browser-Test PowerPoint für das Web → `_pdf_probe\CVV_3_PowerPointWeb.pdf`.
-2. Vergleich mit `CVV_1_PowerPoint.pdf`, danach Entscheidung: Microsoft 365
-   (IT: App-Registrierung) / PDF-Vorlage + „Speichern unter → PDF" beim
-   Berater / lokales Werkzeug. **LibreOffice ist ausgeschieden** (Probe
-   17.09.2026, Ringe und fehlende Überschriften).
-3. Stufe 2 Umwandler, Stufe 3 Oberfläche: zwei Buttons nebeneinander
+gepusht**. Umwandlung über den **PDF-Briefkasten**: privates Repo
+`FFPBAM/pdf-briefkasten` (Release-Anhänge, keine Git-Historie), PowerShell-
+Dienst auf Philips Büro-PC mit echtem PowerPoint. Verworfen: LibreOffice
+(Probe), Microsoft 365 (IT), externe Dienste, PDF-Vorlagen. Repo und beide
+Schlüssel eingerichtet und geprüft. Offen:
+1. Durchstich: `modules/pdf_briefkasten.py`, PowerShell-Dienst mit
+   Lebenszeichen, DPAPI-Ablage des PC-Schlüssels, Messung der Wartezeit
+   (auch bei gesperrtem Bildschirm).
+2. Stufe 3 Oberfläche: zwei Buttons nebeneinander
    (`pf_pdf_btn`, `pf_pdf_dl` in `_KEEPALIVE_SPERRE`), Tooltip aus
    `pdf_export.HINWEIS_VERTRIEB`, `download_bereich` mit Dateityp,
    `test_bedienung.pruefe_kein_pdf` anpassen.
