@@ -2949,6 +2949,91 @@ Typen.
 
 ---
 
+### #73 — Wer kein PowerPoint hat, leiht es sich: der PDF-Briefkasten (NEU 17.09.2026) ⭐
+
+**Auftrag:** Die Broschüre zusätzlich als PDF — so, wie „Speichern unter → PDF"
+in Desktop-PowerPoint aussieht, aber ohne die Folie „Ihre Ansprechpartner für
+den Vertrieb" (deren Fotos tauscht der Berater in der PowerPoint aus).
+
+**Warum der naheliegende Weg nicht geht.** Eine `.pptx` ist eine Beschreibung;
+für ein PDF muss jemand sie **zeichnen**. Auf Streamlit Cloud (Linux) gibt es
+dafür nur LibreOffice — und das hat die Probe am Artefakt widerlegt: Ringe dick,
+Beschriftungen lose, auf Thema F11 **fehlen** Überschriften und ein
+Legendeneintrag (auch mit mitgegebenem Noto; bestätigt #16/#28/#29 am PDF).
+python-pptx schreibt, zeichnet aber nicht. Microsoft 365 scheiterte an der IT,
+ein externer Dienst kommt für eine Bank nicht in Frage, ein eigener Zeichenweg
+(PDF-Vorlagen + selbst gezeichnete Datenseiten) wäre eine zweite Optik mit
+doppelter Pflege.
+
+**Der Weg:** Ein dauerhaft angemeldeter Büro-PC mit Office wandelt um; GitHub
+ist nur der Briefkasten dazwischen.
+
+```
+App:    pdf_export.pptx_fuer_pdf   -> Vertriebsfolie raus, Nummern + Inhaltsverzeichnis
+        pdf_briefkasten            -> <auftrag>.pptx als Release-Anhang hochladen
+PC:     pdf_dienst.ps1             -> abholen, PowerPoint-COM SaveAs 32, <auftrag>.pdf zurück
+App:    PDF abholen, löschen       -> Download wie die PowerPoint
+```
+
+Gemessen: cVV 17–20 s, Thema 13–15 s vom Auftrag bis zum PDF, **auch bei
+gesperrtem Bildschirm** (drei Runden, `LogonUI.exe` je Auftrag nachgewiesen);
+über die Oberfläche inklusive Bau 27 s. PDFs pixelgleich untereinander,
+textgleich mit der direkten Desktop-Umwandlung.
+
+**Die Fallen, jede einzeln gemessen:**
+
+1. **Nicht committen und wieder löschen.** Git vergisst nichts — jede Broschüre
+   bliebe für immer in der Historie. **Release-Anhänge** kommen und gehen ohne
+   Spur, und das Repo ist **privat**.
+2. **GitHub listet einen Anhang schon während des Uploads** (`state: "starter"`).
+   Herunterladen geht erst bei `"uploaded"` — vorher 404. Traf die
+   9-MB-cVV-Broschüre nach 3 s. **Beide Seiten** fassen nur `uploaded` an.
+3. **Der Download eines Anhangs leitet auf eine signierte Speicher-URL um.** Den
+   `Authorization`-Header dorthin mitzunehmen, lehnt der Speicher ab. Die
+   Weiterleitung selbst ausführen, dort **ohne** Schlüssel abrufen (Python:
+   eigener `HTTPRedirectHandler`; PowerShell: `AllowAutoRedirect = $false`).
+4. **`Get-Date -UFormat %s` rechnet in Windows PowerShell 5.1 mit der Ortszeit**
+   — ein Unix-Zeitstempel liegt damit ein bis zwei Stunden daneben. Richtig:
+   `[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()`.
+5. **Bedingte Anfragen (ETag) sind gratis:** Eine `304 Not Modified` zählt nicht
+   gegen das Anfragelimit — gemessen über `X-RateLimit-Used` (253 → 254 → 304 →
+   255). Damit kann der Dienst alle 5 s nachsehen. **Nicht** dem Endpunkt
+   `/rate_limit` glauben: Er zeigte für den fine-grained Schlüssel 0 verbraucht,
+   während der Header 253 meldete.
+6. **Eine zwischengespeicherte Liste kann einen abgeholten Auftrag noch führen.**
+   Der Dienst merkt sich abgeholte Ids und nimmt 404 beim Löschen als „schon
+   weg".
+7. **PowerPoint läuft je Sitzung nur einmal.** Hat der Nutzer es offen, hängt
+   sich der Dienst an dieselbe Instanz. `Quit()` nur, wenn PowerPoint
+   unsichtbar ist und keine Präsentation mehr offen hat — sonst schließt der
+   Dienst das Programm, mit dem gerade jemand arbeitet.
+8. **GitHub lehnt Ablaufdaten über einem Jahr still ab** — „Generate token" tut
+   einfach nichts. Und eine Schlüsseldatei, die nicht gespeichert wurde, ist
+   leer: GitHub antwortet 401. Das Ablaufdatum steht im Antwort-Header
+   `github-authentication-token-expiration` — auslesen, nicht schätzen.
+9. **PowerShell-Skripte in reinem ASCII.** Windows PowerShell 5.1 liest `.ps1`
+   ohne BOM in der ANSI-Codepage; Umlaute zerfallen.
+10. **Aufgabenplanung ohne Konsolenfenster:** `conhost.exe --headless
+    powershell.exe …`; `ExecutionTimeLimit` auf 0, sonst endet der Dienst nach
+    72 h. Ein zweiter Start (Wiederholung alle 15 min) beendet sich über einen
+    Mutex sofort — so steht der Dienst nach einem Absturz spätestens nach 15
+    Minuten wieder.
+
+**Was es kostet und wer es wissen muss:** Ist der PC abgemeldet oder nach einem
+Update neu gestartet, meldet der Button über das fehlende **Lebenszeichen**
+sofort „nicht erreichbar" samt Ausweichweg. Die Schlüssel laufen ab (Frist in
+STATUS.md). Microsoft empfiehlt PowerPoint nicht als unbeaufsichtigten Dienst —
+auf einem angemeldeten Arbeitsplatz hat es getragen; Aufträge laufen
+nacheinander.
+
+**Die übertragbare Lehre:** Wenn die Plattform ein Werkzeug nicht hat, muss man
+nicht das Werkzeug ersetzen (und dessen Ergebnis schlechter nachbauen). Man kann
+die Arbeit dorthin schicken, wo das Werkzeug steht — über einen Kanal, den beide
+Seiten **von sich aus** erreichen, weil der PC hinter der Firewall nicht
+angerufen werden kann, sondern selbst nachfragen muss.
+
+---
+
 ### #72 — Ein Round-Trip durch dieselbe Bibliothek ist keine Validierung (BUG, NEU 26.08.2026) ⭐
 
 **Gemeldet wurde:** Broschüren laden herunter, lassen sich aber nicht öffnen —
@@ -4828,7 +4913,7 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
    16 bekannten Meldungen sieht sich niemand an.
 8. **Internes Hosting evaluieren** (löst Cloud-Update-Fallen dauerhaft; für
    den Download seit #25 NICHT mehr nötig).
-9. **Alt-Aufgaben aus Phase 2 — Status prüfen:** PDF-Seitenzahlen
+9. **Alt-Aufgaben aus Phase 2 — Status prüfen:** *(17.09.2026: Ein PDF der Broschüre gibt es jetzt — von echtem PowerPoint, Seitenzahlen und Inhaltsverzeichnis nachgezogen, siehe #73. Die Punkte unten betrafen den alten, selbst gezeichneten PDF-Weg.)* PDF-Seitenzahlen
    (Position-Spec stand aus) und dynamische PPTX-Seitenzahlen. Ob sie noch
    gewünscht sind, ist offen — vor Umsetzung mit Philip klären.
 10. Ggf. F2/F3-Varianten der Performance-Folie (ohne BM / Berater-Zeitraum);
@@ -4838,6 +4923,41 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 17.09.2026 (Nachtrag) – PDF-Export fertig: Briefkasten, Dienst, zwei Buttons
+
+Nach der Probe (Eintrag darunter) hat Philip `CVV_1_PowerPoint.pdf` als Maßstab
+gewählt; Microsoft 365 scheiterte an der IT. Umgesetzt: der **PDF-Briefkasten**
+(Transferwissen **#73**).
+
+- `modules/pdf_briefkasten.py` — Auftrag hochladen, warten (bis 5 min),
+  abholen, aufräumen; Lebenszeichen-Prüfung vorab; `BriefkastenFehler` mit
+  einem Satz für die Oberfläche.
+- `pdf_dienst/pdf_dienst.ps1`, `einrichten.ps1`, `autostart_einrichten.ps1` —
+  Dienst auf Philips PC (PowerPoint-COM, ETag-Abfrage alle 5 s, Lebenszeichen
+  jede Minute, Mutex, Stop-Datei), Schlüssel per DPAPI, Aufgabenplanung bei
+  Anmeldung + alle 15 min. Eingerichtet und laufend seit 17.09.2026.
+- Oberfläche (`portfolioanalyse.py`): „PowerPoint erstellen" und „PDF erstellen"
+  nebeneinander, **ein** gemeinsamer Bau (`_pptx_bauen`, vorher inline im
+  Button). Tooltip nennt die fehlende Vertriebsfolie nur, wo die Vorlage sie
+  führt (cVV); ohne `[pdf_briefkasten]` in den Secrets ist der Button gesperrt
+  und nennt den Ausweichweg. Fehler des Dienstes stehen unter dem Button, die
+  PowerPoint bleibt.
+- `download_helfer.download_bereich(…, art="pptx"|"pdf")` — MIME-Typ und
+  Beschriftung je Art; Fallback-Buttons mit festen Keys `pf_pptx_dl`/`pf_pdf_dl`.
+  `_KEEPALIVE_SPERRE` um `pf_pdf_btn`, `pf_pdf_dl` ergänzt.
+- Prüfstein `tests/test_pdf_briefkasten.py` (35. Suite): Protokoll `.py` ↔ `.ps1`,
+  Lebenszeichen, Normalfall mit simuliertem Dienst (inkl. `starter`-Falle),
+  Fehlerfälle, Oberfläche per AppTest. `test_bedienung.pruefe_kein_pdf` verbietet
+  weiterhin den **alten** reportlab-Weg.
+
+Ende-zu-Ende über die Oberfläche (AppTest, echter Dienst): Klick bei cVV →
+27 s → PDF 2,48 MB, 36 Seiten, Inhaltsverzeichnis 30/32/35, keine
+Vertriebsfolie.
+
+Nebenbefund, nicht behoben: Streamlit meldet `st.components.v1.html` (vom
+Download-Baustein genutzt) als abgekündigt — bei fest eingestelltem
+Streamlit 1.61.0 folgenlos, vor einem Versionssprung auf `st.iframe` umstellen.
 
 ### 17.09.2026 – PDF-Export, Stufe 0 und 1: Probe und PDF-Quelle
 

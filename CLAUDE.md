@@ -59,6 +59,17 @@ prüfte statt gegen eine Schwelle (#47).
   Zusicherungen, Sollwerte eingefroren). **Tabuflächen sind Legende UND
   Quellenangabe** — letztere steht nicht auf der Folie, sondern als
   Zeichnungsobjekt im Chart-Teil.
+- **Das PDF der Broschüre macht echtes PowerPoint auf einem Büro-PC** (NEU
+  17.09.2026, Transferwissen #73). Die Cloud hat kein PowerPoint, LibreOffice
+  zeichnet die Ringe falsch. Weg: `pdf_export.pptx_fuer_pdf` (Folie mit Layout
+  „Ansprechpartner" raus, Seitenzahlen + Inhaltsverzeichnis nachziehen) →
+  `pdf_briefkasten.pdf_anfordern` (Release-Anhang im **privaten** Repo
+  `FFPBAM/pdf-briefkasten`) → `pdf_dienst/pdf_dienst.ps1` auf Philips PC wandelt
+  um. **Nie selbst ein PDF zeichnen** (reportlab/matplotlib bleiben verboten)
+  und **nie Broschüren ins Repo committen** — Git vergisst nichts. Die
+  Dateinamen sind das Protokoll zwischen `.py` und `.ps1`: wer eine Seite
+  ändert, ändert die andere (`tests/test_pdf_briefkasten.py` Schritt 1).
+  **Schlüssel laufen am 16.12.2026 ab** (STATUS.md, Fristkasten).
 - **Jedes Trigger-Widget mit `key=` → Key in `_KEEPALIVE_SPERRE`** (oben in
   `streamlit_app.py`). Sonst stürzt die Seite ab: Das Keep-Alive schreibt
   alle session_state-Keys zurück, und für diese Widgets ist das verboten. Die
@@ -428,6 +439,9 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/farben.py` | die **festen Assetklassen-Farben** und ihre Klassifizierung — **streamlit- und lxml-frei**, weil Broschüre *und* Oberfläche sie brauchen |
 | `modules/risiko_ansicht.py` | Heatmap und Risiko-Block **innerhalb** der Performance-Ansicht |
 | `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander — Punktwolke, Überschneidung, Exposure |
+| `modules/pdf_export.py` | die **PDF-Quelle**: welche Folien nicht ins PDF gehören (Layout „Ansprechpartner"), Entfernen, Seitenzahlen und Inhaltsverzeichnis nachziehen, Tooltip-Texte — streamlit-frei |
+| `modules/pdf_briefkasten.py` | Auftrag an den PDF-Dienst schicken und abholen (GitHub-Release-Anhänge, Lebenszeichen) — nur Standardbibliothek, streamlit-frei |
+| `pdf_dienst/*.ps1` | der PDF-Dienst auf dem Büro-PC (PowerPoint-COM), Einrichtung des Schlüssels (DPAPI), Autostart (Aufgabenplanung) — **reines ASCII**, Windows PowerShell 5.1 |
 | `modules/bestandsanalytik.py` | Mathematik auf dem **Bestand** (Gewicht und Performancebeitrag je Kategorie, Überschneidung und Nicht-Überschneidung, Liquidität) — **streamlit-frei**, Gegenstück zu `analytics.py` |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.

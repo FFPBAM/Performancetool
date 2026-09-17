@@ -2,13 +2,14 @@
 
 **Letzte Sitzung:** 17.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **34 von 34 Suiten grün**, `pyflakes` bei null ·
-**PDF-Export in Arbeit, Stufe 1 fertig und NICHT gepusht** — die
-PDF-Quelle (Broschüre ohne „Ihre Ansprechpartner für den Vertrieb", Seitenzahlen
-und Inhaltsverzeichnis nachgezogen) steht. **Umwandlungsweg entschieden:
-PDF-Briefkasten** — echtes PowerPoint auf Philips Büro-PC, GitHub
-(privates Repo) nur als Briefkasten dazwischen. Repo und Schlüssel sind
-eingerichtet und geprüft. Sitzungsbericht unten.
+unerheblich) · **35 von 35 Suiten grün**, `pyflakes` bei null ·
+**PDF-Export fertig und gepusht** — neben „PowerPoint erstellen" steht
+„PDF erstellen": dieselbe Broschüre ohne „Ihre Ansprechpartner für den
+Vertrieb", umgewandelt von **echtem PowerPoint auf Philips Büro-PC** über den
+**PDF-Briefkasten** (privates Repo `FFPBAM/pdf-briefkasten`). Der Dienst läuft
+per Aufgabenplanung. **In der Cloud erst nutzbar, wenn Philip den Block
+`[pdf_briefkasten]` in die Streamlit-Secrets einträgt** — bis dahin ist der
+Button gesperrt und nennt den Ausweichweg. Sitzungsbericht unten.
 
 > **⏰ FRIST: Die beiden GitHub-Schlüssel des PDF-Briefkastens laufen am
 > 16.12.2026 ab** (`pdf-briefkasten-app` 09:09 UTC, `pdf-briefkasten-pc`
@@ -21,11 +22,20 @@ eingerichtet und geprüft. Sitzungsbericht unten.
 > **mehr als ein Jahr lehnt GitHub ab, und zwar still: „Generate token" tut
 > dann einfach nichts** (17.09.2026 so passiert, mit 31.12.2027).
 
-**Nächster Schritt (17.09.2026):** Der **Durchstich trägt** (cVV 17–20 s,
-Thema 13–15 s, auch bei gesperrtem Bildschirm, PDFs pixelgleich mit der
-Desktop-Umwandlung — Messung im Sitzungsbericht). Offen: **Stufe 3**
-(zwei Buttons in der App), **Autostart** des Dienstes bei der Anmeldung
-(Aufgabenplanung), App-Schlüssel in die **Cloud-Secrets**, dann Push.
+**Nächster Schritt (17.09.2026):**
+1. *Philip:* In Streamlit Cloud unter **Manage app → Settings → Secrets**
+   unten anfügen (Wert wie in der lokalen `.streamlit\secrets.toml`):
+   ```toml
+   [pdf_briefkasten]
+   repo = "FFPBAM/pdf-briefkasten"
+   token = "github_pat_…(pdf-briefkasten-app)…"
+   ```
+   Speichern startet die App neu. Danach in der Portfolioanalyse bei einer
+   cVV-Strategie „PDF erstellen" klicken — nach ~30 s erscheint
+   „PDF herunterladen".
+2. Sichtprüfung des ersten PDFs **aus der Cloud** (Inhaltsverzeichnis Seite 2,
+   Übergang Seite 29 → 30, Ringe).
+3. Frist **16.12.2026** (Schlüssel) — Erinnerung ist eingerichtet.
 
 > ### Für Philip: was diese Sitzung geändert hat (17.09.2026)
 >
@@ -192,6 +202,49 @@ Desktop-Umwandlung — Messung im Sitzungsbericht). Offen: **Stufe 3**
 > `"uploaded"`. Die 9-MB-cVV-Broschüre war nach 3 s noch nicht fertig
 > übertragen. Beide Seiten fassen jetzt nur `uploaded` an. Gut daran: Der
 > Fehlerweg (`.fehler.txt` → Meldung in der App) war damit gleich mitgetestet.
+>
+> #### Fertig: zwei Buttons, Autostart, gepusht
+>
+> **Oberfläche** (`modules/portfolioanalyse.py`): „PowerPoint erstellen" und
+> „PDF erstellen" nebeneinander, **ein** gemeinsamer Bau. Der PDF-Klick baut die
+> PowerPoint nur, wenn sie noch nicht da ist, und zeigt danach **beide**
+> Downloads.
+>
+> | Lage | PDF-Button |
+> |---|---|
+> | cVV | Tooltip: „Das PDF enthält die Folie ‚Ihre Ansprechpartner für den Vertrieb' nicht – im PDF lassen sich die Bilder nicht austauschen. Seitenzahlen und Inhaltsverzeichnis sind angepasst." |
+> | ESG, ETF, Thema, comdirect | Tooltip: „Dieselbe Broschüre wie die PowerPoint, als PDF." |
+> | Secrets ohne `[pdf_briefkasten]` | **gesperrt**, Tooltip nennt „Speichern unter → PDF" als Ausweg |
+> | Dienst nicht erreichbar / Schlüssel abgelaufen / keine Antwort in 5 min | rote Meldung unter dem Button, PowerPoint bleibt, neuer Versuch möglich |
+>
+> **Philips Vorgaben dazu:** Wartezeit ist unkritisch → die App wartet bis zu
+> **5 Minuten**. Der Dienst soll ruhig sein → **bedingte Abfragen (ETag)**:
+> Unveränderte Listen kosten nichts vom Anfragelimit (gemessen: 304 zählt
+> nicht), deshalb bleibt es bei 5 s Abfrageabstand. *Die Idee „Dienst erst beim
+> Klick starten" geht so nicht:* Streamlit kann den PC hinter der Firewall
+> nicht anrufen; der PC muss fragen. PowerPoint selbst startet aber nur bei
+> einem Auftrag.
+>
+> **Autostart** (`pdf_dienst/autostart_einrichten.ps1`, **eingerichtet**):
+> Aufgabe „FFPB PDF-Dienst" in der Aufgabenplanung für `RCO-Maschine\RES` —
+> bei Anmeldung und alle 15 Minuten (ein zweiter Start beendet sich sofort),
+> ohne Fenster (`conhost --headless`), ohne Laufzeitgrenze. Entfernen mit
+> `-Entfernen`. Log: `%LOCALAPPDATA%\FFPB_PDF_Dienst\dienst.log`.
+>
+> **Ende-zu-Ende über die echte Oberfläche** (AppTest, laufender Dienst, keine
+> Attrappen): Klick bei *cVV konservativ* → **27 s** inklusive Bau → PDF
+> 2,48 MB, 36 Seiten, Inhaltsverzeichnis 30/32/35, keine Vertriebsfolie,
+> danach beide Download-Buttons. Liegt als `_pdf_probe\CVV_7_aus_der_App.pdf`.
+>
+> **Prüfstein `tests/test_pdf_briefkasten.py`** (35. Suite), ohne Netz: Protokoll
+> `.py` ↔ `.ps1`, Lebenszeichen, Normalfall mit simuliertem Dienst (der das PDF
+> erst als `starter` meldet), drei Fehlerfälle, Oberfläche per AppTest.
+>
+> **Erinnerung eingerichtet:** Cloud-Routine „Erinnerung: PDF-Briefkasten-
+> Schlüssel laufen am 16.12.2026 ab", einmalig **01.12.2026, 09:00**
+> (https://claude.ai/code/routines/trig_014Aphd9o454vjPBEVNzxakh). Sie erscheint
+> als Sitzung in claude.ai/code, nicht als Mail — ein Outlook-Termin ist die
+> sichere Ergänzung.
 >
 > #### Nur gemeldet, nicht geändert
 >
@@ -3284,6 +3337,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 | `test_ring_geometrie.py` *(neu 25.08.2026)* | **+ python-pptx**, Schritt 4 zusätzlich **+ streamlit** und ein Ausgabeordner | Die Geometrie der Ringdiagramme, für die es bis dahin **keinen** Prüfstein gab. Schritt 1 die sechs Vorlagen (Rahmen, `holeSize`, `plotArea` aller 22 Ringe — die Geometrie kommt zu 100 % aus der .pptx), Schritt 2 die Ist-Werte **nach** `nachbearbeiten` gegen eingefrorene Maße, Schritt 3 die Zusagen, die auch eine spätere Änderung überleben müssen (keine Beschriftung im Ring, keine Überlappung, nichts aus dem Rahmen, kein Ring in der Legende), Schritt 4 dasselbe an 17 Ringen echter Broschüren, Schritt 5 die Trennung der Familien-Optik (Standard 79, die fünf Familien 68). Seit dem 25.08.2026 zusätzlich: **Flächenprüfung** gegen die Legende (nicht mehr nur die Oberkante) und **kreuzende Führungslinien** — in echten Broschüren null von 69, auf den Platzhalterdaten der Vorlagen höchstens der gemessene Ausgangswert 2. **Gegenprobe belegt:** Dicke zurückgestellt → 22 Fehler, Verkleinerung stillgelegt → 44 Fehler |
 | `test_pdf_export.py` *(neu 17.09.2026)* | **+ python-pptx, lxml**, Schritt 2 **+ streamlit** und die echten Daten | Die PDF-Quelle (`modules/pdf_export.py`). Schritt 1 die Vertriebsfolie je Vorlage (nur cVV F30 und FFPB F21, am Layout „Ansprechpartner“ erkannt), Schritt 2 cVV bauen → 37 → 36 Folien, keine Vertriebsfolie, Seitenzahlen = Position, **Schritt 3 die Zusage**: jeder Inhaltsverzeichnis-Eintrag zeigt im PDF auf dieselbe Folie wie in der PowerPoint, und das Impressum steht auf einer Folie mit Layout „Impressum“ (gegen die alte Vorlage mit „34“ rot), Schritt 4 Paket-Integrität L1–L6, Schritt 5 Familien ohne Vertriebsfolie unverändert, **Schritt 6 Gegenprobe**: ohne Nachziehen werden 2 und 3 rot |
+| `test_pdf_briefkasten.py` *(neu 17.09.2026)* | Schritte 1–4 **nichts** (nur Standardbibliothek), Schritt 5 **+ streamlit** | Der PDF-Briefkasten ohne Netz und ohne PowerPoint. **Schritt 1** hält App und Dienst zusammen: Das Auftragsmuster aus `pdf_dienst.ps1` muss den Namen matchen, den die App erzeugt; Release-Tag, Lebenszeichen, Fehlerdatei und die `uploaded`-Regel stehen auf beiden Seiten. Schritt 2 ohne/zu altes Lebenszeichen → Meldung **ohne** Auftrag, **Schritt 3** Normalfall mit simuliertem Dienst, der das PDF zuerst als `starter` meldet (der 404 vom 17.09.2026), Schritt 4 Fehlerdatei, Zeitüberschreitung, kein PDF — jeweils kein zurückgelassener Auftrag, **Schritt 5** die Oberfläche: zwei Buttons, Tooltip bei cVV nennt die Folie, bei ESG neutral, ohne Secrets gesperrt, Klick liefert das PDF, Dienstfehler steht als Meldung da und die PowerPoint bleibt |
 
 ```
 python tests/test_bedienung.py
@@ -3375,20 +3429,22 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 Anleitung und Fallstrick (Ablaufdatum > 1 Jahr → Button tut still nichts)
 ganz oben und im Sitzungsbericht 17.09.2026.
 
-**NEU 17.09.2026 — PDF-Export: Weg entschieden, Durchstich steht aus.** Stufe 1
-(PDF-Quelle, `modules/pdf_export.py`) ist fertig und lokal committet, **nicht
-gepusht**. Umwandlung über den **PDF-Briefkasten**: privates Repo
-`FFPBAM/pdf-briefkasten` (Release-Anhänge, keine Git-Historie), PowerShell-
-Dienst auf Philips Büro-PC mit echtem PowerPoint. Verworfen: LibreOffice
-(Probe), Microsoft 365 (IT), externe Dienste, PDF-Vorlagen. Repo und beide
-Schlüssel eingerichtet und geprüft. Offen:
-1. Durchstich: `modules/pdf_briefkasten.py`, PowerShell-Dienst mit
-   Lebenszeichen, DPAPI-Ablage des PC-Schlüssels, Messung der Wartezeit
-   (auch bei gesperrtem Bildschirm).
-2. Stufe 3 Oberfläche: zwei Buttons nebeneinander
-   (`pf_pdf_btn`, `pf_pdf_dl` in `_KEEPALIVE_SPERRE`), Tooltip aus
-   `pdf_export.HINWEIS_VERTRIEB`, `download_bereich` mit Dateityp,
-   `test_bedienung.pruefe_kein_pdf` anpassen.
+**NEU 17.09.2026 — PDF-Export: fertig, in der Cloud fehlt nur der Secret.**
+Philip trägt `[pdf_briefkasten]` unter *Manage app → Settings → Secrets* ein
+(Anleitung ganz oben). Bis dahin ist der PDF-Button dort gesperrt — kein
+Fehlzustand. Der Dienst läuft auf Philips PC per Aufgabenplanung; ist der PC
+abgemeldet, meldet der Button „nicht erreichbar".
+
+**NEU 17.09.2026 — `st.components.v1.html` ist abgekündigt.** Streamlit
+meldet beim Download-Baustein „will be removed after 2026-06-01, replace with
+`st.iframe`". Mit fest eingestelltem `streamlit==1.61.0` folgenlos; **vor
+jedem Streamlit-Versionssprung** auf `st.iframe` umstellen und den
+clientseitigen Download (Gateway, #25) erneut prüfen.
+
+*(Erledigt 17.09.2026, war hier offen:)* Durchstich, Oberfläche, Autostart —
+zwei Buttons nebeneinander (`pf_pdf_btn`, `pf_pdf_dl` in `_KEEPALIVE_SPERRE`),
+Tooltip aus `pdf_export.HINWEIS_VERTRIEB`, `download_bereich` mit Dateityp,
+`test_bedienung.pruefe_kein_pdf` angepasst.
 
 *Nur gemeldet:* ESG-Inhaltsverzeichnis „Rechtliche Hinweise 36" zeigt auf die
 Trennfolie „Unser Reporting" (und F34/35 stehen vor den Trennfolien);
