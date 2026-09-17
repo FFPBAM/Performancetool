@@ -69,7 +69,21 @@ prüfte statt gegen eine Schwelle (#47).
   und **nie Broschüren ins Repo committen** — Git vergisst nichts. Die
   Dateinamen sind das Protokoll zwischen `.py` und `.ps1`: wer eine Seite
   ändert, ändert die andere (`tests/test_pdf_briefkasten.py` Schritt 1).
-  **Schlüssel laufen am 16.12.2026 ab** (STATUS.md, Fristkasten).
+  **Schlüssel laufen am 16.12.2026 ab** (STATUS.md, Fristkasten, mit
+  Anleitung zum Erneuern).
+  Vier Dinge, die im Alltag stolpern lassen:
+  - **Der Dienst läuft auf DIESEM PC** (Aufgabe „FFPB PDF-Dienst"). Wer hier
+    PowerPoint per COM automatisiert (z. B. PNG-Export für eine Sichtprüfung),
+    teilt sich die Instanz mit ihm — `$ppt.Quit()` nur, wenn keine
+    Präsentation mehr offen und PowerPoint unsichtbar ist.
+  - **Änderungen an `pdf_dienst.ps1` wirken erst nach Neustart des Dienstes**
+    (Datei `%LOCALAPPDATA%\FFPB_PDF_Dienst\stop` anlegen; die Aufgabenplanung
+    startet ihn spätestens nach 15 min neu). Log: `…\FFPB_PDF_Dienst\dienst.log`.
+  - **Neuer oder geänderter Streamlit-Secret → Manage app → Reboot app.**
+    Speichern allein reichte am 17.09.2026 nicht.
+  - **Schlüssel nie ausgeben** — prüfen nur über Länge, Präfix und die
+    Antwort von GitHub (Ablauf steht im Header
+    `github-authentication-token-expiration`).
 - **Jedes Trigger-Widget mit `key=` → Key in `_KEEPALIVE_SPERRE`** (oben in
   `streamlit_app.py`). Sonst stürzt die Seite ab: Das Keep-Alive schreibt
   alle session_state-Keys zurück, und für diese Widgets ist das verboten. Die

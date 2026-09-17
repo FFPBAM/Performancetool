@@ -22,22 +22,36 @@ genügte nicht). Sitzungsbericht unten.
 > **mehr als ein Jahr lehnt GitHub ab, und zwar still: „Generate token" tut
 > dann einfach nichts** (17.09.2026 so passiert, mit 31.12.2027).
 
-**Nächster Schritt (17.09.2026):**
-1. *Philip:* In Streamlit Cloud unter **Manage app → Settings → Secrets**
-   unten anfügen (Wert wie in der lokalen `.streamlit\secrets.toml`):
-   ```toml
-   [pdf_briefkasten]
-   repo = "FFPBAM/pdf-briefkasten"
-   token = "github_pat_…(pdf-briefkasten-app)…"
-   ```
-   **Danach Manage app → ⋮ → Reboot app** — Speichern allein genügte am
-   17.09.2026 NICHT: Die laufende App meldete weiter „nicht eingerichtet",
-   erst der Neustart las den neuen Block. **Erledigt 17.09.2026, in der Cloud
-   getestet (Philip): funktioniert.** Gilt genauso beim Erneuern der
-   Schlüssel im Dezember.
-2. Sichtprüfung des ersten PDFs **aus der Cloud** (Inhaltsverzeichnis Seite 2,
-   Übergang Seite 29 → 30, Ringe).
-3. Frist **16.12.2026** (Schlüssel) — Erinnerung ist eingerichtet.
+**Stand bei Sitzungsende (17.09.2026, mittags):**
+
+| | |
+|---|---|
+| Git | `verbesserungen` gepusht, lokal = GitHub, **Ablage H: nachgezogen** (Fast-Forward) |
+| Cloud-App | PDF-Button in Betrieb — **erster echter Cloud-Auftrag 11:02:57** im Dienst-Log (9,0 MB → PDF 2,5 MB, umwandeln 4,6 s) |
+| PDF-Dienst | Aufgabe „FFPB PDF-Dienst" **läuft** auf diesem PC; Briefkasten leer bis aufs Lebenszeichen |
+| Tests | 35 von 35 grün, `pyflakes` null |
+| Belege | `H:\…\Performancetool\_pdf_probe\` — LibreOffice-Probe, Stufe-1-Vorschau, Briefkasten- und App-PDFs, `LIESMICH.txt`. **Bleibt als Beleg** (nicht ohne Rückfrage löschen) |
+| Erinnerung | 01.12.2026, 09:00 — https://claude.ai/code/routines/trig_014Aphd9o454vjPBEVNzxakh |
+
+**Nächster Schritt:** Im PDF-Export steht nichts an. Offen sind nur:
+1. **Frist 16.12.2026 — Schlüssel erneuern.** Ablauf in fünf Handgriffen:
+   (a) GitHub → Fine-grained tokens → `pdf-briefkasten-app` → *Regenerate
+   token*, Ablauf knapp unter einem Jahr; (b) neuen Wert in
+   `.streamlit\secrets.toml` **und** in den Cloud-Secrets, danach **Reboot
+   app**; (c) dasselbe für `pdf-briefkasten-pc`, Wert nach
+   `C:\Entwicklung\pdf_briefkasten_pc_token.txt`; (d)
+   `powershell -ExecutionPolicy Bypass -File pdf_dienst\einrichten.ps1`
+   (verschlüsselt, löscht die Textdatei); (e) Dienst neu starten
+   (`…\FFPB_PDF_Dienst\stop` anlegen, nach spätestens 15 min startet die
+   Aufgabenplanung ihn mit dem neuen Schlüssel) und die neue Frist hier eintragen.
+2. *Wenn gewünscht:* Sichtprüfung eines PDFs **aus der Cloud** (Seite 2
+   Inhaltsverzeichnis 30/32/35, Übergang 29 → 30, Ringe). Lokal ist das
+   identische Ergebnis bereits belegt (`_pdf_probe\CVV_7_aus_der_App.pdf`).
+3. *Entscheidung Philip, nur gemeldet:* ESG-Inhaltsverzeichnis „Rechtliche
+   Hinweise 36" und comdirect „Honorar 14" (Vorlagentext, siehe
+   Sitzungsbericht).
+4. *Vor einem Streamlit-Versionssprung:* `st.components.v1.html` im
+   Download-Baustein auf `st.iframe` umstellen (siehe „Offene Punkte").
 
 > ### Für Philip: was diese Sitzung geändert hat (17.09.2026)
 >
