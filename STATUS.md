@@ -45,10 +45,11 @@ Autor-Metadaten bereinigt.
   (`…\Sicherheit_PDF-Dienst\`).
 - **Belegt:** alle 34 Suiten grün, `pyflakes` null, vollständiger Rundlauf lokal
   **2× grün** (signieren → prüfen → PowerPoint → PDF).
-- **OFFEN — Live-Klick in der Cloud (Philip):** Nach dem Deploy einmal „PDF
-  erstellen" klicken. Echtes PDF → der App-Token in den Cloud-Secrets sitzt.
-  Kommt die „… (für PDF).pptx", ist dieser Token ungültig → regenerieren, in
-  die Cloud-Secrets, „Reboot app". `hmac` steht schon in den Cloud-Secrets.
+- **ERLEDIGT — in der Cloud live bestätigt:** „PDF erstellen" liefert dort ein
+  echtes PDF. Nötig war, `pdf-briefkasten-app` in den Cloud-Secrets zu
+  erneuern und den `hmac` exakt auf den Wert des PC (`hmac.dat`) zu setzen —
+  stimmt der HMAC nicht, verwirft der Dienst die Signatur. Die Erstellung dauert
+  ~30 s (Abfrageintervall des Dienstes); der Tooltip weist darauf hin.
 
 **Diese Sitzung (17.09.2026 vormittags):**
 
@@ -101,11 +102,8 @@ Autor-Metadaten bereinigt.
   zeigte auf 34 statt 36 — in der Vorlage korrigiert (nur diese Zahl).
 
 **Nächster Schritt:**
-0. **Live-Klick in der Cloud (Philip) — der eine offene Beleg.** Nach dem Deploy
-   von `2b579db` einmal „PDF erstellen": echtes PDF = der App-Token in den
-   Cloud-Secrets sitzt; kommt die „… (für PDF).pptx", den Token regenerieren,
-   in die Cloud-Secrets, „Reboot app". Kontext: der neue Sitzungsabschnitt oben,
-   `modules/pdf_briefkasten.py`; PC-Einrichtung und Schlüssel **intern auf H:**.
+0. *(erledigt 17.09.2026 abends)* PDF-Dienst in der Cloud live bestätigt —
+   echtes PDF. Siehe Sitzungsabschnitt oben.
 1. **Sicherheitsbefunde mit ISB/DSB/Compliance durchgehen** (interner Bericht
    auf H:). Erst danach die dort offenen Entscheidungen umsetzen — u. a. die
    **Git-Historie** (enthält noch die entfernten Personennamen) und vor dem Fix
