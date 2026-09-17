@@ -7,9 +7,9 @@ unerheblich) · **35 von 35 Suiten grün**, `pyflakes` bei null ·
 „PDF erstellen": dieselbe Broschüre ohne „Ihre Ansprechpartner für den
 Vertrieb", umgewandelt von **echtem PowerPoint auf Philips Büro-PC** über den
 **PDF-Briefkasten** (privates Repo `FFPBAM/pdf-briefkasten`). Der Dienst läuft
-per Aufgabenplanung. **In der Cloud erst nutzbar, wenn Philip den Block
-`[pdf_briefkasten]` in die Streamlit-Secrets einträgt** — bis dahin ist der
-Button gesperrt und nennt den Ausweichweg. Sitzungsbericht unten.
+per Aufgabenplanung. **In der Cloud in Betrieb und von Philip getestet**
+(Secret eingetragen — danach war ein *Reboot app* nötig, Speichern allein
+genügte nicht). Sitzungsbericht unten.
 
 > **⏰ FRIST: Die beiden GitHub-Schlüssel des PDF-Briefkastens laufen am
 > 16.12.2026 ab** (`pdf-briefkasten-app` 09:09 UTC, `pdf-briefkasten-pc`
@@ -30,9 +30,11 @@ Button gesperrt und nennt den Ausweichweg. Sitzungsbericht unten.
    repo = "FFPBAM/pdf-briefkasten"
    token = "github_pat_…(pdf-briefkasten-app)…"
    ```
-   Speichern startet die App neu. Danach in der Portfolioanalyse bei einer
-   cVV-Strategie „PDF erstellen" klicken — nach ~30 s erscheint
-   „PDF herunterladen".
+   **Danach Manage app → ⋮ → Reboot app** — Speichern allein genügte am
+   17.09.2026 NICHT: Die laufende App meldete weiter „nicht eingerichtet",
+   erst der Neustart las den neuen Block. **Erledigt 17.09.2026, in der Cloud
+   getestet (Philip): funktioniert.** Gilt genauso beim Erneuern der
+   Schlüssel im Dezember.
 2. Sichtprüfung des ersten PDFs **aus der Cloud** (Inhaltsverzeichnis Seite 2,
    Übergang Seite 29 → 30, Ringe).
 3. Frist **16.12.2026** (Schlüssel) — Erinnerung ist eingerichtet.
@@ -3429,7 +3431,7 @@ Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 Anleitung und Fallstrick (Ablaufdatum > 1 Jahr → Button tut still nichts)
 ganz oben und im Sitzungsbericht 17.09.2026.
 
-**NEU 17.09.2026 — PDF-Export: fertig, in der Cloud fehlt nur der Secret.**
+**ERLEDIGT 17.09.2026 — PDF-Export läuft in der Cloud** (Secret eingetragen, App neu gestartet, von Philip getestet). *War:*
 Philip trägt `[pdf_briefkasten]` unter *Manage app → Settings → Secrets* ein
 (Anleitung ganz oben). Bis dahin ist der PDF-Button dort gesperrt — kein
 Fehlzustand. Der Dienst läuft auf Philips PC per Aufgabenplanung; ist der PC

@@ -3019,6 +3019,10 @@ textgleich mit der direkten Desktop-Umwandlung.
     Mutex sofort — so steht der Dienst nach einem Absturz spätestens nach 15
     Minuten wieder.
 
+11. **Neuer Secret in Streamlit Cloud → *Reboot app*.** Nach dem Speichern
+    meldete die laufende App weiter „nicht eingerichtet"; erst der Neustart las
+    den Block. Gilt für jede Schlüsselerneuerung.
+
 **Was es kostet und wer es wissen muss:** Ist der PC abgemeldet oder nach einem
 Update neu gestartet, meldet der Button über das fehlende **Lebenszeichen**
 sofort „nicht erreichbar" samt Ausweichweg. Die Schlüssel laufen ab (Frist in
