@@ -261,7 +261,7 @@ _CVV_CONFIG = _folien_config(
         ("S", "Kombination verschiedener Anlageklassen"),
         ("S", "Regelmäßige Berichte"),
         ("S", "Wesentliche Finanzkennzahlen (AuM-Wachstum)"),
-        ("S", "Ansprechpartner Private Banking"),
+        ("S", "Ihre Ansprechpartner für den Vertrieb (nicht im PDF)"),
         ("S", "Standort Friedrichsplatz"),
         ("S", "Standort Theodor-Heuss-Str."),
         ("S", "Individuell. Unabhängig. Vertrauensvoll."),
