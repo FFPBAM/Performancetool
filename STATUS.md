@@ -4,7 +4,8 @@
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
 unerheblich) · **Alle Suiten grün**, `pyflakes` bei null ·
 **PDF-Fassung der Broschüre gebaut; automatischer Umwandlungsdienst
-zurückgenommen (Sicherheit).**
+zurückgenommen (Sicherheit).** · **Vorlagen repo-weit von personenbezogenen
+Autor-Metadaten bereinigt; C: und H: synchron auf `8c0fc9e`.**
 
 > ### ⚠️ Sicherheitsprüfung des öffentlichen Repos (17.09.2026)
 >
@@ -70,8 +71,15 @@ zurückgenommen (Sicherheit).**
   zeigte auf 34 statt 36 — in der Vorlage korrigiert (nur diese Zahl).
 
 **Nächster Schritt:**
+0. **Nächste Sitzung (mit Philip): die PDF-Umsetzung besprechen.** Offen ist
+   die Ausgestaltung der PDF-Fassung (aktuell „vorbereitete PowerPoint, Berater
+   speichert selbst als PDF"; automatischer Umwandlungsdienst zurückgenommen).
+   Kontext in `modules/pdf_export.py`, `tests/test_pdf_export.py` und dem
+   internen Bericht auf H:.
 1. **Sicherheitsbefunde mit ISB/DSB/Compliance durchgehen** (interner Bericht
-   auf H:). Erst danach die dort offenen Entscheidungen umsetzen.
+   auf H:). Erst danach die dort offenen Entscheidungen umsetzen — u. a. die
+   **Git-Historie** (enthält noch die entfernten Personennamen) und vor dem Fix
+   ausgelieferte Broschüren.
 2. *Empfohlen, aber Entscheidung Philip:* Repo auf **privat** stellen und
    Streamlit Cloud neu anbinden.
 3. *Nur gemeldet (Vorlagentext, Entscheidung Philip):* ESG-Inhaltsverzeichnis

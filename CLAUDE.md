@@ -43,6 +43,15 @@ prüfte statt gegen eine Schwelle (#47).
   Mathematik gehört dorthin und **nirgendwo sonst hin kopiert**.
 - **Das Repo ist öffentlich.** Keine Zugangsdaten, keine Kundendaten
   einchecken. `.gitignore` schützt `secrets.toml` — nicht aufweichen.
+  **Vor jedem Push** einen Prüf-Agenten (read-only) auf Diff **und neue
+  Binärdateien** ansetzen; erst nach dessen Ergebnis pushen. **Office-Metadaten
+  tief prüfen:** PPTX tragen in `ppt/embeddings/*.xlsx` eingebettete
+  Excel-Objekte, deren `docProps/core.xml` (dc:creator/cp:lastModifiedBy)
+  **Mitarbeiter-Klarnamen** enthalten kann — die Bereinigung des Haupt-
+  Containers erfasst diese **nicht**. Rekursiv scrubben (17.09.2026: vier Namen
+  in allen Vorlagen gefunden). Solche Namen landen nicht nur im Repo, sondern
+  in **jeder ausgelieferten Broschüre**. Byte-Treffer in `ppt/media/*` sind
+  dagegen meist Bildrauschen — Fundort (XML-Text vs. Binärbild) unterscheiden.
 - **Keine Piktogramme in der Oberfläche** (10.08.2026). Überschriften,
   Hinweise, Schaltflächen und Disclaimer tragen keine Emoji — die Ergebnisse
   gehen ins Kundengespräch einer Privatbank. In Kommentaren und Doku sind sie
