@@ -1,7 +1,8 @@
 ﻿# STATUS — FFPB Performancetool
 
 **Letzte Sitzung:** 26.08.2026 · **Branch:** `verbesserungen` ·
-**Nicht gemergt** · **33 von 33 Suiten grün**, `pyflakes` bei null ·
+**ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
+unerheblich) · **33 von 33 Suiten grün**, `pyflakes` bei null ·
 **die unlesbaren Broschüren sind behoben** — beim Duplizieren einer Folie
 (Vergleichsportfolio, Familie *Thema*) teilten sich zwei Charts dieselben
 Sub-Teile statt eigene zu bekommen; **in echtem PowerPoint bewiesen, vorher
@@ -24,7 +25,8 @@ Dazu **ein Fehler aus dem eigenen Eingriff**, den erst der PNG-Export zeigte:
 die feste Label-Box kürzte längere Zahlen zu „37,1…".
 Stand davor: die Ringe tragen die Makro-Geometrie (25.08.2026, abgenommen).
 
-**Nächster Schritt:** Der Branch ist **nicht gemergt**. Fachlich offen ist nur
+**Nächster Schritt:** Im Code steht nichts an; ein Merge ist **nicht**
+Voraussetzung für irgendetwas (siehe „Wo wir stehen"). Fachlich offen ist nur
 noch die *Ursache* hinter der Label-Verteilung (Kopfsperre deckelt die
 Label-Höhe auf die Ringoberkante) — siehe „Offene Punkte".
 
@@ -2051,10 +2053,26 @@ git config --global --add safe.directory '%(prefix)///RCO-MASCHINE/DRACOON/Entwi
 
 ## Wo wir stehen
 
-`main` ist **unverändert** — auf GitHub liegt dort weiterhin `3c3b920`.
-Alle Arbeit liegt im Branch `verbesserungen` und wartet auf Philips Review:
+**Korrigiert am 17.09.2026, an GitHub gemessen:** Hier stand bis dahin, alle
+Arbeit warte als Pull Request auf Philips Review. Das stimmte nicht.
 
-**https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen**
+| | Befund |
+|---|---|
+| `verbesserungen` | **die laufende App** — Streamlit Cloud deployt diesen Branch |
+| `main` | unverändert `3c3b920` (06.08.2026), **187 Commits** hinter `verbesserungen` |
+| Pull Request | **keiner offen.** PR #1 „Verbesserungen" wurde am 07.08.2026 um 15:11 geöffnet und **18 Sekunden später ohne Merge geschlossen** |
+
+**Damit wartet nichts auf einen Merge.** Alle Änderungen sind mit dem Push
+bereits beim Anwender. Ein Nachziehen von `main` wäre reine Ordnung — es ändert
+am Betrieb nichts, solange die Cloud auf `verbesserungen` zeigt. Wer es will,
+legt einen **neuen** PR an; der alte lässt sich nicht weiterverwenden.
+Nachprüfbar ohne `gh`:
+
+```
+git fetch origin
+git rev-list --left-right --count origin/main...origin/verbesserungen
+curl -s "https://api.github.com/repos/FFPBAM/Performancetool/pulls?state=all"
+```
 
 ### Kollegen-Feedback vom 17.08.2026 — eingearbeitet
 
@@ -3016,7 +3034,11 @@ Folie auf. Die Methode hat die Fälle danach jedes Mal vervielfacht (21 von
 Bildschirm des Testlaufs. Beides wird gebraucht, und zwar in dieser
 Reihenfolge.
 
-### Nach dem Merge noch testen (in der App)
+### In der laufenden App noch testen
+
+*(Hieß bis 17.09.2026 „Nach dem Merge" — die Änderungen sind aber längst
+live, weil die Cloud `verbesserungen` deployt. Ob die drei Punkte je angesehen
+wurden, ist nicht vermerkt.)*
 
 1. **Muster SCHWEIZ Aktien** wählen → Kennzahlen zeigen „–" statt 0,00 %
 2. **Eine andere Strategie** → muss exakt dieselben Zahlen liefern wie vorher
@@ -3410,8 +3432,11 @@ Schriftbild.
    Vorab ohne App ansehen geht auch — die Figuren lassen sich als HTML
    ausgeben (`fig.write_html`, kein Kaleido nötig).
 
-2. **PR mergen** — alles andere hängt daran.
-2. **Deploy-Log nach dem Merge ansehen** (Manage app → schwarze Konsole). Die
+3. ~~**PR mergen** — alles andere hängt daran.~~ — **gegenstandslos
+   (17.09.2026):** Es gibt keinen offenen PR (#1 wurde am 07.08.2026 ohne
+   Merge geschlossen), und es hängt nichts daran — die Cloud deployt
+   `verbesserungen`. Siehe „Wo wir stehen".
+4. **Deploy-Log ansehen** (Manage app → schwarze Konsole). Die
    requirements sind jetzt nach oben gedeckelt, geprüft wurde das aber lokal
    unter **Python 3.12** — die Cloud läuft unter **3.14**. Das Log ist die
    einzige Stelle, an der die tatsächlich installierte Kombination sichtbar
