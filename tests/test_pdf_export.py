@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-"""PDF-Quelle der Broschuere — ohne "Ihre Ansprechpartner fuer den Vertrieb".
+"""PDF-Fassung der Broschuere — ohne "Ihre Ansprechpartner fuer den Vertrieb".
 
 WARUM ES DIESE SUITE GIBT (17.09.2026): Die Broschuere soll zusaetzlich als PDF
 herausgehen, und zwar aus DERSELBEN gebauten PowerPoint, nur ohne die Folie mit
 den Vertriebs-Ansprechpartnern (im PDF lassen sich deren Fotos nicht
-austauschen). `modules/pdf_export.pptx_fuer_pdf` entfernt die Folie und zieht
-zwei Dinge nach, die sonst still falsch waeren:
+austauschen). Die App liefert dafuer eine vorbereitete PowerPoint, die der
+Berater in PowerPoint als PDF speichert. `modules/pdf_export.pptx_fuer_pdf`
+entfernt die Folie und zieht zwei Dinge nach, die sonst still falsch waeren:
   - die Seitenzahlen unten (beim Bau als FESTER Text geschrieben, #pptx_helpers)
   - die EINGETIPPTEN Seitenzahlen im Inhaltsverzeichnis
+und entfernt Diagramm-Verknuepfungen auf externe Mappen.
 
 Schritte:
   1  Erkennung ueber alle sechs Vorlagen: nur cVV (F30) und FFPB (F21)
@@ -16,8 +18,13 @@ Schritte:
      PowerPoint; das Impressum steht in der PowerPoint auf 36 (Vorlagen-
      korrektur 17.09.2026, vorher stand dort 34)
   4  Paket-Integritaet der PDF-Quelle (L1-L6 aus test_pptx_integritaet)
-  5  Familien ohne Vertriebsfolie: Bytes unveraendert
+  5  Alle Vorlagen: externe Verknuepfungen (Netzlaufwerk) entfernt, Folien nur
+     wo noetig, Paket intakt (Sicherheitspruefung 17.09.2026)
   6  GEGENPROBE: ohne das Nachziehen muessen 2 und 3 rot werden
+  7  Waechter: kein automatischer Umwandlungsdienst, keine Skripte, kein
+     Netzzugriff im PDF-Weg (nur mit Freigabe der IT-Sicherheit)
+  8  Oberflaeche (AppTest): zwei Buttons, Tooltip je Familie, Klick liefert die
+     PDF-Fassung mit Download und Anleitung, Fehlerfall laesst die PowerPoint
 
     python tests/test_pdf_export.py [ausgabeordner]
 
@@ -228,16 +235,42 @@ def main():
         else:
             print("   OK — L1-L6 sauber")
 
-        print("\n5. Familien ohne Vertriebsfolie bleiben unberuehrt")
+        print("\n5. Alle Vorlagen: keine externe Verknuepfung mehr, Folien nur "
+              "wo noetig entfernt, Paket intakt")
+        # Seit der Sicherheitspruefung 17.09.2026 entfernt pptx_fuer_pdf auch
+        # Diagramm-Verknuepfungen auf externe Mappen (c:externalData, oleObject
+        # External) — sie gehoeren nicht in eine Datei, die weitergegeben wird.
+        if pdf_export.externe_verknuepfungen(pdf):
+            print("   FEHLER — cVV-PDF-Quelle traegt externe Verknuepfungen")
+            fehler += 1
         for name, soll in sorted(ERWARTET.items()):
-            if soll:
-                continue
             with open(os.path.join("Vorlage", name), "rb") as fh:
                 roh = fh.read()
+            vorher = len(pdf_export.externe_verknuepfungen(roh))
             raus, entf, hinw = pdf_export.pptx_fuer_pdf(roh)
-            ok = raus is roh and entf == [] and hinw == []
-            fehler += 0 if ok else 1
-            print("   %-5s %s" % ("OK" if ok else "FEHLER", name))
+            ziel = os.path.join(ausgabe, "quelle_" + name)
+            with open(ziel, "wb") as fh:
+                fh.write(raus)
+            n_roh = len(Presentation(io.BytesIO(roh)).slides)
+            n_raus = len(Presentation(io.BytesIO(raus)).slides)
+            probleme = []
+            if entf != soll:
+                probleme.append("entfernt %s statt %s" % (entf, soll))
+            if n_raus != n_roh - len(soll):
+                probleme.append("Folien %d -> %d" % (n_roh, n_raus))
+            if pdf_export.externe_verknuepfungen(raus):
+                probleme.append("externe Verknuepfungen uebrig")
+            if hinw:
+                probleme.append("Hinweise %s" % hinw)
+            if not vorher and not soll and raus is not roh:
+                probleme.append("ohne Anlass veraendert")
+            befunde = INTEGRITAET.pruefe_paket(ziel) if raus is not roh else []
+            if befunde:
+                probleme.append("Integritaet: %s" % befunde[:2])
+            fehler += 1 if probleme else 0
+            print("   %-5s %-28s extern %d -> 0%s" % (
+                "OK" if not probleme else "FEHLER", name, vorher,
+                "" if not probleme else "  " + "; ".join(probleme)))
 
         print("\n6. Gegenprobe: ohne Nachziehen muss 2 und 3 rot werden")
         echt = (pdf_export.update_slide_numbers,
@@ -262,14 +295,148 @@ def main():
         traceback.print_exc()
         fehler += 1
 
+    for schritt in (schritt7_kein_umwandlungsdienst, schritt8_oberflaeche):
+        try:
+            fehler += schritt()
+        except Exception:
+            traceback.print_exc()
+            fehler += 1
+
     print()
     print("Ausgabe: %s" % ausgabe)
     if fehler:
         print("FEHLGESCHLAGEN — %d Fehler" % fehler)
         return 1
-    print("BESTANDEN — PDF-Quelle ohne Vertriebsfolie, Nummern und "
-          "Inhaltsverzeichnis stimmen, Gegenprobe greift")
+    print("BESTANDEN — PDF-Fassung ohne Vertriebsfolie und externe Verknuepfungen, "
+          "Nummern und Inhaltsverzeichnis stimmen, Gegenprobe greift, kein "
+          "Umwandlungsdienst, Oberflaeche")
     return 0
+
+
+def schritt7_kein_umwandlungsdienst():
+    """Waechter (Sicherheitspruefung 17.09.2026): Ein automatischer
+    Umwandlungsweg (Dienst auf einem Arbeitsplatz-PC, der Dateien aus dem Netz
+    mit PowerPoint oeffnet) wurde gebaut, vom Virenschutz als Schadsoftware
+    eingestuft und zurueckgenommen. Er darf nur mit Freigabe der
+    IT-Sicherheit zurueckkommen — nicht still ueber einen Commit."""
+    print("\n7. Kein automatischer Umwandlungsdienst im Repo")
+    fehler = 0
+    for pfad in ("modules/pdf_briefkasten.py", "pdf_dienst"):
+        if os.path.exists(os.path.join(WURZEL, pfad)):
+            print("   FEHLER — %s ist wieder da (Freigabe der IT-Sicherheit?)" % pfad)
+            fehler += 1
+    ps1 = [os.path.relpath(os.path.join(w, d), WURZEL)
+           for w, _o, dateien in os.walk(WURZEL)
+           if ".git" not in w and ".venv" not in w
+           for d in dateien if d.lower().endswith((".ps1", ".psm1", ".bat", ".cmd", ".vbs"))]
+    if ps1:
+        print("   FEHLER — Skripte im Repo: %s" % ps1)
+        fehler += 1
+    with open(os.path.join(WURZEL, "modules", "portfolioanalyse.py"), encoding="utf-8") as fh:
+        quelle = fh.read()
+    for verboten in ("pdf_briefkasten", 'secrets.get("pdf_', "urllib", "requests."):
+        if verboten in quelle:
+            print("   FEHLER — portfolioanalyse.py enthaelt %r" % verboten)
+            fehler += 1
+    if not fehler:
+        print("   OK — kein Dienst-Code, keine Skripte, kein Netzzugriff im PDF-Weg")
+    return fehler
+
+
+def schritt8_oberflaeche():
+    print("\n8. Oberflaeche (AppTest)")
+    try:
+        from streamlit.testing.v1 import AppTest
+        from modules import pptx_export
+        from modules import portfolioanalyse as PA
+    except ImportError as ex:
+        print("   UEBERSPRUNGEN — %s" % ex)
+        return 0
+
+    with open(os.path.join(WURZEL, "streamlit_app.py"), encoding="utf-8") as fh:
+        m = re.search(r'^_VIEW_PF\s*=\s*"([^"]*)"', fh.read(), re.M)
+    ansicht = m.group(1) if m else "Portfolioanalyse"
+
+    def app(strategie):
+        at = AppTest.from_file(os.path.join(WURZEL, "streamlit_app.py"),
+                               default_timeout=400)
+        at.secrets["passwords"] = {"t": "t"}
+        at.session_state["logged_in"] = True
+        at.session_state["username"] = "t"
+        at.session_state["nav_view"] = ansicht
+        at.session_state["pf_sel_1"] = strategie
+        at.run()
+        return at
+
+    def knopf(at, key):
+        return next((b for b in at.button if b.key == key), None)
+
+    def ss(at, key):
+        try:
+            return at.session_state[key]
+        except (KeyError, AttributeError):
+            return None
+
+    fehler = 0
+    for strategie, soll_hilfe in (("cVV konservativ", pdf_export.HINWEIS_VERTRIEB),
+                                  ("ESG defensiv", pdf_export.HINWEIS_OHNE_VERTRIEB)):
+        at = app(strategie)
+        if at.exception:
+            print("   FEHLER — %s: App warf %s" % (strategie, at.exception[0].value))
+            fehler += 1
+            continue
+        if ss(at, "pf_sel_1") != strategie:
+            print("   UEBERSPRUNGEN — %r nicht in den Daten" % strategie)
+            continue
+        pptx_k, pdf_k = knopf(at, "pf_pptx_btn"), knopf(at, "pf_pdf_btn")
+        if pptx_k is None or pdf_k is None or pdf_k.disabled or pdf_k.help != soll_hilfe:
+            print("   FEHLER — %s: Buttons %s/%s, gesperrt %s, Tooltip %r" % (
+                strategie, pptx_k is not None, pdf_k is not None,
+                getattr(pdf_k, "disabled", None), getattr(pdf_k, "help", None)))
+            fehler += 1
+        else:
+            print("   OK — %s: beide Buttons, Tooltip %s" % (
+                strategie, "nennt die Vertriebsfolie"
+                if soll_hilfe == pdf_export.HINWEIS_VERTRIEB else "neutral"))
+
+    echt = (pptx_export.generate_portfolioanalyse_pptx, pdf_export.pptx_fuer_pdf)
+    aufrufe = []
+    pptx_export.generate_portfolioanalyse_pptx = lambda *a, **k: b"PK\x03\x04-attrappe"
+    try:
+        pdf_export.pptx_fuer_pdf = lambda b: (aufrufe.append(b) or (b"PK\x03\x04-fassung", [30], []))
+        at = app("ESG defensiv")
+        knopf(at, "pf_pdf_btn").click().run()
+        downloads = [d.key for d in at.get("download_button")]
+        texte = " ".join(str(c.value) for c in at.caption)
+        if (at.exception or ss(at, "pf_pdf_bytes") != b"PK\x03\x04-fassung"
+                or ss(at, "pf_pptx_bytes") is None or knopf(at, "pf_pdf_btn")
+                or "pf_pdf_dl" not in downloads or PA.PDF_ANLEITUNG not in texte
+                or aufrufe != [b"PK\x03\x04-attrappe"]):
+            print("   FEHLER — Klick: Ausnahme %s, Fassung %r, Downloads %s, Anleitung %s, Quelle %s"
+                  % (bool(at.exception), ss(at, "pf_pdf_bytes"), downloads,
+                     PA.PDF_ANLEITUNG in texte, aufrufe))
+            fehler += 1
+        else:
+            print("   OK — Klick baut die PowerPoint, bereitet die PDF-Fassung daraus "
+                  "vor, Download + Anleitung stehen da")
+
+        def kaputt(b):
+            raise ValueError("Test-Fehler")
+        pdf_export.pptx_fuer_pdf = kaputt
+        at = app("ESG defensiv")
+        knopf(at, "pf_pdf_btn").click().run()
+        meldungen = " ".join(str(e.value) for e in at.error)
+        if (at.exception or ss(at, "pf_pdf_bytes") is not None
+                or ss(at, "pf_pptx_bytes") is None or "Test-Fehler" not in meldungen
+                or knopf(at, "pf_pdf_btn") is None):
+            print("   FEHLER — Fehlerfall: Ausnahme %s, Meldungen %r" % (bool(at.exception), meldungen))
+            fehler += 1
+        else:
+            print("   OK — Fehlerfall: Meldung steht da, PowerPoint bleibt, "
+                  "neuer Versuch moeglich")
+    finally:
+        pptx_export.generate_portfolioanalyse_pptx, pdf_export.pptx_fuer_pdf = echt
+    return fehler
 
 
 if __name__ == "__main__":

@@ -1106,33 +1106,22 @@ def _render_familien_hinweis(name_mapping, strategie, vergleich_aktiv=False):
         )
 
 
-PDF_NICHT_EINGERICHTET = (
-    "Der PDF-Dienst ist hier nicht eingerichtet (Zugang [pdf_briefkasten] "
-    "fehlt in den Secrets). Die PowerPoint lässt sich in PowerPoint über "
-    "„Speichern unter → PDF“ sichern.")
+PDF_ANLEITUNG = ("**So entsteht das PDF:** Datei öffnen → in PowerPoint "
+                 "**Datei → Speichern unter → PDF**.")
+"""Steht unter dem Download der PDF-Fassung.
+
+WARUM KEIN FERTIGES PDF (17.09.2026): Ein PDF in der Qualität von
+Desktop-PowerPoint lässt sich auf Streamlit Cloud nicht erzeugen (kein
+PowerPoint; LibreOffice zeichnet die Ringe falsch — Probe 17.09.2026). Ein
+automatischer Umwandlungsdienst auf einem Arbeitsplatz-PC wurde gebaut, vom
+Virenschutz als Schadsoftware eingestuft und zurückgenommen; eine solche
+Lösung braucht die Freigabe der IT-Sicherheit. Bis dahin liefert die App die
+fertig vorbereitete PowerPoint, und der Berater speichert sie als PDF."""
 
 
-def _pdf_briefkasten_cfg():
-    """Zugang zum PDF-Briefkasten aus st.secrets — None, wenn nicht eingerichtet.
-
-    Fehlt der Block, bleibt der PDF-Button sichtbar, aber gesperrt, mit einem
-    Tooltip, der den Ausweichweg nennt. Nie ein Absturz: Ein fehlender
-    Schlüssel darf den PowerPoint-Export nicht mitreißen.
-    """
-    try:
-        cfg = st.secrets.get("pdf_briefkasten")
-    except Exception:
-        return None
-    if not cfg or not cfg.get("repo") or not cfg.get("token"):
-        return None
-    return {"repo": str(cfg["repo"]), "token": str(cfg["token"])}
-
-
-def _pdf_tooltip(familie, cfg):
+def _pdf_tooltip(familie):
     """Tooltip am PDF-Button: nennt die fehlende Vertriebsfolie nur dort, wo
     die Vorlage der Familie sie wirklich führt (heute cVV)."""
-    if cfg is None:
-        return PDF_NICHT_EINGERICHTET
     from modules import pdf_export as _pdf_export_mod
     from modules.pptx_export import TEMPLATE_PATH as _standard_vorlage
     pfad, _cfg = _vorlage_fuer_familie(familie)
@@ -1144,32 +1133,24 @@ def _pdf_tooltip(familie, cfg):
             else _pdf_export_mod.HINWEIS_OHNE_VERTRIEB)
 
 
-def _pdf_erstellen(cfg) -> bool:
-    """PDF aus der gebauten PowerPoint: Vertriebsfolie raus, PDF-Dienst wandelt um.
+def _pdf_fassung_erstellen() -> bool:
+    """PDF-Fassung aus der gebauten PowerPoint: Vertriebsfolie raus, Seitenzahlen
+    und Inhaltsverzeichnis nachgezogen, externe Verknüpfungen entfernt.
 
-    Ergebnis nach st.session_state["pf_pdf_bytes"]; Auffälligkeiten beim
-    Entfernen nach ["pf_pdf_hinweise"]. Fehler des Dienstes (nicht erreichbar,
-    Schlüssel abgelaufen, Zeitüberschreitung) landen in ["pf_pdf_fehler"] und
-    stehen nach dem Rerun unter dem Button — die PowerPoint bleibt davon
-    unberührt. (In session_state statt direkt per st.error, weil der Aufrufer
-    danach neu zeichnet: Im selben Klick kann gerade die PowerPoint entstanden
-    sein, und deren Download soll sofort daneben erscheinen.)
+    Ergebnis nach st.session_state["pf_pdf_bytes"] (eine .pptx, die der Berater
+    in PowerPoint als PDF speichert); Auffälligkeiten nach ["pf_pdf_hinweise"],
+    Fehler nach ["pf_pdf_fehler"] — die PowerPoint bleibt davon unberührt.
     """
     from modules import pdf_export as _pdf_export_mod
-    from modules import pdf_briefkasten as _briefkasten
-    zeile = st.empty()
     try:
-        with st.spinner("PDF wird erstellt — PowerPoint wandelt auf dem PDF-Dienst um …"):
+        with st.spinner("PDF-Fassung wird vorbereitet …"):
             quelle, _entfernt, hinweise = _pdf_export_mod.pptx_fuer_pdf(
                 st.session_state["pf_pptx_bytes"])
-            st.session_state["pf_pdf_bytes"] = _briefkasten.pdf_anfordern(
-                cfg, quelle, fortschritt=zeile.caption)
+        st.session_state["pf_pdf_bytes"] = quelle
         st.session_state["pf_pdf_hinweise"] = list(hinweise)
         return True
-    except _briefkasten.BriefkastenFehler as ex:
-        st.session_state["pf_pdf_fehler"] = str(ex)
     except Exception as ex:
-        st.session_state["pf_pdf_fehler"] = f"PDF konnte nicht erstellt werden: {ex}"
+        st.session_state["pf_pdf_fehler"] = f"PDF-Fassung konnte nicht vorbereitet werden: {ex}"
     return False
 
 
@@ -1270,9 +1251,10 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         st.session_state["pf_export_key"] = current_key
 
     # ── PowerPoint- und PDF-Export (PDF NEU 17.09.2026) ──
-    # Beide Buttons nutzen DENSELBEN Bau: Das PDF entsteht aus der gebauten
-    # PowerPoint (ohne Vertriebsfolie, `pdf_export.pptx_fuer_pdf`) und wird
-    # vom PDF-Dienst mit echtem PowerPoint umgewandelt (`pdf_briefkasten`).
+    # Beide Buttons nutzen DENSELBEN Bau. „PDF erstellen“ liefert die
+    # vorbereitete PowerPoint (`pdf_export.pptx_fuer_pdf`: ohne Vertriebsfolie,
+    # Nummern und Inhaltsverzeichnis nachgezogen, ohne externe Verknüpfungen);
+    # das PDF speichert der Berater in PowerPoint (siehe PDF_ANLEITUNG).
     def _pptx_bauen():
         """Baut die Broschuere nach st.session_state["pf_pptx_bytes"].
 
@@ -1472,7 +1454,6 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                       + st.session_state.get("pf_pdf_hinweise", [])):
         st.warning(f"{_diag_msg}")
 
-    _pdf_cfg = _pdf_briefkasten_cfg()
     _spalte_pptx, _spalte_pdf = st.columns(2)
     with _spalte_pptx:
         if "pf_pptx_bytes" not in st.session_state:
@@ -1494,20 +1475,19 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     with _spalte_pdf:
         if "pf_pdf_bytes" not in st.session_state:
             if st.button("PDF erstellen", key="pf_pdf_btn", width="stretch",
-                         disabled=_pdf_cfg is None,
-                         help=_pdf_tooltip(_familie_fuer_strategie(name_mapping, pf_sel_1),
-                                           _pdf_cfg)):
+                         help=_pdf_tooltip(_familie_fuer_strategie(name_mapping, pf_sel_1))):
                 st.session_state.pop("pf_pdf_fehler", None)
                 if "pf_pptx_bytes" in st.session_state or _pptx_bauen():
-                    _pdf_erstellen(_pdf_cfg)
+                    _pdf_fassung_erstellen()
                     st.rerun()
             if st.session_state.get("pf_pdf_fehler"):
                 st.error(st.session_state["pf_pdf_fehler"])
         else:
             download_bereich(st.session_state["pf_pdf_bytes"],
                              _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf,
-                                               endung=".pdf"),
-                             art="pdf")
+                                               endung=" (für PDF).pptx"),
+                             art="pdf_fassung")
+            st.caption(PDF_ANLEITUNG)
     # Kontextbezogener Familien-Hinweis (immer unter dem Button).
     _render_familien_hinweis(name_mapping, pf_sel_1,
                              vergleich_aktiv=bool(show_compare_pf

@@ -9,12 +9,14 @@ fuer den Vertrieb". Grund (Philip): In der PowerPoint tauscht der Berater die
 Fotos und Namen gegen seine eigenen aus; im PDF geht das nicht, also gehoert
 die Folie dort nicht hinein.
 
-Dieses Modul baut die PDF-QUELLE: eine PowerPoint, in der
+Dieses Modul baut die PDF-FASSUNG: eine PowerPoint, in der
   1. jede Folie mit dem Layout "Ansprechpartner" entfernt ist,
   2. die Seitenzahlen unten neu geschrieben sind,
-  3. die festen Seitenzahlen im Inhaltsverzeichnis nachgezogen sind.
-Die eigentliche Umwandlung in PDF ist ein eigener Schritt (Stand 17.09.2026
-noch offen: LibreOffice ist durch die Probe ausgeschieden, siehe STATUS.md).
+  3. die festen Seitenzahlen im Inhaltsverzeichnis nachgezogen sind,
+  4. Diagramm-Verknuepfungen auf externe Mappen (Netzlaufwerk) entfernt sind.
+Die Umwandlung in PDF macht der Berater in PowerPoint ("Speichern unter ->
+PDF"). Ein automatischer Umwandlungsweg ist ohne Freigabe der IT-Sicherheit
+nicht vorgesehen (Stand 17.09.2026).
 
 WARUM AM LAYOUT UND NICHT AN DER FOLIENNUMMER: Die Folie steckt heute nur in
 der cVV-Vorlage (F30) und in der ungenutzten Standard-Vorlage (F21) — beide
@@ -55,12 +57,15 @@ INHALT_LAYOUT = "Inhaltsverzeichnis"
 """Layoutname der Inhaltsverzeichnis-Folie (cVV, ESG, ETF, comdirect, FFPB)."""
 
 HINWEIS_VERTRIEB = (
-    "Das PDF enthält die Folie „Ihre Ansprechpartner für den Vertrieb“ nicht "
-    "– im PDF lassen sich die Bilder nicht austauschen. Seitenzahlen und "
-    "Inhaltsverzeichnis sind angepasst.")
+    "Lädt eine PowerPoint für das PDF: ohne die Folie „Ihre Ansprechpartner "
+    "für den Vertrieb“ (im PDF lassen sich die Bilder nicht austauschen), "
+    "Seitenzahlen und Inhaltsverzeichnis angepasst. In PowerPoint über "
+    "„Speichern unter → PDF“ sichern.")
 """Tooltip am PDF-Button, wenn die Vorlage der Familie die Folie fuehrt."""
 
-HINWEIS_OHNE_VERTRIEB = "Dieselbe Broschüre wie die PowerPoint, als PDF."
+HINWEIS_OHNE_VERTRIEB = (
+    "Lädt dieselbe Broschüre als PowerPoint für das PDF. In PowerPoint über "
+    "„Speichern unter → PDF“ sichern.")
 """Tooltip am PDF-Button, wenn nichts entfernt wird."""
 
 
@@ -162,6 +167,55 @@ def _inhaltsverzeichnis_nachziehen(prs, entfernt: list, meldungen: list):
                     break
 
 
+_TYP_HYPERLINK = _NS_R + "/hyperlink"
+_NS_C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+
+
+def externe_verknuepfungen(pptx_quelle) -> list:
+    """Alle externen Beziehungen AUSSER Weblinks: [(Teil, Typ-Endung)].
+
+    WARUM (Sicherheitspruefung 17.09.2026): Diagramme koennen auf externe
+    Mappen verweisen (`c:externalData` -> oleObject, TargetMode External). Fuer
+    die Anzeige sind solche Verweise ohne Belang, in einer Datei, die
+    weitergegeben wird, haben sie nichts zu suchen — sie verraten Pfade und
+    laden beim Bearbeiten zu Verbindungen dorthin ein. Die PDF-Fassung wird
+    deshalb davon befreit (`_externe_daten_entfernen`).
+    """
+    if isinstance(pptx_quelle, (bytes, bytearray)):
+        pptx_quelle = io.BytesIO(pptx_quelle)
+    raus = []
+    with zipfile.ZipFile(pptx_quelle) as zf:
+        for name in zf.namelist():
+            if not name.endswith(".rels"):
+                continue
+            for rel in etree.fromstring(zf.read(name)).iter(
+                    "{%s}Relationship" % _NS_REL):
+                if (rel.get("TargetMode") == "External"
+                        and rel.get("Type") != _TYP_HYPERLINK):
+                    raus.append((name, rel.get("Type", "").rsplit("/", 1)[-1]))
+    return raus
+
+
+def _externe_daten_entfernen(prs) -> int:
+    """Entfernt `c:externalData`, das auf eine EXTERNE Mappe zeigt, samt
+    Beziehung. Die Diagramme zeichnen aus ihrem Zwischenspeicher (c:*Cache) —
+    fuers PDF aendert sich nichts. Rueckgabe: Anzahl entfernter Verweise."""
+    anzahl = 0
+    for teil in prs.part.package.iter_parts():
+        wurzel = getattr(teil, "_element", None)
+        if wurzel is None or not str(teil.partname).startswith("/ppt/charts/chart"):
+            continue
+        for ext in wurzel.findall("{%s}externalData" % _NS_C):
+            rid = ext.get("{%s}id" % _NS_R)
+            rel = teil.rels.get(rid) if rid else None
+            if rel is None or not rel.is_external:
+                continue
+            wurzel.remove(ext)
+            teil.drop_rel(rid)
+            anzahl += 1
+    return anzahl
+
+
 def pptx_fuer_pdf(pptx_bytes: bytes) -> tuple:
     """Baut aus der fertigen Broschuere die Quelle fuer das PDF.
 
@@ -170,10 +224,11 @@ def pptx_fuer_pdf(pptx_bytes: bytes) -> tuple:
         - entfernte_positionen: 1-basiert, bezogen auf die Eingabe
         - meldungen: Auffaelligkeiten, die der Aufrufer anzeigen muss
           (gleiches Prinzip wie `pptx_export.LAST_BUILD_ERRORS`, nie still)
-        Ohne Vertriebsfolie kommen die Eingabe-Bytes UNVERAENDERT zurueck.
+        Ohne Vertriebsfolie UND ohne externe Verknuepfungen kommen die
+        Eingabe-Bytes unveraendert zurueck.
     """
     entfernt = vertriebsfolien(pptx_bytes)
-    if not entfernt:
+    if not entfernt and not externe_verknuepfungen(pptx_bytes):
         return pptx_bytes, [], []
 
     meldungen = []
@@ -181,8 +236,10 @@ def pptx_fuer_pdf(pptx_bytes: bytes) -> tuple:
     # Von hinten entfernen, damit die vorderen Positionen gueltig bleiben.
     for pos in sorted(entfernt, reverse=True):
         remove_slide(prs, pos - 1)
-    update_slide_numbers(prs)
-    _inhaltsverzeichnis_nachziehen(prs, entfernt, meldungen)
+    if entfernt:
+        update_slide_numbers(prs)
+        _inhaltsverzeichnis_nachziehen(prs, entfernt, meldungen)
+    _externe_daten_entfernen(prs)
 
     puffer = io.BytesIO()
     prs.save(puffer)
@@ -193,4 +250,9 @@ def pptx_fuer_pdf(pptx_bytes: bytes) -> tuple:
     if rest:
         meldungen.append(
             f"PDF-Quelle enthält weiter Vertriebsfolien an Position {rest}.")
+    extern = externe_verknuepfungen(daten)
+    if extern:
+        meldungen.append(
+            f"PDF-Fassung enthält weiter {len(extern)} externe Verknüpfung(en) "
+            f"({extern[0][0]}) — bitte melden.")
     return daten, entfernt, meldungen

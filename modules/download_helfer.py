@@ -44,14 +44,13 @@ PPTX_MIMETYPE = (
     "application/vnd.openxmlformats-officedocument."
     "presentationml.presentation"
 )
-PDF_MIMETYPE = "application/pdf"
-
-# Dateityp -> (MIME-Typ, Beschriftung). Seit dem PDF-Export (17.09.2026) stehen
-# zwei Downloads nebeneinander; "Broschüre herunterladen" hätte beide gleich
-# beschriftet.
+# Art -> (MIME-Typ, Beschriftung). Seit 17.09.2026 stehen zwei Downloads
+# nebeneinander: die Broschüre und ihre PDF-Fassung (eine vorbereitete
+# PowerPoint, die der Berater als PDF speichert). "Broschüre herunterladen"
+# hätte beide gleich beschriftet.
 DOWNLOAD_ARTEN = {
     "pptx": (PPTX_MIMETYPE, "PowerPoint herunterladen"),
-    "pdf": (PDF_MIMETYPE, "PDF herunterladen"),
+    "pdf_fassung": (PPTX_MIMETYPE, "PowerPoint für PDF herunterladen"),
 }
 
 
@@ -110,8 +109,8 @@ def download_bereich(daten: bytes, dateiname: str, art: str = "pptx") -> None:
        Scan → startet sofort, kein neuer Tab).
     2) FALLBACK: klassischer st.download_button (In-Page über den Server).
 
-    art: "pptx" oder "pdf" — bestimmt MIME-Typ, Beschriftung und den Key des
-    Fallback-Buttons.
+    art: "pptx" oder "pdf_fassung" — bestimmt MIME-Typ, Beschriftung und den
+    Key des Fallback-Buttons.
     """
     import streamlit as st
     import streamlit.components.v1 as components
@@ -127,7 +126,7 @@ def download_bereich(daten: bytes, dateiname: str, art: str = "pptx") -> None:
     # key=f"pf_{art}_dl": tests/test_keepalive.py verbietet berechnete Keys an
     # Trigger-Widgets (sie wären in _KEEPALIVE_SPERRE nicht prüfbar).
     with st.expander("Alternativer Download (falls der Button oben nicht lädt)"):
-        if art == "pdf":
+        if art == "pdf_fassung":
             st.download_button(
                 "Klassischer Download (über den Server)",
                 data=daten,
