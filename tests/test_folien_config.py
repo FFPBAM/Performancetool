@@ -37,7 +37,10 @@ sys.path.insert(0, WURZEL)
 # Fehlschlag. Alle anderen Suiten machen es so wie hier jetzt auch.
 try:
     from modules.portfolioanalyse import VORLAGEN_FAMILIEN  # noqa: E402
-    from modules.vorlagen_config import _folien_config  # noqa: E402
+    from modules.vorlagen_config import (  # noqa: E402
+        _folien_config, VORLAGEN_STRATEGIE, _THEMA_CONFIG,
+        _THEMA_SCHWEIZ_CONFIG,
+    )
 except ImportError as ex:
     print(f"UEBERSPRUNGEN — Abhaengigkeit fehlt: {ex}")
     sys.exit(0)
@@ -237,11 +240,62 @@ def pruefe_export_namen():
     return True
 
 
+def pruefe_strategie_vorlagen():
+    """Strategie-spezifische Thema-Vorlagen (NEU 17.09.2026).
+
+    Die Anfangsfolien 2/3 unterscheiden sich je Thema-Strategie: Offensiv und
+    Pro Dividende bekommen eigene .pptx (gleiche Config), beide SCHWEIZ die
+    Pro-Vorlage mit entfernten F2/F3 (_THEMA_SCHWEIZ_CONFIG).
+    """
+    print("\n5. Strategie-spezifische Thema-Vorlagen")
+    fehler = 0
+
+    # SCHWEIZ-Config: entfernt genau F2/F3, sonst identisch zur Thema-Config.
+    if _THEMA_SCHWEIZ_CONFIG.get("entfernen") != [2, 3]:
+        print(f"   FEHLER — SCHWEIZ-Config entfernen={_THEMA_SCHWEIZ_CONFIG.get('entfernen')!r}, erwartet [2, 3]")
+        fehler += 1
+    if _THEMA_CONFIG.get("entfernen") != []:
+        print(f"   FEHLER — Gegenprobe: _THEMA_CONFIG entfernen={_THEMA_CONFIG.get('entfernen')!r}, erwartet []")
+        fehler += 1
+    if _THEMA_SCHWEIZ_CONFIG.get("block_positionen") != _THEMA_CONFIG.get("block_positionen"):
+        print("   FEHLER — SCHWEIZ-Config hat andere block_positionen als _THEMA_CONFIG")
+        fehler += 1
+    if _THEMA_SCHWEIZ_CONFIG.get("erwartete_folien") != 21:
+        print(f"   FEHLER — SCHWEIZ erwartete_folien={_THEMA_SCHWEIZ_CONFIG.get('erwartete_folien')}, erwartet 21 (der 21-Folien-Vorlage)")
+        fehler += 1
+
+    # Jede referenzierte Datei existiert und hat 21 Folien.
+    try:
+        from pptx import Presentation
+        haben_pptx = True
+    except ImportError:
+        haben_pptx = False
+    for strat, (dateiname, cfg) in sorted(VORLAGEN_STRATEGIE.items()):
+        pfad = os.path.join(WURZEL, "Vorlage", dateiname)
+        if not os.path.exists(pfad):
+            print(f"   FEHLER — {strat}: Vorlage {dateiname} fehlt")
+            fehler += 1
+            continue
+        if haben_pptx:
+            n = len(Presentation(pfad).slides)
+            if n != cfg.get("erwartete_folien"):
+                print(f"   FEHLER — {strat}: {dateiname} hat {n} Folien, Config erwartet {cfg.get('erwartete_folien')}")
+                fehler += 1
+                continue
+        print(f"   OK — {strat:28s} -> {dateiname} (entfernen={cfg.get('entfernen')})")
+
+    if fehler:
+        return False
+    print("   OK — alle strategie-spezifischen Vorlagen vorhanden und stimmig")
+    return True
+
+
 def main():
     ergebnisse = [pruefe_thema_aequivalenz(),
                   pruefe_modus_wachen(),
                   pruefe_gegen_vorlagen(),
-                  pruefe_export_namen()]
+                  pruefe_export_namen(),
+                  pruefe_strategie_vorlagen()]
     print()
     if all(ergebnisse):
         print("BESTANDEN")

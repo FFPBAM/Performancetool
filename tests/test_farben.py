@@ -49,7 +49,11 @@ VORLAGEN = "Vorlage"
 # seit dem 10.07.2026 auf 9FD0EF - eine bestehende Festlegung, die hier
 # NAMENTLICH als Ausnahme steht und nicht stillschweigend durchrutscht.
 BEKANNTE_ABWEICHUNG = {
-    (GROUP_LIQUIDITAET, "D1E9F8"): ("Vorlage_FFPB.pptx", "Vorlage_Thema.pptx"),
+    # Die strategie-spezifischen Thema-Vorlagen (NEU 17.09.2026) erben die
+    # Abweichung von Vorlage_Thema — sie unterscheiden sich nur in F2/F3.
+    (GROUP_LIQUIDITAET, "D1E9F8"): ("Vorlage_FFPB.pptx", "Vorlage_Thema.pptx",
+                                    "Vorlage_Thema_Offensiv.pptx",
+                                    "Vorlage_Thema_ProDividende.pptx"),
 }
 
 

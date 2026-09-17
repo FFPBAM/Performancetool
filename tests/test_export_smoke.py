@@ -16,6 +16,7 @@ Die erzeugten PPTX bitte STICHPROBENARTIG IN ECHTEM PowerPoint oeffnen —
 LibreOffice reicht nicht (Transferwissen #16/#28).
 """
 
+import io
 import os
 import sys
 import tempfile
@@ -42,10 +43,12 @@ try:
     from modules.portfolioanalyse import (
         load_pf_csvs, build_pf_data, duration_info_aus_bestand,
         VORLAGEN_FAMILIEN, FAMILIE_ALLE_STRATEGIEN, _familien_portfolios,
-        _vorlage_fuer_familie, _familie_fuer_strategie, historie_beschneiden,
+        _vorlage_fuer_strategie, _familie_fuer_strategie,
+        historie_beschneiden,
     )
     from modules import pptx_export
     from modules.pptx_export import generate_portfolioanalyse_pptx
+    from modules import pdf_export
 except ImportError as ex:
     print(f"UEBERSPRUNGEN — Abhaengigkeit fehlt: {ex}")
     sys.exit(0)
@@ -114,7 +117,12 @@ def _perf_inputs(portfolios, d, familie=""):
 
 
 def _bauen(portfolios, familie, d, ausgabe, dateiname):
-    tpl, cfg = _vorlage_fuer_familie(familie)
+    # Strategie-basierte Vorlagenauflösung wie im Produktionsweg (NEU
+    # 17.09.2026): Die Leitstrategie (portfolios[0][0]) wählt die Vorlage —
+    # für Thema-Strategien mit eigenen Anfangsfolien und für SCHWEIZ (F2/F3
+    # entfernt). Für alle anderen fällt _vorlage_fuer_strategie auf die Familie
+    # zurück, das Ergebnis ist identisch zu vorher.
+    tpl, cfg = _vorlage_fuer_strategie(d["nm"], portfolios[0][0])
     daten = generate_portfolioanalyse_pptx(
         portfolios, 0.0, performance_inputs=_perf_inputs(portfolios, d, familie),
         template_path=tpl, template_config=cfg)
@@ -161,9 +169,14 @@ def main():
             ziel, groesse, meldungen = _bauen(portfolios, familie, d, ausgabe,
                                               f"{familie}.pptx")
             n = len(Presentation(ziel).slides)
-            soll = VORLAGEN_FAMILIEN[familie][1].get("erwartete_folien")
+            # Soll aus der STRATEGIE-Config der Leitstrategie (berücksichtigt
+            # z.B. SCHWEIZ mit entfernten Anfangsfolien), nicht stur aus der
+            # Familie — sonst schlägt Teil 1 falsch an, wenn die erste
+            # Thema-Strategie eine SCHWEIZ-Strategie ist.
+            _, _cfg = _vorlage_fuer_strategie(d["nm"], portfolios[0][0])
+            soll = _cfg.get("erwartete_folien") - len(_cfg.get("entfernen") or [])
             # Im Dupliziermodus waechst die Folienzahl mit den Strategien
-            if VORLAGEN_FAMILIEN[familie][1].get("block_positionen"):
+            if _cfg.get("block_positionen"):
                 soll += THEMA_BLOCK * (len(portfolios) - 1)
             ok = n == soll and not meldungen
             fehler += 0 if ok else 1
@@ -204,6 +217,69 @@ def main():
             print(f"{'Thema x' + str(anzahl):28s} {'-':>6s} {'-':>5s} {'-':>6s}  "
                   f"FEHLER: {type(ex).__name__}: {ex}")
             traceback.print_exc()
+
+    # ── Teil 3: Thema-Strategien mit eigenen Anfangsfolien (NEU 17.09.2026) ──
+    # Offensiv/Pro Dividende bekommen eigene F2/F3, beide SCHWEIZ keine
+    # (Folie 2 wird dann "Aktien – die guten Jahre überwiegen"). Geprueft:
+    # Folienzahl (mit entfernen), F2-Titel, KEINE externen Verknuepfungen.
+    print("\nTeil 3: strategie-spezifische Anfangsfolien (Thema)")
+    THEMA_F2 = {
+        "Offensiv": ("Offensiv", "PRO"),
+        "Pro": ("PRO", None),
+        "Pro Dividende": ("Pro Dividende", "PRO"),
+        "Schweiz_aktienorientiert": ("Aktien – die guten Jahre", "PRO"),
+        "Schweiz_substanzorientiert": ("Aktien – die guten Jahre", "PRO"),
+    }
+    for strat, (muss, darf_nicht) in THEMA_F2.items():
+        if strat not in d["d2c"]:
+            print(f"   {strat:28s} UEBERSPRUNGEN (nicht in den Daten)")
+            continue
+        try:
+            tpl, cfg = _vorlage_fuer_strategie(d["nm"], strat)
+            port = [_portfolio(strat, d)]
+            daten = generate_portfolioanalyse_pptx(
+                port, 0.0, performance_inputs=_perf_inputs(port, d, "Thema"),
+                template_path=tpl, template_config=cfg)
+            meldungen = list(pptx_export.LAST_BUILD_ERRORS)
+            prs = Presentation(io.BytesIO(daten))
+            n = len(prs.slides)
+            soll = cfg["erwartete_folien"] - len(cfg.get("entfernen") or [])
+            t2 = prs.slides[1].shapes.title
+            f2 = t2.text_frame.text.replace("\n", " ").strip() if t2 is not None else ""
+            extern = pdf_export.externe_verknuepfungen(daten)
+            probleme = []
+            if n != soll:
+                probleme.append(f"{n} Folien statt {soll}")
+            if muss not in f2:
+                probleme.append(f"F2 «{f2}» enthaelt nicht {muss!r}")
+            if darf_nicht and darf_nicht in f2:
+                probleme.append(f"F2 «{f2}» enthaelt faelschlich {darf_nicht!r}")
+            if extern:
+                probleme.append(f"externe Verknuepfungen: {extern[:2]}")
+            if meldungen:
+                probleme.append(f"Build-Meldungen: {meldungen}")
+            fehler += 1 if probleme else 0
+            print(f"   {'FEHLER' if probleme else 'OK':6s} {strat:28s} {n:2d} Folien, F2 «{f2[:34]}»"
+                  + ("  " + "; ".join(probleme) if probleme else ""))
+        except Exception as ex:
+            fehler += 1
+            print(f"   FEHLER {strat:28s} {type(ex).__name__}: {ex}")
+            traceback.print_exc()
+
+    # Gegenprobe, dass der Detektor misst: ein Original unter H: TRAEGT
+    # externe Verknuepfungen (skip-if-not-present, kein Fehler wenn H: fehlt).
+    import glob as _glob
+    _orig = _glob.glob(r"H:\Entwicklung\Forschung_Claude\Performancetool"
+                       r"\Themenvorlageneu\*.pptx")
+    if _orig:
+        with open(_orig[0], "rb") as fh:
+            roh = fh.read()
+        if pdf_export.externe_verknuepfungen(roh):
+            print("   OK — Gegenprobe: Original-Broschuere traegt externe "
+                  "Verknuepfungen (Detektor misst wirklich)")
+        else:
+            print("   FEHLER — Gegenprobe: Original ohne externe Verknuepfungen?")
+            fehler += 1
 
     print()
     if fehler:

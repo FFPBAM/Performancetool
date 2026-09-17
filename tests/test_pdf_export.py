@@ -70,6 +70,9 @@ ERWARTET = {
     "Vorlage_ESG.pptx": [],
     "Vorlage_ETF.pptx": [],
     "Vorlage_Thema.pptx": [],
+    # Strategie-spezifische Thema-Vorlagen (NEU 17.09.2026, nur andere F2/F3):
+    "Vorlage_Thema_Offensiv.pptx": [],
+    "Vorlage_Thema_ProDividende.pptx": [],
     "Vorlage_comdirect.pptx": [],
 }
 

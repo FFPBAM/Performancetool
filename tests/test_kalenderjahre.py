@@ -267,17 +267,24 @@ def schritt3_artefakt():
         print(f"    UEBERSPRUNGEN — {ex}")
         return 0
 
+    from modules.portfolioanalyse import _vorlage_fuer_strategie
+
     d = _daten()
     ausgabe = tempfile.mkdtemp(prefix="ffpb_kalenderjahre_")
     fehler = 0
 
     # ── Themen-Familie: eine Broschuere je Strategie ──────────────────────
-    _, cfg = VORLAGEN_FAMILIEN["Thema"]
-    idx = cfg["block_positionen"]["wertentwicklung"] - 1
+    # Die Wertentwicklungs-Folie liegt je Strategie an unterschiedlicher
+    # Position: SCHWEIZ hat die Anfangsfolien 2/3 entfernt (NEU 17.09.2026),
+    # deshalb rutscht der Block um die davor entfernten Folien nach vorne. Den
+    # Index deshalb aus der STRATEGIE-Config ableiten, nicht stur aus Thema.
     for name, familie, soll in ARTEFAKT_FAELLE:
         if name not in d["d2c"]:
             print(f"    {name[:28]:28s} UEBERSPRUNGEN (nicht in den Daten)")
             continue
+        _, cfg = _vorlage_fuer_strategie(d["nm"], name)
+        roh = cfg["block_positionen"]["wertentwicklung"]
+        idx = roh - sum(1 for p in (cfg.get("entfernen") or []) if p < roh) - 1
         ziel, _g, meldungen = _bauen([_portfolio(name, d)], familie, d,
                                      ausgabe, f"{name}.pptx")
         for m in meldungen:

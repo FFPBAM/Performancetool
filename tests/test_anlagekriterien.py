@@ -97,7 +97,11 @@ NOCH_OFFEN = ["Schweiz_substanzorientiert", "Schweiz_aktienorientiert"]
 
 # Vorlagen ohne Kriterien-Tabelle. Solange das so ist, kann kein Excel-Eintrag
 # eine Thema-Broschüre veraendern — Schritt 4b weist das am Artefakt nach.
-VORLAGEN_OHNE_KASTEN = ["Vorlage_Thema.pptx", "Vorlage_FFPB.pptx"]
+# Die strategie-spezifischen Thema-Vorlagen (NEU 17.09.2026) unterscheiden sich
+# von Vorlage_Thema nur in F2/F3 und haben ebenso keinen Kasten.
+VORLAGEN_OHNE_KASTEN = ["Vorlage_Thema.pptx", "Vorlage_FFPB.pptx",
+                        "Vorlage_Thema_Offensiv.pptx",
+                        "Vorlage_Thema_ProDividende.pptx"]
 
 
 def _pruefe_struktur(df):

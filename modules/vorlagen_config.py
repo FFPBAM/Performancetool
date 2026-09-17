@@ -171,32 +171,45 @@ def _folien_config(folien, rollen_optionen=None, entfernen=None, modus="fest"):
 # _folien_config — erzeugt beweisbar dasselbe template_config (siehe
 # tests/test_folien_config.py), aber in derselben lesbaren Folienliste wie
 # alle anderen Familien.
-_THEMA_CONFIG = _folien_config(
-    modus="dupliziert",
-    folien=[
-        ("S", "UNABHÄNGIG. WERTEORIENTIERT. PERSÖNLICH."),
-        ("S", "Unsere Strategie PRO"),
-        ("S", "Unsere Strategie PRO (Fortsetzung)"),
-        ("S", "Aktien – die guten Jahre überwiegen"),
-        ("S", "Die Fallstricke des typischen Investors"),
-        ("S", "Durchhalten zahlt sich aus"),
-        ("S", "Gute Jahre überwiegen"),
-        ("S", "Krise als Chance"),
-        ("S", "Basis unserer Investmententscheidungen"),
-        ("einzeltitel_themen", 0, "Einzeltitel (Tabelle + Assetklassen-Ring)"),
-        ("zusammenstellung", 0, "Aktuelle Portfoliozusammenstellung (Regionen + Branchen)"),
-        ("wertentwicklung", 0, "Anlagestrategie … | Wertentwicklung"),
-        ("rollierend", 0, "Wertentwicklung der Strategie … (rollierend)"),
-        ("S", "Unser Honorar"),
-        ("S", "Unser Honorar (Tabelle)"),
-        ("S", "Unsere Bank in Zahlen"),
-        ("S", "Unsere Standorte"),
-        ("S", "Unsere Standorte (Fortsetzung)"),
-        ("S", "Risikohinweise"),
-        ("S", "Rechtliche Hinweise und Impressum"),
-        ("S", "www.fuggerbank.de"),
-    ],
-)
+# Die Thema-Folienliste als Konstante, damit sie mehrfach genutzt werden kann
+# (Standard-Config UND die SCHWEIZ-Variante mit entfernten Intro-Folien 2/3).
+# Folien 2/3 ("Unsere Strategie PRO") sind PRO-spezifisch; Offensiv und Pro
+# Dividende bekommen ihre eigenen über strategie-spezifische VORLAGEN
+# (VORLAGEN_STRATEGIE, gleiche Folienliste, nur andere .pptx), SCHWEIZ bekommt
+# sie über entfernen=[2,3] entfernt (NEU 17.09.2026, Feedback aus dem Haus).
+_THEMA_FOLIEN = [
+    ("S", "UNABHÄNGIG. WERTEORIENTIERT. PERSÖNLICH."),
+    ("S", "Unsere Strategie PRO"),
+    ("S", "Unsere Strategie PRO (Fortsetzung)"),
+    ("S", "Aktien – die guten Jahre überwiegen"),
+    ("S", "Die Fallstricke des typischen Investors"),
+    ("S", "Durchhalten zahlt sich aus"),
+    ("S", "Gute Jahre überwiegen"),
+    ("S", "Krise als Chance"),
+    ("S", "Basis unserer Investmententscheidungen"),
+    ("einzeltitel_themen", 0, "Einzeltitel (Tabelle + Assetklassen-Ring)"),
+    ("zusammenstellung", 0, "Aktuelle Portfoliozusammenstellung (Regionen + Branchen)"),
+    ("wertentwicklung", 0, "Anlagestrategie … | Wertentwicklung"),
+    ("rollierend", 0, "Wertentwicklung der Strategie … (rollierend)"),
+    ("S", "Unser Honorar"),
+    ("S", "Unser Honorar (Tabelle)"),
+    ("S", "Unsere Bank in Zahlen"),
+    ("S", "Unsere Standorte"),
+    ("S", "Unsere Standorte (Fortsetzung)"),
+    ("S", "Risikohinweise"),
+    ("S", "Rechtliche Hinweise und Impressum"),
+    ("S", "www.fuggerbank.de"),
+]
+
+_THEMA_CONFIG = _folien_config(modus="dupliziert", folien=_THEMA_FOLIEN)
+
+# SCHWEIZ-Variante: dieselbe (Pro-)Vorlage, aber die beiden PRO-Intro-Folien
+# 2/3 werden entfernt (die Broschüre beginnt nach der Titelfolie direkt mit
+# "Aktien – die guten Jahre überwiegen"). erwartete_folien bleibt 21 (der
+# Guard prüft die 21-Folien-Vorlage), entfernen=[2,3] -> gebaut 19 Folien;
+# `_normalisiere_vorlage` löscht sie und korrigiert die Blockpositionen.
+_THEMA_SCHWEIZ_CONFIG = _folien_config(
+    modus="dupliziert", folien=_THEMA_FOLIEN, entfernen=[2, 3])
 
 # Struktur der CVV-Broschüre ("cVV Infoboard", NEU 09.07.2026).
 #
@@ -496,6 +509,21 @@ VORLAGEN_FAMILIEN = {
     "ESG": ("Vorlage_ESG.pptx", _ESG_CONFIG),
     "ETF": ("Vorlage_ETF.pptx", _ETF_CONFIG),
     "comdirect": ("Vorlage_comdirect.pptx", _COMDIRECT_CONFIG),
+}
+
+# Strategie-spezifische Vorlagen INNERHALB einer Familie (NEU 17.09.2026).
+# Nur die Familie „Thema" braucht das: Die Anfangsfolien 2/3 („Unsere
+# Strategie …") sind strategiespezifisch, der Rest der Befüllung ist identisch.
+# Auflösung geht VOR der Familie (_vorlage_fuer_strategie in portfolioanalyse):
+#   - Offensiv / Pro Dividende: eigene .pptx (nur F2/F3 anders), gleiche Config.
+#   - beide SCHWEIZ: die Pro-Vorlage mit entfernten F2/F3 (_THEMA_SCHWEIZ_CONFIG).
+#   - Pro steht bewusst NICHT hier -> Rückfall auf VORLAGEN_FAMILIEN["Thema"].
+# Strategienamen exakt wie in Mapping_Namen.xlsx, Spalte „Strategie auswählen".
+VORLAGEN_STRATEGIE = {
+    "Offensiv":                   ("Vorlage_Thema_Offensiv.pptx",     _THEMA_CONFIG),
+    "Pro Dividende":              ("Vorlage_Thema_ProDividende.pptx", _THEMA_CONFIG),
+    "Schweiz_aktienorientiert":   ("Vorlage_Thema.pptx",              _THEMA_SCHWEIZ_CONFIG),
+    "Schweiz_substanzorientiert": ("Vorlage_Thema.pptx",              _THEMA_SCHWEIZ_CONFIG),
 }
 
 # ══════════════════════════════════════════════════════════════════════════

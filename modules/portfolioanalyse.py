@@ -861,6 +861,7 @@ def beitrag_einzelsegment_text(name, wert, gattung,
 from modules.vorlagen_config import (   # noqa: F401  (Re-Export fuer Alt-Importe)
     SPALTE_PP_FAMILIE,
     VORLAGEN_FAMILIEN,
+    VORLAGEN_STRATEGIE,
     FAMILIE_ALLE_STRATEGIEN,
     # HISTORIE_AB stand hier bis 14.08.2026. Es wurde nur von
     # historie_beschneiden gebraucht, und die liegt jetzt in analytics.py —
@@ -981,20 +982,13 @@ def _familie_fuer_strategie(name_mapping, display_name):
 familie_fuer_strategie = _familie_fuer_strategie
 
 
-def _vorlage_fuer_familie(familie):
-    """Familie → (template_path|None, template_config|None).
+def _pfad_aufloesen(dateiname):
+    """Vorlagen-Dateiname → existierender Pfad oder None.
 
-    Gibt (None, None) zurück, wenn die Familie leer/unbekannt ist ODER die
-    Vorlagen-Datei nicht gefunden wird → Standard-Export (rückwärtskompatibel).
-
-    Der Pfad wird vom funktionierenden Standard-TEMPLATE_PATH abgeleitet
-    (gleiches Verzeichnis wie Vorlage_FFPB.pptx), damit er in JEDER
-    Ausführungsumgebung (Streamlit Cloud, lokal) am selben Ort sucht wie die
-    Standard-Vorlage — statt relativ zum aktuellen Arbeitsverzeichnis.
+    Sucht am selben Ort wie die Standard-Vorlage (abgeleitet von
+    TEMPLATE_PATH), damit es in JEDER Ausführungsumgebung (Streamlit Cloud,
+    lokal) greift — statt relativ zum aktuellen Arbeitsverzeichnis.
     """
-    if not familie or familie not in VORLAGEN_FAMILIEN:
-        return None, None
-    dateiname, config = VORLAGEN_FAMILIEN[familie]
     import os as _os
     kandidaten = []
     # 1) Neben der Standard-Vorlage (identisches Verzeichnis wie TEMPLATE_PATH)
@@ -1013,9 +1007,42 @@ def _vorlage_fuer_familie(familie):
                                     "..", "Vorlage", dateiname))
     for pfad in kandidaten:
         if _os.path.exists(pfad):
+            return pfad
+    return None
+
+
+def _vorlage_fuer_familie(familie):
+    """Familie → (template_path|None, template_config|None).
+
+    Gibt (None, None) zurück, wenn die Familie leer/unbekannt ist ODER die
+    Vorlagen-Datei nicht gefunden wird → Standard-Export (rückwärtskompatibel).
+    """
+    if not familie or familie not in VORLAGEN_FAMILIEN:
+        return None, None
+    dateiname, config = VORLAGEN_FAMILIEN[familie]
+    pfad = _pfad_aufloesen(dateiname)
+    return (pfad, config) if pfad else (None, None)
+
+
+def _vorlage_fuer_strategie(name_mapping, strategie):
+    """Strategie → (template_path|None, template_config|None).
+
+    Erst die strategie-spezifische Vorlage (VORLAGEN_STRATEGIE, NEU 17.09.2026:
+    die Thema-Anfangsfolien 2/3 unterscheiden sich je Strategie), sonst über die
+    Familie. Fehlt die Datei → (None, None) = Standard-Export.
+
+    Bei einer Mehr-Strategien-Broschüre bestimmt die LEITSTRATEGIE (pf_sel_1,
+    hier `strategie`) die Anfangsfolien — die Familien-Config baut ohnehin nur
+    diese eine Strategie (Thema steht nicht in FAMILIE_ALLE_STRATEGIEN).
+    """
+    eintrag = VORLAGEN_STRATEGIE.get(strategie)
+    if eintrag:
+        dateiname, config = eintrag
+        pfad = _pfad_aufloesen(dateiname)
+        if pfad:
             return pfad, config
-    # Keiner existiert → Standard (kein Crash). Der aufrufende Code meldet das.
-    return None, None
+        # Datei fehlt → über die Familie versuchen (statt hart Standard)
+    return _vorlage_fuer_familie(_familie_fuer_strategie(name_mapping, strategie))
 
 
 def _export_name_saeubern(name: str) -> str:
@@ -1398,11 +1425,11 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             with st.spinner("PowerPoint wird erstellt..."):
                 from modules import pptx_export as _pptx_export_mod
                 from modules.pptx_export import generate_portfolioanalyse_pptx
-                # Familie der gewählten Strategie bestimmt die Vorlage
-                # (Variante A). Leere/unbekannte Familie oder fehlende
-                # Vorlagen-Datei → (None, None) = Standard-Export.
+                # Strategie bestimmt die Vorlage: erst strategie-spezifisch
+                # (Thema-Anfangsfolien 2/3), sonst über die Familie. Leere/
+                # unbekannte Strategie oder fehlende Datei → Standard-Export.
                 _familie = _familie_fuer_strategie(name_mapping, pf_sel_1)
-                _tpl_path, _tpl_cfg = _vorlage_fuer_familie(_familie)
+                _tpl_path, _tpl_cfg = _vorlage_fuer_strategie(name_mapping, pf_sel_1)
                 if _familie and not _tpl_path:
                     pptx_diag.append(
                         f"Familie '{_familie}' hat (noch) keine Vorlage "
