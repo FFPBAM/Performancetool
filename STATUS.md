@@ -2,275 +2,61 @@
 
 **Letzte Sitzung:** 17.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **35 von 35 Suiten grün**, `pyflakes` bei null ·
-**PDF-Export fertig und gepusht** — neben „PowerPoint erstellen" steht
-„PDF erstellen": dieselbe Broschüre ohne „Ihre Ansprechpartner für den
-Vertrieb", umgewandelt von **echtem PowerPoint auf Philips Büro-PC** über den
-**PDF-Briefkasten** (privates Repo `FFPBAM/pdf-briefkasten`). Der Dienst läuft
-per Aufgabenplanung. **In der Cloud in Betrieb und von Philip getestet**
-(Secret eingetragen — danach war ein *Reboot app* nötig, Speichern allein
-genügte nicht). Sitzungsbericht unten.
+unerheblich) · **Alle Suiten grün**, `pyflakes` bei null ·
+**PDF-Fassung der Broschüre gebaut; automatischer Umwandlungsdienst
+zurückgenommen (Sicherheit).**
 
-> **⏰ FRIST: Die beiden GitHub-Schlüssel des PDF-Briefkastens laufen am
-> 16.12.2026 ab** (`pdf-briefkasten-app` 09:09 UTC, `pdf-briefkasten-pc`
-> 09:11 UTC — ausgelesen aus dem Antwort-Header
-> `github-authentication-token-expiration`, nicht geschätzt). Danach liefert
-> der PDF-Button nichts mehr. **Vorher** beide erneuern: GitHub → Settings →
-> Developer settings → Personal access tokens → Fine-grained tokens → Schlüssel
-> anklicken → *Regenerate token* → neu ablegen (Orte siehe „PDF-Briefkasten"
-> unten). Für den Betrieb ein Ablaufdatum **knapp unter einem Jahr** wählen —
-> **mehr als ein Jahr lehnt GitHub ab, und zwar still: „Generate token" tut
-> dann einfach nichts** (17.09.2026 so passiert, mit 31.12.2027).
+> ### ⚠️ Sicherheitsprüfung des öffentlichen Repos (17.09.2026)
+>
+> Das Repo `verbesserungen`/`main` ist **öffentlich**. Eine vollständige
+> Prüfung (ganze Historie, Office-Metadaten, GitHub-API) liegt **intern** im
+> DRACOON-Ordner `…/Performancetool/Sicherheit_PDF-Dienst/` — Bericht und
+> Betriebshandbuch stehen bewusst **nicht** im Repo. **Belegt: keine
+> Schlüssel, keine Kundendaten im Repo.** Die offenen Punkte (Gateway-Frage,
+> Personendaten der Ansprechpartner-Folie, Datenlizenzen, Historien-Bereinigung,
+> Repo auf privat) gehören dem ISB/DSB vorgelegt und werden hier **nicht**
+> ausbuchstabiert. Grundsatz für alles, was hierher kommt: **keine
+> Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
+> Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
 
-**Stand bei Sitzungsende (17.09.2026, mittags):**
+**Diese Sitzung (17.09.2026):**
 
-| | |
-|---|---|
-| Git | `verbesserungen` gepusht, lokal = GitHub, **Ablage H: nachgezogen** (Fast-Forward) |
-| Cloud-App | PDF-Button in Betrieb — **erster echter Cloud-Auftrag 11:02:57** im Dienst-Log (9,0 MB → PDF 2,5 MB, umwandeln 4,6 s) |
-| PDF-Dienst | Aufgabe „FFPB PDF-Dienst" **läuft** auf diesem PC; Briefkasten leer bis aufs Lebenszeichen |
-| Tests | 35 von 35 grün, `pyflakes` null |
-| Belege | `H:\…\Performancetool\_pdf_probe\` — LibreOffice-Probe, Stufe-1-Vorschau, Briefkasten- und App-PDFs, `LIESMICH.txt`. **Bleibt als Beleg** (nicht ohne Rückfrage löschen) |
-| Erinnerung | 01.12.2026, 09:00 — https://claude.ai/code/routines/trig_014Aphd9o454vjPBEVNzxakh |
+- **PDF-Fassung der Broschüre.** Neben „PowerPoint erstellen" liefert
+  „PDF erstellen" eine **vorbereitete PowerPoint**: ohne die Folie „Ihre
+  Ansprechpartner für den Vertrieb" (im PDF nicht austauschbar), Seitenzahlen
+  und Inhaltsverzeichnis angepasst, ohne interne Verknüpfungen. Der Berater
+  speichert sie in PowerPoint als PDF (Anleitung unter dem Download). Kein
+  Dienst, kein Netzzugriff, keine Zugangsdaten. Modul `modules/pdf_export.py`,
+  Prüfstein `tests/test_pdf_export.py` (mit Wächter, dass kein
+  Umwandlungsdienst still zurückkommt).
+- **Ein automatischer Umwandlungsdienst wurde gebaut und wieder
+  zurückgenommen.** Grund: Sicherheitsbewertung und die Einstufung durch den
+  lokalen Virenschutz. Er kommt nur mit Freigabe der IT-Sicherheit zurück.
+  Dienst-Code, zugehörige Schlüssel und Aufgaben sind entfernt; Einzelheiten
+  intern (siehe Kasten oben).
+- **Bereinigt (Repo-Infos, keine sichtbaren Folieninhalte geändert):**
+  - Interne Server-Verknüpfungen aus **allen Vorlagen** und damit aus jeder
+    gebauten Broschüre entfernt (Diagramm-Verknüpfungen auf ein Netzlaufwerk).
+    Belegt: 0 sichtbare Folien und 0 Bilder verändert; Diagramme zeichnen aus
+    ihrem eingebetteten Zwischenspeicher weiter. Wächter in
+    `tests/test_pdf_export.py`.
+  - Personenbezogene **Metadaten** aus den Vorlagen entfernt (Ersteller/
+    Manager, Kommentar-Autor, Tenant-Kennung).
+  - Ungenutztes gelöscht: `Zieldaten/` (interne Instrumentenliste) und
+    `fonts/` (Microsoft-Schriften, Lizenz).
+- **cVV-Vorlage:** Inhaltsverzeichnis „Rechtliche Hinweise und Impressum"
+  zeigte auf 34 statt 36 — in der Vorlage korrigiert (nur diese Zahl).
 
-**Nächster Schritt:** Im PDF-Export steht nichts an. Offen sind nur:
-1. **Frist 16.12.2026 — Schlüssel erneuern.** Ablauf in fünf Handgriffen:
-   (a) GitHub → Fine-grained tokens → `pdf-briefkasten-app` → *Regenerate
-   token*, Ablauf knapp unter einem Jahr; (b) neuen Wert in
-   `.streamlit\secrets.toml` **und** in den Cloud-Secrets, danach **Reboot
-   app**; (c) dasselbe für `pdf-briefkasten-pc`, Wert nach
-   `C:\Entwicklung\pdf_briefkasten_pc_token.txt`; (d)
-   `powershell -ExecutionPolicy Bypass -File pdf_dienst\einrichten.ps1`
-   (verschlüsselt, löscht die Textdatei); (e) Dienst neu starten
-   (`…\FFPB_PDF_Dienst\stop` anlegen, nach spätestens 15 min startet die
-   Aufgabenplanung ihn mit dem neuen Schlüssel) und die neue Frist hier eintragen.
-2. *Wenn gewünscht:* Sichtprüfung eines PDFs **aus der Cloud** (Seite 2
-   Inhaltsverzeichnis 30/32/35, Übergang 29 → 30, Ringe). Lokal ist das
-   identische Ergebnis bereits belegt (`_pdf_probe\CVV_7_aus_der_App.pdf`).
-3. *Entscheidung Philip, nur gemeldet:* ESG-Inhaltsverzeichnis „Rechtliche
-   Hinweise 36" und comdirect „Honorar 14" (Vorlagentext, siehe
-   Sitzungsbericht).
+**Nächster Schritt:**
+1. **Sicherheitsbefunde mit ISB/DSB/Compliance durchgehen** (interner Bericht
+   auf H:). Erst danach die dort offenen Entscheidungen umsetzen.
+2. *Empfohlen, aber Entscheidung Philip:* Repo auf **privat** stellen und
+   Streamlit Cloud neu anbinden.
+3. *Nur gemeldet (Vorlagentext, Entscheidung Philip):* ESG-Inhaltsverzeichnis
+   „Rechtliche Hinweise 36", comdirect „Honorar 14".
 4. *Vor einem Streamlit-Versionssprung:* `st.components.v1.html` im
    Download-Baustein auf `st.iframe` umstellen (siehe „Offene Punkte").
 
-> ### Für Philip: was diese Sitzung geändert hat (17.09.2026)
->
-> **Auftrag:** Neben „PowerPoint erstellen" ein Button „PDF erstellen". Das PDF
-> entsteht aus **derselben** gebauten PowerPoint, aber ohne die Folie „Ihre
-> Ansprechpartner für den Vertrieb" (im PDF lassen sich die Fotos nicht
-> tauschen). Seitenzahlen müssen danach stimmen, am Button ein Tooltip.
->
-> #### Der Befund, bevor etwas gebaut wurde
->
-> | Familie | Vertriebsfolie |
-> |---|---|
-> | **cVV** | **F30** von 37 |
-> | FFPB-Standard | F21 — Vorlage wird von keiner der 19 Strategien gebaut |
-> | ESG, ETF, Thema, comdirect | **keine** (ESG/ETF/Thema nur ein ungenutztes Layout) |
->
-> Gemessen an den Vorlagen **und** an echten Broschüren auf H:. Entschieden:
-> nur cVV ist betroffen; erkannt wird die Folie am **Layout „Ansprechpartner"**,
-> nicht an der Nummer — kommt sie in eine weitere Vorlage, greift es von selbst.
->
-> Zwei Seitenzahl-Arten, zwei Mechanismen: Die Zahl **unten** schreibt
-> `update_slide_numbers` beim Bau als festen Text (neu schreiben genügt). Das
-> **Inhaltsverzeichnis** hat eingetippte Zahlen — die zieht jetzt eigener Code
-> nach. Und dabei fiel auf: **„Rechtliche Hinweise und Impressum 34" war schon
-> immer falsch**, Folie 34 ist das Anschreiben, das Impressum ist F36. In der
-> Vorlage korrigiert (deine Freigabe).
->
-> #### Stufe 0 — die Probe: LibreOffice scheidet aus
->
-> Die Cloud hat kein PowerPoint. Deshalb zuerst dieselbe cVV- und
-> Thema-Broschüre zweimal umgewandelt — echtes PowerPoint gegen LibreOffice
-> 7.6 (der Weg, der auf dem Server liefe; Noto-Schriften mitgegeben, damit
-> nur der Renderer verglichen wird):
->
-> | | PowerPoint | LibreOffice |
-> |---|---|---|
-> | Ringe | wie das Original | Zahlen lose auf der Folie, Linien ins Leere, Ringe dick |
-> | Thema S. 11 | vollständig | Überschriften „REGIONEN"/„Branchen" und Legende „Japan" **fehlen** |
-> | Text, Linien-/Balkencharts | — | weitgehend gleich |
-> | cVV Größe / Dauer | 2,51 MB / 4,6 s | 3,64 MB / 11 s |
->
-> **Nicht nur hässlicher, sondern inhaltlich unvollständig** — damit ist
-> LibreOffice in der Cloud vom Tisch. PowerPoint bettet übrigens echtes Noto
-> Sans/Serif ein, obwohl Noto nicht in `C:\Windows\Fonts` liegt (Office holt
-> es selbst). Alles zum Ansehen in `_pdf_probe\` mit `LIESMICH.txt`.
->
-> *Zwei Stolpersteine beim Aufsetzen, damit sie niemand zweimal sucht:*
-> LibreOffice 26.x startet hier nicht (`0xC0000142`, die VC++-Laufzeit im
-> System ist 14.28 von 2020) — 7.6 läuft. Und aus dem MSI entpackt
-> (`msiexec /a`) lädt LibreOffice Schriften aus
-> `program\resource\common\fonts`, **nicht** aus dem mitentpackten `Fonts\`.
->
-> #### Stufe 1 — die PDF-Quelle (fertig, zwei Commits, nicht gepusht)
->
-> Neues streamlit-freies Modul `modules/pdf_export.py`:
-> `vertriebsfolien()` und `pptx_fuer_pdf()`. cVV: 37 → 36 Folien,
-> Inhaltsverzeichnis Standorte 31→30, Tradition 33→32, Impressum 36→35.
-> In echtem PowerPoint geöffnet und als PDF gespeichert, im Bild geprüft
-> (`_pdf_probe\CVV_4_ohne_Vertrieb_PowerPoint.pdf`).
->
-> Prüfstein `tests/test_pdf_export.py` (34. Suite) mit **Gegenprobe**: ohne
-> das Nachziehen zeigt „Unsere Tradition" im PDF aufs Anschreiben und das
-> Impressum auf die Grußfolie — beide Prüfungen werden rot. Die
-> Impressum-Prüfung ist gegen eine Broschüre aus der **alten** Vorlage
-> ebenfalls rot.
->
-> **Die Entscheidung vom 11.08.2026 („Kundendokumente nur als PowerPoint")
-> ist damit bewusst aufgehoben** — das PDF kommt zusätzlich.
-> `tests/test_bedienung.py::pruefe_kein_pdf` wird in Stufe 3 angepasst
-> (reportlab/matplotlib bleiben verboten).
->
-> #### Die Wende: kein Umwandler in der Cloud — ein „PDF-Briefkasten"
->
-> Philip hat die Probe-PDFs angesehen: **`CVV_1_PowerPoint.pdf` (Desktop-
-> PowerPoint) ist die gewünschte Qualität.** Auf dem Streamlit-Server ist sie
-> nicht zu haben: Dort läuft Linux, PowerPoint gibt es nur für Windows/Mac,
-> python-pptx kann Dateien schreiben, aber nicht **zeichnen**, und LibreOffice
-> zeichnet die Ringe falsch. Verworfen außerdem: **Microsoft 365** (Umwandlung
-> über den eigenen Mandanten — scheitert an der IT, der Browser-Test entfiel
-> damit), **externe Umwandlungsdienste** (Broschüren bei Fremdanbietern — für
-> eine Bank nicht ratsam), **PDF-Vorlagen** (26 feste cVV-Seiten vorgerendert,
-> die 11 Datenseiten selbst gezeichnet — ein zweiter Zeichenweg, Wochen
-> Aufwand, jede Optik-Änderung doppelt).
->
-> **Philips Idee, zu Ende gedacht:** Die Umwandlung macht **dieser Büro-PC**
-> (dauerhaft an, nur gesperrt, praktisch nie abgemeldet) mit echtem
-> PowerPoint. GitHub dient nur als Briefkasten dazwischen:
->
-> ```
-> App baut PowerPoint -> pptx_fuer_pdf -> legt Auftrag in den Briefkasten
-> Büro-PC (PowerShell-Dienst) holt ab -> PowerPoint "Speichern als PDF" -> legt PDF zurück
-> App holt PDF ab, löscht es im Briefkasten -> Download wie heute
-> ```
->
-> Zwei Korrekturen an der ersten Fassung der Idee („im Repo zwischenspeichern
-> und wieder löschen"), beide wichtig:
-> 1. **Nicht committen und wieder löschen** — Git vergisst nichts, jede
->    Broschüre bliebe für immer in der Historie und das Repo wüchse um ~10 MB
->    je PDF. Stattdessen **Release-Anhänge**: hochladen, abholen, löschen —
->    ohne Historie.
-> 2. **Nicht das öffentliche Performancetool-Repo**, sondern ein eigenes
->    **privates** Repo.
->
-> Grenzen, bewusst in Kauf genommen: Ist der PC abgemeldet oder nach einem
-> Update neu gestartet, meldet der Button „nicht erreichbar" (Lebenszeichen
-> des Dienstes). Microsoft empfiehlt PowerPoint nicht als unbeaufsichtigten
-> Dienst — auf einem angemeldeten Arbeitsplatz funktioniert es in der Praxis,
-> Aufträge nacheinander. Gemessen: PowerPoint braucht für cVV 4,6 s; erwartete
-> Wartezeit für den Berater 15–40 s (im Durchstich zu messen).
->
-> #### PDF-Briefkasten — eingerichtet am 17.09.2026 (Philip)
->
-> | | |
-> |---|---|
-> | Repo | **`FFPBAM/pdf-briefkasten`**, **privat**, mit README (Standardzweig `main`) |
-> | Schlüssel App | Fine-grained token **`pdf-briefkasten-app`** — nur dieses Repo, *Contents: Read and write* (+ Metadata read-only). Lokal in `.streamlit\secrets.toml`, Block `[pdf_briefkasten]` mit `repo` und `token`; für die Cloud später derselbe Block unter *Manage app → Settings → Secrets*. **Geprüft: privat, Schreibrecht, gültig** |
-> | Schlüssel PC | Fine-grained token **`pdf-briefkasten-pc`**, gleiche Rechte, eigener Schlüssel (einzeln sperrbar). Liegt vorläufig in `C:\Entwicklung\pdf_briefkasten_pc_token.txt`; das Einrichtungsskript verschlüsselt ihn per DPAPI unter dem Windows-Konto und löscht die Textdatei. **Geprüft: privat, Schreibrecht, gültig** |
-> | **Ablauf** | **16.12.2026** — App 09:09 UTC, PC 09:11 UTC (90 Tage) |
->
-> Die Schlüssel stehen **nirgends im Repo** und nie im Chat; geprüft wurde nur
-> Länge, Form und die Antwort von GitHub. Zwei getrennte Schlüssel auch wegen
-> des Rate-Limits (5.000 Anfragen/Stunde je Schlüssel) — der Dienst fragt alle
-> paar Sekunden.
->
-> *Zwei Stolpersteine beim Anlegen:* Ablaufdatum 31.12.2027 → der Button
-> reagiert nicht (Grenze ein Jahr, ohne Fehlermeldung); und die erste
-> Schlüsseldatei war nach dem Anlegen **leer** (nicht gespeichert) — GitHub
-> antwortet dann mit 401.
->
-> #### Durchstich des PDF-Briefkastens — er trägt
->
-> Gebaut (committet, **nicht** gepusht, noch **nicht** in der Oberfläche):
-> - `modules/pdf_briefkasten.py` — App-Seite, nur Standardbibliothek:
->   `pdf_anfordern(cfg, pptx_bytes)` prüft das Lebenszeichen, lädt den Auftrag
->   als Release-Anhang hoch, wartet, holt das PDF, räumt auf; Fehler kommen als
->   `BriefkastenFehler` mit einem Satz für die Oberfläche.
-> - `pdf_dienst/pdf_dienst.ps1` — der Dienst auf dem Büro-PC (reines ASCII,
->   Windows PowerShell 5.1): Abfrage alle 4 s, Lebenszeichen jede Minute,
->   PowerPoint-COM ohne Fenster, Log `%LOCALAPPDATA%\FFPB_PDF_Dienst\dienst.log`,
->   verwaiste Anhänge nach 30 min weg, nur ein Dienst je PC (Mutex), Beenden
->   über die Datei `…\FFPB_PDF_Dienst\stop`. **Schließt nie das PowerPoint,
->   mit dem jemand arbeitet** (nur unsichtbar und ohne offene Präsentation).
-> - `pdf_dienst/einrichten.ps1` — legt den PC-Schlüssel per DPAPI unter dem
->   Windows-Konto ab (`…\FFPB_PDF_Dienst\token.dat`) und löscht die
->   Klartextdatei — **am 17.09.2026 ausgeführt**.
->
-> Gemessen (Aufrufer bis fertiges PDF):
->
-> | | cVV (Vertriebsfolie entfernt) | Thema |
-> |---|---:|---:|
-> | entsperrt | 19,9 s | 13,3 s |
-> | **gesperrt, 3 Runden** | **17,2–17,5 s** | **13,0–15,4 s** |
-> | davon PowerPoint auf dem PC | 4,4–5,6 s | 2,1–2,3 s |
->
-> **Gesperrter Bildschirm (Windows+L) ist kein Hindernis** — nachgewiesen über
-> `LogonUI.exe` bei jedem Auftrag. Alle Ergebnis-PDFs sind **pixelgleich**
-> untereinander und textgleich mit der direkten Desktop-Umwandlung (36/36,
-> 21/21); Inhaltsverzeichnis 30/32/35, keine Vertriebsfolie.
-> Zum Ansehen: `_pdf_probe\CVV_5_ueber_Briefkasten.pdf`.
->
-> *Der eine Fehler unterwegs, weil er wiederkommen kann:* Der erste Auftrag
-> scheiterte mit **404 beim Herunterladen**. GitHub listet einen Anhang schon
-> **während** des Hochladens (`state: "starter"`); abholbar ist er erst bei
-> `"uploaded"`. Die 9-MB-cVV-Broschüre war nach 3 s noch nicht fertig
-> übertragen. Beide Seiten fassen jetzt nur `uploaded` an. Gut daran: Der
-> Fehlerweg (`.fehler.txt` → Meldung in der App) war damit gleich mitgetestet.
->
-> #### Fertig: zwei Buttons, Autostart, gepusht
->
-> **Oberfläche** (`modules/portfolioanalyse.py`): „PowerPoint erstellen" und
-> „PDF erstellen" nebeneinander, **ein** gemeinsamer Bau. Der PDF-Klick baut die
-> PowerPoint nur, wenn sie noch nicht da ist, und zeigt danach **beide**
-> Downloads.
->
-> | Lage | PDF-Button |
-> |---|---|
-> | cVV | Tooltip: „Das PDF enthält die Folie ‚Ihre Ansprechpartner für den Vertrieb' nicht – im PDF lassen sich die Bilder nicht austauschen. Seitenzahlen und Inhaltsverzeichnis sind angepasst." |
-> | ESG, ETF, Thema, comdirect | Tooltip: „Dieselbe Broschüre wie die PowerPoint, als PDF." |
-> | Secrets ohne `[pdf_briefkasten]` | **gesperrt**, Tooltip nennt „Speichern unter → PDF" als Ausweg |
-> | Dienst nicht erreichbar / Schlüssel abgelaufen / keine Antwort in 5 min | rote Meldung unter dem Button, PowerPoint bleibt, neuer Versuch möglich |
->
-> **Philips Vorgaben dazu:** Wartezeit ist unkritisch → die App wartet bis zu
-> **5 Minuten**. Der Dienst soll ruhig sein → **bedingte Abfragen (ETag)**:
-> Unveränderte Listen kosten nichts vom Anfragelimit (gemessen: 304 zählt
-> nicht), deshalb bleibt es bei 5 s Abfrageabstand. *Die Idee „Dienst erst beim
-> Klick starten" geht so nicht:* Streamlit kann den PC hinter der Firewall
-> nicht anrufen; der PC muss fragen. PowerPoint selbst startet aber nur bei
-> einem Auftrag.
->
-> **Autostart** (`pdf_dienst/autostart_einrichten.ps1`, **eingerichtet**):
-> Aufgabe „FFPB PDF-Dienst" in der Aufgabenplanung für `RCO-Maschine\RES` —
-> bei Anmeldung und alle 15 Minuten (ein zweiter Start beendet sich sofort),
-> ohne Fenster (`conhost --headless`), ohne Laufzeitgrenze. Entfernen mit
-> `-Entfernen`. Log: `%LOCALAPPDATA%\FFPB_PDF_Dienst\dienst.log`.
->
-> **Ende-zu-Ende über die echte Oberfläche** (AppTest, laufender Dienst, keine
-> Attrappen): Klick bei *cVV konservativ* → **27 s** inklusive Bau → PDF
-> 2,48 MB, 36 Seiten, Inhaltsverzeichnis 30/32/35, keine Vertriebsfolie,
-> danach beide Download-Buttons. Liegt als `_pdf_probe\CVV_7_aus_der_App.pdf`.
->
-> **Prüfstein `tests/test_pdf_briefkasten.py`** (35. Suite), ohne Netz: Protokoll
-> `.py` ↔ `.ps1`, Lebenszeichen, Normalfall mit simuliertem Dienst (der das PDF
-> erst als `starter` meldet), drei Fehlerfälle, Oberfläche per AppTest.
->
-> **Erinnerung eingerichtet:** Cloud-Routine „Erinnerung: PDF-Briefkasten-
-> Schlüssel laufen am 16.12.2026 ab", einmalig **01.12.2026, 09:00**
-> (https://claude.ai/code/routines/trig_014Aphd9o454vjPBEVNzxakh). Sie erscheint
-> als Sitzung in claude.ai/code, nicht als Mail — ein Outlook-Termin ist die
-> sichere Ergänzung.
->
-> #### Nur gemeldet, nicht geändert
->
-> - **ESG:** „Rechtliche Hinweise und Impressum 36" zeigt auf die Trennfolie
->   „Unser Reporting"; außerdem stehen Risikohinweise und Impressum (F34/35)
->   **vor** den Trennfolien „Unser Reporting"/„Rechtliche Hinweise" (F36/37) —
->   bei ETF liegt es richtig herum.
-> - **comdirect:** „Honorar 14" zeigt auf die Honorartabelle; der Abschnitt
->   beginnt bei F12 „Unser Honorar".
->
 ---
 
 ### Stand der Sitzung davor (26.08.2026)
@@ -2318,7 +2104,7 @@ bleibt begründet.
 **Falls Git auf H: „dubious ownership" meldet:** einmalig
 
 ```
-git config --global --add safe.directory '%(prefix)///RCO-MASCHINE/DRACOON/Entwicklung/Forschung_Claude/Performancetool'
+git config --global --add safe.directory '%(prefix)///<RECHNER>/DRACOON/…/Performancetool'
 ```
 
 ---
@@ -3352,8 +3138,7 @@ Alle laufen ohne pytest, mit reinem `python`:
 | `test_export_smoke.py` | **+ python-pptx, streamlit** | erzeugt je Familie eine echte Broschüre |
 | `test_trennstriche.py` | **+ python-pptx** | Trennstriche an den Kategoriegrenzen (braucht einen Export-Ordner) |
 | `test_ring_geometrie.py` *(neu 25.08.2026)* | **+ python-pptx**, Schritt 4 zusätzlich **+ streamlit** und ein Ausgabeordner | Die Geometrie der Ringdiagramme, für die es bis dahin **keinen** Prüfstein gab. Schritt 1 die sechs Vorlagen (Rahmen, `holeSize`, `plotArea` aller 22 Ringe — die Geometrie kommt zu 100 % aus der .pptx), Schritt 2 die Ist-Werte **nach** `nachbearbeiten` gegen eingefrorene Maße, Schritt 3 die Zusagen, die auch eine spätere Änderung überleben müssen (keine Beschriftung im Ring, keine Überlappung, nichts aus dem Rahmen, kein Ring in der Legende), Schritt 4 dasselbe an 17 Ringen echter Broschüren, Schritt 5 die Trennung der Familien-Optik (Standard 79, die fünf Familien 68). Seit dem 25.08.2026 zusätzlich: **Flächenprüfung** gegen die Legende (nicht mehr nur die Oberkante) und **kreuzende Führungslinien** — in echten Broschüren null von 69, auf den Platzhalterdaten der Vorlagen höchstens der gemessene Ausgangswert 2. **Gegenprobe belegt:** Dicke zurückgestellt → 22 Fehler, Verkleinerung stillgelegt → 44 Fehler |
-| `test_pdf_export.py` *(neu 17.09.2026)* | **+ python-pptx, lxml**, Schritt 2 **+ streamlit** und die echten Daten | Die PDF-Quelle (`modules/pdf_export.py`). Schritt 1 die Vertriebsfolie je Vorlage (nur cVV F30 und FFPB F21, am Layout „Ansprechpartner“ erkannt), Schritt 2 cVV bauen → 37 → 36 Folien, keine Vertriebsfolie, Seitenzahlen = Position, **Schritt 3 die Zusage**: jeder Inhaltsverzeichnis-Eintrag zeigt im PDF auf dieselbe Folie wie in der PowerPoint, und das Impressum steht auf einer Folie mit Layout „Impressum“ (gegen die alte Vorlage mit „34“ rot), Schritt 4 Paket-Integrität L1–L6, Schritt 5 Familien ohne Vertriebsfolie unverändert, **Schritt 6 Gegenprobe**: ohne Nachziehen werden 2 und 3 rot |
-| `test_pdf_briefkasten.py` *(neu 17.09.2026)* | Schritte 1–4 **nichts** (nur Standardbibliothek), Schritt 5 **+ streamlit** | Der PDF-Briefkasten ohne Netz und ohne PowerPoint. **Schritt 1** hält App und Dienst zusammen: Das Auftragsmuster aus `pdf_dienst.ps1` muss den Namen matchen, den die App erzeugt; Release-Tag, Lebenszeichen, Fehlerdatei und die `uploaded`-Regel stehen auf beiden Seiten. Schritt 2 ohne/zu altes Lebenszeichen → Meldung **ohne** Auftrag, **Schritt 3** Normalfall mit simuliertem Dienst, der das PDF zuerst als `starter` meldet (der 404 vom 17.09.2026), Schritt 4 Fehlerdatei, Zeitüberschreitung, kein PDF — jeweils kein zurückgelassener Auftrag, **Schritt 5** die Oberfläche: zwei Buttons, Tooltip bei cVV nennt die Folie, bei ESG neutral, ohne Secrets gesperrt, Klick liefert das PDF, Dienstfehler steht als Meldung da und die PowerPoint bleibt |
+| `test_pdf_export.py` *(neu 17.09.2026)* | **+ python-pptx**, Schritt 8 **+ streamlit** | Die PDF-Fassung der Broschüre (`modules/pdf_export.py`): Vertriebsfolie je Vorlage (nur cVV/FFPB, am Layout „Ansprechpartner“), cVV 37→36 Folien mit lückenlosen Seitenzahlen, Inhaltsverzeichnis zeigt auf dieselben Folien (Impressum gegen die alte „34“ rot), Paket-Integrität; **Schritt 5** alle Vorlagen frei von externen Verknüpfungen (Sicherheit) und Pakete intakt, **Schritt 7** wacht, dass kein automatischer Umwandlungsdienst still zurückkommt, **Schritt 8** die Oberfläche (zwei Buttons, Download der PDF-Fassung, Fehlerfall lässt die PowerPoint) |
 
 ```
 python tests/test_bedienung.py
@@ -3440,16 +3225,10 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
-**⏰ FRIST 16.12.2026 — GitHub-Schlüssel des PDF-Briefkastens erneuern**
-(`pdf-briefkasten-app` und `pdf-briefkasten-pc`, 90 Tage ab 17.09.2026).
-Anleitung und Fallstrick (Ablaufdatum > 1 Jahr → Button tut still nichts)
-ganz oben und im Sitzungsbericht 17.09.2026.
-
-**ERLEDIGT 17.09.2026 — PDF-Export läuft in der Cloud** (Secret eingetragen, App neu gestartet, von Philip getestet). *War:*
-Philip trägt `[pdf_briefkasten]` unter *Manage app → Settings → Secrets* ein
-(Anleitung ganz oben). Bis dahin ist der PDF-Button dort gesperrt — kein
-Fehlzustand. Der Dienst läuft auf Philips PC per Aufgabenplanung; ist der PC
-abgemeldet, meldet der Button „nicht erreichbar".
+**Sicherheit:** Die offenen Punkte aus der Prüfung des öffentlichen Repos
+(Gateway-Frage, Personendaten der Ansprechpartner-Folie, Datenlizenzen,
+Historien-Bereinigung, Repo auf privat) stehen **intern** auf H: und gehören
+dem ISB/DSB vorgelegt — hier bewusst nicht ausbuchstabiert.
 
 **NEU 17.09.2026 — `st.components.v1.html` ist abgekündigt.** Streamlit
 meldet beim Download-Baustein „will be removed after 2026-06-01, replace with
@@ -3457,10 +3236,8 @@ meldet beim Download-Baustein „will be removed after 2026-06-01, replace with
 jedem Streamlit-Versionssprung** auf `st.iframe` umstellen und den
 clientseitigen Download (Gateway, #25) erneut prüfen.
 
-*(Erledigt 17.09.2026, war hier offen:)* Durchstich, Oberfläche, Autostart —
-zwei Buttons nebeneinander (`pf_pdf_btn`, `pf_pdf_dl` in `_KEEPALIVE_SPERRE`),
-Tooltip aus `pdf_export.HINWEIS_VERTRIEB`, `download_bereich` mit Dateityp,
-`test_bedienung.pruefe_kein_pdf` angepasst.
+*(Erledigt 17.09.2026:)* PDF-Fassung als vorbereitete PowerPoint (zwei
+Buttons `pf_pdf_btn`/`pf_pdf_dl`), `test_bedienung.pruefe_kein_pdf` angepasst.
 
 *Nur gemeldet:* ESG-Inhaltsverzeichnis „Rechtliche Hinweise 36" zeigt auf die
 Trennfolie „Unser Reporting" (und F34/35 stehen vor den Trennfolien);

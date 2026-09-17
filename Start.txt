@@ -112,14 +112,12 @@ geschlossen. Und es haengt nichts daran - die Cloud deployt
 verbesserungen, alles Gepushte ist bereits live. main nachzuziehen waere
 reine Ordnung und braeuchte einen NEUEN PR.
 
-0. PDF-EXPORT (NEU 17.09.2026). Frist: die GitHub-Schluessel des
-   PDF-Briefkastens laufen am 16.12.2026 ab (Erinnerung am 01.12.2026 in
-   claude.ai/code). Solange [pdf_briefkasten] nicht in den Cloud-Secrets
-   steht, ist der PDF-Button dort gesperrt. Der PDF-Dienst laeuft auf
-   Philips PC (Aufgabe "FFPB PDF-Dienst", Log
-   %LOCALAPPDATA%\FFPB_PDF_Dienst\dienst.log). "PDF-Dienst nicht
-   erreichbar" heisst fast immer: PC abgemeldet oder neu gestartet.
-   Alles Weitere: STATUS.md, Transferwissen #73.
+0. SICHERHEIT (17.09.2026). Das Repo ist OEFFENTLICH. Vor JEDEM Push und
+   fuer alles, was hier hineingeschrieben wird, eine Hochsicherheits-Brille:
+   keine Rechnernamen, Pfade, Konten, Repo-Namen, Fristen, Gateway-Interna,
+   keine Personen- oder Metadaten. Eine vollstaendige Repo-Sicherheitspruefung
+   liegt INTERN auf H: (Ordner Sicherheit_PDF-Dienst), samt offener Punkte
+   fuer ISB/DSB. Nicht ins Repo kopieren.
 
 1. DEPLOY-LOG ansehen (Manage app -> schwarze Konsole).
    Die requirements sind nach oben gedeckelt, geprueft wurde lokal unter
@@ -153,7 +151,7 @@ WICHTIG FUER DIE NAECHSTE SITZUNG
 
       git config windows.appendAtomically false
 
-- 35 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
+- 34 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
   .venv\Scripts\python.exe (sonst ueberspringen sie ihre schweren
   Schritte stillschweigend). Zwei davon brauchen ein Ausgabeverzeichnis
   als Argument: test_export_smoke.py und test_trennstriche.py.

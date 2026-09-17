@@ -1059,7 +1059,7 @@ assert at.session_state["nav_view"] == "B"
 
 ### 25. Download hinter einem scannenden Firmen-Gateway: clientseitiger Blob-Download statt Server-Abruf (NEU 07.07.2026)
 
-**Situation:** Der Broschüren-Download aus der Streamlit-App landet hinter einem Download-scannenden Web-Gateway (hier: Atruvia Secure Web Gateway / Skyhigh, Regel „Block If Virus Was Found"). Der klassische `st.download_button` liefert dem Nutzer statt der PPTX eine `progress.htm` (die Scan-Zwischenseite des Gateways).
+**Situation:** Der Broschüren-Download aus der Streamlit-App landet hinter einem Download-scannenden Web-Gateway. Der klassische `st.download_button` liefert dem Nutzer statt der PPTX eine `progress.htm` (die Scan-Zwischenseite des Gateways).
 
 **Die Kernerkenntnis (teuer erkauft):** **JEDER Download, der die Datei vom Server holt, läuft durch den Scanner** — egal über welchen Streamlit-Pfad. Der Scanner hält die Verbindung, liefert seine `progress.htm` aus, und je nach Download-Mechanik hängt der Tab endlos oder speichert die Zwischenseite. Das ist NICHT durch Wahl eines anderen Server-Pfades lösbar. Drei Sackgassen wurden nacheinander durchgespielt und verworfen:
 
@@ -1099,7 +1099,7 @@ components.html(html, height=90)
 
 **Grenzen / Trade-offs:**
 - **Größe:** ~4 MB PPTX → ~5,5 MB Base64 in der Seite, das bei jedem Rerun der Komponente mitgeht (Streamlit `maxMessageSize` default 200 MB → unkritisch für gelegentliche Downloads, aber kein Muster für sehr große oder häufige Dateien).
-- **Content-DLP:** Die Bytes reisen im App-Verkehr mit. Ein Gateway, das zusätzlich **tiefe Inhaltsprüfung (DLP) auf den App-/Websocket-Verkehr** macht, könnte theoretisch anschlagen — das ist aber eine ANDERE Regel als die Download-Scan-Regel, die hier blockierte. In der Praxis (Atruvia „Block If Virus Was Found") lief es sauber durch.
+- **Content-DLP:** Die Bytes reisen im App-Verkehr mit. Ein Gateway, das zusätzlich **tiefe Inhaltsprüfung (DLP) auf den App-/Websocket-Verkehr** macht, könnte theoretisch anschlagen — das ist aber eine ANDERE Regel als die Download-Scan-Regel, die hier blockierte. In der Praxis lief es sauber durch.
 - Der klassische `st.download_button` bleibt als Fallback unter einem Expander stehen (Server-Weg), falls die Komponente in einer Umgebung mal nicht greift.
 
 **Implementiert in diesem Projekt:** `modules/download_helfer.py` → `download_bereich(daten, dateiname)`; aufgerufen aus `portfolioanalyse.py` im Export-Bereich. Frühere Versuche (`medien_download_url`, Static Serving, `enableStaticServing` in config.toml) sind toter Code bzw. ungenutzt — die config-Zeile darf raus.
@@ -2949,94 +2949,37 @@ Typen.
 
 ---
 
-### #73 — Wer kein PowerPoint hat, leiht es sich: der PDF-Briefkasten (NEU 17.09.2026) ⭐
+### #73 — Fehlt der Renderer auf der Plattform, wandle NICHT das Umfeld zum Sicherheitsrisiko um (NEU 17.09.2026) ⭐
 
-**Auftrag:** Die Broschüre zusätzlich als PDF — so, wie „Speichern unter → PDF"
-in Desktop-PowerPoint aussieht, aber ohne die Folie „Ihre Ansprechpartner für
-den Vertrieb" (deren Fotos tauscht der Berater in der PowerPoint aus).
+**Auftrag:** Die Broschüre zusätzlich als PDF, in der Qualität von
+Desktop-PowerPoint. Auf Streamlit Cloud (Linux) gibt es kein PowerPoint;
+LibreOffice zeichnet die Ringe falsch (Probe am Artefakt, #16/#28/#29).
 
-**Warum der naheliegende Weg nicht geht.** Eine `.pptx` ist eine Beschreibung;
-für ein PDF muss jemand sie **zeichnen**. Auf Streamlit Cloud (Linux) gibt es
-dafür nur LibreOffice — und das hat die Probe am Artefakt widerlegt: Ringe dick,
-Beschriftungen lose, auf Thema F11 **fehlen** Überschriften und ein
-Legendeneintrag (auch mit mitgegebenem Noto; bestätigt #16/#28/#29 am PDF).
-python-pptx schreibt, zeichnet aber nicht. Microsoft 365 scheiterte an der IT,
-ein externer Dienst kommt für eine Bank nicht in Frage, ein eigener Zeichenweg
-(PDF-Vorlagen + selbst gezeichnete Datenseiten) wäre eine zweite Optik mit
-doppelter Pflege.
+**Was gebaut wurde und warum es zurückgenommen ist:** Ein automatischer
+Umwandlungsdienst auf einem Windows-Rechner (PowerPoint per COM), der Aufträge
+über einen Cloud-Kanal abholt, wurde entworfen und gehärtet. Eine
+Sicherheitsbewertung zeigte, dass ein Dienst, der Dateien aus dem Netz
+unbeaufsichtigt mit Office öffnet und dazu gespeicherte Zugangsdaten nutzt, in
+einer Bank nicht ohne Freigabe der IT-Sicherheit betrieben werden darf — und
+der lokale Virenschutz stufte die Automatisierung als Schadsoftware ein. **Der
+Weg wurde nicht so umgebaut, dass er an Schutzmechanismen vorbeigeht, sondern
+zurückgenommen.**
 
-**Der Weg:** Ein dauerhaft angemeldeter Büro-PC mit Office wandelt um; GitHub
-ist nur der Briefkasten dazwischen.
+**Gewählte Lösung:** „PDF erstellen" liefert eine **vorbereitete PowerPoint**
+(`pdf_export.pptx_fuer_pdf`: Vertriebsfolie raus, Seitenzahlen und
+Inhaltsverzeichnis nachziehen, externe Verknüpfungen entfernen), die der
+Berater in PowerPoint als PDF speichert. Kein Dienst, kein Netzzugriff, keine
+Zugangsdaten, keine Skripte im Repo. Ein Wächter-Test verhindert, dass ein
+Umwandlungsdienst still zurückkommt.
 
-```
-App:    pdf_export.pptx_fuer_pdf   -> Vertriebsfolie raus, Nummern + Inhaltsverzeichnis
-        pdf_briefkasten            -> <auftrag>.pptx als Release-Anhang hochladen
-PC:     pdf_dienst.ps1             -> abholen, PowerPoint-COM SaveAs 32, <auftrag>.pdf zurück
-App:    PDF abholen, löschen       -> Download wie die PowerPoint
-```
-
-Gemessen: cVV 17–20 s, Thema 13–15 s vom Auftrag bis zum PDF, **auch bei
-gesperrtem Bildschirm** (drei Runden, `LogonUI.exe` je Auftrag nachgewiesen);
-über die Oberfläche inklusive Bau 27 s. PDFs pixelgleich untereinander,
-textgleich mit der direkten Desktop-Umwandlung.
-
-**Die Fallen, jede einzeln gemessen:**
-
-1. **Nicht committen und wieder löschen.** Git vergisst nichts — jede Broschüre
-   bliebe für immer in der Historie. **Release-Anhänge** kommen und gehen ohne
-   Spur, und das Repo ist **privat**.
-2. **GitHub listet einen Anhang schon während des Uploads** (`state: "starter"`).
-   Herunterladen geht erst bei `"uploaded"` — vorher 404. Traf die
-   9-MB-cVV-Broschüre nach 3 s. **Beide Seiten** fassen nur `uploaded` an.
-3. **Der Download eines Anhangs leitet auf eine signierte Speicher-URL um.** Den
-   `Authorization`-Header dorthin mitzunehmen, lehnt der Speicher ab. Die
-   Weiterleitung selbst ausführen, dort **ohne** Schlüssel abrufen (Python:
-   eigener `HTTPRedirectHandler`; PowerShell: `AllowAutoRedirect = $false`).
-4. **`Get-Date -UFormat %s` rechnet in Windows PowerShell 5.1 mit der Ortszeit**
-   — ein Unix-Zeitstempel liegt damit ein bis zwei Stunden daneben. Richtig:
-   `[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()`.
-5. **Bedingte Anfragen (ETag) sind gratis:** Eine `304 Not Modified` zählt nicht
-   gegen das Anfragelimit — gemessen über `X-RateLimit-Used` (253 → 254 → 304 →
-   255). Damit kann der Dienst alle 5 s nachsehen. **Nicht** dem Endpunkt
-   `/rate_limit` glauben: Er zeigte für den fine-grained Schlüssel 0 verbraucht,
-   während der Header 253 meldete.
-6. **Eine zwischengespeicherte Liste kann einen abgeholten Auftrag noch führen.**
-   Der Dienst merkt sich abgeholte Ids und nimmt 404 beim Löschen als „schon
-   weg".
-7. **PowerPoint läuft je Sitzung nur einmal.** Hat der Nutzer es offen, hängt
-   sich der Dienst an dieselbe Instanz. `Quit()` nur, wenn PowerPoint
-   unsichtbar ist und keine Präsentation mehr offen hat — sonst schließt der
-   Dienst das Programm, mit dem gerade jemand arbeitet.
-8. **GitHub lehnt Ablaufdaten über einem Jahr still ab** — „Generate token" tut
-   einfach nichts. Und eine Schlüsseldatei, die nicht gespeichert wurde, ist
-   leer: GitHub antwortet 401. Das Ablaufdatum steht im Antwort-Header
-   `github-authentication-token-expiration` — auslesen, nicht schätzen.
-9. **PowerShell-Skripte in reinem ASCII.** Windows PowerShell 5.1 liest `.ps1`
-   ohne BOM in der ANSI-Codepage; Umlaute zerfallen.
-10. **Aufgabenplanung ohne Konsolenfenster:** `conhost.exe --headless
-    powershell.exe …`; `ExecutionTimeLimit` auf 0, sonst endet der Dienst nach
-    72 h. Ein zweiter Start (Wiederholung alle 15 min) beendet sich über einen
-    Mutex sofort — so steht der Dienst nach einem Absturz spätestens nach 15
-    Minuten wieder.
-
-11. **Neuer Secret in Streamlit Cloud → *Reboot app*.** Nach dem Speichern
-    meldete die laufende App weiter „nicht eingerichtet"; erst der Neustart las
-    den Block. Gilt für jede Schlüsselerneuerung.
-
-**Was es kostet und wer es wissen muss:** Ist der PC abgemeldet oder nach einem
-Update neu gestartet, meldet der Button über das fehlende **Lebenszeichen**
-sofort „nicht erreichbar" samt Ausweichweg. Die Schlüssel laufen ab (Frist in
-STATUS.md). Microsoft empfiehlt PowerPoint nicht als unbeaufsichtigten Dienst —
-auf einem angemeldeten Arbeitsplatz hat es getragen; Aufträge laufen
-nacheinander.
-
-**Die übertragbare Lehre:** Wenn die Plattform ein Werkzeug nicht hat, muss man
-nicht das Werkzeug ersetzen (und dessen Ergebnis schlechter nachbauen). Man kann
-die Arbeit dorthin schicken, wo das Werkzeug steht — über einen Kanal, den beide
-Seiten **von sich aus** erreichen, weil der PC hinter der Firewall nicht
-angerufen werden kann, sondern selbst nachfragen muss.
-
----
+**Die übertragbaren Lehren** (Einzelheiten und die technischen Fallen liegen
+**intern** auf H:, nicht im öffentlichen Repo, siehe Wissensbasis P36–P39):
+- Eine Automatisierung, die die Bequemlichkeit über eine Schutzkontrolle
+  stellt, ist in einer regulierten Bank keine Lösung, sondern ein Befund.
+  Solche Wege gehören **vor** dem Bau zur IT-Sicherheit, nicht danach.
+- Was in ein **öffentliches** Repo geschrieben wird — Code UND Doku —, trägt
+  eine Hochsicherheits-Brille: keine Rechnernamen, Pfade, Konten, Repo-Namen,
+  Fristen, Gateway-Interna, Personen- oder Metadaten.
 
 ### #72 — Ein Round-Trip durch dieselbe Bibliothek ist keine Validierung (BUG, NEU 26.08.2026) ⭐
 
@@ -4692,7 +4635,7 @@ müssen im Deploy geprüft werden.
 ## 14. Download-Problem Firmen-Gateway (GELÖST 07.07.2026 — clientseitiger Blob-Download)
 
 Der PowerPoint-Download aus der Streamlit-Cloud scheiterte firmenseitig am
-**Atruvia Secure Web Gateway / Skyhigh** (Regel "Block If Virus was Found") —
+das firmenseitige, Download-scannende Web-Gateway —
 statt der Datei kam eine `progress.htm`. Ursache: JEDER Download, der die
 Datei vom Server holt, läuft durch den Scanner, der die Verbindung hält.
 
@@ -4928,40 +4871,17 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 ## 16. Changelog
 
-### 17.09.2026 (Nachtrag) – PDF-Export fertig: Briefkasten, Dienst, zwei Buttons
+### 17.09.2026 (Nachtrag) – PDF-Fassung; Umwandlungsdienst zurückgenommen; Repo bereinigt
 
-Nach der Probe (Eintrag darunter) hat Philip `CVV_1_PowerPoint.pdf` als Maßstab
-gewählt; Microsoft 365 scheiterte an der IT. Umgesetzt: der **PDF-Briefkasten**
-(Transferwissen **#73**).
-
-- `modules/pdf_briefkasten.py` — Auftrag hochladen, warten (bis 5 min),
-  abholen, aufräumen; Lebenszeichen-Prüfung vorab; `BriefkastenFehler` mit
-  einem Satz für die Oberfläche.
-- `pdf_dienst/pdf_dienst.ps1`, `einrichten.ps1`, `autostart_einrichten.ps1` —
-  Dienst auf Philips PC (PowerPoint-COM, ETag-Abfrage alle 5 s, Lebenszeichen
-  jede Minute, Mutex, Stop-Datei), Schlüssel per DPAPI, Aufgabenplanung bei
-  Anmeldung + alle 15 min. Eingerichtet und laufend seit 17.09.2026.
-- Oberfläche (`portfolioanalyse.py`): „PowerPoint erstellen" und „PDF erstellen"
-  nebeneinander, **ein** gemeinsamer Bau (`_pptx_bauen`, vorher inline im
-  Button). Tooltip nennt die fehlende Vertriebsfolie nur, wo die Vorlage sie
-  führt (cVV); ohne `[pdf_briefkasten]` in den Secrets ist der Button gesperrt
-  und nennt den Ausweichweg. Fehler des Dienstes stehen unter dem Button, die
-  PowerPoint bleibt.
-- `download_helfer.download_bereich(…, art="pptx"|"pdf")` — MIME-Typ und
-  Beschriftung je Art; Fallback-Buttons mit festen Keys `pf_pptx_dl`/`pf_pdf_dl`.
-  `_KEEPALIVE_SPERRE` um `pf_pdf_btn`, `pf_pdf_dl` ergänzt.
-- Prüfstein `tests/test_pdf_briefkasten.py` (35. Suite): Protokoll `.py` ↔ `.ps1`,
-  Lebenszeichen, Normalfall mit simuliertem Dienst (inkl. `starter`-Falle),
-  Fehlerfälle, Oberfläche per AppTest. `test_bedienung.pruefe_kein_pdf` verbietet
-  weiterhin den **alten** reportlab-Weg.
-
-Ende-zu-Ende über die Oberfläche (AppTest, echter Dienst): Klick bei cVV →
-27 s → PDF 2,48 MB, 36 Seiten, Inhaltsverzeichnis 30/32/35, keine
-Vertriebsfolie.
-
-Nebenbefund, nicht behoben: Streamlit meldet `st.components.v1.html` (vom
-Download-Baustein genutzt) als abgekündigt — bei fest eingestelltem
-Streamlit 1.61.0 folgenlos, vor einem Versionssprung auf `st.iframe` umstellen.
+„PDF erstellen" liefert eine vorbereitete PowerPoint (siehe #73). Ein
+automatischer Umwandlungsdienst wurde nach einer Sicherheitsbewertung und der
+Einstufung durch den Virenschutz **zurückgenommen** (nur mit Freigabe der
+IT-Sicherheit). Aus einer vollständigen Sicherheitsprüfung des **öffentlichen**
+Repos folgte, ohne sichtbare Folieninhalte zu ändern: interne
+Server-Verknüpfungen aus allen Vorlagen und damit aus jeder Broschüre entfernt,
+personenbezogene Metadaten aus den Vorlagen entfernt, `Zieldaten/` und `fonts/`
+gelöscht, Betriebsdetails aus der Doku genommen. Bericht und offene ISB/DSB-Punkte
+liegen **intern** auf H:.
 
 ### 17.09.2026 – PDF-Export, Stufe 0 und 1: Probe und PDF-Quelle
 
@@ -6756,7 +6676,7 @@ nie im Repo, wurden aber in vier Abschnitten als vorhanden geführt.
 - **Geänderte Dateien:** `modules/chart_dynamik.py`, `modules/pptx_slides.py`
 
 ### 07.07.2026 – Gateway-Download gelöst (clientseitiger Blob-Download)
-- **Problem:** PPTX-Download hinter dem Atruvia/Skyhigh-Gateway lieferte
+- **Problem:** PPTX-Download hinter dem firmenseitigen Web-Gateway lieferte
   `progress.htm` statt der Datei; Kern: JEDER Server-Abruf läuft durch den
   Scanner
 - **Verworfene Sackgassen (alle Server-Abrufe):** klassischer

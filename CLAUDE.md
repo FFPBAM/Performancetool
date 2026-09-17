@@ -59,31 +59,17 @@ prüfte statt gegen eine Schwelle (#47).
   Zusicherungen, Sollwerte eingefroren). **Tabuflächen sind Legende UND
   Quellenangabe** — letztere steht nicht auf der Folie, sondern als
   Zeichnungsobjekt im Chart-Teil.
-- **Das PDF der Broschüre macht echtes PowerPoint auf einem Büro-PC** (NEU
-  17.09.2026, Transferwissen #73). Die Cloud hat kein PowerPoint, LibreOffice
-  zeichnet die Ringe falsch. Weg: `pdf_export.pptx_fuer_pdf` (Folie mit Layout
-  „Ansprechpartner" raus, Seitenzahlen + Inhaltsverzeichnis nachziehen) →
-  `pdf_briefkasten.pdf_anfordern` (Release-Anhang im **privaten** Repo
-  `FFPBAM/pdf-briefkasten`) → `pdf_dienst/pdf_dienst.ps1` auf Philips PC wandelt
-  um. **Nie selbst ein PDF zeichnen** (reportlab/matplotlib bleiben verboten)
-  und **nie Broschüren ins Repo committen** — Git vergisst nichts. Die
-  Dateinamen sind das Protokoll zwischen `.py` und `.ps1`: wer eine Seite
-  ändert, ändert die andere (`tests/test_pdf_briefkasten.py` Schritt 1).
-  **Schlüssel laufen am 16.12.2026 ab** (STATUS.md, Fristkasten, mit
-  Anleitung zum Erneuern).
-  Vier Dinge, die im Alltag stolpern lassen:
-  - **Der Dienst läuft auf DIESEM PC** (Aufgabe „FFPB PDF-Dienst"). Wer hier
-    PowerPoint per COM automatisiert (z. B. PNG-Export für eine Sichtprüfung),
-    teilt sich die Instanz mit ihm — `$ppt.Quit()` nur, wenn keine
-    Präsentation mehr offen und PowerPoint unsichtbar ist.
-  - **Änderungen an `pdf_dienst.ps1` wirken erst nach Neustart des Dienstes**
-    (Datei `%LOCALAPPDATA%\FFPB_PDF_Dienst\stop` anlegen; die Aufgabenplanung
-    startet ihn spätestens nach 15 min neu). Log: `…\FFPB_PDF_Dienst\dienst.log`.
-  - **Neuer oder geänderter Streamlit-Secret → Manage app → Reboot app.**
-    Speichern allein reichte am 17.09.2026 nicht.
-  - **Schlüssel nie ausgeben** — prüfen nur über Länge, Präfix und die
-    Antwort von GitHub (Ablauf steht im Header
-    `github-authentication-token-expiration`).
+- **Die PDF-Fassung der Broschüre ist eine vorbereitete PowerPoint, kein
+  gezeichnetes PDF** (17.09.2026, Transferwissen #73). „PDF erstellen" liefert
+  `pdf_export.pptx_fuer_pdf(...)`: Folie mit Layout „Ansprechpartner" raus,
+  Seitenzahlen + Inhaltsverzeichnis nachziehen, **externe (Netzlaufwerk-)
+  Verknüpfungen entfernen**; der Berater speichert sie in PowerPoint als PDF.
+  **Nie selbst ein PDF zeichnen** (reportlab/matplotlib bleiben verboten) und
+  **nie Broschüren oder Ausgabedateien ins Repo committen** — Git vergisst
+  nichts, und das Repo ist öffentlich. Ein automatischer Umwandlungsdienst
+  wurde 17.09.2026 gebaut und nach einer Sicherheitsbewertung wieder
+  **zurückgenommen**; er kommt nur mit Freigabe der IT-Sicherheit zurück.
+  Details intern auf H:, **nicht** hier.
 - **Jedes Trigger-Widget mit `key=` → Key in `_KEEPALIVE_SPERRE`** (oben in
   `streamlit_app.py`). Sonst stürzt die Seite ab: Das Keep-Alive schreibt
   alle session_state-Keys zurück, und für diese Widgets ist das verboten. Die
@@ -454,8 +440,6 @@ prüfte statt gegen eine Schwelle (#47).
 | `modules/risiko_ansicht.py` | Heatmap und Risiko-Block **innerhalb** der Performance-Ansicht |
 | `modules/strategievergleich.py` | die dritte Ansicht: alle Strategien nebeneinander — Punktwolke, Überschneidung, Exposure |
 | `modules/pdf_export.py` | die **PDF-Quelle**: welche Folien nicht ins PDF gehören (Layout „Ansprechpartner"), Entfernen, Seitenzahlen und Inhaltsverzeichnis nachziehen, Tooltip-Texte — streamlit-frei |
-| `modules/pdf_briefkasten.py` | Auftrag an den PDF-Dienst schicken und abholen (GitHub-Release-Anhänge, Lebenszeichen) — nur Standardbibliothek, streamlit-frei |
-| `pdf_dienst/*.ps1` | der PDF-Dienst auf dem Büro-PC (PowerPoint-COM), Einrichtung des Schlüssels (DPAPI), Autostart (Aufgabenplanung) — **reines ASCII**, Windows PowerShell 5.1 |
 | `modules/bestandsanalytik.py` | Mathematik auf dem **Bestand** (Gewicht und Performancebeitrag je Kategorie, Überschneidung und Nicht-Überschneidung, Liquidität) — **streamlit-frei**, Gegenstück zu `analytics.py` |
 
 **Eine neue Folie oder Familie?** Nur `vorlagen_config.py` anfassen.
