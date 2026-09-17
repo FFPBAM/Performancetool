@@ -89,7 +89,7 @@ def _anfrage(cfg, methode, url, daten=None, kopf=None, erwarte_json=True):
         "Authorization": "Bearer %s" % cfg["token"],
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "ffpb-pdf-briefkasten",
+        "User-Agent": "ffpb-performancetool",
     }
     h.update(kopf or {})
     req = urllib.request.Request(url, data=daten, headers=h, method=methode)
@@ -149,7 +149,7 @@ def herunterladen(cfg, anhang_id) -> bytes:
         "%s/repos/%s/releases/assets/%s" % (API, cfg["repo"], anhang_id),
         headers={"Authorization": "Bearer %s" % cfg["token"],
                  "Accept": "application/octet-stream",
-                 "User-Agent": "ffpb-pdf-briefkasten"})
+                 "User-Agent": "ffpb-performancetool"})
     try:
         with opener.open(req, timeout=60) as antwort:
             return antwort.read()

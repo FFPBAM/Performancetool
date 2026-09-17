@@ -354,7 +354,10 @@ def schritt7_dienst_abgesichert():
     for rel in ("modules/pdf_briefkasten.py", "modules/portfolioanalyse.py"):
         with open(os.path.join(WURZEL, rel), encoding="utf-8") as fh:
             quelle = fh.read()
-        for verboten in ("github_pat_", "FFPBAM/pdf-briefkasten"):
+        # Kein Token-Literal und kein hartkodierter Repo-Pfad (Repo kommt aus
+        # den Secrets). "FFPBAM/" faengt jeden FFPBAM-Pfad, ohne den privaten
+        # Repo-Namen selbst hier hinzuschreiben (Befund B-10).
+        for verboten in ("github_pat_", "FFPBAM/"):
             if verboten in quelle:
                 print("   FEHLER — %s enthaelt %r (gehoert in die Secrets)" % (rel, verboten))
                 fehler += 1
