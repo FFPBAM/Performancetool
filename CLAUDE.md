@@ -68,17 +68,28 @@ prüfte statt gegen eine Schwelle (#47).
   Zusicherungen, Sollwerte eingefroren). **Tabuflächen sind Legende UND
   Quellenangabe** — letztere steht nicht auf der Folie, sondern als
   Zeichnungsobjekt im Chart-Teil.
-- **Die PDF-Fassung der Broschüre ist eine vorbereitete PowerPoint, kein
-  gezeichnetes PDF** (17.09.2026, Transferwissen #73). „PDF erstellen" liefert
-  `pdf_export.pptx_fuer_pdf(...)`: Folie mit Layout „Ansprechpartner" raus,
-  Seitenzahlen + Inhaltsverzeichnis nachziehen, **externe (Netzlaufwerk-)
-  Verknüpfungen entfernen**; der Berater speichert sie in PowerPoint als PDF.
-  **Nie selbst ein PDF zeichnen** (reportlab/matplotlib bleiben verboten) und
-  **nie Broschüren oder Ausgabedateien ins Repo committen** — Git vergisst
-  nichts, und das Repo ist öffentlich. Ein automatischer Umwandlungsdienst
-  wurde 17.09.2026 gebaut und nach einer Sicherheitsbewertung wieder
-  **zurückgenommen**; er kommt nur mit Freigabe der IT-Sicherheit zurück.
-  Details intern auf H:, **nicht** hier.
+- **„PDF erstellen" liefert ein echtes PDF über den PDF-Dienst; ist der Dienst
+  nicht erreichbar, fällt es auf die vorbereitete PowerPoint zurück**
+  (17.09.2026 nachm., freundliche Fassung — Transferwissen #73). Die Quelle
+  ist immer `pdf_export.pptx_fuer_pdf(...)`: Folie mit Layout „Ansprechpartner"
+  raus, Seitenzahlen + Inhaltsverzeichnis nachziehen, **externe
+  (Netzlaufwerk-)Verknüpfungen entfernen**. `modules/pdf_briefkasten.py`
+  schickt diese Datei **signiert (HMAC)** über ein privates GitHub-Repo an
+  einen Büro-PC, der sie mit echtem PowerPoint umwandelt und das PDF
+  zurücklegt. **Nie selbst ein PDF zeichnen** (reportlab/matplotlib bleiben
+  verboten) und **nie Broschüren oder Ausgabedateien ins Repo committen** —
+  Git vergisst nichts, und das Repo ist öffentlich.
+  - **Betriebsdetails gehören NICHT in den öffentlichen Code:** Repo, Token und
+    HMAC nur aus den Secrets `[pdf_briefkasten]` (`repo`/`token`/`hmac`); kein
+    Token-Literal, kein privater Repo-Name im Quelltext (Wächter
+    `test_pdf_export.py` Schritt 7 prüft das, `FFPBAM/` ist verboten).
+  - **Die Dienst-Skripte liegen OFF-REPO auf dem Büro-PC** (Pfade, Einrichtung,
+    Schlüssel und Schaubild **intern auf H:**). Der Dienst ist bewusst
+    unauffällig: **keine** Office-Makro-Sicherheit per Skript, **kein**
+    `ExecutionPolicy Bypass`, dafür Signatur- und Inhaltsprüfung (kein
+    Makro/OLE/externe Verknüpfung) vor dem Öffnen. **Diese Auflagen nicht
+    aufweichen** und die früher als Schadsoftware gewerteten Muster **nicht**
+    wieder einbauen.
 - **Jedes Trigger-Widget mit `key=` → Key in `_KEEPALIVE_SPERRE`** (oben in
   `streamlit_app.py`). Sonst stürzt die Seite ab: Das Keep-Alive schreibt
   alle session_state-Keys zurück, und für diese Widgets ist das verboten. Die

@@ -1,11 +1,12 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 17.09.2026 · **Branch:** `verbesserungen` ·
+**Letzte Sitzung:** 17.09.2026 (nachm.) · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **Alle Suiten grün**, `pyflakes` bei null ·
-**PDF-Fassung der Broschüre gebaut; automatischer Umwandlungsdienst
-zurückgenommen (Sicherheit).** · **Vorlagen repo-weit von personenbezogenen
-Autor-Metadaten bereinigt; C: und H: synchron auf `8c0fc9e`.**
+unerheblich) · **Alle 34 Suiten grün**, `pyflakes` bei null ·
+**PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
+„PDF erstellen" liefert ein echtes PDF über den Dienst, mit Rückfall auf die
+vorbereitete PowerPoint.** · Vorlagen repo-weit von personenbezogenen
+Autor-Metadaten bereinigt.
 
 > ### ⚠️ Sicherheitsprüfung des öffentlichen Repos (17.09.2026)
 >
@@ -20,7 +21,36 @@ Autor-Metadaten bereinigt; C: und H: synchron auf `8c0fc9e`.**
 > Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
 > Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
 
-**Diese Sitzung (17.09.2026):**
+**Diese Sitzung (17.09.2026 nachmittags) — PDF-Dienst zurückgeholt (freundliche Fassung):**
+
+- **Entscheidung Philip:** Der automatische PDF-Weg soll doch bestehen (auch
+  vom Smartphone nutzbar), das Restrisiko wird bewusst getragen. Der frühere
+  Entwurf war dem Virenschutz zu auffällig; die neue Fassung lässt genau die
+  auffälligen Muster weg (keine Makro-Umstellung per Skript, kein
+  `ExecutionPolicy Bypass`) und behält nur echte Schutzmaßnahmen (Signatur,
+  Inhaltsprüfung). *Begründung, Topologie, Schlüssel und Fristen stehen **intern
+  auf H:** — nicht hier (öffentliches Repo).*
+- **App-Seite** (Commit `ec98dbb`, gepusht in `2b579db`):
+  `modules/pdf_briefkasten.py` (neu — signiert jeden Auftrag mit HMAC, Zugang
+  **nur aus den Secrets** `[pdf_briefkasten]`), PDF-Knopf in
+  `portfolioanalyse.py` nutzt den Dienst mit **Rückfall** auf die vorbereitete
+  PowerPoint, Download-Art „pdf" in `download_helfer.py`, Keep-Alive-Key
+  `pf_pdf_datei_dl`. Wächter `test_pdf_export.py` Schritt 7 auf die
+  Sicherheits-Auflagen umgebaut, Vertragstest `test_pdf_briefkasten.py`
+  (Auftragsformat + HMAC). `2b579db` nahm zusätzlich privaten Repo-Namen und
+  Namens-Hinweis aus dem öffentlichen Code (B-10).
+- **PC-Seite: die Dienst-Skripte liegen OFF-REPO auf dem Büro-PC** und laufen
+  dort als Dauerdienst (Autostart eingerichtet, läuft). Pfade, Einrichtung,
+  Schlüssel und das **Schaubild der Funktionsweise** stehen **intern auf H:**
+  (`…\Sicherheit_PDF-Dienst\`).
+- **Belegt:** alle 34 Suiten grün, `pyflakes` null, vollständiger Rundlauf lokal
+  **2× grün** (signieren → prüfen → PowerPoint → PDF).
+- **OFFEN — Live-Klick in der Cloud (Philip):** Nach dem Deploy einmal „PDF
+  erstellen" klicken. Echtes PDF → der App-Token in den Cloud-Secrets sitzt.
+  Kommt die „… (für PDF).pptx", ist dieser Token ungültig → regenerieren, in
+  die Cloud-Secrets, „Reboot app". `hmac` steht schon in den Cloud-Secrets.
+
+**Diese Sitzung (17.09.2026 vormittags):**
 
 - **Thema: strategie-spezifische Anfangsfolien 2/3.** Bisher trugen alle
   Thema-Strategien die Pro-Folien 2/3. Jetzt: Offensiv/Pro Dividende eigene
@@ -71,11 +101,11 @@ Autor-Metadaten bereinigt; C: und H: synchron auf `8c0fc9e`.**
   zeigte auf 34 statt 36 — in der Vorlage korrigiert (nur diese Zahl).
 
 **Nächster Schritt:**
-0. **Nächste Sitzung (mit Philip): die PDF-Umsetzung besprechen.** Offen ist
-   die Ausgestaltung der PDF-Fassung (aktuell „vorbereitete PowerPoint, Berater
-   speichert selbst als PDF"; automatischer Umwandlungsdienst zurückgenommen).
-   Kontext in `modules/pdf_export.py`, `tests/test_pdf_export.py` und dem
-   internen Bericht auf H:.
+0. **Live-Klick in der Cloud (Philip) — der eine offene Beleg.** Nach dem Deploy
+   von `2b579db` einmal „PDF erstellen": echtes PDF = der App-Token in den
+   Cloud-Secrets sitzt; kommt die „… (für PDF).pptx", den Token regenerieren,
+   in die Cloud-Secrets, „Reboot app". Kontext: der neue Sitzungsabschnitt oben,
+   `modules/pdf_briefkasten.py`; PC-Einrichtung und Schlüssel **intern auf H:**.
 1. **Sicherheitsbefunde mit ISB/DSB/Compliance durchgehen** (interner Bericht
    auf H:). Erst danach die dort offenen Entscheidungen umsetzen — u. a. die
    **Git-Historie** (enthält noch die entfernten Personennamen) und vor dem Fix
