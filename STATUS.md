@@ -21,11 +21,11 @@ eingerichtet und geprüft. Sitzungsbericht unten.
 > **mehr als ein Jahr lehnt GitHub ab, und zwar still: „Generate token" tut
 > dann einfach nichts** (17.09.2026 so passiert, mit 31.12.2027).
 
-**Nächster Schritt (17.09.2026):** Durchstich des PDF-Briefkastens —
-`modules/pdf_briefkasten.py` (Auftrag hochladen, warten, abholen, aufräumen),
-PowerShell-Dienst auf dem Büro-PC mit Lebenszeichen, Messung der Wartezeit
-mit cVV und Thema, **einmal bei gesperrtem Bildschirm**. Erst wenn der trägt:
-Buttons in der App, Autostart des Dienstes, Push.
+**Nächster Schritt (17.09.2026):** Der **Durchstich trägt** (cVV 17–20 s,
+Thema 13–15 s, auch bei gesperrtem Bildschirm, PDFs pixelgleich mit der
+Desktop-Umwandlung — Messung im Sitzungsbericht). Offen: **Stufe 3**
+(zwei Buttons in der App), **Autostart** des Dienstes bei der Anmeldung
+(Aufgabenplanung), App-Schlüssel in die **Cloud-Secrets**, dann Push.
 
 > ### Für Philip: was diese Sitzung geändert hat (17.09.2026)
 >
@@ -154,6 +154,44 @@ Buttons in der App, Autostart des Dienstes, Push.
 > reagiert nicht (Grenze ein Jahr, ohne Fehlermeldung); und die erste
 > Schlüsseldatei war nach dem Anlegen **leer** (nicht gespeichert) — GitHub
 > antwortet dann mit 401.
+>
+> #### Durchstich des PDF-Briefkastens — er trägt
+>
+> Gebaut (committet, **nicht** gepusht, noch **nicht** in der Oberfläche):
+> - `modules/pdf_briefkasten.py` — App-Seite, nur Standardbibliothek:
+>   `pdf_anfordern(cfg, pptx_bytes)` prüft das Lebenszeichen, lädt den Auftrag
+>   als Release-Anhang hoch, wartet, holt das PDF, räumt auf; Fehler kommen als
+>   `BriefkastenFehler` mit einem Satz für die Oberfläche.
+> - `pdf_dienst/pdf_dienst.ps1` — der Dienst auf dem Büro-PC (reines ASCII,
+>   Windows PowerShell 5.1): Abfrage alle 4 s, Lebenszeichen jede Minute,
+>   PowerPoint-COM ohne Fenster, Log `%LOCALAPPDATA%\FFPB_PDF_Dienst\dienst.log`,
+>   verwaiste Anhänge nach 30 min weg, nur ein Dienst je PC (Mutex), Beenden
+>   über die Datei `…\FFPB_PDF_Dienst\stop`. **Schließt nie das PowerPoint,
+>   mit dem jemand arbeitet** (nur unsichtbar und ohne offene Präsentation).
+> - `pdf_dienst/einrichten.ps1` — legt den PC-Schlüssel per DPAPI unter dem
+>   Windows-Konto ab (`…\FFPB_PDF_Dienst\token.dat`) und löscht die
+>   Klartextdatei — **am 17.09.2026 ausgeführt**.
+>
+> Gemessen (Aufrufer bis fertiges PDF):
+>
+> | | cVV (Vertriebsfolie entfernt) | Thema |
+> |---|---:|---:|
+> | entsperrt | 19,9 s | 13,3 s |
+> | **gesperrt, 3 Runden** | **17,2–17,5 s** | **13,0–15,4 s** |
+> | davon PowerPoint auf dem PC | 4,4–5,6 s | 2,1–2,3 s |
+>
+> **Gesperrter Bildschirm (Windows+L) ist kein Hindernis** — nachgewiesen über
+> `LogonUI.exe` bei jedem Auftrag. Alle Ergebnis-PDFs sind **pixelgleich**
+> untereinander und textgleich mit der direkten Desktop-Umwandlung (36/36,
+> 21/21); Inhaltsverzeichnis 30/32/35, keine Vertriebsfolie.
+> Zum Ansehen: `_pdf_probe\CVV_5_ueber_Briefkasten.pdf`.
+>
+> *Der eine Fehler unterwegs, weil er wiederkommen kann:* Der erste Auftrag
+> scheiterte mit **404 beim Herunterladen**. GitHub listet einen Anhang schon
+> **während** des Hochladens (`state: "starter"`); abholbar ist er erst bei
+> `"uploaded"`. Die 9-MB-cVV-Broschüre war nach 3 s noch nicht fertig
+> übertragen. Beide Seiten fassen jetzt nur `uploaded` an. Gut daran: Der
+> Fehlerweg (`.fehler.txt` → Meldung in der App) war damit gleich mitgetestet.
 >
 > #### Nur gemeldet, nicht geändert
 >
