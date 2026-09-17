@@ -31,7 +31,7 @@
 
 param(
     [string]$Repo = "FFPBAM/pdf-briefkasten",
-    [int]$AbfrageSekunden = 4,
+    [int]$AbfrageSekunden = 5,
     [int]$LebenszeichenSekunden = 60,
     [int]$LaufzeitMinuten = 0
 )
@@ -90,8 +90,37 @@ function Hole-ReleaseId {
     }
 }
 
+# Bedingte Abfrage (ETag): Hat sich an der Liste nichts geaendert, antwortet
+# GitHub mit 304 - und 304-Antworten zaehlen NICHT gegen das Anfragelimit.
+# Damit kostet das Warten auf Auftraege praktisch nichts, auch alle 5 s.
+$script:AnhaengeEtag = $null
+$script:AnhaengeListe = @()
+$script:Erledigt = @{}   # Anhang-Ids, die dieser Dienst schon abgeholt hat
+
 function Anhaenge($rid) {
-    return @(Api "GET" "https://api.github.com/repos/$Repo/releases/$rid/assets?per_page=100")
+    $req = [Net.HttpWebRequest]::Create("https://api.github.com/repos/$Repo/releases/$rid/assets?per_page=100")
+    $req.Headers.Add("Authorization", "Bearer $Token")
+    $req.Headers.Add("X-GitHub-Api-Version", "2022-11-28")
+    $req.Accept = "application/vnd.github+json"
+    $req.UserAgent = "ffpb-pdf-dienst"
+    $req.Timeout = 60000
+    if ($script:AnhaengeEtag) { $req.Headers.Add("If-None-Match", $script:AnhaengeEtag) }
+    try {
+        $antwort = $req.GetResponse()
+    } catch [Net.WebException] {
+        $r = $_.Exception.Response
+        if ($r -and [int]$r.StatusCode -eq 304) { $r.Close(); return $script:AnhaengeListe }
+        throw
+    }
+    try {
+        $leser = New-Object IO.StreamReader($antwort.GetResponseStream(), [Text.Encoding]::UTF8)
+        $daten = ConvertFrom-Json $leser.ReadToEnd()
+        # ForEach-Object zaehlt das Feld auf - ConvertFrom-Json liefert es in
+        # PowerShell 5.1 sonst als EIN Objekt.
+        $script:AnhaengeListe = @($daten | ForEach-Object { $_ })
+        $script:AnhaengeEtag = $antwort.Headers["ETag"]
+        return $script:AnhaengeListe
+    } finally { $antwort.Close() }
 }
 
 function Lade-Hoch($rid, [string]$name, [string]$pfad, [string]$typ) {
@@ -100,7 +129,13 @@ function Lade-Hoch($rid, [string]$name, [string]$pfad, [string]$typ) {
 }
 
 function Loesche-Anhang($id) {
-    Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$Repo/releases/assets/$id" -Headers $Kopf -TimeoutSec 60 | Out-Null
+    try {
+        Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$Repo/releases/assets/$id" -Headers $Kopf -TimeoutSec 60 | Out-Null
+    } catch [Net.WebException] {
+        # 404 = schon weg (z.B. von der App aufgeraeumt) - Ziel erreicht.
+        $r = $_.Exception.Response
+        if (-not ($r -and [int]$r.StatusCode -eq 404)) { throw }
+    }
 }
 
 function Lade-Herunter($id, [string]$ziel) {
@@ -188,6 +223,10 @@ try {
                 # (state "starter"); herunterladen geht erst bei "uploaded".
                 # Ohne diese Zeile: 404 bei grossen Broschueren (17.09.2026).
                 if ($a.state -ne "uploaded") { continue }
+                # Schon abgeholt? Eine (per ETag zwischengespeicherte oder von
+                # GitHub verzoegert aktualisierte) Liste kann ihn noch fuehren.
+                if ($script:Erledigt.ContainsKey([string]$a.id)) { continue }
+                $script:Erledigt[[string]$a.id] = Get-Date
                 $auftrag = $m.Groups[1].Value
                 $pptx = Join-Path $Arbeit "$auftrag.pptx"
                 $pdf = Join-Path $Arbeit "$auftrag.pdf"
@@ -218,11 +257,18 @@ try {
             # Verwaiste Dateien (App hat nicht abgeholt) nach 30 min entfernen
             foreach ($a in $liste) {
                 if ($a.name -like "lebenszeichen-*") { continue }
+                if ($script:Erledigt.ContainsKey([string]$a.id)) { continue }
                 $alter = ((Get-Date).ToUniversalTime() - ([datetime]$a.created_at).ToUniversalTime()).TotalMinutes
                 if ($alter -gt $VerwaistNachMinuten) {
+                    $script:Erledigt[[string]$a.id] = Get-Date
                     Loesche-Anhang $a.id
                     Schreibe-Log ("verwaist entfernt: {0} ({1:N0} min alt)" -f $a.name, $alter)
                 }
+            }
+
+            # Gedaechtnis der abgeholten Ids klein halten (2 h reichen weit)
+            foreach ($k in @($script:Erledigt.Keys)) {
+                if (((Get-Date) - $script:Erledigt[$k]).TotalHours -gt 2) { $script:Erledigt.Remove($k) }
             }
         } catch {
             Schreibe-Log "Abfrage fehlgeschlagen: $($_.Exception.Message)"
