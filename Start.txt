@@ -1,5 +1,5 @@
 START-PROMPT — FFPB Performancetool
-Stand: 21.08.2026 · Branch verbesserungen · Commit-Zahl: siehe unten
+Stand: 17.09.2026 · Branch verbesserungen · Commit-Zahl: siehe unten
 
 ==========================================================================
 DIESE DREI ZEILEN IN DEN CHAT KOPIEREN:
@@ -13,7 +13,6 @@ Hol den aktuellen Stand von GitHub und sag mir, wo wir stehen.
 FALLS DU GLEICH ETWAS BESTIMMTES WILLST, HAENG EINE ZEILE AN:
 ==========================================================================
 
-  ... Danach: den PR nach main mergen.
   ... Danach: <dein Thema>.
 
 ==========================================================================
@@ -106,17 +105,20 @@ halbe Stunde, wenn man sie nicht kennt.
 WAS OFFEN IST (Details in STATUS.md)
 ==========================================================================
 
-1. PR MERGEN — https://github.com/FFPBAM/Performancetool/pull/new/verbesserungen
-   ACHTUNG: Der Merge aendert am Betrieb nichts, weil die Cloud bereits
-   auf verbesserungen laeuft. Er raeumt die Historie auf.
+KEIN MERGE AUSSTEHEND (korrigiert 17.09.2026). Hier stand bis dahin
+"PR mergen" als erster offener Punkt. Es gibt aber keinen offenen PR:
+PR #1 wurde am 07.08.2026 geoeffnet und 18 Sekunden spaeter ohne Merge
+geschlossen. Und es haengt nichts daran - die Cloud deployt
+verbesserungen, alles Gepushte ist bereits live. main nachzuziehen waere
+reine Ordnung und braeuchte einen NEUEN PR.
 
-2. DEPLOY-LOG NACH DEM MERGE ansehen (Manage app -> schwarze Konsole).
+1. DEPLOY-LOG ansehen (Manage app -> schwarze Konsole).
    Die requirements sind nach oben gedeckelt, geprueft wurde lokal unter
    Python 3.12 - die Cloud laeuft unter 3.14. Das Log ist die einzige
    Stelle, an der die tatsaechlich installierte Kombination sichtbar
    wird.
 
-3. Zurueckgestellt (Entscheidung Philip, 12.08.2026): Anlagekriterien
+2. Zurueckgestellt (Entscheidung Philip, 12.08.2026): Anlagekriterien
    SCHWEIZ (Werte muessen aus dem Haus kommen) und der
    comdirect-Disclaimer (falsche Kostenregel im Vorlagentext).
 
@@ -142,7 +144,7 @@ WICHTIG FUER DIE NAECHSTE SITZUNG
 
       git config windows.appendAtomically false
 
-- 31 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
+- 33 Testsuiten unter tests/ — vor jedem Push alle gruen, und zwar gegen
   .venv\Scripts\python.exe (sonst ueberspringen sie ihre schweren
   Schritte stillschweigend). Zwei davon brauchen ein Ausgabeverzeichnis
   als Argument: test_export_smoke.py und test_trennstriche.py.
