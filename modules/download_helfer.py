@@ -44,21 +44,32 @@ PPTX_MIMETYPE = (
     "application/vnd.openxmlformats-officedocument."
     "presentationml.presentation"
 )
+PDF_MIMETYPE = "application/pdf"
+
+# Dateityp -> (MIME-Typ, Beschriftung). Seit dem PDF-Export (17.09.2026) stehen
+# zwei Downloads nebeneinander; "Broschüre herunterladen" hätte beide gleich
+# beschriftet.
+DOWNLOAD_ARTEN = {
+    "pptx": (PPTX_MIMETYPE, "PowerPoint herunterladen"),
+    "pdf": (PDF_MIMETYPE, "PDF herunterladen"),
+}
 
 
-def _download_komponente_html(daten: bytes, dateiname: str) -> str:
+def _download_komponente_html(daten: bytes, dateiname: str,
+                              art: str = "pptx") -> str:
     """Baut das HTML/JS für den clientseitigen Blob-Download."""
+    mime, beschriftung = DOWNLOAD_ARTEN[art]
     b64 = base64.b64encode(daten).decode("ascii")
     # Dateiname sicher als JS-String-Literal einbetten (Umlaute, Quotes …).
     name_js = json.dumps(dateiname)
-    mime_js = json.dumps(PPTX_MIMETYPE)
+    mime_js = json.dumps(mime)
     return f"""
 <div style="font-family:'Segoe UI',Tahoma,sans-serif;">
   <button id="dlbtn" style="
       width:100%;box-sizing:border-box;padding:0.6rem 1rem;cursor:pointer;
       border:1px solid #003460;border-radius:0.5rem;background:#003460;
       color:#ffffff;font-size:1rem;font-weight:600;">
-    Broschüre herunterladen
+    {beschriftung}
   </button>
   <div id="dlmsg" style="margin-top:0.4rem;font-size:0.85rem;color:#5c6b3c;"></div>
 </div>
@@ -93,25 +104,44 @@ def _download_komponente_html(daten: bytes, dateiname: str) -> str:
 """
 
 
-def download_bereich(daten: bytes, dateiname: str) -> None:
+def download_bereich(daten: bytes, dateiname: str, art: str = "pptx") -> None:
     """Rendert den Broschüren-Download:
     1) PRIMÄR: clientseitiger Blob-Download (kein Server-Abruf → kein Gateway-
        Scan → startet sofort, kein neuer Tab).
     2) FALLBACK: klassischer st.download_button (In-Page über den Server).
+
+    art: "pptx" oder "pdf" — bestimmt MIME-Typ, Beschriftung und den Key des
+    Fallback-Buttons.
     """
     import streamlit as st
     import streamlit.components.v1 as components
 
-    # Clientseitiger Download-Button (im Komponenten-iframe, downloads erlaubt).
-    components.html(_download_komponente_html(daten, dateiname), height=90)
+    if art not in DOWNLOAD_ARTEN:
+        raise ValueError(f"Unbekannte Download-Art: {art!r}")
+    mime, _beschriftung = DOWNLOAD_ARTEN[art]
 
-    # Fallback bleibt IMMER erreichbar.
+    # Clientseitiger Download-Button (im Komponenten-iframe, downloads erlaubt).
+    components.html(_download_komponente_html(daten, dateiname, art), height=90)
+
+    # Fallback bleibt IMMER erreichbar. Zwei Zweige mit FESTEM Key statt
+    # key=f"pf_{art}_dl": tests/test_keepalive.py verbietet berechnete Keys an
+    # Trigger-Widgets (sie wären in _KEEPALIVE_SPERRE nicht prüfbar).
     with st.expander("Alternativer Download (falls der Button oben nicht lädt)"):
-        st.download_button(
-            "Klassischer Download (über den Server)",
-            data=daten,
-            file_name=dateiname,
-            mime=PPTX_MIMETYPE,
-            key="pf_pptx_dl",
-            width="stretch",
-        )
+        if art == "pdf":
+            st.download_button(
+                "Klassischer Download (über den Server)",
+                data=daten,
+                file_name=dateiname,
+                mime=mime,
+                key="pf_pdf_dl",
+                width="stretch",
+            )
+        else:
+            st.download_button(
+                "Klassischer Download (über den Server)",
+                data=daten,
+                file_name=dateiname,
+                mime=mime,
+                key="pf_pptx_dl",
+                width="stretch",
+            )

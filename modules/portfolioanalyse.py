@@ -1029,7 +1029,8 @@ def _export_name_saeubern(name: str) -> str:
     return name or "Broschuere"
 
 
-def _export_dateiname(name_mapping, strategie, datum, fallback_tag) -> str:
+def _export_dateiname(name_mapping, strategie, datum, fallback_tag,
+                      endung=".pptx") -> str:
     """Baut den Dateinamen der exportierten Broschüre aus der Konfiguration
     oben (EXPORT_NAME_STRATEGIE / EXPORT_NAME_FAMILIE / EXPORT_NAME_DEFAULT).
 
@@ -1038,7 +1039,7 @@ def _export_dateiname(name_mapping, strategie, datum, fallback_tag) -> str:
     fallback_tag: Ersatz-Datumsstring (yyMMdd aus dem UI), falls kein
                   Auswertungsdatum vorliegt
 
-    Rückgabe inkl. ".pptx". Bricht NIE hart ab — bei defektem Muster
+    Rückgabe inkl. Endung (".pptx", beim PDF ".pdf"). Bricht NIE hart ab — bei defektem Muster
     (z.B. unbekannter Platzhalter) wird auf den Default zurückgefallen.
     """
     familie = ""
@@ -1069,7 +1070,7 @@ def _export_dateiname(name_mapping, strategie, datum, fallback_tag) -> str:
         # Defektes Muster (unbekannter Platzhalter o.ä.) → sicherer Default
         name = EXPORT_NAME_DEFAULT.format(datum=datum_str, strategie=strategie,
                                           familie=familie)
-    return _export_name_saeubern(name) + ".pptx"
+    return _export_name_saeubern(name) + endung
 
 
 def _render_familien_hinweis(name_mapping, strategie, vergleich_aktiv=False):
@@ -1103,6 +1104,73 @@ def _render_familien_hinweis(name_mapping, strategie, vergleich_aktiv=False):
             f'Vergleichsportfolio wird am Bildschirm gezeigt, aber **nicht** '
             f'in die PowerPoint übernommen.'
         )
+
+
+PDF_NICHT_EINGERICHTET = (
+    "Der PDF-Dienst ist hier nicht eingerichtet (Zugang [pdf_briefkasten] "
+    "fehlt in den Secrets). Die PowerPoint lässt sich in PowerPoint über "
+    "„Speichern unter → PDF“ sichern.")
+
+
+def _pdf_briefkasten_cfg():
+    """Zugang zum PDF-Briefkasten aus st.secrets — None, wenn nicht eingerichtet.
+
+    Fehlt der Block, bleibt der PDF-Button sichtbar, aber gesperrt, mit einem
+    Tooltip, der den Ausweichweg nennt. Nie ein Absturz: Ein fehlender
+    Schlüssel darf den PowerPoint-Export nicht mitreißen.
+    """
+    try:
+        cfg = st.secrets.get("pdf_briefkasten")
+    except Exception:
+        return None
+    if not cfg or not cfg.get("repo") or not cfg.get("token"):
+        return None
+    return {"repo": str(cfg["repo"]), "token": str(cfg["token"])}
+
+
+def _pdf_tooltip(familie, cfg):
+    """Tooltip am PDF-Button: nennt die fehlende Vertriebsfolie nur dort, wo
+    die Vorlage der Familie sie wirklich führt (heute cVV)."""
+    if cfg is None:
+        return PDF_NICHT_EINGERICHTET
+    from modules import pdf_export as _pdf_export_mod
+    from modules.pptx_export import TEMPLATE_PATH as _standard_vorlage
+    pfad, _cfg = _vorlage_fuer_familie(familie)
+    try:
+        hat_folie = bool(_pdf_export_mod.vertriebsfolien(pfad or _standard_vorlage))
+    except Exception:
+        hat_folie = False
+    return (_pdf_export_mod.HINWEIS_VERTRIEB if hat_folie
+            else _pdf_export_mod.HINWEIS_OHNE_VERTRIEB)
+
+
+def _pdf_erstellen(cfg) -> bool:
+    """PDF aus der gebauten PowerPoint: Vertriebsfolie raus, PDF-Dienst wandelt um.
+
+    Ergebnis nach st.session_state["pf_pdf_bytes"]; Auffälligkeiten beim
+    Entfernen nach ["pf_pdf_hinweise"]. Fehler des Dienstes (nicht erreichbar,
+    Schlüssel abgelaufen, Zeitüberschreitung) landen in ["pf_pdf_fehler"] und
+    stehen nach dem Rerun unter dem Button — die PowerPoint bleibt davon
+    unberührt. (In session_state statt direkt per st.error, weil der Aufrufer
+    danach neu zeichnet: Im selben Klick kann gerade die PowerPoint entstanden
+    sein, und deren Download soll sofort daneben erscheinen.)
+    """
+    from modules import pdf_export as _pdf_export_mod
+    from modules import pdf_briefkasten as _briefkasten
+    zeile = st.empty()
+    try:
+        with st.spinner("PDF wird erstellt — PowerPoint wandelt auf dem PDF-Dienst um …"):
+            quelle, _entfernt, hinweise = _pdf_export_mod.pptx_fuer_pdf(
+                st.session_state["pf_pptx_bytes"])
+            st.session_state["pf_pdf_bytes"] = _briefkasten.pdf_anfordern(
+                cfg, quelle, fortschritt=zeile.caption)
+        st.session_state["pf_pdf_hinweise"] = list(hinweise)
+        return True
+    except _briefkasten.BriefkastenFehler as ex:
+        st.session_state["pf_pdf_fehler"] = str(ex)
+    except Exception as ex:
+        st.session_state["pf_pdf_fehler"] = f"PDF konnte nicht erstellt werden: {ex}"
+    return False
 
 
 def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0.0):
@@ -1196,211 +1264,250 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     if st.session_state.get("pf_export_key") != current_key:
         st.session_state.pop("pf_pptx_bytes", None)
         st.session_state.pop("pf_pptx_build_errors", None)
+        st.session_state.pop("pf_pdf_bytes", None)
+        st.session_state.pop("pf_pdf_hinweise", None)
+        st.session_state.pop("pf_pdf_fehler", None)
         st.session_state["pf_export_key"] = current_key
 
-    # ── PowerPoint Export (einziger Export) ──
-    if "pf_pptx_bytes" not in st.session_state:
-        # Button zum Generieren
-        if st.button("PowerPoint erstellen", key="pf_pptx_btn", width="stretch",
-                     help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Folien 7-10)."):
-            # Die Broschuere fuehrt IMMER NUR die oben gewaehlte Strategie
-            # (Entscheidung Philip, 26.08.2026). Das Vergleichsportfolio ist
-            # eine Sache des Bildschirms; die Familien CVV/ESG/ETF/comdirect
-            # ignorieren es ohnehin seit jeher (sie ueberschreiben `portfolios`
-            # weiter unten mit allen Strategien ihrer Familie). Damit ist die
-            # Regel jetzt fuer ALLE Familien dieselbe.
-            #
-            # HISTORIE: Bis zum 26.08.2026 wurde `pf_sel_2` hier angehaengt und
-            # die Familie "Thema" baute daraus einen zweiten Folienblock. Das
-            # ist technisch in Ordnung und seit d9105c1 auch fehlerfrei — die
-            # Entscheidung ist fachlich, nicht technisch. Wer sie umdreht,
-            # haengt hier wieder an und passt `tests/test_broschuere_auswahl.py`
-            # sowie `_render_familien_hinweis` an.
-            portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
+    # ── PowerPoint- und PDF-Export (PDF NEU 17.09.2026) ──
+    # Beide Buttons nutzen DENSELBEN Bau: Das PDF entsteht aus der gebauten
+    # PowerPoint (ohne Vertriebsfolie, `pdf_export.pptx_fuer_pdf`) und wird
+    # vom PDF-Dienst mit echtem PowerPoint umgewandelt (`pdf_briefkasten`).
+    def _pptx_bauen():
+        """Baut die Broschuere nach st.session_state["pf_pptx_bytes"].
 
-            # ── CVV: IMMER alle fünf Strategien (NEU 09.07.2026) ────────
-            # Die CVV-Vorlage ist ein Gesamtdokument über alle fünf
-            # klassischen VV-Strategien mit fest vorgebauten Folien. Die
-            # Vergleichsauswahl wird hier bewusst ignoriert.
-            # name_mapping ist bereits geladen (oben in der Ansicht)
-            _fam_vorab = _familie_fuer_strategie(name_mapping, pf_sel_1)
-            _alle = FAMILIE_ALLE_STRATEGIEN.get(_fam_vorab)
-            if _alle:
-                _fam_pfs, _fehlend = _familien_portfolios(
-                    _alle, display_names_pf, display_to_csv_pf, pf_data,
-                    duration_info_aus_bestand)
-                if _fehlend:
-                    st.error(
-                        f"❌ {_fam_vorab}-Broschüre: Für diese Strategien fehlen "
-                        f"die Portfolio-Daten: {', '.join(_fehlend)}.\n\n"
-                        f"Die Broschüre enthält immer alle {len(_alle)} Strategien — "
-                        "bitte die fehlenden CSVs in `Daten_PF/` ergänzen.")
-                    st.stop()
-                portfolios = _fam_pfs
+        Rueckgabe True, wenn die Bytes stehen. Fehler zeigt die Funktion selbst
+        an; den Rerun entscheidet der Aufrufer (der PDF-Button baut danach noch
+        weiter, ein st.rerun() hier wuerde ihn abbrechen).
+        """
+        # Die Broschuere fuehrt IMMER NUR die oben gewaehlte Strategie
+        # (Entscheidung Philip, 26.08.2026). Das Vergleichsportfolio ist
+        # eine Sache des Bildschirms; die Familien CVV/ESG/ETF/comdirect
+        # ignorieren es ohnehin seit jeher (sie ueberschreiben `portfolios`
+        # weiter unten mit allen Strategien ihrer Familie). Damit ist die
+        # Regel jetzt fuer ALLE Familien dieselbe.
+        #
+        # HISTORIE: Bis zum 26.08.2026 wurde `pf_sel_2` hier angehaengt und
+        # die Familie "Thema" baute daraus einen zweiten Folienblock. Das
+        # ist technisch in Ordnung und seit d9105c1 auch fehlerfrei — die
+        # Entscheidung ist fachlich, nicht technisch. Wer sie umdreht,
+        # haengt hier wieder an und passt `tests/test_broschuere_auswahl.py`
+        # sowie `_render_familien_hinweis` an.
+        portfolios = [(pf_sel_1, df_pf_1, ad1, dur_1)]
 
-            # ── Performance-Inputs für die Folien 8+9 zusammenbauen ──
-            # Priorität 1: aus session_state (gefüllt vom Performance-Tab)
-            # Priorität 2 (Fallback): direkt aus CSV laden, falls User den
-            # Performance-Tab nie geöffnet hat oder dort kein passendes
-            # Portfolio drin ist.
-            perf_timeseries = st.session_state.get("perf_timeseries", {})
-            perf_d2c = st.session_state.get("perf_d2c", {})
-            mwst_faktor_pf = 1.19 if pf_brutto_mwst else 1.0
+        # ── CVV: IMMER alle fünf Strategien (NEU 09.07.2026) ────────
+        # Die CVV-Vorlage ist ein Gesamtdokument über alle fünf
+        # klassischen VV-Strategien mit fest vorgebauten Folien. Die
+        # Vergleichsauswahl wird hier bewusst ignoriert.
+        # name_mapping ist bereits geladen (oben in der Ansicht)
+        _fam_vorab = _familie_fuer_strategie(name_mapping, pf_sel_1)
+        _alle = FAMILIE_ALLE_STRATEGIEN.get(_fam_vorab)
+        if _alle:
+            _fam_pfs, _fehlend = _familien_portfolios(
+                _alle, display_names_pf, display_to_csv_pf, pf_data,
+                duration_info_aus_bestand)
+            if _fehlend:
+                st.error(
+                    f"❌ {_fam_vorab}-Broschüre: Für diese Strategien fehlen "
+                    f"die Portfolio-Daten: {', '.join(_fehlend)}.\n\n"
+                    f"Die Broschüre enthält immer alle {len(_alle)} Strategien — "
+                    "bitte die fehlenden CSVs in `Daten_PF/` ergänzen.")
+                st.stop()
+            portfolios = _fam_pfs
+
+        # ── Performance-Inputs für die Folien 8+9 zusammenbauen ──
+        # Priorität 1: aus session_state (gefüllt vom Performance-Tab)
+        # Priorität 2 (Fallback): direkt aus CSV laden, falls User den
+        # Performance-Tab nie geöffnet hat oder dort kein passendes
+        # Portfolio drin ist.
+        perf_timeseries = st.session_state.get("perf_timeseries", {})
+        perf_d2c = st.session_state.get("perf_d2c", {})
+        mwst_faktor_pf = 1.19 if pf_brutto_mwst else 1.0
+        try:
+            mapping_pf = load_mapping()
+        except Exception:
+            mapping_pf = None
+
+        # NEU (Juli 2026): Benchmark-Texte für die ***-Fußnote der
+        # Wertentwicklungs-Folie (Folie 8). Primär aus session_state
+        # (vom Performance-Tab: st.session_state["perf_d2b"] = d2b),
+        # Fallback direkt aus dem Name-Mapping (Spalte D).
+        perf_d2b = st.session_state.get("perf_d2b", {})
+        if not perf_d2b:
             try:
-                mapping_pf = load_mapping()
+                nm_cols = name_mapping.columns
+                if len(nm_cols) >= 4:
+                    perf_d2b = dict(zip(name_mapping[nm_cols[0]], name_mapping[nm_cols[3]]))
             except Exception:
-                mapping_pf = None
+                perf_d2b = {}
 
-            # NEU (Juli 2026): Benchmark-Texte für die ***-Fußnote der
-            # Wertentwicklungs-Folie (Folie 8). Primär aus session_state
-            # (vom Performance-Tab: st.session_state["perf_d2b"] = d2b),
-            # Fallback direkt aus dem Name-Mapping (Spalte D).
-            perf_d2b = st.session_state.get("perf_d2b", {})
-            if not perf_d2b:
-                try:
-                    nm_cols = name_mapping.columns
-                    if len(nm_cols) >= 4:
-                        perf_d2b = dict(zip(name_mapping[nm_cols[0]], name_mapping[nm_cols[3]]))
-                except Exception:
-                    perf_d2b = {}
-
-            # Fallback-Loader: wenn session_state leer ist, lade Performance-CSVs direkt
-            fallback_loaded = False
-            if not perf_timeseries:
-                try:
-                    perf_date_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
-                    perf_files = load_all_csvs(DATA_FOLDER, perf_date_tag, EXCLUDE_SUBSTRINGS)
-                    if perf_files and mapping_pf is not None:
-                        perf_timeseries = build_portfolio_timeseries(perf_files, mapping_pf)
-                        fallback_loaded = True
-                except Exception as ex:
-                    st.warning(f"Performance-Daten konnten nicht geladen werden: {ex}")
-
-            performance_inputs = []
-            missing_csv_names = []
-            for pf_name, df_pf, _ad, _dur in portfolios:
-                # csv_name auflösen: erst über perf_d2c (vom Performance-Tab),
-                # fallback auf display_to_csv_pf (lokales Mapping)
-                csv_n = perf_d2c.get(pf_name) or display_to_csv_pf.get(pf_name)
-                ts_df = perf_timeseries.get(csv_n) if csv_n else None
-                if ts_df is None or len(ts_df) == 0:
-                    missing_csv_names.append((pf_name, csv_n))
-                else:
-                    # Historien-Beginn der Datenreihe (NEU 07.08.2026, siehe
-                    # HISTORIE_AB). EINMAL hier beschnitten — damit rechnen
-                    # ALLE Folien (Kennzahlen, Linien-Chart, rollierende
-                    # Tabelle, Vergleich) auf derselben Basis, und die
-                    # Beschriftung "seit <Jahr>" ergibt sich von selbst.
-                    ts_df = historie_beschneiden(ts_df, csv_n)
-                # Honorarsatz aus mapping (Default, dezimal) × MwSt-Faktor
-                fee_dec = 0.0
-                if mapping_pf is not None and csv_n is not None:
-                    try:
-                        fee_dec = float(mapping_pf.loc[mapping_pf["Inhaber"] == csv_n,
-                                                      "Honorarsatz Standard"].values[0]) * mwst_faktor_pf
-                    except Exception:
-                        fee_dec = 0.0
-
-                # NEU (Juli 2026): Zusatzdaten für die Wertentwicklungs-Folie
-                # (Folie 8) — beide optional, fehlend → "–" bzw.
-                # Vorlagen-Fußnote bleibt.
-                # Duration: dur_info ist das Dict aus
-                # duration_info_aus_bestand ({"duration", "rendite"},
-                # anleihe-gewichtet aus den Titeln).
-                duration_val = _dur.get("duration") if isinstance(_dur, dict) else None
-                # Benchmark-Text: Mapping Spalte D; Platzhalter-Werte filtern
-                bm_text = perf_d2b.get(pf_name)
-                if bm_text is not None:
-                    bm_text = str(bm_text).strip()
-                    if bm_text.lower() in ("", "nan", "none", "haben keine benchmark"):
-                        bm_text = None
-
-                performance_inputs.append({
-                    "timeseries_df": ts_df,
-                    "fee_dec": fee_dec,
-                    "duration": duration_val,
-                    "benchmark_text": bm_text,
-                })
-
-            # Wenn Daten fehlen, Diagnose PERSISTENT machen (NEU Juli 2026):
-            # st.warning direkt vor st.rerun() wird vom Rerun weggewischt —
-            # deshalb in session_state sammeln und nach dem Rerun anzeigen.
-            pptx_diag = []
-            if missing_csv_names:
-                diag = ", ".join([f"'{pn}' → '{cn}'" for pn, cn in missing_csv_names])
-                pptx_diag.append(
-                    f"Performance-Daten für {diag} fehlen — Folien 8+9 zeigen Platzhalter. "
-                    f"Verfügbar in session_state: {len(perf_timeseries)} Portfolios, "
-                    f"davon: {list(perf_timeseries.keys())[:5]}{'…' if len(perf_timeseries) > 5 else ''}. "
-                    f"Fallback-Load aktiv: {fallback_loaded}."
-                )
-
+        # Fallback-Loader: wenn session_state leer ist, lade Performance-CSVs direkt
+        fallback_loaded = False
+        if not perf_timeseries:
             try:
-                with st.spinner("PowerPoint wird erstellt..."):
-                    from modules import pptx_export as _pptx_export_mod
-                    from modules.pptx_export import generate_portfolioanalyse_pptx
-                    # Familie der gewählten Strategie bestimmt die Vorlage
-                    # (Variante A). Leere/unbekannte Familie oder fehlende
-                    # Vorlagen-Datei → (None, None) = Standard-Export.
-                    _familie = _familie_fuer_strategie(name_mapping, pf_sel_1)
-                    _tpl_path, _tpl_cfg = _vorlage_fuer_familie(_familie)
-                    if _familie and not _tpl_path:
-                        pptx_diag.append(
-                            f"Familie '{_familie}' hat (noch) keine Vorlage "
-                            f"im Ordner Vorlage/ — Standard-Broschüre verwendet.")
-                    st.session_state["pf_pptx_bytes"] = generate_portfolioanalyse_pptx(
-                        portfolios, anlagevolumen,
-                        performance_inputs=performance_inputs,
-                        template_path=_tpl_path, template_config=_tpl_cfg,
-                    )
-                    # NEU (Juli 2026): Berechnungsfehler aus dem Export
-                    # (z.B. Kennzahlen-Berechnung der Folie 8 geworfen →
-                    # Folie zeigt Platzhalter) sichtbar machen statt still
-                    # zu verschlucken.
-                    pptx_diag.extend(_pptx_export_mod.LAST_BUILD_ERRORS)
-                st.session_state["pf_pptx_build_errors"] = pptx_diag
-                st.rerun()
-            except FileNotFoundError as e:
-                st.error(f"❌ Vorlage nicht gefunden: {e}\n\nBitte `Vorlage_FFPB.pptx` im Ordner `Vorlage/` im Repo ablegen.")
-            except Exception as e:
-                # Bei "Package not found" gezielt diagnostizieren: existiert
-                # die Datei am Ladeort wirklich, wie groß ist sie (ein
-                # Git-LFS-Zeiger ist nur ~130 Bytes!), was liegt im Ordner?
-                import os as _osd
-                diag = [f"❌ Fehler beim PowerPoint-Export: {e}"]
-                try:
-                    _p = locals().get("_tpl_path")
-                    if _p:
-                        if _osd.path.exists(_p):
-                            _sz = _osd.path.getsize(_p)
-                            diag.append(f"Datei {_p} existiert, Größe {_sz} Bytes.")
-                            if _sz < 5000:
-                                diag.append("Sehr klein — das ist vermutlich ein "
-                                            "Git-LFS-Zeiger statt der echten PPTX. "
-                                            "Die Vorlage muss als normale Binärdatei "
-                                            "(nicht über Git LFS) im Repo liegen.")
-                        else:
-                            _dir = _osd.path.dirname(_p) or "."
-                            vorhanden = _osd.listdir(_dir) if _osd.path.isdir(_dir) else "Ordner fehlt"
-                            diag.append(f"Datei {_p} NICHT am Ladeort. Im Ordner "
-                                        f"'{_dir}' liegt: {vorhanden}")
-                except Exception:
-                    pass
-                st.error("\n\n".join(diag))
-    else:
-        # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
-        for _diag_msg in st.session_state.get("pf_pptx_build_errors", []):
-            st.warning(f"{_diag_msg}")
+                perf_date_tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
+                perf_files = load_all_csvs(DATA_FOLDER, perf_date_tag, EXCLUDE_SUBSTRINGS)
+                if perf_files and mapping_pf is not None:
+                    perf_timeseries = build_portfolio_timeseries(perf_files, mapping_pf)
+                    fallback_loaded = True
+            except Exception as ex:
+                st.warning(f"Performance-Daten konnten nicht geladen werden: {ex}")
 
-        # Dateiname aus der konfigurierbaren Sektion oben (EXPORT_NAME_*).
-        # Familie/Strategie/Datum werden dort zum finalen Namen aufgelöst;
-        # ad1 = Auswertungsdatum, date_tag_pf = Fallback (yyMMdd aus UI).
-        _dateiname = _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf)
-        # Kompletter Download-Bereich (Neuer-Tab-Varianten für den
-        # Atruvia-Gateway-Scan + klassischer In-Page-Fallback) liegt in
-        # modules/download_helfer.py → download_bereich(). Künftige
-        # Anpassungen am Download passieren NUR dort, nicht hier.
-        download_bereich(st.session_state["pf_pptx_bytes"], _dateiname)
+        performance_inputs = []
+        missing_csv_names = []
+        for pf_name, df_pf, _ad, _dur in portfolios:
+            # csv_name auflösen: erst über perf_d2c (vom Performance-Tab),
+            # fallback auf display_to_csv_pf (lokales Mapping)
+            csv_n = perf_d2c.get(pf_name) or display_to_csv_pf.get(pf_name)
+            ts_df = perf_timeseries.get(csv_n) if csv_n else None
+            if ts_df is None or len(ts_df) == 0:
+                missing_csv_names.append((pf_name, csv_n))
+            else:
+                # Historien-Beginn der Datenreihe (NEU 07.08.2026, siehe
+                # HISTORIE_AB). EINMAL hier beschnitten — damit rechnen
+                # ALLE Folien (Kennzahlen, Linien-Chart, rollierende
+                # Tabelle, Vergleich) auf derselben Basis, und die
+                # Beschriftung "seit <Jahr>" ergibt sich von selbst.
+                ts_df = historie_beschneiden(ts_df, csv_n)
+            # Honorarsatz aus mapping (Default, dezimal) × MwSt-Faktor
+            fee_dec = 0.0
+            if mapping_pf is not None and csv_n is not None:
+                try:
+                    fee_dec = float(mapping_pf.loc[mapping_pf["Inhaber"] == csv_n,
+                                                  "Honorarsatz Standard"].values[0]) * mwst_faktor_pf
+                except Exception:
+                    fee_dec = 0.0
+
+            # NEU (Juli 2026): Zusatzdaten für die Wertentwicklungs-Folie
+            # (Folie 8) — beide optional, fehlend → "–" bzw.
+            # Vorlagen-Fußnote bleibt.
+            # Duration: dur_info ist das Dict aus
+            # duration_info_aus_bestand ({"duration", "rendite"},
+            # anleihe-gewichtet aus den Titeln).
+            duration_val = _dur.get("duration") if isinstance(_dur, dict) else None
+            # Benchmark-Text: Mapping Spalte D; Platzhalter-Werte filtern
+            bm_text = perf_d2b.get(pf_name)
+            if bm_text is not None:
+                bm_text = str(bm_text).strip()
+                if bm_text.lower() in ("", "nan", "none", "haben keine benchmark"):
+                    bm_text = None
+
+            performance_inputs.append({
+                "timeseries_df": ts_df,
+                "fee_dec": fee_dec,
+                "duration": duration_val,
+                "benchmark_text": bm_text,
+            })
+
+        # Wenn Daten fehlen, Diagnose PERSISTENT machen (NEU Juli 2026):
+        # st.warning direkt vor st.rerun() wird vom Rerun weggewischt —
+        # deshalb in session_state sammeln und nach dem Rerun anzeigen.
+        pptx_diag = []
+        if missing_csv_names:
+            diag = ", ".join([f"'{pn}' → '{cn}'" for pn, cn in missing_csv_names])
+            pptx_diag.append(
+                f"Performance-Daten für {diag} fehlen — Folien 8+9 zeigen Platzhalter. "
+                f"Verfügbar in session_state: {len(perf_timeseries)} Portfolios, "
+                f"davon: {list(perf_timeseries.keys())[:5]}{'…' if len(perf_timeseries) > 5 else ''}. "
+                f"Fallback-Load aktiv: {fallback_loaded}."
+            )
+
+        try:
+            with st.spinner("PowerPoint wird erstellt..."):
+                from modules import pptx_export as _pptx_export_mod
+                from modules.pptx_export import generate_portfolioanalyse_pptx
+                # Familie der gewählten Strategie bestimmt die Vorlage
+                # (Variante A). Leere/unbekannte Familie oder fehlende
+                # Vorlagen-Datei → (None, None) = Standard-Export.
+                _familie = _familie_fuer_strategie(name_mapping, pf_sel_1)
+                _tpl_path, _tpl_cfg = _vorlage_fuer_familie(_familie)
+                if _familie and not _tpl_path:
+                    pptx_diag.append(
+                        f"Familie '{_familie}' hat (noch) keine Vorlage "
+                        f"im Ordner Vorlage/ — Standard-Broschüre verwendet.")
+                st.session_state["pf_pptx_bytes"] = generate_portfolioanalyse_pptx(
+                    portfolios, anlagevolumen,
+                    performance_inputs=performance_inputs,
+                    template_path=_tpl_path, template_config=_tpl_cfg,
+                )
+                # NEU (Juli 2026): Berechnungsfehler aus dem Export
+                # (z.B. Kennzahlen-Berechnung der Folie 8 geworfen →
+                # Folie zeigt Platzhalter) sichtbar machen statt still
+                # zu verschlucken.
+                pptx_diag.extend(_pptx_export_mod.LAST_BUILD_ERRORS)
+            st.session_state["pf_pptx_build_errors"] = pptx_diag
+            return True
+        except FileNotFoundError as e:
+            st.error(f"❌ Vorlage nicht gefunden: {e}\n\nBitte `Vorlage_FFPB.pptx` im Ordner `Vorlage/` im Repo ablegen.")
+            return False
+        except Exception as e:
+            # Bei "Package not found" gezielt diagnostizieren: existiert
+            # die Datei am Ladeort wirklich, wie groß ist sie (ein
+            # Git-LFS-Zeiger ist nur ~130 Bytes!), was liegt im Ordner?
+            import os as _osd
+            diag = [f"❌ Fehler beim PowerPoint-Export: {e}"]
+            try:
+                _p = locals().get("_tpl_path")
+                if _p:
+                    if _osd.path.exists(_p):
+                        _sz = _osd.path.getsize(_p)
+                        diag.append(f"Datei {_p} existiert, Größe {_sz} Bytes.")
+                        if _sz < 5000:
+                            diag.append("Sehr klein — das ist vermutlich ein "
+                                        "Git-LFS-Zeiger statt der echten PPTX. "
+                                        "Die Vorlage muss als normale Binärdatei "
+                                        "(nicht über Git LFS) im Repo liegen.")
+                    else:
+                        _dir = _osd.path.dirname(_p) or "."
+                        vorhanden = _osd.listdir(_dir) if _osd.path.isdir(_dir) else "Ordner fehlt"
+                        diag.append(f"Datei {_p} NICHT am Ladeort. Im Ordner "
+                                    f"'{_dir}' liegt: {vorhanden}")
+            except Exception:
+                pass
+            st.error("\n\n".join(diag))
+            return False
+
+    # Diagnose aus dem letzten Export-Lauf anzeigen (überlebt st.rerun)
+    for _diag_msg in (st.session_state.get("pf_pptx_build_errors", [])
+                      + st.session_state.get("pf_pdf_hinweise", [])):
+        st.warning(f"{_diag_msg}")
+
+    _pdf_cfg = _pdf_briefkasten_cfg()
+    _spalte_pptx, _spalte_pdf = st.columns(2)
+    with _spalte_pptx:
+        if "pf_pptx_bytes" not in st.session_state:
+            if st.button("PowerPoint erstellen", key="pf_pptx_btn", width="stretch",
+                         help="Exportiert die Portfolioanalyse in die Corporate-Vorlage (Folien 7-10)."):
+                if _pptx_bauen():
+                    st.rerun()
+        else:
+            # Dateiname aus der konfigurierbaren Sektion oben (EXPORT_NAME_*).
+            # Familie/Strategie/Datum werden dort zum finalen Namen aufgelöst;
+            # ad1 = Auswertungsdatum, date_tag_pf = Fallback (yyMMdd aus UI).
+            # Kompletter Download-Bereich (clientseitiger Download für den
+            # Atruvia-Gateway-Scan + klassischer In-Page-Fallback) liegt in
+            # modules/download_helfer.py → download_bereich(). Künftige
+            # Anpassungen am Download passieren NUR dort, nicht hier.
+            download_bereich(st.session_state["pf_pptx_bytes"],
+                             _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf),
+                             art="pptx")
+    with _spalte_pdf:
+        if "pf_pdf_bytes" not in st.session_state:
+            if st.button("PDF erstellen", key="pf_pdf_btn", width="stretch",
+                         disabled=_pdf_cfg is None,
+                         help=_pdf_tooltip(_familie_fuer_strategie(name_mapping, pf_sel_1),
+                                           _pdf_cfg)):
+                st.session_state.pop("pf_pdf_fehler", None)
+                if "pf_pptx_bytes" in st.session_state or _pptx_bauen():
+                    _pdf_erstellen(_pdf_cfg)
+                    st.rerun()
+            if st.session_state.get("pf_pdf_fehler"):
+                st.error(st.session_state["pf_pdf_fehler"])
+        else:
+            download_bereich(st.session_state["pf_pdf_bytes"],
+                             _export_dateiname(name_mapping, pf_sel_1, ad1, date_tag_pf,
+                                               endung=".pdf"),
+                             art="pdf")
     # Kontextbezogener Familien-Hinweis (immer unter dem Button).
     _render_familien_hinweis(name_mapping, pf_sel_1,
                              vergleich_aktiv=bool(show_compare_pf
@@ -1429,9 +1536,6 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
     st.markdown(f"**Quelle:** Infront & eigene Berechnungen, Stand: {auswertung_str}")
     st.markdown("**Ansprechpartner:** PBAM")
 
-    # Export: PDF und PowerPoint nebeneinander
-    # Pattern: Session-State Cache für Export-Daten, verhindert Re-Generierung bei jedem Rerun.
-    # Cache-Key enthält die aktuelle Auswahl - bei Änderungen wird alter Cache invalidiert.
     st.markdown("---")
 
 

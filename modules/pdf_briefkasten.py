@@ -45,8 +45,13 @@ LEBENSZEICHEN_MAX_ALTER_S = 180
 """Aelter als das -> Dienst gilt als nicht erreichbar. Der Dienst meldet sich
 jede Minute; drei Minuten lassen zwei verpasste Meldungen zu."""
 
-WARTEN_MAX_S = 120
-ABFRAGE_ALLE_S = 2.0
+WARTEN_MAX_S = 300
+"""Fuenf Minuten (Philip, 17.09.2026: Wartezeit ist fuer den Berater nicht
+kritisch). Gemessen sind 13-20 s; der grosse Puffer faengt einen PC ab, der
+gerade ein Update installiert oder einen Auftrag vor diesem abarbeitet —
+lieber spaet ein PDF als frueh eine Fehlermeldung."""
+
+ABFRAGE_ALLE_S = 3.0
 
 PPTX_TYP = ("application/vnd.openxmlformats-officedocument."
             "presentationml.presentation")
@@ -169,6 +174,17 @@ def lebenszeichen_alter(liste) -> float:
     return time.time() - max(zeiten)
 
 
+def neuer_auftrag() -> str:
+    """Auftragsname: UTC-Zeit + 8 Hex-Zeichen, z.B. 20260917-082256-00b0757a.
+
+    Der Dienst nimmt NUR Dateien an, die auf `$AuftragMuster` in
+    pdf_dienst.ps1 passen — wer das Format hier aendert, aendert es dort mit
+    (tests/test_pdf_briefkasten.py prueft beides gegeneinander).
+    """
+    return "%s-%s" % (datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"),
+                      _zufall.token_hex(4))
+
+
 def pdf_anfordern(cfg, pptx_bytes, warten_max_s=WARTEN_MAX_S,
                   abfrage_alle_s=ABFRAGE_ALLE_S, fortschritt=None) -> bytes:
     """Legt die PDF-Quelle in den Briefkasten und wartet auf das PDF.
@@ -196,8 +212,7 @@ def pdf_anfordern(cfg, pptx_bytes, warten_max_s=WARTEN_MAX_S,
             "%s). Bitte die PowerPoint herunterladen und in PowerPoint über "
             "„Speichern unter → PDF“ sichern." % seit)
 
-    auftrag = "%s-%s" % (datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"),
-                         _zufall.token_hex(4))
+    auftrag = neuer_auftrag()
     melde("Auftrag wird übermittelt …")
     eigener = hochladen(cfg, rid, auftrag + ".pptx", pptx_bytes, PPTX_TYP)
 

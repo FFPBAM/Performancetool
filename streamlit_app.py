@@ -427,6 +427,8 @@ if not check_login(): st.stop()
 # die Ansicht ueber session_state gesetzt statt sie zu bedienen, und der
 # Chart wurde deshalb nie zweimal MIT vorhandenem Zustand gerendert.
 _KEEPALIVE_SPERRE = {"pf_pptx_btn", "pf_pptx_dl", "p_zeit_reset",
+                     # PDF-Export der Broschuere (17.09.2026)
+                     "pf_pdf_btn", "pf_pdf_dl",
                      "sv_ue_chart", "sv_zeit_reset",
                      # Das Segment-Chart der Portfolioanalyse ist seit dem
                      # 24.08.2026 anklickbar und damit ebenfalls ein Widget.

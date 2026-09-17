@@ -8,8 +8,11 @@ Geprueft wird:
      die Kalenderfelder erscheinen nur auf Wunsch.
   1b. Der eigene Zeitraum am Balken-Chart erscheint und traegt das deutsche
      Datumsformat (der Kalender selbst ist englisch, siehe #60).
-  2. Der PDF-Weg ist weg — keine Schaltflaeche, keine Funktion, kein
-     reportlab/matplotlib in requirements.txt.
+  2. Der ALTE PDF-Weg (reportlab, Performance-Ansicht) ist weg — keine
+     Schaltflaeche dort, keine Funktion, kein reportlab/matplotlib in
+     requirements.txt. Seit 17.09.2026 gibt es wieder ein PDF, aber nur als
+     Broschuere aus der gebauten PowerPoint (Portfolioanalyse, PDF-Dienst,
+     tests/test_pdf_export.py) — nie selbst gezeichnet.
   3. Die Benchmark-Zusammensetzung steht genau EINMAL.
   4. Das Logo steht auf dem Anmeldebildschirm.
   5. Der Datenstand steht oben, nicht nur als Fussnote.
@@ -270,7 +273,12 @@ def pruefe_balken_zeitraum():
 
 
 def pruefe_kein_pdf():
-    print("\n2. PDF-Weg ist entfernt")
+    # Entscheidung 11.08.2026 ("nur PowerPoint") am 17.09.2026 bewusst
+    # geaendert: Die Broschuere gibt es zusaetzlich als PDF — erzeugt von
+    # echtem PowerPoint ueber den PDF-Dienst, geprueft in test_pdf_export.py.
+    # Was hier weiter verboten bleibt, ist der ALTE Weg: ein selbst
+    # gezeichnetes PDF (reportlab/matplotlib) in der Performance-Ansicht.
+    print("\n2. Der alte PDF-Weg (reportlab, Performance-Ansicht) bleibt entfernt")
     fehler = 0
     at = _app()
     at.run()
