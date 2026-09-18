@@ -2,7 +2,7 @@
 
 **Letzte Sitzung:** 18.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **Alle 35 Suiten grün** (Datenstand 16.09.2026), `pyflakes` bei null ·
+unerheblich) · **Alle 36 Suiten grün** (Datenstand 16.09.2026), `pyflakes` bei null ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
 „PDF erstellen" liefert ein echtes PDF über den Dienst, mit Rückfall auf die
 vorbereitete PowerPoint.** · Vorlagen repo-weit von personenbezogenen
@@ -41,6 +41,19 @@ Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
   diesem Stand an **+0,00002** — das Vorzeichen kippt noch, aber knapp. Wird
   sie bei einer späteren Lieferung rot, ist die Gegenprobe wertlos geworden,
   nicht der Code falsch.
+
+- **Titel der rollierenden Folie lief ins Foto** (gemeldet von Philip: Pro
+  Dividende F13, beide SCHWEIZ F11 — PowerPoint und PDF). Ursache: Der Master
+  der Thema-Vorlagen stellt Titel auf `wrap="none"`, der Name lief aus dem
+  Titelfeld (bis 13,29 cm) ins Bild (ab 13,36 cm); in PowerPoint gemessen bis
+  18,99 cm. **Alle übrigen Titel der fünf Thema-Broschüren liegen im Feld**
+  (ebenfalls gemessen). Umsetzung nach Entscheidung Philip: Umbruch nach
+  „Strategie", **nur wo nötig** — Namen bis 8 Zeichen bleiben einzeilig
+  (`ROLLIEREND_TITEL_EINZEILIG_MAX` in `pptx_slides.py`; „Offensiv" ist mit
+  13,27 cm der längste, der passt). Pro/Offensiv byte-gleich unverändert.
+  Neuer Prüfstein `tests/test_titel_umbruch.py` (36. Suite): jede
+  Thema-Strategie namentlich eingeordnet — eine neue schlägt an und muss
+  vorher in PowerPoint gemessen werden. Gegenprobe: alter Code → 9 Fehler.
 
 **Sitzung 17.09.2026 nachmittags — PDF-Dienst zurückgeholt (freundliche Fassung):**
 

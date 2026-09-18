@@ -2280,6 +2280,43 @@ def _fussnote_stand_setzen(slide, shape_name, stand_date_str):
     run.text = f"{basis.rstrip()} Stand: {stand_date_str}"
     return True
 
+
+# Titel der rollierenden Folie: ab welcher Namenslänge umgebrochen wird
+# (NEU 18.09.2026). Der Master der Thema-Vorlagen stellt Titel auf
+# wrap="none" — ein langer Name lief deshalb nach rechts aus dem Titelfeld
+# (endet 13,29 cm) ins Foto (beginnt 13,36 cm). In PowerPoint gemessen, wo
+# "Wertentwicklung der Strategie {Name}" endet:
+#     Pro 11,77 · Offensiv 13,27 · Pro Dividende 15,03 ·
+#     Schweiz aktienorientiert 18,24 · Schweiz substanzorientiert 18,99 cm
+# "Offensiv" (8 Zeichen) ist der längste Name, der noch passt. Längere Namen
+# brechen nach "Strategie" um (Entscheidung Philip: nur wo nötig, Pro und
+# Offensiv bleiben einzeilig). Die zweite Zeile hat Platz — der Titel war in
+# der Vorlage schon zweizeilig angelegt, die Tabelle beginnt darunter.
+ROLLIEREND_TITEL_EINZEILIG_MAX = 8
+
+
+def _titel_zweizeilig(shape, zeile1: str, zeile2: str):
+    """Setzt einen Titel als zwei Zeilen in EINEM Absatz (Zeilenumbruch
+    <a:br>, kein neuer Absatz — sonst käme der Absatzabstand dazu).
+
+    Die Formatierung des ersten Runs bleibt; verwaiste <a:br> der Vorlage
+    werden entfernt, sonst entstünde eine leere dritte Zeile.
+    """
+    replace_text_in_shape(shape, zeile1)
+    p = shape.text_frame.paragraphs[0]._p
+    for br in p.findall(qn("a:br")):
+        p.remove(br)
+    r1 = p.find(qn("a:r"))
+    br = p.makeelement(qn("a:br"), {})
+    rpr = r1.find(qn("a:rPr"))
+    if rpr is not None:
+        br.append(deepcopy(rpr))
+    r2 = deepcopy(r1)
+    r2.find(qn("a:t")).text = zeile2
+    r1.addnext(br)
+    br.addnext(r2)
+
+
 def fill_rollierend_slide(prs, slide_idx: int, strategy_name: str,
                           rollierend_data: Optional[dict] = None,
                           stand_date_str: Optional[str] = None):
@@ -2307,7 +2344,10 @@ def fill_rollierend_slide(prs, slide_idx: int, strategy_name: str,
     # Titel: "Wertentwicklung der Strategie {Name}" (Shape "Titel" ODER "Titel 2")
     title = find_shape_by_name(slide, "Titel") or find_shape_by_name(slide, "Titel 2")
     if title and title.has_text_frame:
-        replace_text_in_shape(title, f"Wertentwicklung der Strategie {strategy_name}")
+        if len(strategy_name) > ROLLIEREND_TITEL_EINZEILIG_MAX:
+            _titel_zweizeilig(title, "Wertentwicklung der Strategie", strategy_name)
+        else:
+            replace_text_in_shape(title, f"Wertentwicklung der Strategie {strategy_name}")
 
     # Kopf-Spaltentitel "Strategie {Name}" aktualisieren (Zeile 0, Spalte 4)
     tabelle = find_shape_by_name(slide, "Tabelle") or find_shape_by_name(slide, "Tabelle 2")
