@@ -21,7 +21,8 @@ Autor-Metadaten bereinigt.
 > Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
 > Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
 
-**Diese Sitzung (18.09.2026) — Sollwerte auf den Datenstand 16.09.2026 nachgezogen:**
+**Diese Sitzung (18.09.2026) — Sollwerte auf den Datenstand 16.09.2026 nachgezogen,
+Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
 
 - **Anlass:** Philip hat `Daten/` und `Daten_PF/` über die Web-Oberfläche
   ausgetauscht (nur noch Stand 260916, je 19 Dateien, keine Strategie
@@ -132,8 +133,8 @@ Autor-Metadaten bereinigt.
    Streamlit Cloud neu anbinden.
 3. *Nur gemeldet (Vorlagentext, Entscheidung Philip):* ESG-Inhaltsverzeichnis
    „Rechtliche Hinweise 36", comdirect „Honorar 14".
-4. *Umgestellt, wartet auf die Probe im Firmennetz:* Download-Baustein von
-   `st.components.v1.html` auf `st.iframe` (siehe „Offene Punkte").
+4. *(erledigt 18.09.2026)* Download-Baustein von `st.components.v1.html` auf
+   `st.iframe` umgestellt, im Firmennetz bestätigt (siehe „Offene Punkte").
 
 ---
 
@@ -3318,8 +3319,10 @@ dieselbe Frontend-Komponente, dieselbe Sandbox mit `allow-downloads`. Einziger
 Unterschied: `st.iframe` erzwingt `scrolling=True`; ein `overflow: hidden` im
 HTML stellt das alte Verhalten her. Prüfstein `tests/test_streamlit_api.py`
 (Verbot der alten Aufrufe + Schritt 2 für das Element, mit Gegenprobe).
-**Offen:** einmal aus dem Firmennetz eine Broschüre herunterladen
-(PowerPoint und PDF) — nur dort ist das Gateway (#25) im Spiel.
+**Bestätigt 18.09.2026 (Philip):** Download aus dem Firmennetz klappt,
+PowerPoint und PDF. Lokal war die heruntergeladene Datei bytegleich mit der
+Quelle. Ein künftiger Streamlit-Versionssprung hängt damit nicht mehr an
+diesem Baustein.
 
 *(Erledigt 17.09.2026:)* PDF-Fassung als vorbereitete PowerPoint (zwei
 Buttons `pf_pdf_btn`/`pf_pdf_dl`), `test_bedienung.pruefe_kein_pdf` angepasst.

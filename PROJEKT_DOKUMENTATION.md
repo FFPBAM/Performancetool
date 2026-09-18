@@ -1089,13 +1089,14 @@ document.getElementById("dl").addEventListener("click", function() {{
   setTimeout(()=>URL.revokeObjectURL(url), 2000);
 }});
 </script>'''
-import streamlit.components.v1 as components
-components.html(html, height=90)
+# Seit 18.09.2026 st.iframe (components.v1.html ist abgekündigt, siehe Punkt 3):
+st.iframe(html, height=90)
 ```
 
 **Zwei kritische Details, ohne die es nicht läuft:**
 1. **`st.components.v1.html`, NICHT `st.markdown`.** `st.markdown(unsafe_allow_html=True)` entfernt `<script>`-Tags → das JS läuft nie. Die HTML-Komponente führt Skripte in ihrem iframe aus.
 2. **Der Komponenten-iframe muss Downloads erlauben.** Streamlit setzt `sandbox="… allow-downloads"` (im Frontend-Code `IFrameUtil.ts` verifiziert) → der Blob-Download aus dem iframe ist erlaubt. Der Klick liefert die nötige User-Geste.
+3. **NACHTRAG 18.09.2026 — `st.iframe` statt `st.components.v1.html`.** Die alte Funktion ist abgekündigt („will be removed after 2026-06-01"). Unter Streamlit 1.61 gemessen: beide erzeugen **dasselbe** Element (IFrameProto mit `srcdoc`, gleiches Layout, dieselbe Frontend-Komponente, dieselbe Sandbox). Einziger Unterschied: `st.iframe` erzwingt `scrolling=True` → `<style>html, body { overflow: hidden; }</style>` im HTML stellt das alte Verhalten her. **Feste Höhe behalten** — `height="content"` schleust ein Mess-Skript in den `srcdoc` ein. Bestätigt lokal (Datei bytegleich) und im Firmennetz (PowerPoint und PDF). Prüfstein `tests/test_streamlit_api.py`.
 
 **Grenzen / Trade-offs:**
 - **Größe:** ~4 MB PPTX → ~5,5 MB Base64 in der Seite, das bei jedem Rerun der Komponente mitgeht (Streamlit `maxMessageSize` default 200 MB → unkritisch für gelegentliche Downloads, aber kein Muster für sehr große oder häufige Dateien).
@@ -4647,8 +4648,9 @@ dort): Die PPTX-Bytes werden als Base64 in die Seite eingebettet, ein Button
 baut die Datei im Browser lokal zusammen (`Blob` + `<a download>`) und
 speichert sie — **ohne Netzwerk-Request**, den das Gateway scannen könnte.
 Umgesetzt in `modules/download_helfer.py` → `download_bereich()` über
-`st.components.v1.html` (dessen iframe erlaubt Downloads). Im Deploy bestätigt
-funktionsfähig.
+`st.iframe` (bis 17.09.2026 `st.components.v1.html`; dessen iframe erlaubt
+Downloads). Im Deploy bestätigt funktionsfähig, nach der Umstellung erneut
+(18.09.2026).
 
 Verworfene Sackgassen (alle waren Server-Abrufe → Scan hängt): klassischer
 `st.download_button`, neuer Tab auf die interne Media-URL `/media/…` (bootet
