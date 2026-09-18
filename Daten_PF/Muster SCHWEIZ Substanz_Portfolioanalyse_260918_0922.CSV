@@ -1,0 +1,25 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+17.09.2026;Alphabet Inc. A;A14Y6F;2,122%;USD;0,267%;13,718%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster SCHWEIZ Substanz
+17.09.2026;ASML Holding N.V.;A1J4U4;2,702%;EUR;2,165%;54,292%;-;0%;-;-;Elektro;Europa ohne Deutschland;Aktien;5;Muster SCHWEIZ Substanz
+17.09.2026;Berkshire Hathaway Inc. B;A0YJQ2;3,043%;USD;0,107%;3,680%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Muster SCHWEIZ Substanz
+17.09.2026;DAX Discountzert. 22.650 Pkt. 28.12.26 (DZ);DY4XYM;6,011%;EUR;0,220%;3,665%;-;0%;-;-;Index;Europa;Aktien;3;Muster SCHWEIZ Substanz
+17.09.2026;Develop. Markets Divid. Leaders ETF (VanEck);A2JAHJ;3,066%;EUR;0,201%;6,883%;-;0%;-;-;Index;Global;Aktien;4;Muster SCHWEIZ Substanz
+17.09.2026;Dt. Bahn IHS 1,625 % 16.08.33;A2G8U8;3,830%;EUR;-0,081%;-2,093%;16.08.2033;1,6250%;6,5689;3,9099%;Corporates;Deutschland;Renten;3;Muster SCHWEIZ Substanz
+17.09.2026;E.ON SE;ENAG99;2,356%;EUR;0,309%;13,553%;-;0%;-;-;Versorger;Deutschland;Aktien;5;Muster SCHWEIZ Substanz
+17.09.2026;EDF IHS 5,625 % 21.02.33;755460;3,463%;EUR;-0,031%;-1,021%;21.02.2033;5,6250%;5,4989;4,2449%;Corporates;Europa ohne Deutschland;Renten;3;Muster SCHWEIZ Substanz
+17.09.2026;Equal-weight Commodity exAgricu. ETF (Amundi);LYX0Z2;5,330%;EUR;1,605%;41,418%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Global;Edelmetalle;4;Muster SCHWEIZ Substanz
+17.09.2026;EUR Ultrashort Bond ETF (iShares);A3DJQJ;5,420%;EUR;0,087%;1,605%;-;0%;-;-;Index;Europa;Renten;2;Muster SCHWEIZ Substanz
+17.09.2026;EuroStoxx50 Discountzert. 5.200 Pkt. 28.12.26;DY9KHZ;6,038%;EUR;0,236%;3,939%;-;0%;-;-;Index;Europa;Aktien;3;Muster SCHWEIZ Substanz
+17.09.2026;Flossbach v. Storch Bond Opportunities R;A0RCKL;2,846%;EUR;-0,081%;-3,765%;-;0%;-;-;Rentenfonds;Global;Renten;2;Muster SCHWEIZ Substanz
+17.09.2026;Fresenius IHS 0,875 % 01.10.31;A3KN0R;4,475%;EUR;-0,080%;-1,795%;01.10.2031;0,8750%;4,8987;4,1184%;Corporates;Deutschland;Renten;3;Muster SCHWEIZ Substanz
+17.09.2026;Holcim Ltd.;869898;2,622%;CHF;-0,350%;-11,698%;-;0%;-;-;Bau,Baustoffe;Europa ohne Deutschland;Aktien;5;Muster SCHWEIZ Substanz
+17.09.2026;iBonds Dec 2031 EUR Corp. ETF (iShares);A40MD5;2,735%;EUR;-0,033%;-1,261%;-;0%;-;-;Index;Europa;Renten;3;Muster SCHWEIZ Substanz
+17.09.2026;Microsoft Corp.;870747;2,710%;USD;0,136%;5,822%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Muster SCHWEIZ Substanz
+17.09.2026;MSCI World Value ETF (Xtrackers);A1103E;3,683%;USD;0,782%;26,296%;-;0%;-;-;Index;Global;Aktien;4;Muster SCHWEIZ Substanz
+17.09.2026;Physical Gold ETC (Invesco);A1AA5X;13,928%;EUR;0,226%;1,398%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;4;Muster SCHWEIZ Substanz
+17.09.2026;Physical Silber ETC (Xtrackers);A1E0HS;1,615%;EUR;-0,277%;-14,772%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Global;Edelmetalle;5;Muster SCHWEIZ Substanz
+17.09.2026;Roche Holding PS AG;A424UK;3,143%;CHF;0,377%;13,326%;-;0%;-;-;Chemie,Pharma;Europa ohne Deutschland;Aktien;5;Muster SCHWEIZ Substanz
+17.09.2026;UBAM - Global High Yield Solution I;A2P55C;4,053%;CHF;-0,098%;-2,434%;-;0%;-;-;Rentenfonds;Global;Renten;3;Muster SCHWEIZ Substanz
+17.09.2026;VW Leasing Green Bond IHS 4,625 % 25.03.29;A3514U;3,079%;EUR;0,001%;-0,007%;25.03.2029;4,6250%;2,3882;4,0349%;Corporates;Deutschland;Renten;3;Muster SCHWEIZ Substanz
+17.09.2026;Walmart Inc.;860853;1,808%;USD;-0,013%;-1,295%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Muster SCHWEIZ Substanz
+;;;;;;;;;;;;;;;
