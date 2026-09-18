@@ -132,8 +132,8 @@ Autor-Metadaten bereinigt.
    Streamlit Cloud neu anbinden.
 3. *Nur gemeldet (Vorlagentext, Entscheidung Philip):* ESG-Inhaltsverzeichnis
    „Rechtliche Hinweise 36", comdirect „Honorar 14".
-4. *Vor einem Streamlit-Versionssprung:* `st.components.v1.html` im
-   Download-Baustein auf `st.iframe` umstellen (siehe „Offene Punkte").
+4. *Umgestellt, wartet auf die Probe im Firmennetz:* Download-Baustein von
+   `st.components.v1.html` auf `st.iframe` (siehe „Offene Punkte").
 
 ---
 
@@ -3310,9 +3310,16 @@ dem ISB/DSB vorgelegt — hier bewusst nicht ausbuchstabiert.
 
 **NEU 17.09.2026 — `st.components.v1.html` ist abgekündigt.** Streamlit
 meldet beim Download-Baustein „will be removed after 2026-06-01, replace with
-`st.iframe`". Mit fest eingestelltem `streamlit==1.61.0` folgenlos; **vor
-jedem Streamlit-Versionssprung** auf `st.iframe` umstellen und den
-clientseitigen Download (Gateway, #25) erneut prüfen.
+`st.iframe`". Mit fest eingestelltem `streamlit==1.61.0` folgenlos.
+**Umgestellt am 18.09.2026** (noch unter 1.61, damit der Wechsel die einzige
+Änderung ist): Beide Aufrufe erzeugen gemessen dasselbe Element — gleicher
+`srcdoc` (5,47 Mio. Zeichen bei einer 4-MB-Broschüre), gleiches Layout,
+dieselbe Frontend-Komponente, dieselbe Sandbox mit `allow-downloads`. Einziger
+Unterschied: `st.iframe` erzwingt `scrolling=True`; ein `overflow: hidden` im
+HTML stellt das alte Verhalten her. Prüfstein `tests/test_streamlit_api.py`
+(Verbot der alten Aufrufe + Schritt 2 für das Element, mit Gegenprobe).
+**Offen:** einmal aus dem Firmennetz eine Broschüre herunterladen
+(PowerPoint und PDF) — nur dort ist das Gateway (#25) im Spiel.
 
 *(Erledigt 17.09.2026:)* PDF-Fassung als vorbereitete PowerPoint (zwei
 Buttons `pf_pdf_btn`/`pf_pdf_dl`), `test_bedienung.pruefe_kein_pdf` angepasst.

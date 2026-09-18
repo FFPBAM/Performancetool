@@ -17,9 +17,19 @@ LÖSUNG — CLIENTSEITIGER DOWNLOAD (kein Netzwerk-Request):
     das Gateway hat nichts zu scannen → der Download startet sofort, im
     selben Fenster, ganz normal.
 
-    Umgesetzt über st.components.v1.html: Dessen iframe erlaubt Downloads
-    (Streamlit setzt sandbox="… allow-downloads"; im Frontend-Code
+    Umgesetzt über st.iframe mit einem HTML-String: Dessen iframe erlaubt
+    Downloads (Streamlit setzt sandbox="… allow-downloads"; im Frontend-Code
     verifiziert). st.markdown scheidet aus, weil es <script> entfernt.
+
+    UMGESTELLT 18.09.2026 von `st.components.v1.html` auf `st.iframe`
+    (abgekündigt, "will be removed after 2026-06-01"). Unter Streamlit 1.61
+    gemessen: beide erzeugen DASSELBE Element (IFrameProto, gleicher srcdoc,
+    gleiches Layout, dieselbe Frontend-Komponente, dieselbe Sandbox). Einziger
+    Unterschied: st.iframe setzt immer scrolling=True, die alte Fassung
+    scrolling=False. Das `overflow:hidden` im HTML stellt das alte Verhalten
+    wieder her — sonst erschiene ein Scrollbalken, sobald der Inhalt die
+    90 px knapp überschreitet (etwa wenn die Meldung auf dem Smartphone
+    umbricht). Prüfstein: tests/test_streamlit_api.py.
 
     Die Base64-Daten reisen nur als Teil der normalen App-Antwort mit (kein
     "Datei-Download" im Sinne der Gateway-Regel) — der eigentliche
@@ -66,6 +76,7 @@ def _download_komponente_html(daten: bytes, dateiname: str,
     name_js = json.dumps(dateiname)
     mime_js = json.dumps(mime)
     return f"""
+<style>html, body {{ overflow: hidden; }}</style>
 <div style="font-family:'Segoe UI',Tahoma,sans-serif;">
   <button id="dlbtn" style="
       width:100%;box-sizing:border-box;padding:0.6rem 1rem;cursor:pointer;
@@ -116,14 +127,15 @@ def download_bereich(daten: bytes, dateiname: str, art: str = "pptx") -> None:
     Key des Fallback-Buttons.
     """
     import streamlit as st
-    import streamlit.components.v1 as components
 
     if art not in DOWNLOAD_ARTEN:
         raise ValueError(f"Unbekannte Download-Art: {art!r}")
     mime, _beschriftung = DOWNLOAD_ARTEN[art]
 
-    # Clientseitiger Download-Button (im Komponenten-iframe, downloads erlaubt).
-    components.html(_download_komponente_html(daten, dateiname, art), height=90)
+    # Clientseitiger Download-Button (im iframe, downloads erlaubt). Feste
+    # Höhe 90 wie bisher — "content" würde ein Mess-Skript einschleusen und
+    # das Verhalten ändern.
+    st.iframe(_download_komponente_html(daten, dateiname, art), height=90)
 
     # Fallback bleibt IMMER erreichbar. Zwei Zweige mit FESTEM Key statt
     # key=f"pf_{art}_dl": tests/test_keepalive.py verbietet berechnete Keys an
