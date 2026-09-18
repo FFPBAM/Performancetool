@@ -90,7 +90,7 @@ from modules.analytics import (  # noqa: E402
 
 TOLERANZ = 1e-12
 
-# Die fuenf Strategien, deren Historie am 24.08.2026 kuerzer als drei Jahre
+# Die vier Strategien, deren Historie am 16.09.2026 kuerzer als drei Jahre
 # war — mit ihrer gemessenen Laenge. NAMENTLICH und nicht als Zahl: Wer eine
 # Strategie ergaenzt oder eine Historie nachliefert, soll hier anschlagen und
 # bewusst entscheiden, statt dass sich eine Zahl still verschiebt.
@@ -100,18 +100,20 @@ TOLERANZ = 1e-12
 # Die Historien werden mit jeder Datenlieferung laenger — dass diese Zahlen
 # wandern, ist kein Fehler, sondern der Zweck des Ankers.
 #
-# ACHTUNG, DIESER ANKER LAEUFT AB: `Pro` beginnt am 01.09.2023 und erreicht
-# damit am 01.09.2026 die vollen drei Jahre. Ab der ersten Datenlieferung
-# danach faellt es aus dieser Liste, und Pruefung (a) meldet zu Recht eine
-# Abweichung — dann ist der Eintrag zu ENTFERNEN, nicht die Zahl zu erhoehen.
-# Die uebrigen vier halten laenger: Comdirect_* bis 12.03.2027,
-# Pro Dividende bis 22.10.2027.
+# NACHGEZOGEN am 18.09.2026 auf den Datenstand 260916 — und dabei ist der
+# angekuendigte Ablauf eingetreten: `Pro` (Beginn 01.09.2023) hat jetzt 3,04
+# Jahre, steht also im '3 Jahre'-Vergleich und ist aus der Liste ENTFERNT.
+# Vorher (Stand 260824): Pro 2.98, Pro Dividende 1.84, Comdirect_* je 2.45.
+#
+# DIESER ANKER LAEUFT WEITER AB: Comdirect_* erreicht drei Jahre am
+# 12.03.2027, Pro Dividende am 22.10.2027. Ab der ersten Datenlieferung
+# danach meldet Pruefung (a) zu Recht eine Abweichung — dann ist der Eintrag
+# zu ENTFERNEN, nicht die Zahl zu erhoehen.
 KURZ_UNTER_3J = {
-    "Pro":            2.98,
-    "Pro Dividende":  1.84,
-    "Comdirect_30":   2.45,
-    "Comdirect_70":   2.45,
-    "Comdirect_100":  2.45,
+    "Pro Dividende":  1.90,
+    "Comdirect_30":   2.51,
+    "Comdirect_70":   2.51,
+    "Comdirect_100":  2.51,
 }
 
 
@@ -570,7 +572,7 @@ def schritt5_apptest():
             print("    FEHLER — die Ueberschrift der Ansicht fehlt")
             f += 1
         # Und der Hinweis auf die ausgelassenen Strategien muss dastehen:
-        # bei der Vorbelegung "3 Jahre" sind es fuenf.
+        # bei der Vorbelegung "3 Jahre" sind es vier (Stand 260916).
         elif not any("Nicht gezeigt" in c.value for c in at.caption):
             print("    FEHLER — der Hinweis auf ausgelassene Strategien fehlt")
             f += 1

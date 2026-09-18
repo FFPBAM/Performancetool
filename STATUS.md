@@ -1,8 +1,8 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 17.09.2026 (nachm.) · **Branch:** `verbesserungen` ·
+**Letzte Sitzung:** 18.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **Alle 34 Suiten grün**, `pyflakes` bei null ·
+unerheblich) · **Alle 35 Suiten grün** (Datenstand 16.09.2026), `pyflakes` bei null ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
 „PDF erstellen" liefert ein echtes PDF über den Dienst, mit Rückfall auf die
 vorbereitete PowerPoint.** · Vorlagen repo-weit von personenbezogenen
@@ -21,7 +21,27 @@ Autor-Metadaten bereinigt.
 > Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
 > Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
 
-**Diese Sitzung (17.09.2026 nachmittags) — PDF-Dienst zurückgeholt (freundliche Fassung):**
+**Diese Sitzung (18.09.2026) — Sollwerte auf den Datenstand 16.09.2026 nachgezogen:**
+
+- **Anlass:** Philip hat `Daten/` und `Daten_PF/` über die Web-Oberfläche
+  ausgetauscht (nur noch Stand 260916, je 19 Dateien, keine Strategie
+  weggefallen; je ein Platzhalter `test.md` bleibt liegen, stört nicht — die
+  App liest nur `*.CSV`). Code unverändert.
+- **Danach 33 von 35 Suiten grün.** Rot waren `test_bestandsanalytik.py` (25)
+  und `test_strategievergleich.py` (6) — beides **namentliche Datenanker**,
+  die genau dafür da sind. **Gegenprobe:** am Stand vor dem Upload sind beide
+  grün, der Unterschied liegt also allein in den Daten.
+- **Nachgezogen**, alte Werte jeweils im Kommentar festgehalten. Fachlich
+  sichtbar: **`Pro` hat jetzt 3,04 Jahre Historie und steht im
+  „3 Jahre"-Strategievergleich** — der im Test angekündigte Ablauf; der
+  Eintrag ist entfernt, nicht erhöht. Nächste Abläufe: Comdirect_* am
+  12.03.2027, Pro Dividende am 22.10.2027.
+- **Merke:** Die Gegenprobe zu #64 (Doppelsegment flach aggregiert) hängt auf
+  diesem Stand an **+0,00002** — das Vorzeichen kippt noch, aber knapp. Wird
+  sie bei einer späteren Lieferung rot, ist die Gegenprobe wertlos geworden,
+  nicht der Code falsch.
+
+**Sitzung 17.09.2026 nachmittags — PDF-Dienst zurückgeholt (freundliche Fassung):**
 
 - **Entscheidung Philip:** Der automatische PDF-Weg soll doch bestehen (auch
   vom Smartphone nutzbar), das Restrisiko wird bewusst getragen. Der frühere
