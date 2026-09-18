@@ -2142,8 +2142,15 @@ cd C:\Entwicklung\Performancetool
 git push origin verbesserungen
 cd <DRACOON-Ablage>
 git log --oneline origin/verbesserungen..HEAD    # muss LEER sein
-git fetch origin && git reset --hard origin/verbesserungen
+git fetch origin && git merge --ff-only origin/verbesserungen
 ```
+
+**Seit 18.09.2026 `merge --ff-only` statt `reset --hard`.** Das Ergebnis ist
+dasselbe, solange die Ablage nur zurückliegt; statt still zu überschreiben
+bricht `--ff-only` ab, wenn dort doch etwas geändert wurde. (Der Auto-Modus
+von Claude Code blockt `reset --hard` als unumkehrbar.) Die unversionierten
+Ordner dort (`Sicherheit_PDF-Dienst/`, Prüf- und Vergleichsordner,
+Broschüren) fasst keiner der beiden Befehle an.
 
 **`<DRACOON-Ablage>` ist rechnerabhängig — der Buchstabe `H:` gilt nicht
 überall.** Der DRACOON-Client bindet dieselbe Ablage unterschiedlich ein:

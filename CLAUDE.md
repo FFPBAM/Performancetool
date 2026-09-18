@@ -198,6 +198,19 @@ prüfte statt gegen eine Schwelle (#47).
   passt, wird gekürzt statt umgebrochen (`wrap="none"` behebt es). *Ein
   geöffnetes Dokument ist kein Beweis. Ein Bild ist einer.* Der Export geht
   per COM: `$pres.Slides.Item(N).Export(<pfad>.png, "PNG", 1920, 1225)`.
+- **Textbreiten misst PowerPoint selbst — nicht schätzen** (18.09.2026). Ob
+  ein Titel in sein Feld passt, liefert COM exakt:
+  `TextFrame2.TextRange.BoundLeft + BoundWidth` (Punkt, /72·2,54 = cm) und
+  `.Lines().Count`. So wurde der Titel der rollierenden Thema-Folie
+  vermessen (Master: `wrap="none"`, lief bis 18,99 cm ins Foto) — über
+  **alle** Titel aller Thema-Broschüren, nicht nur den gemeldeten.
+  PowerShell-Falle dabei: Variablen sind case-insensitiv, `$S` (Pfad) und
+  `$s` (Folie) sind DIESELBE Variable.
+- **Seitenzahlen im Inhaltsverzeichnis sind eingetippt** (18.09.2026). Nichts
+  rechnet sie nach; der PDF-Weg zieht nur die Vertriebsfolie ab. Eine falsche
+  Zahl in der Vorlage ist also in PowerPoint UND PDF falsch.
+  `tests/test_inhaltsverzeichnis.py` hält jeden Eintrag namentlich an seiner
+  Zielfolie fest — wer Folien einfügt oder entfernt, sieht es dort.
 - **Zähle nicht die Verstöße, miss ihre SCHWERE** (26.08.2026). Der Prüfstein
   deckelte die *Anzahl* falsch stehender Führungslinien je Familie. Diese Zahl
   taugte nicht: Der beanstandete Zustand hatte 17 Kreuzungen, der abgenommene
