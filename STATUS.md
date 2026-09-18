@@ -2,7 +2,7 @@
 
 **Letzte Sitzung:** 18.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **Alle 36 Suiten grün** (Datenstand 16.09.2026), `pyflakes` bei null ·
+unerheblich) · **Alle 37 Suiten grün** (Datenstand 16.09.2026), `pyflakes` bei null ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
 „PDF erstellen" liefert ein echtes PDF über den Dienst, mit Rückfall auf die
 vorbereitete PowerPoint.** · Vorlagen repo-weit von personenbezogenen
@@ -54,6 +54,19 @@ Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
   Neuer Prüfstein `tests/test_titel_umbruch.py` (36. Suite): jede
   Thema-Strategie namentlich eingeordnet — eine neue schlägt an und muss
   vorher in PowerPoint gemessen werden. Gegenprobe: alter Code → 9 Fehler.
+
+- **Inhaltsverzeichnisse:** alle Einträge aller Vorlagen nachgeschlagen
+  (cVV, ESG, ETF, comdirect). Falsch waren drei, korrigiert direkt in der
+  Vorlage nach Entscheidung Philip: ESG „Rechtliche Hinweise und Impressum"
+  36 → **37** (Trennfolie, wie die übrigen ESG-/ETF-Einträge), comdirect
+  „Honorar" 14 → **12** (Abschnittsbeginn, wie cVV) und — bisher unbekannt —
+  comdirect „Rechtliche Hinweise und Impressum" 25 → **26** (25 war
+  „Risikohinweise"). Im ZIP nur `ppt/slides/slide2.xml` geändert, in echtem
+  PowerPoint geöffnet. Die Vorlage hat so viele Folien wie die Broschüre, ihre
+  Nummer ist also die Nummer im Ergebnis; der PDF-Weg zieht nur die
+  Vertriebsfolie ab. Neuer Prüfstein `tests/test_inhaltsverzeichnis.py`
+  (37. Suite): jeder Eintrag namentlich auf seiner Zielfolie, Gegenprobe gegen
+  die alten Vorlagen → genau die drei Fehler.
 
 **Sitzung 17.09.2026 nachmittags — PDF-Dienst zurückgeholt (freundliche Fassung):**
 
@@ -144,8 +157,8 @@ Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
    ausgelieferte Broschüren.
 2. *Empfohlen, aber Entscheidung Philip:* Repo auf **privat** stellen und
    Streamlit Cloud neu anbinden.
-3. *Nur gemeldet (Vorlagentext, Entscheidung Philip):* ESG-Inhaltsverzeichnis
-   „Rechtliche Hinweise 36", comdirect „Honorar 14".
+3. *(erledigt 18.09.2026)* Inhaltsverzeichnisse ESG und comdirect korrigiert
+   (siehe Sitzungsabschnitt).
 4. *(erledigt 18.09.2026)* Download-Baustein von `st.components.v1.html` auf
    `st.iframe` umgestellt, im Firmennetz bestätigt (siehe „Offene Punkte").
 
@@ -3340,10 +3353,11 @@ diesem Baustein.
 *(Erledigt 17.09.2026:)* PDF-Fassung als vorbereitete PowerPoint (zwei
 Buttons `pf_pdf_btn`/`pf_pdf_dl`), `test_bedienung.pruefe_kein_pdf` angepasst.
 
-*Nur gemeldet:* ESG-Inhaltsverzeichnis „Rechtliche Hinweise 36" zeigt auf die
-Trennfolie „Unser Reporting" (und F34/35 stehen vor den Trennfolien);
-comdirect „Honorar 14" statt Abschnittsbeginn F12. Beides Vorlagentext —
-Entscheidung bei Philip.
+*(Erledigt 18.09.2026:)* Inhaltsverzeichnisse ESG (36 → 37) und comdirect
+(Honorar 14 → 12, Impressum 25 → 26) in der Vorlage korrigiert; Prüfstein
+`tests/test_inhaltsverzeichnis.py`. *Weiter offen, nur gemeldet:* ESG führt
+„Rechtliche Hinweise und Impressum" doppelt (F35 und F38), die Trennfolie
+„Unser Reporting" (F36) hat keinen Eintrag — Folienaufbau, Entscheidung Philip.
 
 **NEU 26.08.2026 — die Reihenfolge der Beschriftungs-Elemente ist verletzt,
 aber folgenlos.** In jeder gebauten Broschüre stehen die `<c:dLbl>` der Ringe
