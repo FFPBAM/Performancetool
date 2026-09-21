@@ -6,10 +6,12 @@ befuellten Folien passten, die STATISCHEN wichen ab — gemessen am Folientext
 und am PowerPoint-Bild:
 
     alle          "Unsere Bank in Zahlen" noch mit den Zahlen 31.12.2024
+                  (comdirect ebenso, Nachtrag am selben Tag)
     Pro, Pro Div. "Steuerlicher Hinweis zum Honorar" fehlte
     Offensiv      eigenes Cover, eigene Leitlinien, eigene Honorar-Folie,
                   KEINE Folie "Gute Jahre ueberwiegen" (20 statt 22 Folien)
     Pro Div.      Honorar-Tabelle zeigte "Strategie Pro"
+    Offensiv      dito — dort auch im Original, auf Zuruf korrigiert
 
 Die Folien wurden 1:1 aus den Originalen in die Vorlagen uebernommen. Beide
 SCHWEIZ-Strategien nutzen die Pro-Vorlage und bekommen die Aenderungen mit.
@@ -103,6 +105,15 @@ KERNWERTE = {
         ("Unsere Bank in Zahlen", "7.358 Mio. EUR"),
         ("Basis unserer Investmententscheidungen", "Aktienrückkäufe"),
         ("Unser Honorar", "Halbjährliche Abrechnung"),
+        # Das Original traegt hier "Strategie Pro" — auf Zuruf Philip
+        # korrigiert (21.09.2026), weicht also bewusst vom Original ab.
+        ("Unser Honorar", "Strategie Offensiv"),
+    ],
+    # Nachtrag 21.09.2026: comdirect F21 trug noch Dezember 2024; die Folie
+    # ist jetzt die (layoutgleiche) aktuelle Bank-Folie der cVV-Vorlage.
+    "Vorlage_comdirect.pptx": [
+        ("Unsere Bank in Zahlen", "Dezember 2025"),
+        ("Unsere Bank in Zahlen", "7.358 Mio. EUR"),
     ],
 }
 
@@ -226,11 +237,13 @@ def main():
         if not abw:
             print(f"   OK — {vorlage}: {len(werte)} Kernwerte gefunden")
     pro = laden("Vorlage_Thema.pptx")
-    if pruefe_kernwerte(pro, [("Unser Honorar", "Strategie Pro Dividende")]):
-        print("   OK — Pro traegt in der Honorar-Tabelle nicht 'Pro Dividende'")
-    else:
-        print("   FEHLER — Pro-Vorlage zeigt 'Strategie Pro Dividende'")
-        f += 1
+    for vorlage, fremd in (("Vorlage_Thema.pptx", "Strategie Pro Dividende"),
+                           ("Vorlage_Thema.pptx", "Strategie Offensiv")):
+        if pruefe_kernwerte(laden(vorlage), [("Unser Honorar", fremd)]):
+            print(f"   OK — {vorlage} traegt in der Honorar-Tabelle nicht {fremd!r}")
+        else:
+            print(f"   FEHLER — {vorlage} zeigt {fremd!r}")
+            f += 1
 
     print("Schritt 3 — Offensiv hat sein eigenes Cover")
     if _cover_bilder(laden("Vorlage_Thema_Offensiv.pptx")) & _cover_bilder(pro):
@@ -240,7 +253,7 @@ def main():
         print("   OK — keine gemeinsamen Titelbilder mit Pro")
 
     print("Schritt 4 — Metadaten ohne Personennamen")
-    for vorlage in FOLGE:
+    for vorlage in sorted(set(FOLGE) | set(KERNWERTE)):
         funde = autor_funde(os.path.join(WURZEL, "Vorlage", vorlage))
         for x in funde:
             print(f"   FEHLER — {x}")
