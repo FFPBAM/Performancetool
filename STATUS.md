@@ -41,6 +41,13 @@ Autor-Metadaten bereinigt.
   „letzter Tick im letzten Datenmonat". **Gegenprobe am Artefakt:** mit dem
   alten Code meldet Schritt 3 genau CVV F19, alle übrigen 19 Achsen
   unverändert.
+- **Abgenommen von Philip** („F19 sieht super aus"), gepusht (`6918081`),
+  38/38 Suiten grün, `pyflakes` null. Vergleichsordner auf H: gelöscht.
+- **Ebenfalls heute:** Übersicht §0 der `PROJEKT_DOKUMENTATION.md` bis
+  21.09. nachgezogen, Changelog-Lücken (21.–26.08., 18./21.09.) geschlossen.
+  **Entscheidung Philip:** Sein Vorname bleibt in Doku, Code und Tests
+  stehen, nicht ersetzen. (Treffer „Philip Morris" in `Daten_PF/` sind eine
+  Aktie, keine Personendaten.)
 
 **Sitzung 21.09.2026 — statische Themen-Folien an die Original-Broschüren angeglichen:**
 

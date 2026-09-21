@@ -74,6 +74,14 @@ prüfte statt gegen eine Schwelle (#47).
   Quellstand („Quelle: Eigene Berechnung, Stand …“) muss dagegen **fester
   Text** sein, sonst zeigte er das Öffnungsdatum; die Befüllung ersetzt das
   Feld dort und muss deshalb vor `update_stand_datum` laufen.
+- **Datumsachsen: der Anker ist eine Entscheidung je Folie** (21.09.2026).
+  `achsen_raster` wählt standardmäßig den Anker mit dem kleinsten Vorlauf
+  (`anker="auto"`). Bei einer Reihe ab Januar gewinnt der Januar, und die
+  letzte Beschriftung liegt dann bis zu elf Monate vor dem Datenende. Die
+  cVV-Vergleichsfolie F19 nutzt deshalb `anker="ende"` (letzter Datenmonat,
+  gewählt in echtem PowerPoint). Wer eine weitere Folie umstellen will,
+  übergibt ihren Chart als `anker_am_ende` und nimmt sie in Schritt 3 von
+  `tests/test_chartachsen.py` auf.
 - **Keine Piktogramme in der Oberfläche** (10.08.2026). Überschriften,
   Hinweise, Schaltflächen und Disclaimer tragen keine Emoji — die Ergebnisse
   gehen ins Kundengespräch einer Privatbank. In Kommentaren und Doku sind sie
