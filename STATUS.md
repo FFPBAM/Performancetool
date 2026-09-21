@@ -3379,6 +3379,15 @@ abgebrochen). Ein Grund mehr für die Arbeitskopie auf C:.
 
 Vollständige Liste in `PROJEKT_DOKUMENTATION.md` §15. Das Wichtigste:
 
+**Jährlich, nächstes Mal ab Frühjahr 2027 — „Unsere Bank in Zahlen“:** Die
+Folie ist statisch in den Vorlagen, kein Code rechnet sie. Nach dem
+Jahresabschluss die neuen Zahlen in **alle** Vorlagen ziehen (Thema ×3, cVV
+F29, comdirect F21, FFPB F20), am besten 1:1 aus einer aktuellen
+Original-Broschüre des Hauses übernehmen. Danach den Prüfstein
+`tests/test_thema_statische_folien.py` (KERNWERTE) nachziehen. Stand
+21.09.2026: Thema und cVV zeigen Dezember 2025, **comdirect und FFPB noch
+Dezember 2024**.
+
 **Sicherheit:** Die offenen Punkte aus der Prüfung des öffentlichen Repos
 (Gateway-Frage, Personendaten der Ansprechpartner-Folie, Datenlizenzen,
 Historien-Bereinigung, Repo auf privat) stehen **intern** auf H: und gehören
