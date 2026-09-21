@@ -3,8 +3,7 @@
 **Letzte Sitzung:** 21.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
 unerheblich) · **Alle 38 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
-**Stand 21.09. lokal committet, NOCH NICHT GEPUSHT — wartet auf Philips
-Sichtprüfung der Themen-Broschüren** (siehe Sitzung 21.09.) ·
+**Stand 21.09. nach Sichtprüfung durch Philip gepusht** (siehe Sitzung 21.09.) ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
 „PDF erstellen" liefert ein echtes PDF über den Dienst, mit Rückfall auf die
 vorbereitete PowerPoint.** · Vorlagen repo-weit von personenbezogenen
@@ -76,8 +75,8 @@ Autor-Metadaten bereinigt.
   - In `Daten/` und `Daten_PF/` liegen 260916 und 260918 nebeneinander; die
     App nimmt den neuesten Stand.
   - Zur Sichtprüfung liegen Vergleichsbilder und Broschüren auf H: in
-    `Themenvorlageneu\_vergleich_tool\` (mit LIESMICH). **Erst nach der Abnahme
-    pushen.**
+    `Themenvorlageneu\_vergleich_tool\` (mit LIESMICH). Abgenommen und
+    gepusht am 21.09.2026.
 
 **Sitzung 18.09.2026 — Sollwerte auf den Datenstand 16.09.2026 nachgezogen,
 Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
