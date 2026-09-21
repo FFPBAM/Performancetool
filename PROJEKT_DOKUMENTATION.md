@@ -1,5 +1,5 @@
 # FFPB Streamlit Tool – Projektdokumentation & Transferwissen
-## Stand: 11.08.2026 (Phase 4: Code-Review — Benchmark-Bugfix, Deploy-Konfiguration repariert, ~2.200 Zeilen toter Code entfernt)
+## Stand: 21.09.2026 (Übersicht §0 nachgezogen; Tagesstand und offene Punkte stehen in `STATUS.md`)
 
 > **Neu am 12.08.2026:** Transferwissen **#47**–**#51**. Der letzte kam aus
 > Philips Sichtprüfung an der Pro-Broschüre: „Es gibt Daten" ist nicht „der
@@ -42,6 +42,17 @@
 | 06.07. | **Streamlit-Cloud-Versionsfalle**: `>=`-requirements zog Streamlit 1.59.0 + pandas 3.0; Downgrade-Versuch hing unter Python 3.14 → zurück auf `>=` (Pinnen offen, siehe Backlog) |
 | 07.07. | **Navigations-Umbau**: `st.tabs` → `st.segmented_control` (Tab-Rücksprung-Bug strukturell gelöst); Keep-Alive für Widget-States; zentrale Datenbereitstellung vor der Navigation. Per AppTest unter 1.59.0 verifiziert, im Deploy bestätigt |
 | 20.07. | **Ring-Optik final**: Cluster-Engine verworfen, (7)-Positionierung + schwarze Leader bleiben; `ring_labels_stub_fix` (Leader-Richtung); Punkte am Label-Ende (Assetklassen+Branchen der Thema-Familie); Familien-/Ringtyp-Erkennung. **Datenlogik-Bugs**: Themen-Einzeltitel-Ring wurde nie befüllt (EDELMETALLE fehlte) → GROUP_ORDER-Feed ergänzt; Legendenbox zu klein → `ensure_ring_legend_fits`. Transferwissen #29–#34 |
+| 21.–28.07. | **ETF-Familie** und **comdirect-Familie** als reine Config-Ergänzung; konfigurierbare Export-Dateinamen; `_folien_config` (Folienliste statt Hand-Config, byte-identisch belegt); `FAMILIE_RING_FORMAT` („kräftigere" Ringe). Transferwissen #35–#40 |
+| 07.08. | **Code-Review**: Benchmark-Bug (Null-Spalte ist keine Benchmark, #41), `.streamlit`-Ordner + `lxml` repariert, Loader-Duplikate aufgelöst, ~1.900 Zeilen toter Code entfernt, erster Regressionstest; Folien-Config nach `modules/vorlagen_config.py`; Historien-Beginn je Datenreihe. Transferwissen #41–#43 |
+| 10.–11.08. | **Arbeitskopie nach C:** (DRACOON nur noch Ablage); einheitlicher App-Name; **Anlagekriterien** aus Excel-Konfiguration in Tool und Broschüre; Bedienbarkeit Runden 1–4; SCHWEIZ ohne Benchmark + Honorarsatz 1,55 %; requirements mit Obergrenzen. Transferwissen #44–#46 |
+| 12.08. | **Backlog abgearbeitet**: Honorar-Mathematik nur in `analytics`, Prüfsteine für `analytics`/`formats`, `pyflakes` repo-weit auf 0. **Sichtprüfungs-Fehler**: aktuelles Jahr fehlte auf 21 von 21 Datumsachsen, 100-%-Linie auf cVV, Quellenangabe im Disclaimer (16/16), Rumpfjahr als Jahresbalken (`test_kalenderjahre.py`). Transferwissen #47–#51 |
+| 14.08. | **Monatsrenditen-Heatmap** (inkl. Ansicht „Bandbreite") und **Risiko-Kennzahlen** in der Performance-Ansicht; dabei gefunden: fehlender Honorarsatz fiel still auf 0 %, Honorarabzug traf den eigenen Satz nicht, „3 Jahre" hatte drei Bedeutungen. Transferwissen #52–#59 |
+| 17.–18.08. | Kollegen-Feedback (Einzeltitel, Fälligkeiten); deutsche Datumsauswahl gebaut und **zurückgebaut** (Kalender bleibt englisch). **Dritter Tab Strategievergleich** (Risiko-Rendite-Raum, Überschneidung/Exposure, Drilldown), `modules/bestandsanalytik.py`, einheitliches Theme, Gattungsfarben zentral. Transferwissen #60–#69 |
+| 21.–24.08. | YTD-Rendite in den Kennzahlen (geliehen, nicht neu gerechnet, #70); Performancebeitrag je Segment mit Klick-Drilldown auf Einzeltitel; eigener Zeitraum im Strategievergleich; Broschüre meldet fehlende Zeitreihe; Sollwerte auf Datenstand 260824 |
+| 25.–26.08. | **Ring-Geometrie** vermessen und an die Makro-PowerPoint angeglichen (`test_ring_geometrie.py`, #71); **Seitentreue** der Ring-Labels mit Totzone, von Philip in PowerPoint abgenommen. **Unlesbare Broschüren behoben**: duplizierte Charts teilten sich Sub-Teile (`test_pptx_integritaet.py`, #72); Thema-Broschüre führt nur die obere Strategie |
+| 17.09. | **Thema**: strategie-spezifische Anfangsfolien (Offensiv, Pro Dividende, SCHWEIZ ohne F2/F3). **PDF erstellen**: vorbereitete PowerPoint, dann **PDF-Dienst** als freundliche Fassung (`modules/pdf_briefkasten.py`, HMAC-signiert, Rückfall auf PowerPoint), in der Cloud live (#73). Vorlagen von Server-Verknüpfungen und personenbezogenen Metadaten bereinigt (auch in eingebetteten Excel-Objekten). Sicherheitsprüfung des öffentlichen Repos, Bericht nur intern |
+| 18.09. | Sollwerte auf Datenstand 260916; Download-Baustein auf `st.iframe` umgestellt (im Firmennetz bestätigt); Titelumbruch der rollierenden Folie (`test_titel_umbruch.py`); drei falsche Inhaltsverzeichnis-Einträge (ESG, comdirect) korrigiert (`test_inhaltsverzeichnis.py`) |
+| 21.09. | **Statische Themen-Folien 1:1 an die Original-Broschüren vom 14.09.** angeglichen (Bank-Folie 2025, Steuer-Folie, Offensiv mit 20 Folien und eigener Config); Stimmigkeitsprüfung über alle Familien (Balkenkopf 2025, ESG-Impressum als Datumsfeld); `update_stand_datum` setzt alle Datumsfelder; `test_thema_statische_folien.py` (38. Suite). Sollwerte auf 260918, alte Daten 260916 entfernt |
 
 ---
 
