@@ -1,8 +1,10 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 18.09.2026 · **Branch:** `verbesserungen` ·
+**Letzte Sitzung:** 21.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **Alle 37 Suiten grün** (Datenstand 16.09.2026), `pyflakes` bei null ·
+unerheblich) · **Alle 38 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
+**Stand 21.09. lokal committet, NOCH NICHT GEPUSHT — wartet auf Philips
+Sichtprüfung der Themen-Broschüren** (siehe Sitzung 21.09.) ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
 „PDF erstellen" liefert ein echtes PDF über den Dienst, mit Rückfall auf die
 vorbereitete PowerPoint.** · Vorlagen repo-weit von personenbezogenen
@@ -21,7 +23,47 @@ Autor-Metadaten bereinigt.
 > Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
 > Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
 
-**Diese Sitzung (18.09.2026) — Sollwerte auf den Datenstand 16.09.2026 nachgezogen,
+**Sitzung 21.09.2026 — statische Themen-Folien an die Original-Broschüren angeglichen:**
+
+- **Anlass:** Philip hat die aktuellen Original-Broschüren aus dem Haus geliefert
+  (Pro, Offensiv, Pro Dividende, Stand 14.09.2026) und vermutet, dass die
+  statischen Folien abweichen. **Gemessen, Folie für Folie** (Text inkl. Gruppen
+  und Tabellen, dazu PowerPoint-Bild mit Pixelvergleich). Abweichungen gab es:
+  Bank-Folie mit Zahlen 2024 (alle), fehlende Folie „Steuerlicher Hinweis zum
+  Honorar“ (Pro, Pro Div.), Honorar-Tabelle „Strategie Pro“ statt „Pro
+  Dividende“, Offensiv mit eigenem Cover, eigenen Leitlinien und eigener
+  Honorar-Folie und **ohne** „Gute Jahre überwiegen“.
+- **Umgesetzt nach Entscheidung Philip:** Die Folien wurden 1:1 aus den
+  Originalen in die drei Thema-Vorlagen übernommen (ZIP-Transplantation, das
+  Layout der Zielvorlage bleibt). Die Steuer-Folie gilt auch für beide
+  SCHWEIZ. Offensiv hat **20 Folien** und eine eigene Config
+  (`_THEMA_OFFENSIV_CONFIG`, Block F9–F12). Pro Dividende **behält** die
+  rollierende Tabelle. Folienzahlen: Pro/Pro Div. 22, SCHWEIZ 20, Offensiv 20.
+  Beleg: Alle statischen Folien der fünf gebauten Broschüren sind
+  pixelgleich mit dem Original (≤ 1,3, nur Bildkompression), und alle fünf
+  öffnen in echtem PowerPoint.
+- **Schlussfolie „Stand: …“ ist ein Datumsfeld**, kein Text. PowerPoint zeigt
+  beim Öffnen und im PDF das heutige Datum; so bleibt es (Entscheidung
+  Philip). **Mein erster Befund („statisch 06.07.2026“) war falsch**, er kam
+  vom gespeicherten Feldwert. Den setzt `update_stand_datum` jetzt auf den
+  Datenstand, für Vorschauen ohne Feldaktualisierung.
+- **Neuer Prüfstein** `tests/test_thema_statische_folien.py` (38. Suite) mit
+  Gegenproben: fehlende Steuer-Folie, alte Bankzahlen und das Feld ohne
+  Aufruf werden jeweils gemeldet.
+- **Sollwerte** `test_bestandsanalytik.py` auf 260918 nachgezogen. Die
+  Gegenprobe #64 steht wieder deutlich (flach +0,00114).
+- **Offen / für Philip:**
+  - Das Offensiv-Original trägt in der Honorar-Tabelle ebenfalls „Strategie
+    Pro“, übernommen 1:1. Ist das ein Fehler im Original?
+  - **comdirect** (F21) zeigt noch die Bankzahlen „Dezember 2024“; cVV ist
+    aktuell. Nicht geändert, weil nicht beauftragt.
+  - In `Daten/` und `Daten_PF/` liegen 260916 und 260918 nebeneinander; die
+    App nimmt den neuesten Stand.
+  - Zur Sichtprüfung liegen Vergleichsbilder und Broschüren auf H: in
+    `Themenvorlageneu\_vergleich_tool\` (mit LIESMICH). **Erst nach der Abnahme
+    pushen.**
+
+**Sitzung 18.09.2026 — Sollwerte auf den Datenstand 16.09.2026 nachgezogen,
 Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
 
 - **Anlass:** Philip hat `Daten/` und `Daten_PF/` über die Web-Oberfläche
