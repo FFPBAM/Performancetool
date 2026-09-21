@@ -483,27 +483,31 @@ def update_quelle_datum(prs, datum_str: str):
 
 
 def update_stand_datum(prs, datum_str):
-    """Setzt den gespeicherten Wert der Datumsfelder auf der Schlussfolie.
+    """Setzt den gespeicherten Wert aller verbliebenen Datumsfelder.
 
-    HINTERGRUND (21.09.2026): "Stand: …" auf der letzten Folie ist KEIN
-    Text, sondern ein PowerPoint-Datumsfeld (<a:fld type="datetime1">).
-    PowerPoint rechnet es beim Öffnen und beim PDF-Export selbst auf das
-    heutige Datum um — das bleibt so (Entscheidung Philip). Programme, die
-    Felder nicht aktualisieren (Handy-Vorschauen u. ä.), zeigen aber den
-    gespeicherten Wert, und der stammte aus der Vorlage (06.07.2026). Er wird
-    deshalb auf den Datenstand gesetzt; das Feld selbst bleibt erhalten.
+    HINTERGRUND (21.09.2026): "Stand: …" auf der Schlussfolie und im
+    Impressum ist KEIN Text, sondern ein PowerPoint-Datumsfeld
+    (<a:fld type="datetime1">). PowerPoint rechnet es beim Öffnen und beim
+    PDF-Export selbst auf das heutige Datum um — das bleibt so (Entscheidung
+    Philip). Programme, die Felder nicht aktualisieren (Handy-Vorschauen
+    u. ä.), zeigen aber den gespeicherten Wert, und der stammte aus der
+    Vorlage (06.07.2026). Er wird deshalb auf den Datenstand gesetzt; das
+    Feld selbst bleibt erhalten.
 
-    Betrifft nur die LETZTE Folie. Hat sie kein Datumsfeld (ESG, ETF),
-    passiert nichts. No-op wenn datum_str leer ist.
+    Läuft über ALLE Folien, muss aber NACH der Befüllung aufgerufen werden:
+    Die Datumsfelder in "Quelle: Eigene Berechnung, Stand …" der
+    Wertentwicklungsfolien ersetzt die Befüllung vorher durch festen Text
+    mit dem Datenstand — dort darf kein Feld stehen bleiben, sonst zeigte
+    PowerPoint als Quellstand das heutige Datum. No-op wenn datum_str leer ist.
     """
-    if not datum_str or not len(prs.slides):
+    if not datum_str:
         return
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
-    # BaseOxmlElement.xpath kennt das Praefix "a" selbst (kein namespaces=).
-    for fld in prs.slides[-1]._element.xpath(
-            ".//a:fld[starts-with(@type,'datetime')]"):
-        for t in fld.findall("a:t", ns):
-            t.text = datum_str
+    for folie in prs.slides:
+        # BaseOxmlElement.xpath kennt das Praefix "a" selbst (kein namespaces=).
+        for fld in folie._element.xpath(".//a:fld[starts-with(@type,'datetime')]"):
+            for t in fld.findall("a:t", ns):
+                t.text = datum_str
 
 
 # Default-Namen für Foliennummer-Shapes (PowerPoint generiert verschiedene

@@ -28,7 +28,10 @@ jetzt beim Export auf den Datenstand gesetzt (`update_stand_datum`).
     Schritt 3 — Offensiv hat ein anderes Cover als Pro
     Schritt 4 — keine Personennamen in den Metadaten (auch eingebettete Excel)
     Schritt 5 — update_stand_datum setzt den Feldwert, das Feld bleibt
-    Schritt 6 — Gegenproben: die alten Zustaende wuerden gemeldet
+    Schritt 6 — Datums-Stimmigkeit ALLER Vorlagen (Nachtrag 21.09.2026):
+                Bank-Folie in sich stimmig (Balkenkopf = Kennzahlen = letzter
+                Balken), kein fester "Stand: TT.MM.JJJJ" als Folientext
+    Schritt 7 — Gegenproben: die alten Zustaende wuerden gemeldet
 
     python tests/test_thema_statische_folien.py
 """
@@ -201,10 +204,60 @@ def autor_funde(pfad):
 
 
 def _feldwerte(prs):
+    """Gespeicherte Werte aller Datumsfelder auf allen Folien."""
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
-    return [t.text for fld in prs.slides[-1]._element.xpath(
-                ".//a:fld[starts-with(@type,'datetime')]")
+    return [t.text for folie in prs.slides
+            for fld in folie._element.xpath(".//a:fld[starts-with(@type,'datetime')]")
             for t in fld.findall("a:t", ns)]
+
+
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+_STAND_FEST = re.compile(r"(?i)\bstand[:.,]?\s*\d{2}\.\d{2}\.\d{4}")
+
+
+def feste_stand_daten(prs):
+    """'Stand: TT.MM.JJJJ' als FESTER Folientext (nicht in einem Feld).
+
+    AUSLOESER: Das ESG-Impressum trug "Stand: 31.07.2024" als Text — in
+    jeder gebauten ESG-Broschuere, zwei Jahre alt. Alle anderen Impressen
+    haben dort ein Datumsfeld. Die Quellzeilen der Diagramme sind Felder
+    (TxLink) und werden vom Export gesetzt; sie zaehlen hier nicht.
+    """
+    funde = []
+    for i, folie in enumerate(prs.slides, 1):
+        for p in folie._element.iter(_A + "p"):
+            text = "".join(t.text or "" for t in p.iter(_A + "t")
+                           if t.getparent().tag != _A + "fld")
+            funde += [f"F{i}: {m.group(0)!r}" for m in _STAND_FEST.finditer(text)]
+    return funde
+
+
+def bank_jahre(prs):
+    """Jahre auf der Folie 'Unsere Bank in Zahlen': (Kopf, Kennzahlen, letzter Balken).
+
+    AUSLOESER: Nach dem Nachziehen auf 2025 stand im Balkenkopf weiter
+    "DEZEMBER 2024" — auch im Original des Hauses. Drei Angaben derselben
+    Folie, die nur gemeinsam stimmen.
+    """
+    for folie in prs.slides:
+        if not _norm(_titel(folie)).startswith(_norm("Unsere Bank in Zahlen")):
+            continue
+        kennzahlen = re.search(r"auf einen blick\W*(?:dezember\s+|31\.12\.)(20\d\d)", _texte(folie))
+        kopf = balken = None
+        for sh in folie.shapes:
+            if not getattr(sh, "has_chart", False) or not sh.has_chart:
+                continue
+            kategorien = list(sh.chart.plots[0].categories)
+            balken = str(kategorien[-1]).strip()[:4] if kategorien else None
+            for rel in sh.chart.part.rels.values():
+                if rel.reltype.endswith("/chartUserShapes"):
+                    txt = " ".join(t.text or "" for t in
+                                   __import__("lxml.etree").etree.fromstring(
+                                       rel.target_part.blob).iter(_A + "t"))
+                    m = re.search(r"(?i)assets under control\s+(?:dezember\s+|31\.12\.)(20\d\d)", txt)
+                    kopf = m.group(1) if m else None
+        return (kopf, kennzahlen.group(1) if kennzahlen else None, balken)
+    return None
 
 
 def main():
@@ -261,7 +314,7 @@ def main():
         if not funde:
             print(f"   OK — {vorlage}")
 
-    print("Schritt 5 — Datumsfeld der Schlussfolie")
+    print("Schritt 5 — Datumsfelder (Schlussfolie, Impressum)")
     datum = "18.09.2026"
     for vorlage in sorted(os.listdir(os.path.join(WURZEL, "Vorlage"))):
         if not vorlage.endswith(".pptx"):
@@ -278,7 +331,26 @@ def main():
             print(f"   FEHLER — {vorlage}: {vorher} -> {nachher}")
             f += 1
 
-    print("Schritt 6 — Gegenproben")
+    print("Schritt 6 — Datums-Stimmigkeit aller Vorlagen")
+    for vorlage in sorted(os.listdir(os.path.join(WURZEL, "Vorlage"))):
+        if not vorlage.endswith(".pptx"):
+            continue
+        prs = laden(vorlage)
+        fest = feste_stand_daten(prs)
+        for x in fest:
+            print(f"   FEHLER — {vorlage}: fester Stand-Text {x} (Datumsfeld verwenden)")
+        f += len(fest)
+        jahre = bank_jahre(prs)
+        if jahre is None:
+            print(f"   OK — {vorlage}: kein fester Stand-Text, keine Bank-Folie")
+        elif None in jahre or len(set(jahre)) != 1:
+            print(f"   FEHLER — {vorlage}: Bank-Folie widerspruechlich "
+                  f"(Kopf {jahre[0]}, Kennzahlen {jahre[1]}, letzter Balken {jahre[2]})")
+            f += 1
+        else:
+            print(f"   OK — {vorlage}: kein fester Stand-Text, Bank-Folie durchgehend {jahre[0]}")
+
+    print("Schritt 7 — Gegenproben")
     # (a) Die Folie "Steuerlicher Hinweis" herausnehmen -> Schritt 1 meldet es.
     prs = laden("Vorlage_Thema.pptx")
     lst = prs.slides._sldIdLst
@@ -307,6 +379,29 @@ def main():
         print(f"   OK — ohne Aufruf steht {_feldwerte(prs)}, nicht der Datenstand")
     else:
         print("   FEHLER — Gegenprobe leer: Vorlage traegt schon den Datenstand")
+        f += 1
+    # (d) Der alte ESG-Impressumstext wuerde als fester Stand-Text gemeldet.
+    prs = laden("Vorlage_Thema.pptx")
+    prs.slides[-1].shapes.add_textbox(0, 0, 100, 100).text_frame.text = "Stand: 31.07.2024"
+    if feste_stand_daten(prs):
+        print("   OK — ein fester 'Stand: 31.07.2024' wuerde gemeldet")
+    else:
+        print("   FEHLER — fester Stand-Text ginge durch")
+        f += 1
+    # (e) Der alte Balkenkopf "DEZEMBER 2024" neben 2025er Zahlen faellt auf.
+    prs = laden("Vorlage_Thema.pptx")
+    for folie in prs.slides:
+        for sh in folie.shapes:
+            if getattr(sh, "has_chart", False) and sh.has_chart:
+                for rel in sh.chart.part.rels.values():
+                    if rel.reltype.endswith("/chartUserShapes"):
+                        rel.target_part._blob = rel.target_part.blob.replace(
+                            "DEZEMBER 2025".encode(), "DEZEMBER 2024".encode())
+    j = bank_jahre(prs)
+    if j and len(set(j)) != 1:
+        print(f"   OK — der alte Balkenkopf wuerde gemeldet {j}")
+    else:
+        print(f"   FEHLER — alter Balkenkopf ginge durch {j}")
         f += 1
 
     print()

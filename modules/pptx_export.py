@@ -1054,7 +1054,7 @@ def generate_portfolioanalyse_pptx(
             if hasattr(datum_obj, 'strftime'):
                 datum_str = datum_obj.strftime("%d.%m.%Y")
                 update_quelle_datum(prs, datum_str)
-                # Schlussfolie "Stand: …" (Datumsfeld) — siehe update_stand_datum
+                # Schlussfolie/Impressum "Stand: …" (Datumsfelder) — siehe update_stand_datum
                 update_stand_datum(prs, datum_str)
         except Exception:
             pass

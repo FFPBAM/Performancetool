@@ -58,9 +58,21 @@ Autor-Metadaten bereinigt.
     abweichend auf Zuruf Philip. **comdirect F21** ist jetzt die aktuelle
     Bank-Folie aus der cVV-Vorlage (layoutgleich, bildgleich, übrige Folien
     unverändert). Beides steht im Prüfstein.
-  - Der Balkenkopf der Bank-Folie lautet überall, auch im Original des
-    Hauses, „ASSETS UNDER CONTROL DEZEMBER 2024“, obwohl der Balken 2025
-    zeigt. Nicht geändert; bei der Jahrespflege 2027 mit korrigieren.
+  - *(erledigt, Nachtrag 2)* **Stimmigkeitsprüfung über alle Familien**
+    (Auftrag Philip: „mehr solche Prüfungen“). Behoben: Der Balkenkopf der
+    Bank-Folie lautete „DEZEMBER 2024“ über 2025er Zahlen, auch im Original,
+    jetzt 2025 in Thema ×3, cVV und comdirect. ESG-Impressum F38 trug den
+    **festen Text „Stand: 31.07.2024“** in jeder ESG-Broschüre, jetzt ein
+    Datumsfeld wie überall. cVV-Impressum „Stand.“ → „Stand:“.
+    `update_stand_datum` setzt jetzt alle verbliebenen Datumsfelder (auch das
+    Impressum). Ein Scan gebauter Broschüren aller Familien, so gebaut wie
+    in der App, findet kein altes Vorlagendatum mehr. Als Regel im Prüfstein
+    (Schritt 6): Die Bank-Folie muss in sich stimmig sein, fester
+    „Stand: TT.MM.JJJJ“-Text ist verboten.
+  - **Offen, braucht Daten aus dem Haus:** Die Marktfolien der Themen
+    („Durchhalten zahlt sich aus“, „Gute Jahre überwiegen“, „Krise als
+    Chance“) zeigen „1980 bis 2023 | Stand: Dezember 2023“, genau wie die
+    Originale vom 14.09. Die Aktualisierung muss vom Haus kommen.
   - In `Daten/` und `Daten_PF/` liegen 260916 und 260918 nebeneinander; die
     App nimmt den neuesten Stand.
   - Zur Sichtprüfung liegen Vergleichsbilder und Broschüren auf H: in
@@ -3389,9 +3401,10 @@ Jahresabschluss die neuen Zahlen in **alle** Vorlagen ziehen (Thema ×3, cVV
 F29, comdirect F21, FFPB F20), am besten 1:1 aus einer aktuellen
 Original-Broschüre des Hauses übernehmen. Danach den Prüfstein
 `tests/test_thema_statische_folien.py` (KERNWERTE) nachziehen. Stand
-21.09.2026: Thema, cVV und comdirect zeigen Dezember 2025, **FFPB (Standard,
-praktisch nie gebaut) noch Dezember 2024**; Balkenkopf überall noch
-„Dezember 2024“.
+21.09.2026: Thema, cVV und comdirect zeigen Dezember 2025, auch im
+Balkenkopf; **FFPB (Standard, praktisch nie gebaut) noch Dezember 2024**. Den
+Balkenkopf (Diagramm-Zeichnung `drawing*.xml`) mitziehen, sonst meldet der
+Prüfstein den Widerspruch.
 
 **Sicherheit:** Die offenen Punkte aus der Prüfung des öffentlichen Repos
 (Gateway-Frage, Personendaten der Ansprechpartner-Folie, Datenlizenzen,
