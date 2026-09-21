@@ -1064,6 +1064,7 @@ def generate_portfolioanalyse_pptx(
     # nebeneinander.) Konfiguration:
     #     cfg["einmal_folien"] = {"uebersicht": 17}   # 1-indexiert
     # Fehlt der Schlüssel, passiert nichts — Standard/Themen unberührt.
+    anker_am_ende = []   # Charts mit Datumsachse am letzten Datenmonat
     for rolle, pos in (cfg.get("einmal_folien") or {}).items():
         idx = pos - 1
         try:
@@ -1115,6 +1116,9 @@ def generate_portfolioanalyse_pptx(
                 set_line_series_sparse(shape, kat, serien)
                 set_series_line_colors(shape, VERGLEICH_FARBEN,
                                        breite_emu=VERGLEICH_LINIENBREITE_EMU)
+                # Datumsachse am letzten Datenmonat verankern (21.09.2026):
+                # letzte Beschriftung = aktueller Monat statt Januar.
+                anker_am_ende.append(str(shape.chart.part.partname))
             else:
                 _record_build_error(
                     f"Folie {pos}",
@@ -1134,7 +1138,7 @@ def generate_portfolioanalyse_pptx(
     # Slide-Operationen, VOR dem Speichern. Balken (catAx) bleiben unberührt.
     # Rührt die Download-Logik NICHT an — arbeitet ausschließlich an Chart-XML.
     try:
-        _stat = _charts_nachbearbeiten(prs)
+        _stat = _charts_nachbearbeiten(prs, anker_am_ende=anker_am_ende)
         # NEU 26.08.2026: Einzel-Charts, die unterwegs abgebrochen sind, melden
         # sich jetzt selbst. Vorher verschluckte chart_dynamik sie spurlos —
         # und lieferte halbfertige Ringe aus (siehe Kommentar dort).

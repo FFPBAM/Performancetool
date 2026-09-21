@@ -190,6 +190,56 @@ def _pruefe_rechenkern():
     return fehler
 
 
+# ───────────────────────────── Schritt 1b ─────────────────────────────────
+
+# anker="ende" (NEU 21.09.2026, nur cVV-Vergleichsfolie F19): Die letzte
+# Beschriftung ist der letzte Datenmonat, nicht der Januar davor. Sollwerte
+# von Hand nachgerechnet:
+#   Jan/09 .. Sep/26 = 212 Monate, aufgerundet 18 Jahresschritte = 216
+#   -> Achse ab Sep/08, 4 Monate Vorlauf.
+#
+#   (Bezeichnung, erster Tag, letzter Tag, Soll-Minimum, Soll-Maximum)
+FAELLE_ENDE = [
+    ("cVV Vergleich, Sep",   (2009, 1, 31), (2026, 9, 18),
+     (2008, 9, 1), (2026, 10, 1)),
+    # Endet die Reihe im Januar, fallen beide Anker zusammen.
+    ("cVV Vergleich, Jan",   (2009, 1, 31), (2027, 1, 20),
+     (2009, 1, 1), (2027, 2, 1)),
+]
+
+
+def _pruefe_anker_ende():
+    print("\n1b. achsen_raster mit anker=\"ende\" (cVV-Vergleichsfolie)")
+    fehler = 0
+    for (name, erst, letzt, s_min, s_max) in FAELLE_ENDE:
+        d_erst, d_letzt = dt.date(*erst), dt.date(*letzt)
+        ist_min, ist_max, ist_mu, ist_mtu = achsen_raster(d_erst, d_letzt,
+                                                          anker="ende")
+        schritt = ist_mu * (12 if ist_mtu == "years" else 1)
+        ticks = _ticks(ist_min, ist_max, schritt)
+        ok = (ist_min == dt.date(*s_min) and ist_max == dt.date(*s_max)
+              and bool(ticks)
+              and (ticks[-1].year, ticks[-1].month) == (d_letzt.year,
+                                                        d_letzt.month))
+        fehler += 0 if ok else 1
+        print(f"   {name:24s} ab {ist_min.isoformat()} letzter Tick "
+              f"{ticks[-1].isoformat() if ticks else '-'}  "
+              f"{'OK' if ok else 'FEHLER'}")
+
+    # GEGENPROBE: Ohne "ende" endet dieselbe Reihe beschriftungsseitig im
+    # Januar — genau der gemeldete Fall (Jan/26 statt Sep/26). Sonst waere
+    # die Pruefung oben per Konstruktion wahr.
+    ist_min, ist_max, ist_mu, ist_mtu = achsen_raster(dt.date(2009, 1, 31),
+                                                      dt.date(2026, 9, 18))
+    ticks = _ticks(ist_min, ist_max, ist_mu * (12 if ist_mtu == "years" else 1))
+    gegen_ok = bool(ticks) and (ticks[-1].year, ticks[-1].month) == (2026, 1)
+    fehler += 0 if gegen_ok else 1
+    print(f"   {'Gegenprobe anker=auto':24s} letzter Tick "
+          f"{ticks[-1].isoformat() if ticks else '-'} (soll 2026-01-01)  "
+          f"{'OK' if gegen_ok else 'FEHLER'}")
+    return fehler
+
+
 # ───────────────────────────── Schritt 2 ──────────────────────────────────
 
 # Die gemessenen Wertebereiche der 21 Linien-Charts (Datenstand 260721) und
@@ -320,9 +370,12 @@ def _wertachse_maengel(b):
     return maengel
 
 
-def _pruefe_datei(pfad, etikett):
+def _pruefe_datei(pfad, etikett, ende_folien=()):
     """Prueft jede Datumsachse einer gebauten Broschuere.
-    Gibt (Anzahl geprueft, Anzahl Abweichungen) zurueck."""
+    Gibt (Anzahl geprueft, Anzahl Abweichungen) zurueck.
+
+    ende_folien: Foliennummern, deren letzte Beschriftung im MONAT des letzten
+    Datenpunkts liegen muss (anker="ende", cVV-Vergleichsfolie)."""
     from pptx import Presentation
 
     geprueft = fehler = 0
@@ -359,6 +412,11 @@ def _pruefe_datei(pfad, etikett):
                 # Ein Achsendatum NACH den Daten waere eine falsche Aussage.
                 if ticks and ticks[-1] > b["letzt"]:
                     maengel.append("Beschriftung liegt hinter den Daten")
+                if nr in ende_folien and ticks and (
+                        (ticks[-1].year, ticks[-1].month)
+                        != (b["letzt"].year, b["letzt"].month)):
+                    maengel.append("letzter Tick nicht im letzten Datenmonat "
+                                   "(anker=ende)")
                 if b["min"] > b["erst"] or b["max"] < b["letzt"]:
                     maengel.append("Achse schneidet Daten ab")
                 if not MIN_TICKS <= len(ticks) <= MAX_TICKS:
@@ -448,7 +506,11 @@ def _pruefe_artefakt(ausgabe):
         for m in meldungen:
             print(f"   ! BUILD-FEHLER {familie}: {m[:90]}")
             fehler += 1
-        n, f = _pruefe_datei(ziel, familie)
+        # Die Vergleichsfolie (nur CVV) ist am letzten Datenmonat verankert.
+        _vgl = ((VORLAGEN_FAMILIEN[familie][1] or {})
+                .get("einmal_folien", {}).get("vergleich"))
+        n, f = _pruefe_datei(ziel, familie,
+                             ende_folien=(_vgl,) if _vgl else ())
         geprueft += n
         fehler += f
 
@@ -482,7 +544,7 @@ def main():
                else tempfile.mkdtemp(prefix="ffpb_datumsachse_"))
     os.makedirs(ausgabe, exist_ok=True)
 
-    fehler = (_pruefe_rechenkern() + _pruefe_wertkern()
+    fehler = (_pruefe_rechenkern() + _pruefe_anker_ende() + _pruefe_wertkern()
               + _pruefe_artefakt(ausgabe))
     print()
     if fehler:

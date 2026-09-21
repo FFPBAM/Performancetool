@@ -4887,6 +4887,20 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 ## 16. Changelog
 
+### 21.09.2026 (Nachtrag) – cVV F19: Datumsachse am letzten Datenmonat verankert
+
+Gemeldet: Die Vergleichsfolie (F19) endete beschriftungsseitig bei Jan/26,
+die Kurven liefen bis September. `achsen_raster` wählt den Anker mit dem
+kleinsten Vorlauf, bei der ab Januar 2009 laufenden Monatsreihe also den
+Januar. Neu: `achsen_raster(..., anker="ende")` nimmt nur den letzten
+Datenmonat (Sep/08 … Sep/26, rund 4 Monate Vorlauf), in echtem PowerPoint
+gegen den Ist-Stand gewählt. Nur für F19: `pptx_export` gibt den Chart der
+Rolle `vergleich` als `anker_am_ende` an `nachbearbeiten`, alle übrigen
+Datumsachsen bleiben bei `"auto"`. Prüfstein `tests/test_chartachsen.py`
+(Schritt 1b mit Gegenprobe, Schritt 3 prüft den letzten Tick der
+Vergleichsfolie im letzten Datenmonat; gegen den alten Code rot, genau an
+CVV F19).
+
 ### 21.09.2026 – Statische Themen-Folien an die Original-Broschüren angeglichen; Stimmigkeitsprüfung
 
 Anlass: aktuelle Original-Broschüren aus dem Haus (Pro, Offensiv, Pro

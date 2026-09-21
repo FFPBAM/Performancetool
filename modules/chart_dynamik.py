@@ -801,7 +801,7 @@ def wert_raster(dmin, dmax):
     return round(ymin, 2), round(ymax, 2), schritt
 
 
-def achsen_raster(erster_tag, letzter_tag):
+def achsen_raster(erster_tag, letzter_tag, anker="auto"):
     """Achsengrenzen und Tick-Abstand einer Datumsachse aus der Datenspanne.
 
     Gibt (min_datum, max_datum, major_unit, major_time_unit) zurück.
@@ -831,6 +831,14 @@ def achsen_raster(erster_tag, letzter_tag):
     verworfen: Ein Achsendatum in der Zukunft hat in einer Kundenbroschüre
     nichts zu suchen. Kandidat (a) erfüllt das immer, es bleibt also stets
     einer übrig.
+
+    anker="ende" (NEU 21.09.2026) nimmt NUR Kandidat (a): Die letzte
+    Beschriftung ist dann immer der letzte Datenmonat. Anlass war die
+    cVV-Vergleichsfolie (F19). Dort gewann der Januar mit null Vorlauf, und
+    die Beschriftung endete bei Jan/26, obwohl die Kurven bis September
+    liefen. Mit "ende" steht dort Sep/08 … Sep/26, bei rund vier Monaten
+    Vorlauf. In echtem PowerPoint gegen den Ist-Stand gewählt. Nur diese
+    Folie nutzt "ende" (siehe nachbearbeiten), alle übrigen Achsen "auto".
     """
     lo_daten = _monatsindex(erster_tag)          # Monat des ersten Datenpunkts
     letzter_monat = _monatsindex(letzter_tag)
@@ -847,9 +855,11 @@ def achsen_raster(erster_tag, letzter_tag):
     kalender = letzter_monat - (letzter_monat % schritt)
 
     kandidaten = []
-    for anker in (kalender, letzter_monat):
-        stufen = -(-(anker - lo_daten) // schritt)        # aufgerundet
-        start = anker - stufen * schritt
+    anker_monate = ((letzter_monat,) if anker == "ende"
+                    else (kalender, letzter_monat))
+    for anker_monat in anker_monate:
+        stufen = -(-(anker_monat - lo_daten) // schritt)  # aufgerundet
+        start = anker_monat - stufen * schritt
         letzter_tick = start + ((hi - start) // schritt) * schritt
         if letzter_tick > letzter_monat:
             continue
@@ -863,7 +873,7 @@ def achsen_raster(erster_tag, letzter_tag):
     return _monatsanfang(start), _monatsanfang(hi), anzahl, einheit
 
 
-def datumsachse_an_daten(chart):
+def datumsachse_an_daten(chart, anker="auto"):
     """Setzt die Datums-Achse (dateAx) einer Linie auf die tatsächliche
     Datenspanne statt auf fixe Vorlagengrenzen — Grenzen, Schrittweite UND
     Anker (das Warum steht in achsen_raster). Behebt den Leerraum vor/nach der
@@ -889,7 +899,7 @@ def datumsachse_an_daten(chart):
 
     a_min, a_max, m_anzahl, m_einheit = achsen_raster(
         _EXCEL_EPOCHE + dt.timedelta(days=int(min(cats))),
-        _EXCEL_EPOCHE + dt.timedelta(days=int(max(cats))))
+        _EXCEL_EPOCHE + dt.timedelta(days=int(max(cats))), anker)
     lo = (a_min - _EXCEL_EPOCHE).days
     hi = (a_max - _EXCEL_EPOCHE).days
 
@@ -2807,7 +2817,8 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                    tangential_in=0.14, tangential_klein=0.24,
                    rand_oben_klein=0.52, kopf_frei_klein=0.60,
                    leader_farbe=LEADER_FARBE,
-                   label_schriftfarbe=LABEL_SCHRIFTFARBE):
+                   label_schriftfarbe=LABEL_SCHRIFTFARBE,
+                   anker_am_ende=()):
     """EINE Funktion, die alle Charts einer fertigen Präsentation
     datenbasiert nachzieht — am Ende von generate_portfolioanalyse_pptx
     aufrufen, DIREKT VOR prs.save(...).
@@ -2817,6 +2828,10 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
         Außen-Labels radial aus dem Segmentwinkel.
       • Linie MIT Datums-Achse (Wertentwicklung): Achse auf die echte
         Datenspanne (kein Leerraum). Balken (catAx) bleiben unberührt.
+
+    anker_am_ende: Partnamen der Charts (z.B. "/ppt/charts/chart16.xml"),
+    deren Datumsachse am letzten Datenmonat verankert wird (achsen_raster,
+    anker="ende"). pptx_export übergibt dort die cVV-Vergleichsfolie F19.
 
     Rührt NICHTS an der Download-Logik an — arbeitet nur an Chart-XML.
     Gibt eine kleine Statistik zurück (für optionales Logging).
@@ -2936,7 +2951,9 @@ def nachbearbeiten(prs, hole_size=79, label_gap_in=0.14,
                             chart, farbe=label_schriftfarbe, fett=_fmt["label_fett"])
                     stat["ringe"] += 1
                 elif "LINE" in typ and _hat_dateax(chart):
-                    datumsachse_an_daten(chart)
+                    _anker = ("ende" if str(chart.part.partname) in anker_am_ende
+                              else "auto")
+                    datumsachse_an_daten(chart, _anker)
                     stat["linien"] += 1
             except Exception as _ex:
                 # Ein einzelnes problematisches Chart darf den Export nie

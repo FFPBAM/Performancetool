@@ -23,6 +23,25 @@ Autor-Metadaten bereinigt.
 > Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
 > Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
 
+**Sitzung 21.09.2026 (Nachtrag abends) — cVV F19: x-Achse endet am aktuellen Monat:**
+
+- **Gemeldet (Philip):** Die Vergleichsfolie F19 der cVV-Broschüre ist
+  dynamisch, die Beschriftung der x-Achse endete aber bei **Jan/26**, obwohl die
+  Kurven bis September laufen. Ursache: `achsen_raster` wählt den Anker mit dem
+  kleinsten Vorlauf; die Monatsreihe beginnt im Januar 2009, also gewann der
+  Januar, und Jan/27 läge in der Zukunft.
+- **Umgesetzt nach Sichtprüfung (Variante 2, echtes PowerPoint):**
+  `achsen_raster(..., anker="ende")` verankert die Jahresticks am letzten
+  Datenmonat → **Sep/08 … Sep/26**, dafür rund 4 Monate Vorlauf. Gilt **nur**
+  für F19: `pptx_export` gibt den Chart der Rolle `vergleich` über
+  `nachbearbeiten(anker_am_ende=…)` weiter, alle anderen Achsen bleiben
+  `"auto"`. Der Monat wandert mit dem Datenstand.
+- **Prüfstein** `tests/test_chartachsen.py`: neuer Schritt 1b (Sollwerte von
+  Hand, Gegenprobe `auto` → Jan/26) und in Schritt 3 für die Vergleichsfolie
+  „letzter Tick im letzten Datenmonat". **Gegenprobe am Artefakt:** mit dem
+  alten Code meldet Schritt 3 genau CVV F19, alle übrigen 19 Achsen
+  unverändert.
+
 **Sitzung 21.09.2026 — statische Themen-Folien an die Original-Broschüren angeglichen:**
 
 - **Anlass:** Philip hat die aktuellen Original-Broschüren aus dem Haus geliefert
