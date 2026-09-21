@@ -52,6 +52,28 @@ prüfte statt gegen eine Schwelle (#47).
   in allen Vorlagen gefunden). Solche Namen landen nicht nur im Repo, sondern
   in **jeder ausgelieferten Broschüre**. Byte-Treffer in `ppt/media/*` sind
   dagegen meist Bildrauschen — Fundort (XML-Text vs. Binärbild) unterscheiden.
+- **Statische Folien stimmen nur, wenn jemand sie prüft** (21.09.2026). Kein
+  Code erzeugt sie, und sie veralten still: Bankzahlen, Stand-Daten,
+  Strategienamen in Tabellen. Referenz sind die **Original-Broschüren aus dem
+  Haus**, nicht unsere Vorlagen. Abgleich Folie für Folie über Text (inkl.
+  Gruppen und Tabellen) **und** PowerPoint-Render mit Pixelvergleich;
+  Bild-Hashes allein taugen nicht, die Vorlagen sind rekomprimiert. Bei jeder
+  Arbeit an Vorlagen zusätzlich eine **Stimmigkeitsprüfung**: Jahre innerhalb
+  einer Folie (Kopf, Kennzahlen-Stichtag, letzter Datenpunkt), fester
+  „Stand“-Text, falsche Namen, Alter statischer Inhalte, Tippfehler. Funde
+  melden, auch wenn das Original des Hauses sie genauso hat. Prüfstein:
+  `tests/test_thema_statische_folien.py` (Schritt 6 gilt für **alle**
+  Vorlagen). Folien aus einem Original übernimmt man per ZIP-Transplantation
+  mit dem gleichnamigen Layout der Zielvorlage, danach die Metadaten der
+  eingebetteten Excel normieren.
+- **„Stand: …“ ist oft ein PowerPoint-Datumsfeld** (`<a:fld
+  type="datetime1">`, Schlussfolie und Impressum). PowerPoint zeigt dort
+  beim Öffnen das **heutige** Datum; der XML-Wert ist nur ein Zwischenspeicher
+  für Vorschauen, den `update_stand_datum` auf den Datenstand setzt.
+  **Vor jedem Urteil über ein Datum in echtem PowerPoint rendern.** Ein
+  Quellstand („Quelle: Eigene Berechnung, Stand …“) muss dagegen **fester
+  Text** sein, sonst zeigte er das Öffnungsdatum; die Befüllung ersetzt das
+  Feld dort und muss deshalb vor `update_stand_datum` laufen.
 - **Keine Piktogramme in der Oberfläche** (10.08.2026). Überschriften,
   Hinweise, Schaltflächen und Disclaimer tragen keine Emoji — die Ergebnisse
   gehen ins Kundengespräch einer Privatbank. In Kommentaren und Doku sind sie

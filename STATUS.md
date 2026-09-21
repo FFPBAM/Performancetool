@@ -3,7 +3,8 @@
 **Letzte Sitzung:** 21.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
 unerheblich) · **Alle 38 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
-**Stand 21.09. nach Sichtprüfung durch Philip gepusht** (siehe Sitzung 21.09.) ·
+**Stand 21.09. nach Sichtprüfung durch Philip gepusht, alte Daten 260916
+entfernt** (siehe Sitzung 21.09.) ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
 „PDF erstellen" liefert ein echtes PDF über den Dienst, mit Rückfall auf die
 vorbereitete PowerPoint.** · Vorlagen repo-weit von personenbezogenen
@@ -72,11 +73,24 @@ Autor-Metadaten bereinigt.
     („Durchhalten zahlt sich aus“, „Gute Jahre überwiegen“, „Krise als
     Chance“) zeigen „1980 bis 2023 | Stand: Dezember 2023“, genau wie die
     Originale vom 14.09. Die Aktualisierung muss vom Haus kommen.
-  - In `Daten/` und `Daten_PF/` liegen 260916 und 260918 nebeneinander; die
-    App nimmt den neuesten Stand.
-  - Zur Sichtprüfung liegen Vergleichsbilder und Broschüren auf H: in
-    `Themenvorlageneu\_vergleich_tool\` (mit LIESMICH). Abgenommen und
-    gepusht am 21.09.2026.
+  - *(erledigt)* Von Philip abgenommen und gepusht. Danach aufgeräumt: die
+    alten Daten 260916 (je 19 CSV in `Daten/` und `Daten_PF/`) gelöscht und
+    gepusht, der Vergleichsordner auf H: gelöscht. In der Live-App
+    **Cache leeren** (Transferwissen #7), falls noch nicht geschehen.
+  - Jeder Push dieser Sitzung lief mit Prüf-Agent vorab: keine Befunde. Ein
+    geringer Hinweis: Philips Vorname steht in Doku, Tests und
+    Commit-Nachrichten, wie schon über 100-mal zuvor. Das gehört zur offenen
+    Historien-Bereinigung (ISB/DSB).
+
+**Nächster Schritt (Stand 21.09.2026):**
+1. Stichprobe in der Live-App durch Philip (Offensiv 20 Folien mit
+   eigenem Cover, Pro mit Steuer-Folie, ESG-Impressum ohne 31.07.2024).
+2. Marktfolien der Themen (Stand Dezember 2023) aktualisieren, sobald das
+   Haus neue Daten liefert.
+3. Jährlich ab Frühjahr 2027: Bank-Folie in allen Vorlagen (siehe „Offene
+   Punkte“).
+4. Weiter offen seit 17.09.: Sicherheitsbefunde mit ISB/DSB (Historie,
+   Repo privat), siehe Kasten oben.
 
 **Sitzung 18.09.2026 — Sollwerte auf den Datenstand 16.09.2026 nachgezogen,
 Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
@@ -205,7 +219,7 @@ Download-Baustein auf `st.iframe` umgestellt (live, im Firmennetz bestätigt):**
 - **cVV-Vorlage:** Inhaltsverzeichnis „Rechtliche Hinweise und Impressum"
   zeigte auf 34 statt 36 — in der Vorlage korrigiert (nur diese Zahl).
 
-**Nächster Schritt:**
+**Nächster Schritt (Stand 17.09.2026, teils überholt — aktuell siehe oben):**
 0. *(erledigt 17.09.2026 abends)* PDF-Dienst in der Cloud live bestätigt —
    echtes PDF. Siehe Sitzungsabschnitt oben.
 1. **Sicherheitsbefunde mit ISB/DSB/Compliance durchgehen** (interner Bericht
