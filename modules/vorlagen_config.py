@@ -156,7 +156,7 @@ def _folien_config(folien, rollen_optionen=None, entfernen=None, modus="fest"):
 
 # Struktur-Block der THEMEN-Broschüren (Pro / Pro Dividende / Offensiv teilen
 # sich diese eine Vorlage + Struktur). Verifiziert an der echten Vorlage:
-# 21 Folien, dynamischer Block F10-F13.
+# 22 Folien (Offensiv 20), dynamischer Block F10-F13.
 #
 # ALS EINZIGE FAMILIE IM DUPLIZIERMODUS (siehe _folien_config): Die Vorlage
 # enthält den Block genau EINMAL, der Export vervielfältigt ihn je Strategie.
@@ -193,6 +193,7 @@ _THEMA_FOLIEN = [
     ("rollierend", 0, "Wertentwicklung der Strategie … (rollierend)"),
     ("S", "Unser Honorar"),
     ("S", "Unser Honorar (Tabelle)"),
+    ("S", "Steuerlicher Hinweis zum Honorar"),   # NEU 21.09.2026 (Original 14.09.)
     ("S", "Unsere Bank in Zahlen"),
     ("S", "Unsere Standorte"),
     ("S", "Unsere Standorte (Fortsetzung)"),
@@ -203,10 +204,23 @@ _THEMA_FOLIEN = [
 
 _THEMA_CONFIG = _folien_config(modus="dupliziert", folien=_THEMA_FOLIEN)
 
+# Offensiv hat einen EIGENEN Aufbau (NEU 21.09.2026, nach der Original-
+# Broschüre vom 14.09.2026, Entscheidung Philip "1:1 wie Original"): ohne
+# "Gute Jahre überwiegen" und ohne "Steuerlicher Hinweis zum Honorar" —
+# 20 statt 22 Folien. Eigenes Cover, eigene Leitlinien auf "Basis unserer
+# Investmententscheidungen" und eigene Honorar-Folie stecken in der Vorlage
+# selbst, nicht hier.
+_THEMA_OFFENSIV_FOLIEN = [
+    f for f in _THEMA_FOLIEN
+    if f[-1] not in ("Gute Jahre überwiegen", "Steuerlicher Hinweis zum Honorar")
+]
+_THEMA_OFFENSIV_CONFIG = _folien_config(
+    modus="dupliziert", folien=_THEMA_OFFENSIV_FOLIEN)
+
 # SCHWEIZ-Variante: dieselbe (Pro-)Vorlage, aber die beiden PRO-Intro-Folien
 # 2/3 werden entfernt (die Broschüre beginnt nach der Titelfolie direkt mit
-# "Aktien – die guten Jahre überwiegen"). erwartete_folien bleibt 21 (der
-# Guard prüft die 21-Folien-Vorlage), entfernen=[2,3] -> gebaut 19 Folien;
+# "Aktien – die guten Jahre überwiegen"). erwartete_folien bleibt 22 (der
+# Guard prüft die 22-Folien-Vorlage), entfernen=[2,3] -> gebaut 20 Folien;
 # `_normalisiere_vorlage` löscht sie und korrigiert die Blockpositionen.
 _THEMA_SCHWEIZ_CONFIG = _folien_config(
     modus="dupliziert", folien=_THEMA_FOLIEN, entfernen=[2, 3])
@@ -520,7 +534,7 @@ VORLAGEN_FAMILIEN = {
 #   - Pro steht bewusst NICHT hier -> Rückfall auf VORLAGEN_FAMILIEN["Thema"].
 # Strategienamen exakt wie in Mapping_Namen.xlsx, Spalte „Strategie auswählen".
 VORLAGEN_STRATEGIE = {
-    "Offensiv":                   ("Vorlage_Thema_Offensiv.pptx",     _THEMA_CONFIG),
+    "Offensiv":                   ("Vorlage_Thema_Offensiv.pptx",     _THEMA_OFFENSIV_CONFIG),
     "Pro Dividende":              ("Vorlage_Thema_ProDividende.pptx", _THEMA_CONFIG),
     "Schweiz_aktienorientiert":   ("Vorlage_Thema.pptx",              _THEMA_SCHWEIZ_CONFIG),
     "Schweiz_substanzorientiert": ("Vorlage_Thema.pptx",              _THEMA_SCHWEIZ_CONFIG),

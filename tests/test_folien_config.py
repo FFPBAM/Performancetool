@@ -55,7 +55,9 @@ THEMA_ORIGINAL = {
         "wertentwicklung": 12,
         "rollierend": 13,
     },
-    "erwartete_folien": 21,
+    # 21 -> 22 am 21.09.2026: Folie "Steuerlicher Hinweis zum Honorar" nach
+    # der Original-Broschuere vom 14.09.2026 (statisch, hinter dem Block).
+    "erwartete_folien": 22,
     "entfernen": [],
 }
 
@@ -260,11 +262,22 @@ def pruefe_strategie_vorlagen():
     if _THEMA_SCHWEIZ_CONFIG.get("block_positionen") != _THEMA_CONFIG.get("block_positionen"):
         print("   FEHLER — SCHWEIZ-Config hat andere block_positionen als _THEMA_CONFIG")
         fehler += 1
-    if _THEMA_SCHWEIZ_CONFIG.get("erwartete_folien") != 21:
-        print(f"   FEHLER — SCHWEIZ erwartete_folien={_THEMA_SCHWEIZ_CONFIG.get('erwartete_folien')}, erwartet 21 (der 21-Folien-Vorlage)")
+    if _THEMA_SCHWEIZ_CONFIG.get("erwartete_folien") != 22:
+        print(f"   FEHLER — SCHWEIZ erwartete_folien={_THEMA_SCHWEIZ_CONFIG.get('erwartete_folien')}, erwartet 22 (der 22-Folien-Vorlage)")
         fehler += 1
 
-    # Jede referenzierte Datei existiert und hat 21 Folien.
+    # Offensiv (21.09.2026): eigener Aufbau mit 20 Folien, der Block F9-F12
+    # rueckt um eins nach vorn, weil "Gute Jahre ueberwiegen" fehlt.
+    off = VORLAGEN_STRATEGIE["Offensiv"][1]
+    soll_off = {"einzeltitel_themen": 9, "zusammenstellung": 10,
+                "wertentwicklung": 11, "rollierend": 12}
+    if off.get("erwartete_folien") != 20 or off.get("block_positionen") != soll_off:
+        print(f"   FEHLER — Offensiv: {off.get('erwartete_folien')} Folien, "
+              f"Block {off.get('block_positionen')!r}, erwartet 20 / {soll_off!r}")
+        fehler += 1
+
+    # Jede referenzierte Datei existiert und hat so viele Folien, wie ihre
+    # Config erwartet.
     try:
         from pptx import Presentation
         haben_pptx = True

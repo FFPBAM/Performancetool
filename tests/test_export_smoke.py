@@ -57,7 +57,8 @@ except ImportError as ex:
 # Strategie waechst die Broschuere um den Block F10-13 (vier Folien).
 THEMA_STRATEGIEN = ["Offensiv", "Pro", "Pro Dividende"]
 THEMA_BLOCK = 4
-THEMA_BASIS = 21
+# Die Grundzahl haengt seit 21.09.2026 an der LEITSTRATEGIE (Offensiv 20,
+# Pro/Pro Dividende 22 Folien) und wird deshalb aus deren Config gelesen.
 
 
 def _daten():
@@ -193,7 +194,7 @@ def main():
     # ── Teil 2: Thema mit mehreren Strategien (Dupliziermodus) ──────────
     # Der einzige Pfad, auf dem _vervielfaeltige_block laeuft. Waere
     # _THEMA_CONFIG faelschlich auf modus="fest" gestellt, blieben es
-    # immer 21 Folien und die Zusatzstrategien haetten stillschweigend keine.
+    # immer die Grundzahl und die Zusatzstrategien haetten stillschweigend keine.
     for anzahl in (2, 3):
         namen = [n for n in THEMA_STRATEGIEN if n in d["d2c"]][:anzahl]
         if len(namen) < anzahl:
@@ -205,7 +206,9 @@ def main():
             ziel, groesse, meldungen = _bauen(portfolios, "Thema", d, ausgabe,
                                               f"Thema_{anzahl}.pptx")
             n = len(Presentation(ziel).slides)
-            soll = THEMA_BASIS + THEMA_BLOCK * (anzahl - 1)
+            _tpl, _cfg = _vorlage_fuer_strategie(d["nm"], namen[0])
+            soll = (_cfg["erwartete_folien"] - len(_cfg.get("entfernen") or [])
+                    + THEMA_BLOCK * (anzahl - 1))
             ok = n == soll and not meldungen
             fehler += 0 if ok else 1
             print(f"{'Thema x' + str(anzahl) + ' (Duplikation)':28s} {n:6d} {soll:5d} "

@@ -1,0 +1,308 @@
+"""Prueft die statischen Folien der Themen-Vorlagen (21.09.2026).
+
+AUSLOESER: Philip hat die aktuellen Original-Broschueren aus dem Haus
+geliefert (Pro, Offensiv, Pro Dividende, Stand 14.09.2026). Die taeglich
+befuellten Folien passten, die STATISCHEN wichen ab — gemessen am Folientext
+und am PowerPoint-Bild:
+
+    alle          "Unsere Bank in Zahlen" noch mit den Zahlen 31.12.2024
+    Pro, Pro Div. "Steuerlicher Hinweis zum Honorar" fehlte
+    Offensiv      eigenes Cover, eigene Leitlinien, eigene Honorar-Folie,
+                  KEINE Folie "Gute Jahre ueberwiegen" (20 statt 22 Folien)
+    Pro Div.      Honorar-Tabelle zeigte "Strategie Pro"
+
+Die Folien wurden 1:1 aus den Originalen in die Vorlagen uebernommen. Beide
+SCHWEIZ-Strategien nutzen die Pro-Vorlage und bekommen die Aenderungen mit.
+Nichts im Code erzeugt diese Folien — eine Vorlage, die jemand spaeter aus
+einem alten Stand zurueckholt, faellt nur hier auf.
+
+Dazu das Datum der Schlussfolie: "Stand: …" ist ein PowerPoint-DATUMSFELD.
+PowerPoint zeigt beim Oeffnen das heutige Datum; der gespeicherte Wert (den
+Vorschauen ohne Feldaktualisierung zeigen) stand auf 06.07.2026 und wird
+jetzt beim Export auf den Datenstand gesetzt (`update_stand_datum`).
+
+    Schritt 1 — Folienfolge je Vorlage namentlich
+    Schritt 2 — Kernwerte der uebernommenen Folien
+    Schritt 3 — Offensiv hat ein anderes Cover als Pro
+    Schritt 4 — keine Personennamen in den Metadaten (auch eingebettete Excel)
+    Schritt 5 — update_stand_datum setzt den Feldwert, das Feld bleibt
+    Schritt 6 — Gegenproben: die alten Zustaende wuerden gemeldet
+
+    python tests/test_thema_statische_folien.py
+"""
+
+import hashlib
+import io
+import os
+import re
+import sys
+import zipfile
+
+WURZEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, WURZEL)
+FIRMA = "Fürst Fugger Privatbank"
+
+_ANFANG = ["Unsere Vermögensverwaltung"]
+_MITTE = [
+    "Aktien – die guten Jahre überwiegen",
+    "Die Fallstricke des typischen Investors",
+    "Durchhalten zahlt sich aus",
+]
+_BLOCK = [
+    "Einzeltitel",
+    "Aktuelle Portfoliozusammenstellung",
+    "Anlagestrategie",                  # Titel wird beim Export befuellt
+    "Wertentwicklung der Strategie",    # dito
+]
+_ENDE = [
+    "Unsere Bank in Zahlen",
+    "Unsere Standorte",
+    "Unsere Standorte",
+    "Risikohinweise",
+    "Rechtliche Hinweise und Impressum",
+    "Vielen Dank für Ihr Interesse",
+]
+
+
+def _pro_folge(strategie_titel):
+    return (_ANFANG + [strategie_titel] * 2 + _MITTE
+            + ["Gute Jahre überwiegen", "Krise als Chance",
+               "Basis unserer Investmententscheidungen"]
+            + _BLOCK
+            + ["Unser Honorar", "Unser Honorar", "Steuerlicher Hinweis zum Honorar"]
+            + _ENDE)
+
+
+# Vorlage -> erwartete Titel (Anfang des Titels, Folie fuer Folie)
+FOLGE = {
+    "Vorlage_Thema.pptx": _pro_folge("Unsere Strategie PRO"),
+    "Vorlage_Thema_ProDividende.pptx": _pro_folge("Unsere Strategie Pro Dividende"),
+    "Vorlage_Thema_Offensiv.pptx": (
+        _ANFANG + ["Unsere Strategie „Offensiv“"] * 2 + _MITTE
+        + ["Krise als Chance", "Basis unserer Investmententscheidungen"]
+        + _BLOCK
+        + ["Unser Honorar", "Unser Honorar"]
+        + _ENDE),
+}
+
+# Vorlage -> [(Folientitel, Text, der auf dieser Folie stehen MUSS)]
+KERNWERTE = {
+    "Vorlage_Thema.pptx": [
+        ("Unsere Bank in Zahlen", "Dezember 2025"),
+        ("Unsere Bank in Zahlen", "7.358 Mio. EUR"),
+        ("Steuerlicher Hinweis zum Honorar", "Abgeltungssteuer"),
+    ],
+    "Vorlage_Thema_ProDividende.pptx": [
+        ("Unsere Bank in Zahlen", "Dezember 2025"),
+        ("Unsere Bank in Zahlen", "7.358 Mio. EUR"),
+        ("Steuerlicher Hinweis zum Honorar", "Abgeltungssteuer"),
+        ("Unser Honorar", "Strategie Pro Dividende"),
+    ],
+    "Vorlage_Thema_Offensiv.pptx": [
+        ("Unsere Bank in Zahlen", "Dezember 2025"),
+        ("Unsere Bank in Zahlen", "7.358 Mio. EUR"),
+        ("Basis unserer Investmententscheidungen", "Aktienrückkäufe"),
+        ("Unser Honorar", "Halbjährliche Abrechnung"),
+    ],
+}
+
+
+def _norm(text):
+    return re.sub(r"\s+", " ", text.replace("\x0b", " ")).strip().casefold()
+
+
+def _titel(folie):
+    """Titel der Folie: Titel-Platzhalter zuerst, sonst der oberste Text."""
+    kandidaten = []
+    for sh in folie.shapes:
+        if sh.has_text_frame and sh.text_frame.text.strip():
+            ist_titel = sh.is_placeholder and str(
+                sh.placeholder_format.type).startswith(("TITLE", "CENTER_TITLE"))
+            kandidaten.append((0 if ist_titel else 1, sh.top, sh.text_frame.text))
+    kandidaten.sort(key=lambda k: (k[0], k[1]))
+    return kandidaten[0][2] if kandidaten else ""
+
+
+def _texte(folie):
+    """Aller Text einer Folie, auch aus Gruppen und Tabellen."""
+    teile = []
+
+    def sammeln(shapes):
+        for sh in shapes:
+            if sh.shape_type == 6:                     # Gruppe
+                sammeln(sh.shapes)
+            if sh.has_text_frame:
+                teile.append(sh.text_frame.text)
+            if getattr(sh, "has_table", False) and sh.has_table:
+                for zeile in sh.table.rows:
+                    teile.extend(z.text for z in zeile.cells)
+    sammeln(folie.shapes)
+    return _norm(" ".join(teile))
+
+
+def pruefe_folge(prs, erwartet):
+    titel = [_titel(f) for f in prs.slides]
+    if len(titel) != len(erwartet):
+        return [f"{len(titel)} Folien statt {len(erwartet)}"]
+    return [f"Folie {i}: {t.strip()[:40]!r} statt {e!r}"
+            for i, (t, e) in enumerate(zip(titel, erwartet), 1)
+            if not _norm(t).startswith(_norm(e))]
+
+
+def pruefe_kernwerte(prs, erwartet):
+    fehler = []
+    for titel, text in erwartet:
+        folien = [f for f in prs.slides if _norm(_titel(f)).startswith(_norm(titel))]
+        if not any(_norm(text) in _texte(f) for f in folien):
+            fehler.append(f"{text!r} steht auf keiner Folie {titel!r}")
+    return fehler
+
+
+def _cover_bilder(prs):
+    """Bild-Hashes der Titelfolie samt Layout."""
+    folie = prs.slides[0]
+    hashes = set()
+    for teil in (folie.part, folie.slide_layout.part):
+        for rel in teil.rels.values():
+            if "image" in rel.reltype and not rel.is_external:
+                hashes.add(hashlib.md5(rel.target_part.blob).hexdigest())
+    return hashes
+
+
+def autor_funde(pfad):
+    """Autorfelder, die nicht der Firmenname sind — auch in Einbettungen."""
+    funde = []
+
+    def scan(name, blob):
+        z = zipfile.ZipFile(io.BytesIO(blob))
+        for n in z.namelist():
+            if n.endswith("core.xml"):
+                xml = z.read(n).decode("utf-8", "replace")
+                for tag in ("dc:creator", "cp:lastModifiedBy"):
+                    for wert in re.findall(rf"<{tag}>(.*?)</{tag}>", xml, re.S):
+                        if wert.strip() and wert.strip() != FIRMA:
+                            funde.append(f"{name}>{n} {tag}={wert!r}")
+            elif n.endswith((".xlsx", ".xlsm", ".docx", ".pptx")):
+                scan(f"{name}>{n}", z.read(n))
+    with open(pfad, "rb") as f:
+        scan(os.path.basename(pfad), f.read())
+    return funde
+
+
+def _feldwerte(prs):
+    ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+    return [t.text for fld in prs.slides[-1]._element.xpath(
+                ".//a:fld[starts-with(@type,'datetime')]")
+            for t in fld.findall("a:t", ns)]
+
+
+def main():
+    from importlib.util import find_spec
+    if find_spec("pptx") is None:
+        print("UEBERSPRUNGEN — python-pptx nicht installiert")
+        return 0
+    from pptx import Presentation
+    from modules.pptx_helpers import update_stand_datum
+
+    def laden(name):
+        return Presentation(os.path.join(WURZEL, "Vorlage", name))
+
+    f = 0
+    print("Schritt 1 — Folienfolge je Vorlage")
+    for vorlage, folge in FOLGE.items():
+        abw = pruefe_folge(laden(vorlage), folge)
+        for a in abw:
+            print(f"   FEHLER — {vorlage}: {a}")
+        f += len(abw)
+        if not abw:
+            print(f"   OK — {vorlage}: {len(folge)} Folien in der Reihenfolge des Originals")
+
+    print("Schritt 2 — Kernwerte der uebernommenen Folien")
+    for vorlage, werte in KERNWERTE.items():
+        abw = pruefe_kernwerte(laden(vorlage), werte)
+        for a in abw:
+            print(f"   FEHLER — {vorlage}: {a}")
+        f += len(abw)
+        if not abw:
+            print(f"   OK — {vorlage}: {len(werte)} Kernwerte gefunden")
+    pro = laden("Vorlage_Thema.pptx")
+    if pruefe_kernwerte(pro, [("Unser Honorar", "Strategie Pro Dividende")]):
+        print("   OK — Pro traegt in der Honorar-Tabelle nicht 'Pro Dividende'")
+    else:
+        print("   FEHLER — Pro-Vorlage zeigt 'Strategie Pro Dividende'")
+        f += 1
+
+    print("Schritt 3 — Offensiv hat sein eigenes Cover")
+    if _cover_bilder(laden("Vorlage_Thema_Offensiv.pptx")) & _cover_bilder(pro):
+        print("   FEHLER — Offensiv teilt Titelbilder mit Pro (altes Kommoden-Cover?)")
+        f += 1
+    else:
+        print("   OK — keine gemeinsamen Titelbilder mit Pro")
+
+    print("Schritt 4 — Metadaten ohne Personennamen")
+    for vorlage in FOLGE:
+        funde = autor_funde(os.path.join(WURZEL, "Vorlage", vorlage))
+        for x in funde:
+            print(f"   FEHLER — {x}")
+        f += len(funde)
+        if not funde:
+            print(f"   OK — {vorlage}")
+
+    print("Schritt 5 — Datumsfeld der Schlussfolie")
+    datum = "18.09.2026"
+    for vorlage in sorted(os.listdir(os.path.join(WURZEL, "Vorlage"))):
+        if not vorlage.endswith(".pptx"):
+            continue
+        prs = laden(vorlage)
+        vorher = _feldwerte(prs)
+        update_stand_datum(prs, datum)
+        nachher = _feldwerte(prs)
+        if not vorher:
+            print(f"   OK — {vorlage}: kein Datumsfeld, nichts zu tun")
+        elif nachher == [datum] * len(vorher):
+            print(f"   OK — {vorlage}: {vorher} -> {nachher} (Feld erhalten)")
+        else:
+            print(f"   FEHLER — {vorlage}: {vorher} -> {nachher}")
+            f += 1
+
+    print("Schritt 6 — Gegenproben")
+    # (a) Die Folie "Steuerlicher Hinweis" herausnehmen -> Schritt 1 meldet es.
+    prs = laden("Vorlage_Thema.pptx")
+    lst = prs.slides._sldIdLst
+    lst.remove(lst[15])
+    if pruefe_folge(prs, FOLGE["Vorlage_Thema.pptx"]):
+        print("   OK — eine fehlende Steuer-Folie wuerde gemeldet")
+    else:
+        print("   FEHLER — fehlende Steuer-Folie ginge durch")
+        f += 1
+    # (b) Die alten Bankzahlen -> Schritt 2 meldet es.
+    prs = laden("Vorlage_Thema.pptx")
+    for folie in prs.slides:
+        for sh in folie.shapes:
+            if sh.has_text_frame:
+                for p in sh.text_frame.paragraphs:
+                    for r in p.runs:
+                        r.text = r.text.replace("Dezember 2025", "31.12.2024")
+    if pruefe_kernwerte(prs, KERNWERTE["Vorlage_Thema.pptx"]):
+        print("   OK — die alten Bankzahlen wuerden gemeldet")
+    else:
+        print("   FEHLER — die alten Bankzahlen gingen durch")
+        f += 1
+    # (c) Ohne update_stand_datum bleibt der Vorlagenwert stehen.
+    prs = laden("Vorlage_Thema.pptx")
+    if _feldwerte(prs) != [datum]:
+        print(f"   OK — ohne Aufruf steht {_feldwerte(prs)}, nicht der Datenstand")
+    else:
+        print("   FEHLER — Gegenprobe leer: Vorlage traegt schon den Datenstand")
+        f += 1
+
+    print()
+    if f:
+        print(f"FEHLGESCHLAGEN — {f} Abweichung(en)")
+        return 1
+    print("BESTANDEN — statische Themen-Folien entsprechen den Originalen vom 14.09.2026")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
