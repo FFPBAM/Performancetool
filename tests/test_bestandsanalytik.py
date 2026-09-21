@@ -90,11 +90,13 @@ TOLERANZ = 1e-12
 # Genau dafuer stehen diese Anker: Der Test hat den Datenwechsel gemeldet,
 # statt ihn durchgehen zu lassen. Die Titelzahl des zweiten Paares ist dabei
 # von 13 auf 12 gefallen — eine echte Bestandsaenderung, keine Rundung.
+# Nachgezogen 21.09.2026 auf Stand 260918; am Stand 260916 standen hier
+# 0.70519 / 0.39702 / 0.21460 (Titelzahlen unveraendert).
 BEKANNTE_PAARE = [
     # (Strategie A, Strategie B, Anteil, gemeinsame Titel)
-    ("cVV ausgewogen", "cVV defensiv plus", 0.70519, 22),
-    ("cVV dynamic",    "Comdirect_100",     0.39702, 11),
-    ("cVV ausgewogen", "Comdirect_100",     0.21460,  5),
+    ("cVV ausgewogen", "cVV defensiv plus", 0.70654, 22),
+    ("cVV dynamic",    "Comdirect_100",     0.39584, 11),
+    ("cVV ausgewogen", "Comdirect_100",     0.21525,  5),
 ]
 # Die Werte sind EXAKT und nicht gerundet. Beim ersten Lauf standen hier
 # 0,696 und 0,450 aus einer gerundeten Ausgabe — der Test schlug an, und das
@@ -399,10 +401,10 @@ def schritt4_gemeinsame_titel():
               "statt 'XETRA Gold'")
         f += 1
     else:
-        # Nachgezogen 18.09.2026 (Stand 260916); vorher 0.08236 (Stand 260824),
-        # davor 0.07544 (Stand 260708).
+        # Nachgezogen 21.09.2026 (Stand 260918); vorher 0.07913 (Stand 260916),
+        # 0.08236 (Stand 260824), 0.07544 (Stand 260708).
         f += _nah("XETRA Gold als groesster Beitrag", oben["gemeinsam"],
-                  0.07913, 5e-6)
+                  0.08025, 5e-6)
 
     # AUF GROEBEREN EBENEN GIBT ES KEINEN KLARTEXTNAMEN. Beim ersten Schreiben
     # bildete die Funktion dort "Aktien" auf einen beliebigen Wertpapiernamen
@@ -435,28 +437,30 @@ def schritt4_gemeinsame_titel():
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Am 18.09.2026 am Bestandsstand 260916 gemessen, Strategie *cVV ausgewogen*.
-# Vorher (Stand 260824): Aktien +0.089020, Edelmetalle +0.005740, Renten
+# Am 21.09.2026 am Bestandsstand 260918 gemessen, Strategie *cVV ausgewogen*.
+# Stand 260916 (18.09.2026): Aktien +0.076360, Edelmetalle +0.000940, Renten
+# -0.001050, gesamt +0.076250; Doppelsegment -0.000920 / +0.000940 / +0.000020.
+# Davor (Stand 260824): Aktien +0.089020, Edelmetalle +0.005740, Renten
 # +0.001590, gesamt +0.096350; Doppelsegment -0.001590 / +0.005740 / +0.004150.
-# ACHTUNG, die Gegenprobe steht auf diesem Stand KNAPP: flach kommt nur noch
-# +0.00002 heraus. Das Vorzeichen kippt weiterhin, aber eine kleine
-# Verschiebung der naechsten Datenlieferung kann es auf null oder darunter
-# druecken — dann ist die Gegenprobe wertlos, nicht der Code falsch.
+# Die Gegenprobe stand am Stand 260916 KNAPP (flach nur +0.00002); am Stand
+# 260918 wieder deutlich: flach +0.00114 gegen -0.00160 auf der Aktienseite.
+# Faellt "flach" bei einer spaeteren Lieferung auf null oder darunter, ist die
+# Gegenprobe wertlos geworden, nicht der Code falsch.
 # DIE GEGENPROBE ZU #64 STECKT IN DIESEN ZAHLEN: "Eisen,Stahl,Rohstoffe" ist
 # das einzige Segment, das in ZWEI Gattungen vorkommt. Flach ueber alle
 # Gattungen aggregiert kippt dabei sogar das VORZEICHEN — die naive Fassung
 # meldet einen Gewinn, wo die Aktienseite einen Verlust hatte.
 BEITRAG_CVV_AUSGEWOGEN = {
-    "Aktien":      (+0.076360, 9),   # (Summe, Zahl der Segmente)
-    "Edelmetalle": (+0.000940, 1),
-    "Renten":      (-0.001050, 2),
+    "Aktien":      (+0.082930, 9),   # (Summe, Zahl der Segmente)
+    "Edelmetalle": (+0.002740, 1),
+    "Renten":      (-0.000530, 2),
 }
-BEITRAG_GESAMT = +0.076250
+BEITRAG_GESAMT = +0.085140
 # Dasselbe Segment, dreimal gelesen:
 DOPPELSEGMENT = "Eisen,Stahl,Rohstoffe"
-DOPPEL_AKTIEN = -0.000920
-DOPPEL_EDELMETALLE = +0.000940
-DOPPEL_FLACH = +0.000020   # was eine Fassung OHNE Gattungsfilter liefern wuerde
+DOPPEL_AKTIEN = -0.001600
+DOPPEL_EDELMETALLE = +0.002740
+DOPPEL_FLACH = +0.001140   # was eine Fassung OHNE Gattungsfilter liefern wuerde
 
 
 def schritt5_beitrag_je_kategorie():
@@ -596,7 +600,9 @@ def schritt5_beitrag_je_kategorie():
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Am 18.09.2026 am Bestandsstand 260916 gemessen (vorher, Stand 260824:
+# Am 21.09.2026 am Bestandsstand 260918 gemessen (Stand 260916:
+# 0.70519/0.25245/0.24280/0.95764, 0.21460/0.74304/0.74229/0.95764,
+# 0.39702/0.58249/0.55987/0.97951; L1 1.48533. Davor, Stand 260824:
 # 0.70552/0.25303/0.24343/0.95855, 0.21385/0.74470/0.74246/0.95855,
 # 0.41607/0.56309/0.54024/0.97916; L1 1.48716). Die drei Zahlen je Paar
 # haengen ueber eine IDENTITAET zusammen, nicht ueber drei Messungen:
@@ -607,14 +613,14 @@ def schritt5_beitrag_je_kategorie():
 # hier nebeneinander und nicht einzeln.
 BEKANNTE_EXKLUSIV = [
     # (A, B, Ueberschneidung, exklusiv A, exklusiv B, investiert A)
-    ("cVV ausgewogen", "cVV defensiv plus", 0.70519, 0.25245, 0.24280, 0.95764),
-    ("cVV ausgewogen", "Comdirect_100",     0.21460, 0.74304, 0.74229, 0.95764),
-    ("cVV dynamic",    "Comdirect_100",     0.39702, 0.58249, 0.55987, 0.97951),
+    ("cVV ausgewogen", "cVV defensiv plus", 0.70654, 0.25145, 0.24184, 0.95799),
+    ("cVV ausgewogen", "Comdirect_100",     0.21525, 0.74274, 0.74185, 0.95799),
+    ("cVV dynamic",    "Comdirect_100",     0.39584, 0.58400, 0.56126, 0.97984),
 ]
 # Die VERWORFENE Definition, zum Vergleich: Summe |w_A - w_B|. Sie ist
 # symmetrisch, kann aber ueber 100 % gehen — bei diesem Paar 148,5 %. Neben
 # einem Mass mit Deckel 100 waere das ein Missverstaendnis mit Ansage.
-L1_CVV_COMDIRECT = 1.48533
+L1_CVV_COMDIRECT = 1.48459
 
 
 def schritt6_nicht_ueberlappung():
