@@ -4887,6 +4887,62 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 
 ## 16. Changelog
 
+### 21.09.2026 – Statische Themen-Folien an die Original-Broschüren angeglichen; Stimmigkeitsprüfung
+
+Anlass: aktuelle Original-Broschüren aus dem Haus (Pro, Offensiv, Pro
+Dividende, Stand 14.09.2026). Folie für Folie gemessen (Text inkl. Gruppen und
+Tabellen, dazu Pixelvergleich am PowerPoint-Bild). Abweichungen: Bank-Folie mit
+Zahlen 2024, fehlende Folie „Steuerlicher Hinweis zum Honorar" (Pro, Pro Div.),
+falsche Honorar-Tabelle bei Pro Dividende, Offensiv mit eigenem Cover, eigenen
+Leitlinien, eigener Honorar-Folie und ohne „Gute Jahre überwiegen".
+- **Umgesetzt:** Folien 1:1 per ZIP-Transplantation in die drei
+  Thema-Vorlagen übernommen (Layout der Zielvorlage bleibt). Steuer-Folie auch
+  für beide SCHWEIZ. Offensiv hat **20 Folien** und eine eigene Config
+  (`_THEMA_OFFENSIV_CONFIG`); Pro Dividende behält die rollierende Tabelle.
+  Folienzahlen: Pro/Pro Div. 22, SCHWEIZ 20, Offensiv 20. Alle statischen
+  Folien der fünf gebauten Broschüren pixelgleich mit dem Original, alle fünf
+  öffnen in echtem PowerPoint.
+- **Nachträge:** Offensiv-Honorartabelle zeigt „Strategie Offensiv" (bewusst
+  abweichend vom Original); comdirect F21 trägt die aktuelle Bank-Folie aus der
+  cVV-Vorlage.
+- **Stimmigkeitsprüfung über alle Familien:** Balkenkopf der Bank-Folie
+  „DEZEMBER 2024" über 2025er Zahlen (auch im Original) → 2025 in Thema ×3, cVV
+  und comdirect. ESG-Impressum trug festen Text „Stand: 31.07.2024" → Datumsfeld.
+  cVV-Impressum „Stand." → „Stand:".
+- **Datumsfelder:** „Stand: …" auf der Schlussfolie ist ein Feld, PowerPoint
+  zeigt das aktuelle Datum. `update_stand_datum` setzt jetzt den gespeicherten
+  Feldwert **aller** Datumsfelder auf den Datenstand (für Vorschauen ohne
+  Feldaktualisierung).
+- **Prüfstein** `tests/test_thema_statische_folien.py` (38. Suite) mit
+  Gegenproben (fehlende Steuer-Folie, alte Bankzahlen, Feld ohne Aufruf, fester
+  „Stand: TT.MM.JJJJ"-Text). Sollwerte `test_bestandsanalytik.py` auf 260918,
+  alte Daten 260916 gelöscht.
+- **Offen:** Die Marktfolien der Themen zeigen „1980 bis 2023 | Stand:
+  Dezember 2023" wie die Originale — die Aktualisierung muss vom Haus kommen.
+
+### 18.09.2026 – Sollwerte 260916, `st.iframe`, Titelumbruch, Inhaltsverzeichnisse
+
+- **Datenstand 260916** (je 19 Dateien in `Daten/` und `Daten_PF/`). Danach 33
+  von 35 Suiten grün; rot nur die namentlichen Datenanker
+  (`test_bestandsanalytik`, `test_strategievergleich`) — Gegenprobe am alten
+  Stand grün. Nachgezogen, alte Werte im Kommentar. `Pro` hat jetzt über 3 Jahre
+  Historie und steht im „3 Jahre"-Strategievergleich. Nächste Abläufe:
+  Comdirect_* am 12.03.2027, Pro Dividende am 22.10.2027. Die Gegenprobe zu #64
+  hing hier knapp (+0,00002).
+- **Download-Baustein** von `st.components.v1.html` (abgekündigt) auf
+  `st.iframe` umgestellt, im Firmennetz bestätigt (#25).
+- **Titel der rollierenden Folie lief ins Foto** (Pro Dividende F13, beide
+  SCHWEIZ F11): Der Master stellt Titel auf `wrap="none"`. Umbruch nach
+  „Strategie" nur wo nötig, Namen bis 8 Zeichen bleiben einzeilig
+  (`ROLLIEREND_TITEL_EINZEILIG_MAX` in `pptx_slides.py`). Prüfstein
+  `tests/test_titel_umbruch.py` (36. Suite), jede Thema-Strategie namentlich
+  eingeordnet.
+- **Inhaltsverzeichnisse** aller Vorlagen nachgeschlagen, drei Einträge falsch
+  und in der Vorlage korrigiert (nur `slide2.xml`): ESG „Rechtliche Hinweise und
+  Impressum" 36 → 37, comdirect „Honorar" 14 → 12, comdirect „Rechtliche
+  Hinweise und Impressum" 25 → 26. Prüfstein `tests/test_inhaltsverzeichnis.py`
+  (37. Suite), Gegenprobe gegen die alten Vorlagen → genau die drei Fehler.
+
 ### 17.09.2026 (Nachtrag 2) – Thema: strategie-spezifische Anfangsfolien 2/3
 
 Feedback aus dem Haus: Die Familie „Thema" wird aus EINER Vorlage (der
@@ -4958,6 +5014,85 @@ erneut, Inhaltsverzeichnis-Zahlen `N − #(entfernte < N)` im letzten Lauf mit
 Endziffer). Prüfstein `tests/test_pdf_export.py` inkl. Gegenprobe. Offen:
 Umwandlungsweg (Philip testet PowerPoint für das Web), dann Umwandler und
 Oberfläche (zwei Buttons, Tooltip).
+
+### 26.08.2026 – Unlesbare Broschüren behoben; Ring-Labels mit Seitentreue und Totzone
+
+- **Broschüren mit Vergleichsportfolio (Familie Thema) ließen sich in
+  PowerPoint nicht öffnen.** Ursache: Beim Duplizieren einer Folie bekam jedes
+  Chart eine eigene Kopie, seine Bestandteile (Zeichnung, eingebettete Mappe,
+  Formatteile) aber nicht — zwei Charts teilten sich dieselben Sub-Teile. In
+  echtem PowerPoint vorher und nachher bewiesen; mit dem Code vom 24.08.
+  dasselbe Bild, also keine Regression. Kein Test fand es, weil alle mit
+  python-pptx zurücklasen (#72). Prüfstein `tests/test_pptx_integritaet.py`
+  (32. Suite, sechs Schichten am ZIP/XML, inkl. beider SCHWEIZ), Gegenprobe
+  meldet 15 geteilte Teile.
+- **Nebenbei:** `chart_dynamik` verschluckte Ausnahmen hinter sieben
+  schreibenden Schritten (`except: pass`) → jetzt `LAST_BUILD_ERRORS` plus
+  Traceback. Die falsche Schema-Reihenfolge der Labels (`txPr` vor `layout`)
+  ist ein echter Mangel, aber **nicht** die Ursache (Offene Punkte).
+- **Thema-Broschüre führt nur die obere Strategie** (nach der Behebung erneut
+  vorgelegt und bestätigt). Prüfstein `tests/test_broschuere_auswahl.py`
+  (33. Suite), Gegenprobe: zwei Portfolios ergäben 25 statt 21 Folien.
+- **Ring-Labels in sechs Schritten, in echtem PowerPoint abgenommen:**
+  Seitentreue (Pass 6d leitet die Seite aus dem Segmentwinkel ab) als
+  Familien-Schalter, ein für CVV/ESG/ETF/comdirect, aus für Thema; Zahl klebt
+  an der Führungslinie (feste Box + Ausrichtung zur Ringseite, `wrap="none"`
+  gegen gekürzte Zahlen „37,1…"), gemessen 1,51/1,66 mm statt 5,14/0 mm;
+  Regionen-Ring bekommt seine Punkte (Thema 17/17); steile Linien (Steilheit
+  > 4) setzen unten an; **Totzone 15°** um die Senkrechte — 13 von 17 Ringen von
+  3:1 auf 2:2. Der Prüfstein sichert die **Schwere** zu (Überstand über die
+  Ringachse, Grenze `R_außen × Totzone`), nicht die Anzahl.
+  `KREUZUNGEN_VORLAGEN_MAX` 1 → 0.
+
+### 25.08.2026 – Ringgeometrie vermessen; Ringe auf Makro-Geometrie
+
+- **Prüfstein** `tests/test_ring_geometrie.py` (31. Suite): bis dahin prüfte
+  nichts Größe, Dicke oder Label-Abstände der Ringe. Gegenproben 22 bzw. 44
+  Fehler.
+- **Befund:** Der Ring war nicht dicker, sondern kleiner als in der
+  Makro-PowerPoint (ESG/ETF 3,41 statt 5,34 cm, Band fast gleich). Ursache:
+  Schritt 2b in `ring_labels_aussen_dynamisch` schrumpft den Ring, bis Ring plus
+  Beschriftung passen (#71). Erster Schritt `LEGENDE_SPALTENWEISE` (14 Ringe
+  größer).
+- **Rückkopplung** um die unveränderten acht Pässe: mehrfach ausgeführt bis zur
+  größten kollisionsfreien Größe (`RK_AN`, Voreinstellung aus, ein für die vier
+  vermessenen Familien). Ergebnis 5,34 cm bei 0,56 cm Band, jede Broschüre in
+  sich einheitlich. Abends auch Thema (F10 exakt 8,51 cm, `hole 79`); dabei
+  gefunden: die SCHWEIZ-Strategien fehlten in `_STRATEGIE_FAMILIE`, die beiden
+  Familienerkennungen liefen auseinander — Prüfstein verlangt jetzt Einigkeit.
+- **Nachträge:** ESG-Dateiname `…Inforboard23.08.2026` → `…Infoboard_23.08.2026`
+  (Namensmuster jetzt in `test_folien_config` Schritt 4 festgenagelt); der
+  Prüfstein selbst rechnete mit vertauschten Achsen (Winkelkonvention);
+  Quellenangabe im Chart-Teil (`cdr:relSizeAnchor`) war gegen Labels
+  ungeschützt → Zusicherung (f).
+
+### 24.08.2026 – Performancebeitrag je Segment; Strategievergleich; stille Broschüre
+
+- **Datenstand 260824**, Ankerwerte nachgezogen.
+- **Portfolioanalyse:** Performancebeitrag je Segment als Balkendiagramm
+  (alle Segmente einer Gattung statt Top/Flop 5, #59), Gattungsauswahl davor
+  (flach aggregiert käme ein falsches Vorzeichen heraus). Corporate Colors
+  (Fuggerblau positiv, Fuggergold negativ). Klick auf ein Segment zeigt seine
+  Einzeltitel; die Summe der Zeilen ist exakt der Balken (709 Kombinationen,
+  max. 1,4e−17). Balken auch bei nur einem Segment. Beide `on_select`-Keys in
+  `_KEEPALIVE_SPERRE`.
+- **Strategievergleich:** X-Achsen-Schalter über der Grafik; eigener Zeitraum
+  mit `deckt_zeitraum_ab` an beiden Rändern (bei Beginn 01.01.2020 fallen 11
+  Strategien heraus, die sonst still eine Zahl geliefert hätten);
+  Nicht-Überschneidung („Nur im Bezugsdepot", asymmetrisch).
+- **Die Broschüre baut nicht mehr still weiter:** Fehlt eine Zeitreihe, meldeten
+  `_build_we_data`, `_build_perf_data` und `_build_rollierend_data` nichts und
+  die Folie behielt die Vorlagenzahlen. Jetzt Meldung mit Name, Folie und
+  Handlungsanweisung, abhängig von der Rolle der Vorlage. Prüfstein
+  `tests/test_wertentwicklung_platzhalter.py` (30. Suite).
+
+### 21.08.2026 – YTD-Kachel im Performance-Reiter
+
+Neue Kachel „YTD" neben „Auflage der Strategie", beide Reihen jetzt mit vier
+Kacheln. Die Zahl ist **geliehen**: dieselbe Funktion `period_return` auf
+denselben Serien wie die YTD-Zeile der rollierenden Tabelle, an 19 von 19
+Strategien zeichengleich (#70). Prüfstein `tests/test_ytd_kachel.py`
+(29. Suite).
 
 ### 18.08.2026 (Nachtrag 5) – Zwei Hinweistexte im Performance-Reiter
 
