@@ -482,6 +482,30 @@ def update_quelle_datum(prs, datum_str: str):
             part._blob = new_xml.encode('utf-8')
 
 
+def update_stand_datum(prs, datum_str):
+    """Setzt den gespeicherten Wert der Datumsfelder auf der Schlussfolie.
+
+    HINTERGRUND (21.09.2026): "Stand: …" auf der letzten Folie ist KEIN
+    Text, sondern ein PowerPoint-Datumsfeld (<a:fld type="datetime1">).
+    PowerPoint rechnet es beim Öffnen und beim PDF-Export selbst auf das
+    heutige Datum um — das bleibt so (Entscheidung Philip). Programme, die
+    Felder nicht aktualisieren (Handy-Vorschauen u. ä.), zeigen aber den
+    gespeicherten Wert, und der stammte aus der Vorlage (06.07.2026). Er wird
+    deshalb auf den Datenstand gesetzt; das Feld selbst bleibt erhalten.
+
+    Betrifft nur die LETZTE Folie. Hat sie kein Datumsfeld (ESG, ETF),
+    passiert nichts. No-op wenn datum_str leer ist.
+    """
+    if not datum_str or not len(prs.slides):
+        return
+    ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+    # BaseOxmlElement.xpath kennt das Praefix "a" selbst (kein namespaces=).
+    for fld in prs.slides[-1]._element.xpath(
+            ".//a:fld[starts-with(@type,'datetime')]"):
+        for t in fld.findall("a:t", ns):
+            t.text = datum_str
+
+
 # Default-Namen für Foliennummer-Shapes (PowerPoint generiert verschiedene
 # Namen je nach Sprache und Vorlagen-Herkunft)
 DEFAULT_FOLIENNUMMER_NAMES = (
