@@ -79,6 +79,21 @@ except ImportError as ex:
     print(f"UEBERSPRUNGEN — Abhaengigkeit fehlt: {ex}")
     sys.exit(0)
 
+# Unsere EIGENEN Konstanten getrennt holen. Fehlt ein Paket, wird oben
+# uebersprungen — das ist Hausregel. Fehlt dagegen eine dieser Konstanten,
+# ist die comdirect-Ersetzung zurueckgebaut und der Disclaimer traegt wieder
+# die alte Kostenregel. Das muss ROT werden, nicht gruen.
+from modules import pptx_slides as _slides                         # noqa: E402
+
+_FEHLEND = [n for n in ("WE_DISCLAIMER_FLIESSTEXT", "WE_DISCLAIMER_ANFANG")
+            if not hasattr(_slides, n)]
+if _FEHLEND:
+    print(f"FEHLGESCHLAGEN — modules/pptx_slides.py fehlt: "
+          f"{', '.join(_FEHLEND)} (zurueckgebaut?)")
+    sys.exit(1)
+WE_DISCLAIMER_FLIESSTEXT = _slides.WE_DISCLAIMER_FLIESSTEXT
+WE_DISCLAIMER_ANFANG = _slides.WE_DISCLAIMER_ANFANG
+
 EMU_PRO_CM = 360000
 
 # ── Rendering-Kennwerte, am Artefakt gemessen (nicht geschaetzt) ────────────
@@ -94,6 +109,13 @@ GLYPHENHOEHE_CM = 0.21
 # Mindestabstand zwischen Disclaimer-Unterkante und Quellenzeile. Weniger
 # waere zwar kollisionsfrei, sieht aber nach Versehen aus.
 MINDESTABSTAND_CM = 0.15
+
+# Die Kostenregel, die seit Juli 2026 gilt — und die, die sie abgeloest hat.
+# Beide stehen hier als Konstante, damit Schritt 3 sie an JEDER gebauten
+# Wertentwicklungs-Folie pruefen kann: Eine Broschuere darf die alte Regel
+# nicht mehr tragen und muss die neue nennen.
+ALTE_KOSTENREGEL = "erfolgt vor Kosten"
+NEUE_KOSTENREGEL = "taggenau abgezogen"
 
 VORLAGEN = [
     "Vorlage_cVV_Infoboard.pptx", "Vorlage_ESG.pptx", "Vorlage_comdirect.pptx",
@@ -220,22 +242,75 @@ def _pruefe_vorlagen():
 
 # ───────────────────────────── Schritt 2 ──────────────────────────────────
 
-def _pruefe_zeilenlaengen():
-    print("\n2. Ersatztexte: passt jeder in eine Zeile?")
-    faelle = [("WE_FOOTNOTE_STAR1_NEW", WE_FOOTNOTE_STAR1_NEW),
-              ("WE_FOOTNOTE_STAR2_NEW", WE_FOOTNOTE_STAR2_NEW)]
-    faelle += [(f"WE_DISCLAIMER_REPLACEMENTS[{i}]", neu)
-               for i, (_p, neu) in enumerate(WE_DISCLAIMER_REPLACEMENTS)]
+def _vorlagen_absatzlaenge(prefix):
+    """Laenge des laengsten Vorlagen-Absatzes, der mit `prefix` beginnt."""
+    from pptx import Presentation
+    laengste = 0
+    for datei in VORLAGEN:
+        pfad = os.path.join(WURZEL, "Vorlage", datei)
+        if not os.path.exists(pfad):
+            continue
+        for folie in Presentation(pfad).slides:
+            for shape in folie.shapes:
+                if not shape.has_text_frame:
+                    continue
+                for absatz in shape.text_frame.paragraphs:
+                    if absatz.text.strip().startswith(prefix):
+                        laengste = max(laengste, len(absatz.text))
+    return laengste
 
+
+def _pruefe_zeilenlaengen():
+    """Passt jeder Ersatztext dorthin, wo er landet?
+
+    ZWEI MASSSTAEBE, weil die Vorlagen zwei Bauarten haben:
+
+      * HAND-UMBROCHEN (fuenf Vorlagen): Die Absaetze sind von Hand auf die
+        Boxbreite verteilt, die laengste Zeile hat 149 Zeichen. Ein laengerer
+        Ersatz bricht still um und schiebt alles darunter eine Zeile tiefer.
+      * FLIESSEND (comdirect): EIN Absatz von 651 Zeichen, der von selbst
+        umbricht. Die 149er-Regel beschreibt hier nichts. Massstab ist der
+        VORLAGENTEXT — wird der Ersatz laenger, waechst der Block nach unten
+        und schiebt die Quellenangabe weg.
+    """
+    print("\n2. Ersatztexte: passt jeder dorthin, wo er landet?")
     fehler = 0
-    for name, text in faelle:
+    for name, text in (("WE_FOOTNOTE_STAR1_NEW", WE_FOOTNOTE_STAR1_NEW),
+                       ("WE_FOOTNOTE_STAR2_NEW", WE_FOOTNOTE_STAR2_NEW)):
         ok = len(text) <= WE_FUSSNOTE_ZEILE_MAX
         fehler += 0 if ok else 1
         print(f"   {name:30s} {len(text):4d} / {WE_FUSSNOTE_ZEILE_MAX}  "
               f"{'OK' if ok else 'ZU LANG'}")
+
+    hat_pptx = importlib.util.find_spec("pptx") is not None
+    for i, (prefix, neu) in enumerate(WE_DISCLAIMER_REPLACEMENTS):
+        name = f"WE_DISCLAIMER_REPLACEMENTS[{i}]"
+        if prefix in WE_DISCLAIMER_FLIESSTEXT:
+            if not hat_pptx:
+                print(f"   {name:30s} {len(neu):4d} / ?    UEBERSPRUNGEN "
+                      "(python-pptx fehlt)")
+                continue
+            grenze = _vorlagen_absatzlaenge(prefix)
+            if not grenze:
+                fehler += 1
+                print(f"   {name:30s} FEHLER — kein Vorlagen-Absatz beginnt "
+                      f"mit {prefix!r}; die Ersetzung liefe ins Leere")
+                continue
+            ok = len(neu) <= grenze
+            fehler += 0 if ok else 1
+            print(f"   {name:30s} {len(neu):4d} / {grenze:4d}  "
+                  f"{'OK (fliessend)' if ok else 'LAENGER ALS DIE VORLAGE'}")
+            if not ok:
+                print("        der Block waechst nach unten und schiebt "
+                      "die Quellenangabe weg")
+            continue
+        ok = len(neu) <= WE_FUSSNOTE_ZEILE_MAX
+        fehler += 0 if ok else 1
+        print(f"   {name:30s} {len(neu):4d} / {WE_FUSSNOTE_ZEILE_MAX}  "
+              f"{'OK' if ok else 'ZU LANG'}")
         if not ok:
             print(f"        bricht um — alles darunter rutscht eine Zeile "
-                  f"tiefer: {text[:70]}...")
+                  f"tiefer: {neu[:70]}...")
     return fehler
 
 
@@ -259,6 +334,17 @@ def _pruefe_datei(pfad, etikett, stand):
             maengel.append("Quellenangabe ist leer")
         elif stand and stand not in text:
             maengel.append(f"Stand-Datum fehlt: {text!r}")
+        # Die KOSTENREGEL im Disclaimer (23.09.2026). Bis dahin trugen die
+        # drei comdirect-Folien weiter den Vorlagentext "erfolgt vor Kosten"
+        # — im Widerspruch zur **-Zeile derselben Fussnote, und zwar weil ein
+        # Bindestrich den Anker verfehlte. Lautlos, fast vierzehn Monate.
+        fu_text = fussnote.text_frame.text
+        if ALTE_KOSTENREGEL in fu_text:
+            maengel.append(f"Disclaimer traegt noch die alte Kostenregel "
+                           f"({ALTE_KOSTENREGEL!r})")
+        if NEUE_KOSTENREGEL not in fu_text:
+            maengel.append(f"Disclaimer nennt den taggenauen Abzug nicht "
+                           f"({NEUE_KOSTENREGEL!r})")
         # Absicht: Hier wird NICHT die Absatzlaenge geprueft. Die Vorlagen
         # tragen selbst Absaetze ueber der Zeilenbreite (237 bzw. 254
         # Zeichen) — das ist gewollter Vorlagentext, der sauber umbricht,
@@ -357,19 +443,116 @@ def _pruefe_artefakt(ausgabe):
     return fehler
 
 
+# ───────────────────────────── Schritt 4 ──────────────────────────────────
+
+def _disclaimer(fussnote):
+    """Der Disclaimer einer Fussnote, zu EINEM Fliesstext zusammengefuegt.
+
+    Die Vorlagen sind unterschiedlich gebaut — fuenf brechen den Disclaimer
+    von Hand auf Zeilen um, comdirect fuehrt ihn als einen Absatz. Verglichen
+    werden soll aber die AUSSAGE, nicht die Bauart. Deshalb:
+
+      * ab dem Absatz sammeln, der mit WE_DISCLAIMER_ANFANG beginnt,
+      * Trennstriche am Zeilenende aufloesen ("Auswirkun-" + "gen"),
+      * geschuetzte Leerzeichen und Mehrfach-Leerraum vereinheitlichen.
+
+    Returns None, wenn die Fussnote keinen Disclaimer traegt.
+    """
+    teile, gefunden = [], False
+    for absatz in fussnote.text_frame.paragraphs:
+        if not gefunden:
+            if absatz.text.strip().startswith(WE_DISCLAIMER_ANFANG):
+                gefunden = True
+            else:
+                continue
+        teile.append(absatz.text)
+    if not gefunden:
+        return None
+    text = ""
+    for stueck in teile:
+        if text.endswith("-") and stueck[:1].islower():
+            text = text[:-1] + stueck     # Trennstrich faellt weg
+        else:
+            text += stueck
+    return " ".join(text.replace("\xa0", " ").split())
+
+
+def _pruefe_disclaimer_gleich(ausgabe):
+    """Sagt der Disclaimer in JEDER Familie dasselbe?
+
+    Auftrag Philip, 23.09.2026: "den Disclaimer der comdirect kannst du
+    gleichschalten mit dem Rest, es werden ja hier auch taegliche Daten
+    verwendet." Genau das misst dieser Schritt — nicht, dass eine Ersetzung
+    lief, sondern dass am Ende ueberall dasselbe steht.
+
+    Er haette den alten Fehler gefunden: Ein Bindestrich liess den Anker bei
+    comdirect ins Leere laufen, und niemand erfuhr davon.
+    """
+    print("\n4. Sagt der Disclaimer in jeder Familie dasselbe?")
+    if importlib.util.find_spec("pptx") is None:
+        print("   UEBERSPRUNGEN — python-pptx nicht installiert")
+        return 0
+    from pptx import Presentation
+    import glob
+
+    dateien = sorted(glob.glob(os.path.join(ausgabe, "*.pptx")))
+    if not dateien:
+        print("   UEBERSPRUNGEN — keine gebauten Broschueren gefunden")
+        return 0
+
+    gesehen = {}
+    for pfad in dateien:
+        etikett = os.path.splitext(os.path.basename(pfad))[0]
+        for nr, fussnote, _q in _we_folien(Presentation(pfad)):
+            text = _disclaimer(fussnote)
+            if text is None:
+                print(f"   FEHLER — {etikett} F{nr}: kein Disclaimer, der mit "
+                      f"{WE_DISCLAIMER_ANFANG!r} beginnt")
+                return 1
+            gesehen.setdefault(text, []).append(f"{etikett} F{nr}")
+
+    if len(gesehen) == 1:
+        text, wo = next(iter(gesehen.items()))
+        print(f"   OK — {len(wo)} Folien aus {len(dateien)} Broschueren, "
+              f"wortgleich ({len(text)} Zeichen)")
+        return 0
+
+    print(f"   FEHLER — {len(gesehen)} verschiedene Fassungen:")
+    for i, (text, wo) in enumerate(sorted(gesehen.items(),
+                                          key=lambda p: -len(p[1])), start=1):
+        print(f"     ({i}) {len(wo):2d} Folien: {', '.join(wo[:4])}"
+              f"{' …' if len(wo) > 4 else ''}")
+        print(f"         {text[:150]}...")
+    # Die erste Abweichung benennen, statt den Leser zwei Bloecke vergleichen
+    # zu lassen.
+    fassungen = list(gesehen)
+    a, b = fassungen[0], fassungen[1]
+    for i, (za, zb) in enumerate(zip(a, b)):
+        if za != zb:
+            print(f"   erste Abweichung bei Zeichen {i}: "
+                  f"{a[max(0, i-40):i+40]!r}")
+            print(f"                              gegen "
+                  f"{b[max(0, i-40):i+40]!r}")
+            break
+    return len(gesehen) - 1
+
+
 def main():
     ausgabe = (sys.argv[1] if len(sys.argv) > 1
                else tempfile.mkdtemp(prefix="ffpb_quelle_"))
     os.makedirs(ausgabe, exist_ok=True)
 
-    fehler = _pruefe_vorlagen() + _pruefe_zeilenlaengen() + _pruefe_artefakt(ausgabe)
+    fehler = (_pruefe_vorlagen() + _pruefe_zeilenlaengen()
+              + _pruefe_artefakt(ausgabe)
+              + _pruefe_disclaimer_gleich(ausgabe))
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
         return 1
     print("BESTANDEN — die Quellenangabe steht auf jeder Wertentwicklungs-Folie")
-    print("            unter dem Disclaimer, und jeder Ersatztext passt in")
-    print("            eine Zeile.")
+    print("            unter dem Disclaimer, jeder Ersatztext passt dorthin,")
+    print("            wo er landet, und der Disclaimer sagt in jeder Familie")
+    print("            dasselbe.")
     return 0
 
 

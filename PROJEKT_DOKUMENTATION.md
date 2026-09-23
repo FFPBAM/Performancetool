@@ -4714,13 +4714,13 @@ mehr nötig.
 
 ---
 
-## 15. Backlog (Stand 12.08.2026, nach Priorität)
+## 15. Backlog (Stand 23.09.2026, nach Priorität)
 
-**Stand 12.08.2026 (abends) — was wirklich noch offen ist:** **G**
-(Anlagekriterien SCHWEIZ) und **H** (comdirect-Disclaimer), beide von Philip
-am 12.08.2026 ausdrücklich **zurückgestellt** — sie warten auf eine
-fachliche Entscheidung, nicht auf Arbeit; die technische Analyse steht
-jeweils unten und muss nicht wiederholt werden. Dazu **8–10** (internes
+**Stand 23.09.2026 — was wirklich noch offen ist:** **G**
+(Anlagekriterien SCHWEIZ) — wartet auf Werte aus dem Haus, nicht auf
+Arbeit. **H** (comdirect-Disclaimer) ist am 23.09.2026 **erledigt**: Philip
+hat die fachliche Entscheidung getroffen („gleichschalten mit dem Rest"),
+die Umsetzung steht unten. Dazu **8–10** (internes
 Hosting, Alt-Aufgaben aus Phase 2, Varianten). Alles andere ist
 abgeschlossen; die Punkte bleiben durchgestrichen stehen, weil die
 Begründungen mehr wert sind als die Aufgaben.
@@ -4729,48 +4729,60 @@ Sämtliche **Sichtprüfungen in echtem PowerPoint sind erledigt** (Philip,
 12.08.2026): SCHWEIZ, Datumsachse, Wertachse und Quellenangabe — jede
 Korrektur am Endprodukt bestätigt.
 
-- **H. Der comdirect-Disclaimer beschreibt noch die alte Kostenregel**
-  *(neu 12.08.2026, FACHLICH — Entscheidung Philip)*. Aufgefallen beim
-  Vorher/Nachher-Vergleich zur Quelle-Korrektur: Von 15 Folien änderten
-  sich die Disclaimer-Absätze nur auf 12. Die drei comdirect-Folien
-  blieben unberührt — und tragen deshalb weiterhin den **Vorlagentext**:
+- **H. comdirect-Disclaimer — ERLEDIGT am 23.09.2026.**
+  *(aufgenommen 12.08.2026, geschlossen auf Entscheidung Philip: „den
+  Disclaimer der comdirect kannst du gleichschalten mit dem Rest, es werden
+  ja hier auch tägliche Daten verwendet.")*
 
-  > „Der unterjährige Performance-Ausweis erfolgt vor Kosten (ab 30.06.
-  > abzüglich des halbjährigen Honorarsatzes)."
+  **Was falsch war:** Die drei comdirect-Wertentwicklungs-Folien trugen
+  weiter den Vorlagentext „Der unterjährige Performance-Ausweis erfolgt vor
+  Kosten (ab 30.06. abzüglich des halbjährigen Honorarsatzes)." Seit Juli
+  2026 wird nach Kosten mit taggenauem Abzug gerechnet. Dieselbe Fußnote
+  sagte oben „nach Kosten" und unten „vor Kosten" — sie widersprach sich
+  selbst, in einem Kundendokument (§10.9).
 
-  Das ist seit Juli 2026 **nicht mehr richtig**: Gerechnet wird nach
-  Kosten mit taggenauem Honorarabzug. Genau diesen Satz ersetzt
-  `WE_DISCLAIMER_REPLACEMENTS` in allen anderen Vorlagen.
+  **Zwei Ursachen, die sich addierten.** *Ein Bindestrich:* Der Anker hieß
+  „Performance Ausweis", die Vorlage schreibt „Performance**-**Ausweis" —
+  der Präfix matchte nicht, die Ersetzung lief ins Leere, ohne Fehler und
+  ohne Meldung. *Eine andere Bauart:* Die fünf übrigen Vorlagen brechen den
+  Disclaimer von Hand auf Zeilen à ~149 Zeichen um, comdirect führt ihn als
+  **einen** fließenden Absatz von 651 Zeichen. Der zweite Anker
+  („Kosten berechnet.") sitzt dort mitten im Satz statt am Absatzanfang und
+  greift deshalb ebenfalls nicht.
 
-  **Ursache — ein Bindestrich.** Der Präfix-Anker lautet
-  `"Der unterjährige Performance Ausweis"`; `Vorlage_comdirect.pptx`
-  schreibt „Performance**-**Ausweis". Der Präfix matcht nicht, die
-  Ersetzung läuft ins Leere — **ohne Fehler, ohne Meldung**, genau wie
-  das fehlende `majorTimeUnit` bei #49. Der zweite Anker
-  (`"Kosten berechnet."`) greift ebenfalls nicht: comdirect führt den
-  ganzen Disclaimer als **einen** Absatz, der Anker sitzt dort mitten im
-  Satz statt am Absatzanfang.
+  **Behoben** durch einen dritten Eintrag in `WE_DISCLAIMER_REPLACEMENTS`
+  mit dem Anker `"Der unterjährige Performance-Ausweis"`, der den ganzen
+  Absatz in einem Stück ersetzt. Der Ersatztext (644 Zeichen) sagt wortgleich
+  dasselbe wie die fünf anderen nach ihrer Ersetzung und ist 7 Zeichen kürzer
+  als der Vorlagentext — der Block wächst also nicht. Neu
+  `WE_DISCLAIMER_FLIESSTEXT` (für welche Anker die 149-Zeichen-Regel **nicht**
+  gilt) und `WE_DISCLAIMER_ANFANG` (woran der Prüfstein den Disclaimer
+  ausschneidet).
 
-  Damit steht in einem Kundendokument eine **falsche Aussage über die
-  Kostenberechnung** — dieselbe Klasse wie die SCHWEIZ-Fußnote (#46),
-  und deshalb nicht nur kosmetisch (§10.9). Verschärfend: Die `*`- und
-  `**`-Zeilen **wurden** ersetzt (ihre Anker passen). Dieselbe Fußnote
-  sagt oben „nach Kosten (taggenauer Honorarabzug)" und unten „vor Kosten
-  (ab 30.06. abzüglich des halbjährigen Honorarsatzes)" — sie widerspricht
-  sich also selbst.
+  **Prüfstein `tests/test_quelle_position.py`:** Schritt 2 misst
+  fließende Ersatztexte gegen den **Vorlagentext** statt gegen 149 Zeichen.
+  Schritt 3 verlangt an jeder gebauten Wertentwicklungs-Folie, dass die alte
+  Kostenregel fehlt und die neue dasteht. **Schritt 4 ist neu und der
+  eigentliche Punkt:** Er fügt den Disclaimer jeder Folie zu einem Fließtext
+  zusammen (Trennstriche auflösen, Leerraum vereinheitlichen) und verlangt,
+  dass **alle Familien wortgleich dasselbe sagen** — 19 Folien aus 7
+  Broschüren, 644 Zeichen. Gegenprobe: Ohne den neuen Eintrag meldet
+  Schritt 3 alle drei comdirect-Folien und Schritt 4 die zweite Fassung.
 
-  **Warum nicht sofort behoben:** Die Korrektur ändert einen
-  Compliance-Text und ist keine reine Technikfrage. Zwei Wege:
-  (a) die Anker toleranter machen (z. B. auf „Der unterjährige
-  Performance" kürzen) — greift dann aber nur für den ersten Satz, weil
-  comdirect einen einzigen Absatz hat; (b) den Vorlagentext in
-  `Vorlage_comdirect.pptx` angleichen, dann greifen die vorhandenen Anker
-  wie überall. **(b) ist der saubere Weg** und entspricht der Regel
-  „statischer Vorlagentext gehört in die Vorlage" (CLAUDE.md).
+  **Beleg:** Von sieben gebauten Broschüren sind sechs byte-gleich zum Stand
+  davor; bei comdirect ändern sich genau die drei Wertentwicklungs-Folien,
+  und dort genau der Disclaimer-Absatz.
 
-  Prüfstein, der so etwas künftig findet: fehlt noch. Ein Test „nach dem
-  Befüllen enthält keine Fußnote mehr den Wortlaut der alten Kostenregel"
-  wäre für alle sechs Vorlagen in wenigen Zeilen zu haben.
+  **ABER — das Thema ist damit nicht ganz zu.** Bei der Prüfung am Artefakt
+  gefunden: Dieselbe alte Kostenregel steht in **jeder Familie außer
+  comdirect** noch auf einer ZWEITEN Folie (der Tabellen-Folie: cVV F17,
+  ESG F24, ETF F20, Thema F12, dazu die SCHWEIZ-Varianten). Der Satz lautet
+  dort kürzer („… erfolgt vor Kosten.") und steht MITTEN im Absatz
+  „* Die aufgeführten Zahlen …"; die Anker sind Absatz-Präfixe und greifen
+  deshalb nie. Die Folien haben zudem kein Shape „Quelle" und fallen aus
+  `_we_folien()` heraus — Schritt 4 sieht sie nicht. comdirect ist jetzt in
+  sich stimmig, die übrigen fünf sind es noch nicht. Wortlautänderung in
+  fünf Familien, deshalb Entscheidung Philip.
 
 - **G. Anlagekriterien für die beiden SCHWEIZ-Strategien** *(neu 12.08.2026)*.
   Seit heute sind 17 der 19 Strategien in `Mapping_Anlagekriterien.xlsx`

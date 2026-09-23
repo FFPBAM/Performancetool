@@ -209,6 +209,38 @@ WE_DISCLAIMER_REPLACEMENTS = [
      "(keine halbjährliche Berücksichtigung). Berücksichtigt sind VV-Honorar, "
      "fremde Spesen und evtl. Produktkosten. Die Inflation kann negative "
      "Auswirkun-"),
+    # comdirect (NEU 23.09.2026, Backlog H erledigt — Entscheidung Philip:
+    # "gleichschalten mit dem Rest, es werden hier auch tägliche Daten
+    # verwendet"). Zwei Dinge sind hier anders als in den fünf übrigen
+    # Vorlagen, und beide zusammen haben den Fehler so lange verborgen:
+    #
+    #   1. DER BINDESTRICH. Die Vorlage schreibt "Performance-Ausweis", der
+    #      Anker oben "Performance Ausweis". Der Präfix matchte nicht, die
+    #      Ersetzung lief ins Leere — ohne Fehler, ohne Meldung. Deshalb
+    #      stand dort seit Juli 2026 weiter die ALTE Kostenregel ("erfolgt
+    #      vor Kosten"), im Widerspruch zur **-Zeile derselben Fußnote.
+    #   2. DER UMBRUCH. Die anderen fünf Vorlagen haben den Disclaimer von
+    #      Hand auf Zeilen à ~149 Zeichen verteilt; comdirect hat EINEN
+    #      fließenden Absatz von 651 Zeichen. Deshalb gibt es hier keinen
+    #      zweiten Anker "Kosten berechnet." — der Text muss in EINEM Stück
+    #      ersetzt werden, und die 149-Zeichen-Regel gilt für ihn nicht
+    #      (siehe WE_DISCLAIMER_FLIESSTEXT).
+    #
+    # Der Ersatztext sagt wortgleich dasselbe wie die fünf anderen nach
+    # ihrer Ersetzung; tests/test_quelle_position.py Schritt 4 misst das an
+    # den gebauten Broschüren. Er ist mit 644 Zeichen 7 kürzer als der
+    # Vorlagentext, der Block wächst also nicht.
+    ("Der unterjährige Performance-Ausweis",
+     "Sämtliche Performance Angaben wurden nach Kosten berechnet; der "
+     "jährliche Honorarsatz wird als äquivalente tägliche Belastung taggenau "
+     "abgezogen (keine halbjährliche Berücksichtigung). Berücksichtigt sind "
+     "VV-Honorar, fremde Spesen und evtl. Produktkosten. Die Inflation kann "
+     "negative Auswirkungen auf den Wert und die nominale Rendite Ihres "
+     "Anlagevermögens haben. So kann insbesondere bei risikofreien Anlagen "
+     "ein Wertverlust dadurch eintreten, dass die negative Auswirkung der "
+     "Inflation die nominale Rendite übersteigt. Auch eine geringe "
+     "Anlagedauer und die Gesamtkosten- und Gebühren können negativ das "
+     "Risiko-Rendite-Verhältnis beeinflussen."),
 ]
 """12.08.2026 GEKÜRZT — die zweite Zeile hatte 189 Zeichen bei 149 Zeichen
 Zeilenbreite und brach still um; alles darunter rutschte eine Zeile tiefer
@@ -220,6 +252,22 @@ gestrafft ("in eine … umgerechnet und taggenau abgezogen" → "als … taggena
 abgezogen"; "Sowohl … als auch … wurden berücksichtigt" → "Berücksichtigt sind
 …"). Der Schluss "Auswirkun-" MUSS stehen bleiben: Der Folgeabsatz der Vorlage
 beginnt mit "gen auf den Wert …"."""
+
+WE_DISCLAIMER_FLIESSTEXT = ("Der unterjährige Performance-Ausweis",)
+"""Anker, deren Vorlagen-Absatz NICHT von Hand umbrochen ist.
+
+Für sie gilt WE_FUSSNOTE_ZEILE_MAX nicht: Die Zahl beschreibt eine von Hand
+gebrochene Zeile, nicht einen fließenden Absatz. Maßstab ist hier
+stattdessen der Vorlagentext selbst — der Ersatz darf nicht länger sein,
+sonst wächst der Block nach unten und schiebt die Quellenangabe weg.
+Gemessen in tests/test_quelle_position.py, Schritt 2."""
+
+WE_DISCLAIMER_ANFANG = "Sämtliche Performance Angaben"
+"""Womit der Disclaimer nach der Ersetzung in JEDER Vorlage beginnt.
+
+Der Marker gehört dem Code, nicht dem Test: Schritt 4 in
+tests/test_quelle_position.py schneidet daran den Disclaimer aus der
+Fußnote heraus und hält die sechs Familien gegeneinander."""
 
 WE_FUSSNOTE_ZEILE_MAX = 149
 """Maximale Zeichenzahl einer Fußnoten-Zeile der Wertentwicklungs-Folie.

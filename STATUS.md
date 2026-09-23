@@ -248,6 +248,47 @@ positionellem (Etappe 1 von 5):**
   Dabei fiel auf, dass die Meldung *im Tool* noch die alte Spaltenbezeichnung
   nannte — korrigiert.
 
+- **comdirect-Disclaimer gleichgeschaltet (Backlog H erledigt).** Auftrag
+  Philip: „den Disclaimer der comdirect kannst du gleichschalten mit dem
+  Rest, es werden ja hier auch tägliche Daten verwendet."
+
+  Die drei comdirect-Wertentwicklungs-Folien trugen seit Juli 2026 die
+  **alte** Kostenregel („erfolgt vor Kosten"), während dieselbe Fußnote
+  oben „nach Kosten" sagte. Zwei Ursachen: ein **Bindestrich** ließ den
+  Anker ins Leere laufen, und comdirect führt den Disclaimer als **einen**
+  fließenden Absatz (651 Zeichen) statt wie die anderen fünf in von Hand
+  umbrochenen Zeilen à ~149 — deshalb griff auch der zweite Anker nicht.
+
+  Behoben mit einem dritten Eintrag in `WE_DISCLAIMER_REPLACEMENTS`, der den
+  ganzen Absatz ersetzt (644 Zeichen, 7 kürzer als die Vorlage — der Block
+  wächst nicht). Dazu `WE_DISCLAIMER_FLIESSTEXT` (für welche Anker die
+  149-Zeichen-Regel **nicht** gilt) und `WE_DISCLAIMER_ANFANG`.
+
+  **Neuer Schritt 4 in `tests/test_quelle_position.py`:** Er fügt den
+  Disclaimer jeder Folie zu einem Fließtext zusammen und verlangt, dass
+  **alle Familien wortgleich dasselbe sagen**. Ergebnis: 19 Folien aus 7
+  Broschüren, 644 Zeichen, identisch. Der Test misst damit nicht, dass eine
+  Ersetzung lief, sondern dass am Ende überall dasselbe steht — er hätte den
+  alten Fehler gefunden. Gegenprobe: ohne den Eintrag 4 Abweichungen.
+
+  **Beleg:** sechs von sieben Broschüren byte-gleich zum Stand davor; bei
+  comdirect genau die drei Wertentwicklungs-Folien, dort genau der
+  Disclaimer-Absatz. 39/39 Suiten grün, `pyflakes` null, `ui_dump` identisch.
+
+  **Offen, gehört dazu — am Artefakt nachgemessen:** Dieselbe alte
+  Kostenregel steht noch auf einer ZWEITEN Folie, und zwar in **jeder
+  Familie außer comdirect**: in den gebauten Broschüren cVV F17, ESG F24,
+  ETF F20, Thema F12 und in allen SCHWEIZ-/Thema-Varianten. Der Satz lautet
+  dort kürzer („… erfolgt vor Kosten." ohne den 30.06.-Zusatz) und steht
+  **mitten** im Absatz „* Die aufgeführten Zahlen …" — die Anker sind
+  Absatz-Präfixe und greifen deshalb nie. Diese Folien tragen auch kein Shape
+  „Quelle" und fallen aus `_we_folien()` heraus, der neue Schritt 4 sieht sie
+  also nicht. **Ergebnis: comdirect ist jetzt in sich stimmig, die übrigen
+  fünf Familien sind es noch nicht** — sie sagen auf der
+  Wertentwicklungs-Folie „nach Kosten" und auf der Tabellen-Folie „vor
+  Kosten". **Von Philip zu entscheiden**, ob diese zweite Stelle ebenfalls
+  angeglichen wird; es wäre eine Wortlautänderung in fünf Familien.
+
 - **Offen / für Philip:**
   - **Sichtprüfung in der Live-App.**
   - **Etappe 5:** Umbenennungs-Prüfstein (Folientitel, Chart-Seriennamen).
@@ -3999,17 +4040,6 @@ genannten Stellen an und nicht bei null.
   Fremdwährungen. Bis dahin zeigt das Tool dort korrekt keinen Banner; das
   ist **kein Fehlzustand**. Zum Eintragen: Werte in die Excel, dann in
   `tests/test_anlagekriterien.py` die Liste `NOCH_OFFEN` leeren.
-- **comdirect-Disclaimer** (Backlog H). Dort steht weiter die alte
-  Kostenregel („erfolgt vor Kosten (ab 30.06. …)"), weil der Ersetzungs-Anker
-  „Performance Ausweis" heißt und `Vorlage_comdirect.pptx`
-  „Performance**-**Ausweis" schreibt — ein Bindestrich. Dieselbe Fußnote sagt
-  oben „nach Kosten (taggenauer Honorarabzug)": Sie widerspricht sich selbst,
-  und die untere Aussage ist seit Juli 2026 falsch. **Das ist eine
-  Sachaussage in einem Kundendokument** (§10.9), keine Kosmetik — deshalb
-  steht es hier und nicht unter „nachrangig". Sauberster Weg: den Satz in der
-  Vorlage angleichen, dann greifen die vorhandenen Anker. Details in
-  `PROJEKT_DOKUMENTATION.md` §15 H.
-
 Im Code ist darüber hinaus nichts offen außer Nachrangigem: internes Hosting
 (§15 Punkt 8) und die Alt-Aufgaben aus Phase 2, die vor einer Umsetzung
 ohnehin erst mit Philip zu klären sind.
