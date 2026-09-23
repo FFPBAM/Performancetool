@@ -881,10 +881,10 @@ if ansicht == _VIEW_PERF:
     if _ohne_csv:
         st.warning(
             "**Ohne Daten und deshalb nicht in der Auswahl: "
-            + ", ".join(_ohne_csv) + ".** Zu diesen Zeilen des "
-            "Namens-Mappings liegt keine CSV im Datenordner. Entweder fehlt "
-            "die Lieferung, oder der CSV-Portfolioname in der Spalte "
-            "„Honorarsatz Mapping“ weicht vom Namen in der Datei ab. "
+            + ", ".join(_ohne_csv) + ".** Zu diesen Zeilen der "
+            "Stammdaten liegt keine CSV im Datenordner. Entweder fehlt "
+            "die Lieferung, oder der Wert in der Spalte "
+            "„CSV-Portfolioname“ weicht vom Namen in der Datei ab. "
             "Bisher verschwanden solche Zeilen kommentarlos.")
 
     _pp_abweichungen = []

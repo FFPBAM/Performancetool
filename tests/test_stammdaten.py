@@ -19,8 +19,8 @@ HINTERGRUND (23.09.2026):
 
 ZWEI SCHLUESSEL, NICHT EINER — der haeufigste Denkfehler an dieser Datei:
     Spalte A "Strategie auswaehlen"  = Anzeigename ("cVV konservativ")
-    Spalte B "Honorarsatz Mapping"   = CSV-PORTFOLIONAME ("Muster konservativ
-                                       cVV"), trotz des Spaltenkopfs.
+    Spalte B "CSV-Portfolioname"      = Schluessel aus dem Bestandssystem
+                                       ("Muster konservativ cVV").
     B kommt aus dem Bestandssystem und ist NICHT frei waehlbar. B schliesst
     die CSV-Dateien auf, Mapping_Honorarsatz ("Inhaber") und HISTORIE_AB.
     A schliesst die Anlagekriterien auf und ist Schluessel vieler
