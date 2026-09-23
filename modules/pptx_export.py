@@ -481,6 +481,41 @@ def _melde_ohne_zeitreihe(bezeichnung: str, idx: int, folie: str):
         f"Beispieldaten der Vorlage. Vor dem Versand pruefen.")
 
 
+def meldung_serien_ohne_farbe(serien_namen, farben_nach_name, pos):
+    """Meldetext, wenn Chart-Serien und Farbtabelle nicht mehr zusammenpassen.
+
+    Returns "" wenn alles passt.
+
+    WARUM DAS EINE MELDUNG WERT IST (23.09.2026): Die Schlüssel von
+    ``VERGLEICH_FARBEN`` sind die Serien-Namen, die IN DER VORLAGE im
+    Chart-Cache stehen ("Konservativ", "Defensiv", …) — NICHT die
+    Strategienamen aus dem Mapping. Wird eine Serie in der Vorlage umbenannt
+    oder ein Schlüssel falsch geschrieben, färbt
+    ``set_series_line_colors`` die Linie einfach nicht: Sie bleibt in
+    Office-Blau/Orange stehen. Die Broschüre sieht dann nur "etwas anders"
+    aus, und niemand erfährt, warum.
+
+    BEIDE Richtungen werden gemeldet: eine Serie ohne Farbe (die Vorlage hat
+    sich geändert) UND ein Schlüssel ohne Serie (der Code hat einen
+    Tippfehler oder eine Serie ist weggefallen).
+
+    Eigene Funktion statt Inline-Vergleich, damit ein Prüfstein sie gegen
+    die echten Serien-Namen der Vorlage halten kann.
+
+    Prüfstein: tests/test_farben.py, Schritt 5
+    """
+    ohne_farbe = [s for s in serien_namen if s and s not in farben_nach_name]
+    unbenutzt = [k for k in farben_nach_name if k not in serien_namen]
+    if not (ohne_farbe or unbenutzt):
+        return ""
+    return (f"Folie {pos}: Vergleichs-Chart — "
+            + (f"ohne Farbe: {', '.join(ohne_farbe)}. " if ohne_farbe else "")
+            + (f"die Farbtabelle kennt {', '.join(unbenutzt)}, das Chart "
+               f"nicht. " if unbenutzt else "")
+            + "Die betroffenen Linien behalten die Office-Standardfarbe. "
+              "Vor dem Versand prüfen.")
+
+
 def _record_build_error(context: str, exc: Exception):
     import traceback
     LAST_BUILD_ERRORS.append(
@@ -1114,8 +1149,13 @@ def generate_portfolioanalyse_pptx(
                         ValueError("Chart-Shape 'Diagramm' nicht gefunden."))
                     continue
                 set_line_series_sparse(shape, kat, serien)
-                set_series_line_colors(shape, VERGLEICH_FARBEN,
-                                       breite_emu=VERGLEICH_LINIENBREITE_EMU)
+                _, _serien_namen = set_series_line_colors(
+                    shape, VERGLEICH_FARBEN,
+                    breite_emu=VERGLEICH_LINIENBREITE_EMU)
+                _m = meldung_serien_ohne_farbe(
+                    _serien_namen, VERGLEICH_FARBEN, pos)
+                if _m:
+                    LAST_BUILD_ERRORS.append(_m)
                 # Datumsachse am letzten Datenmonat verankern (21.09.2026):
                 # letzte Beschriftung = aktueller Monat statt Januar.
                 anker_am_ende.append(str(shape.chart.part.partname))

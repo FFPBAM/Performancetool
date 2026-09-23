@@ -514,15 +514,7 @@ def build_portfolio_timeseries(files, mapping):
         #
         # Ein GEFUNDENER Satz von 0,0 ist etwas anderes als ein fehlender
         # und loest deshalb keine Meldung aus.
-        fd = 0.0
-        honorar_gefunden = False
-        if {_stamm.SP_INHABER, _stamm.SP_SATZ} <= set(mapping.columns):
-            treffer = mapping.loc[mapping[_stamm.SP_INHABER] == pn, _stamm.SP_SATZ]
-            if len(treffer):
-                wert = pd.to_numeric(treffer.iloc[0], errors="coerce")
-                if pd.notna(wert):
-                    fd = float(wert)
-                    honorar_gefunden = True
+        fd, honorar_gefunden = _stamm.honorarsatz(mapping, pn)
         idx = dates.iloc[1:].reset_index(drop=True)
         df = pd.DataFrame(index=idx)
         df.index.name = "Datum"
@@ -566,3 +558,34 @@ def strategien_ohne_honorarsatz(paare):
     return [name for name, reihe in paare
             if reihe is not None
             and not reihe.attrs.get("honorar_gefunden", True)]
+
+
+def strategien_ohne_csv(name_mapping, available_csv_names):
+    """Welche Mapping-Zeilen haben KEINE Daten-CSV?
+
+    Returns: Liste der Anzeigenamen, in Mapping-Reihenfolge. Leer = alles da.
+
+    WARUM DAS EINE MELDUNG WERT IST (23.09.2026): ``build_name_lookups``
+    filtert die Auswahl über ``isin(available_csv_names)``. Eine Zeile, deren
+    CSV-Portfolioname nicht zu den vorhandenen Dateien passt — ein Tippfehler,
+    ein Leerzeichen am Rand, eine umbenannte Strategie — verschwindet damit
+    LAUTLOS aus dem Auswahlfeld. Auf dem Bildschirm sieht das aus wie "diese
+    Strategie gibt es nicht", nicht wie "hier stimmt etwas nicht".
+
+    Der Filter selbst BLEIBT: Eine Strategie ohne Daten wäre nicht
+    auswaehlbar, nur anklickbar. Gemeldet wird sie trotzdem.
+
+    Eigene Funktion und nicht inline, aus demselben Grund wie bei
+    ``strategien_ohne_honorarsatz``: Wer eine Entscheidung trifft, die man
+    pruefen koennen muss, gibt ihr einen Namen.
+
+    Pruefstein: tests/test_stammdaten.py, Schritt 9
+    """
+    if name_mapping is None or getattr(name_mapping, "empty", True):
+        return []
+    col_display = _stamm.spalte(name_mapping, _stamm.SP_ANZEIGE)
+    col_csv_key = _stamm.spalte(name_mapping, _stamm.SP_CSV_NAME)
+    vorhanden = {str(n) for n in available_csv_names}
+    return [str(zeile[col_display])
+            for _, zeile in name_mapping.iterrows()
+            if str(zeile[col_csv_key]) not in vorhanden]

@@ -985,6 +985,26 @@ def _familie_fuer_strategie(name_mapping, display_name):
 familie_fuer_strategie = _familie_fuer_strategie
 
 
+def meldung_ohne_honorarsatz(namen):
+    """Meldetext fuer Strategien, deren Honorarsatz in der Broschüre fehlt.
+
+    Eigene Funktion statt Inline-Text (23.09.2026), damit ein Prüfstein den
+    Fall erreichen kann — ``_pptx_bauen`` ist eine Closure im Renderpfad.
+
+    Der Wortlaut folgt dem Muster der übrigen Build-Meldungen: WER betroffen
+    ist, WAS stattdessen in der Datei steht, WAS zu tun ist. Er ist bewusst
+    schaerfer als die Zeitreihen-Meldung — hier steht eine falsche ZAHL in
+    einem Kundendokument, nicht ein Platzhalter.
+    """
+    if not namen:
+        return ""
+    return (f"Kein Honorarsatz hinterlegt für {' und '.join(namen)}. "
+            f"Im Honorarsatz-Mapping fehlt eine Zeile zu dieser Strategie — "
+            f"die Broschüre rechnet mit 0 % und weist damit BRUTTO-Zahlen "
+            f"aus, obwohl sie als „nach Kosten“ beschriftet sind. "
+            f"Vor dem Versand pruefen.")
+
+
 def _pfad_aufloesen(dateiname):
     """Vorlagen-Dateiname → existierender Pfad oder None.
 
@@ -1410,6 +1430,7 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
         performance_inputs = []
         missing_csv_names = []
+        ohne_honorarsatz = []
         for pf_name, df_pf, _ad, _dur in portfolios:
             # csv_name auflösen: erst über perf_d2c (vom Performance-Tab),
             # fallback auf display_to_csv_pf (lokales Mapping)
@@ -1424,15 +1445,15 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 # Tabelle, Vergleich) auf derselben Basis, und die
                 # Beschriftung "seit <Jahr>" ergibt sich von selbst.
                 ts_df = historie_beschneiden(ts_df, csv_n)
-            # Honorarsatz aus mapping (Default, dezimal) × MwSt-Faktor
-            fee_dec = 0.0
-            if mapping_pf is not None and csv_n is not None:
-                try:
-                    fee_dec = float(mapping_pf.loc[
-                        mapping_pf[_stamm.SP_INHABER] == csv_n,
-                        _stamm.SP_SATZ].values[0]) * mwst_faktor_pf
-                except Exception:
-                    fee_dec = 0.0
+            # Honorarsatz aus mapping (Default, dezimal) × MwSt-Faktor.
+            # DIESELBE Suche wie im Performance-Tab (stammdaten.honorarsatz).
+            # Bis 23.09.2026 stand hier ein eigenes "except: fee_dec = 0.0":
+            # Dieselbe fehlende Mapping-Zeile wurde im Tool gemeldet und in
+            # der Kundenbroschüre verschluckt.
+            _satz, _gefunden = _stamm.honorarsatz(mapping_pf, csv_n)
+            fee_dec = _satz * mwst_faktor_pf
+            if not _gefunden:
+                ohne_honorarsatz.append(pf_name)
 
             # NEU (Juli 2026): Zusatzdaten für die Wertentwicklungs-Folie
             # (Folie 8) — beide optional, fehlend → "–" bzw.
@@ -1467,6 +1488,8 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
                 f"davon: {list(perf_timeseries.keys())[:5]}{'…' if len(perf_timeseries) > 5 else ''}. "
                 f"Fallback-Load aktiv: {fallback_loaded}."
             )
+        if ohne_honorarsatz:
+            pptx_diag.append(meldung_ohne_honorarsatz(ohne_honorarsatz))
 
         try:
             with st.spinner("PowerPoint wird erstellt..."):

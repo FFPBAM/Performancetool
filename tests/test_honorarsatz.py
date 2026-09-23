@@ -29,6 +29,7 @@ Geprueft wird gegen die ECHTEN Daten:
   3. Die beiden SCHWEIZ-Strategien stehen auf 1,55 % netto
      (Festlegung Philip, 11.08.2026).
   4. Ein FEHLENDER Satz ist von einem echten 0 % unterscheidbar.
+  5. Der Broschueren-Pfad meldet denselben Ausfall wie das Tool.
 
 Braucht pandas + streamlit (der Loader liegt in modules/shared.py).
 
@@ -37,6 +38,7 @@ Braucht pandas + streamlit (der Loader liegt in modules/shared.py).
 Rueckgabewert 0 = bestanden, 1 = fehlgeschlagen.
 """
 
+import io
 import os
 import sys
 
@@ -132,6 +134,87 @@ def schritt4_ausfall_ist_sichtbar(mapping, tag):
     return f
 
 
+def schritt5_broschuere_meldet_den_ausfall():
+    """Der BROSCHUEREN-Pfad muss denselben Ausfall melden wie das Tool.
+
+    Bis zum 23.09.2026 tat er das nicht: Im Performance-Tab fuehrte eine
+    fehlende Mapping-Zeile seit dem Audit 14.08.2026 zu einer Fehlermeldung,
+    im Broschüren-Pfad stand ein eigenes ``except Exception: fee_dec = 0.0``.
+    Dieselbe Luecke wurde also auf dem Bildschirm gemeldet und im
+    Kundendokument verschluckt — dort, wo sie mehr schadet.
+
+    Geprueft wird beides: der Wortlaut der Meldung UND dass der Renderpfad
+    sie ueberhaupt aufruft. Letzteres ueber den Syntaxbaum, weil
+    ``_pptx_bauen`` eine Closure im Renderpfad ist und sich nicht importieren
+    laesst (dasselbe Vorgehen wie in tests/test_keepalive.py).
+    """
+    print()
+    print("SCHRITT 5 — die Broschüre meldet den Ausfall ebenfalls")
+    f = 0
+    try:
+        from modules import portfolioanalyse as _pa
+    except Exception as ex:            # streamlit fehlt -> ueberspringen
+        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+        return 0
+    if not hasattr(_pa, "meldung_ohne_honorarsatz"):
+        print("    FEHLER — meldung_ohne_honorarsatz fehlt (zurueckgebaut?) — "
+              "der Ausfall liefe wieder still in die Kundenbroschuere")
+        return 1
+    meldung_ohne_honorarsatz = _pa.meldung_ohne_honorarsatz
+
+    if meldung_ohne_honorarsatz([]) != "":
+        f += 1
+        print("    FEHLER — ohne Betroffene darf keine Meldung entstehen")
+    else:
+        print("    OK — kein Ausfall, keine Meldung")
+
+    m = meldung_ohne_honorarsatz(["cVV ausgewogen"])
+    fehlt = [w for w in ("cVV ausgewogen", "BRUTTO", "nach Kosten")
+             if w not in m]
+    if fehlt:
+        f += 1
+        print(f"    FEHLER — der Meldung fehlt: {fehlt} -> {m!r}")
+    else:
+        print("    OK — die Meldung nennt die Strategie und sagt, dass die "
+              "Zahlen brutto sind")
+
+    # Verdrahtung: ruft der Renderpfad das ueberhaupt auf?
+    import ast
+    quelle = io.open(os.path.join(WURZEL, "modules", "portfolioanalyse.py"),
+                     encoding="utf-8").read()
+    baum = ast.parse(quelle)
+    bauen = [k for k in ast.walk(baum)
+             if isinstance(k, ast.FunctionDef) and k.name == "_pptx_bauen"]
+    if not bauen:
+        f += 1
+        print("    FEHLER — _pptx_bauen nicht gefunden (umbenannt?)")
+        return f
+
+    namen = {n.id for n in ast.walk(bauen[0]) if isinstance(n, ast.Name)}
+    attribute = {n.attr for n in ast.walk(bauen[0]) if isinstance(n, ast.Attribute)}
+    for gesucht, wo in (("ohne_honorarsatz", namen),
+                        ("meldung_ohne_honorarsatz", namen),
+                        ("append", attribute)):
+        if gesucht not in wo:
+            f += 1
+            print(f"    FEHLER — _pptx_bauen nutzt '{gesucht}' nicht mehr — "
+                  "der Ausfall liefe wieder still")
+    else:
+        if f == 0:
+            print("    OK — _pptx_bauen sammelt die Betroffenen und baut die "
+                  "Meldung")
+
+    # Gegenprobe zur Suche selbst: Sie darf nicht alles finden.
+    if "diesen_namen_gibt_es_nicht" in namen:
+        f += 1
+        print("    FEHLER — die Syntaxbaum-Suche findet auch Namen, die es "
+              "gar nicht gibt")
+    else:
+        print("    OK — Gegenprobe: die Suche findet einen erfundenen Namen "
+              "nicht")
+    return f
+
+
 def main():
     mapping = load_mapping()
     tag = detect_newest_date_tag(DATA_FOLDER, EXCLUDE_SUBSTRINGS)
@@ -170,6 +253,7 @@ def main():
                       f"{MAX_SATZ * 100:.2f}%")
 
     fehler += schritt4_ausfall_ist_sichtbar(mapping, tag)
+    fehler += schritt5_broschuere_meldet_den_ausfall()
 
     print()
     if fehler:

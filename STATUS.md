@@ -1,8 +1,8 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 21.09.2026 · **Branch:** `verbesserungen` ·
+**Letzte Sitzung:** 23.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **Alle 38 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
+unerheblich) · **Alle 39 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
 **Stand 21.09. nach Sichtprüfung durch Philip gepusht, alte Daten 260916
 entfernt** (siehe Sitzung 21.09.) ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
@@ -22,6 +22,121 @@ Autor-Metadaten bereinigt.
 > ausbuchstabiert. Grundsatz für alles, was hierher kommt: **keine
 > Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
 > Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
+
+**Sitzung 23.09.2026 — Stammdaten: namentlicher Spaltenzugriff statt
+positionellem (Etappe 1 von 5):**
+
+- **Anlass (Philip):** Er hat die ESG-Benchmarks in `Mapping_Namen.xlsx`
+  angepasst (jetzt „DAX 50 ESG EUR PR" und „MSCI World ESG" statt „DAX" und
+  „MSCI World", vier Zeilen, Spalte D) und über die Weboberfläche
+  eingestellt. Das kam ohne Codeänderung in den Broschüren an. Daraus die
+  Frage: **Hängen auch die NAMEN so zusammen, und was passiert bei einer
+  Umbenennung?** Dazu der Wunsch, die drei Mapping-Excels zusammenzulegen.
+
+- **Antwort nach Bestandsaufnahme: nur halb.** Werte fließen sauber durch.
+  Namen nicht — sie stehen zusätzlich hart im Code, in rund zehn Prüfsteinen
+  und **fest eingebrannt in sechs PowerPoint-Vorlagen** („Anlagestrategie
+  Konservativ" ist statischer Text, `titel_text=""`, der Export fasst ihn nie
+  an). Eine Umbenennung im Mapping erreicht diese Titel **konstruktionsbedingt
+  nie**. Zwei Schlüssel, nicht einer: Spalte A ist der Anzeigename, Spalte B
+  („Honorarsatz Mapping") ist in Wahrheit der **CSV-Portfolioname** und kommt
+  aus dem Bestandssystem.
+
+- **Der gefährlichste Fund: positioneller Spaltenzugriff.** `shared.py`,
+  `portfolioanalyse.py` und `portfolio_builder.py` lasen `columns[0]`, `[1]`
+  und `[3]`. **Am Artefakt belegt:** Mit dem alten Code und einer zusätzlichen
+  Spalte an Position 2 wird der Benchmark-Text der ***-Fußnote zu
+  „konservativ" — dem Inhalt der Duration-Spalte — auf **allen 19
+  Strategien**, ohne jede Fehlermeldung. Genau das wäre passiert, wenn man die
+  tote Spalte „Duration" einfach entfernt hätte.
+
+- **Umgesetzt:** neues Modul `modules/stammdaten.py` (streamlit-frei wie
+  `anlagekriterien.py`, damit der Batch-Export nicht Streamlit hereinzieht):
+  es hält die Spaltennamen und `spalte()`, das bei fehlender Spalte **wirft**
+  und Datei und Spalte beim Namen nennt. Alle sechs positionellen Zugriffe
+  umgestellt. `_finde_familie_spalte` war eine zweite Kopie derselben Suche und
+  delegiert jetzt. Das `except Exception` in `_familie_fuer_strategie` reicht
+  den neuen Fehler durch, statt ihn zu schlucken — sonst wäre der Prüfstein nur
+  im Test scharf gewesen, nicht in der App.
+
+- **Neuer Prüfstein `tests/test_stammdaten.py` (39. Suite)**, acht Schritte:
+  Struktur, Schlüssel-Hygiene, Join gegen den Honorarsatz, Join gegen den
+  **CSV-Inhalt** (nicht den Dateinamen!), Anlagekriterien, Namen gegen die
+  Code-Konstanten, Positions-Unabhängigkeit, dazu drei Gegenproben. **Auf dem
+  alten Stand ist Schritt 7 rot** (git stash, nachgemessen).
+
+- **Beweis, dass nichts kaputt ist:** 39/39 Suiten grün, `pyflakes` null,
+  `py_compile` sauber. Sieben Broschüren (alle Familien plus Thema x2/x3) vor
+  und nach dem Umbau rekursiv als ZIP verglichen: **inhaltsgleich**, einziger
+  Unterschied sind `dcterms:created/modified` in den eingebetteten
+  Arbeitsmappen. `ui_dump.py` für alle drei Ansichten: **identisch**.
+
+- **Entscheidungen Philip:** Der Anzeigename bleibt Schlüssel (keine
+  technische Kurz-ID) — dafür macht der Prüfstein Umbenennungen laut. Tote
+  Spalten werden entfernt. Zusammenlegung zu einer Arbeitsmappe: ja, aber die
+  Blattaufteilung wird erst zu Etappe 2 festgelegt (mein Argument
+  „unterschiedlicher Grain" trug nicht — alle drei Dateien haben dieselbe
+  Kornung, die Anlagekriterien nur zwei Zeilen weniger).
+
+- **Fachlicher Nebenbefund, geklärt:** `Honorarsatz Brutto` wird von keiner
+  Codezeile gelesen und ist **veraltet** — für die drei comdirect-Zeilen
+  ergibt der Wert zurückgerechnet 1,60/1,70/1,80 % netto, während die genutzte
+  Spalte 1,20/1,40/1,60 % sagt. **Philip hat bestätigt: 1,20/1,40/1,60 % netto
+  sind richtig**, die App rechnet also korrekt. Die Spalte fällt mit den
+  anderen toten Spalten.
+
+- **Etappe 2 gleich mit erledigt — die stillen Bruchstellen sind jetzt laut.**
+  Keine Excel wurde dafür angefasst, und keine neue Meldemechanik gebaut: alle
+  drei Fälle nutzen die Kanäle, die es schon gab.
+
+  1. **Fehlender Honorarsatz in der Broschüre.** Der Broschürenpfad hatte ein
+     eigenes `except Exception: fee_dec = 0.0` — dieselbe fehlende
+     Mapping-Zeile wurde im Tool gemeldet und im Kundendokument verschluckt,
+     also dort, wo sie mehr schadet. Die Suche steht jetzt **einmal** in
+     `stammdaten.honorarsatz()` und liefert `(satz, gefunden)`; beide Pfade
+     rufen sie auf. Der Broschürenpfad sammelt die Betroffenen und meldet sie
+     über `meldung_ohne_honorarsatz()` im vorhandenen `pptx_diag`-Kanal.
+     **Wichtig und bewusst:** Ein *eingetragener* Satz von 0 % bleibt etwas
+     anderes als eine *fehlende* Zeile — sonst gäbe es Falschmeldungen.
+  2. **Strategie ohne CSV.** `build_name_lookups` filtert die Auswahl über die
+     vorhandenen CSV-Namen; eine Zeile mit Tippfehler, Leerzeichen am Rand
+     oder geändertem Namen fiel lautlos aus dem Auswahlfeld. Neu
+     `shared.strategien_ohne_csv()`, die App zeigt einen benannten Hinweis.
+     Der Filter **bleibt** — ohne Daten ist die Strategie nicht rechenbar;
+     gemeldet wird sie trotzdem.
+  3. **Nicht gefärbte Chart-Serien.** Die Schlüssel von `VERGLEICH_FARBEN`
+     sind die Serien-Namen aus dem Chart-Cache der Vorlage, nicht die
+     Strategienamen. Passten sie nicht, blieb die Linie in Office-Blau.
+     `set_series_line_colors` liefert jetzt zusätzlich die angetroffenen
+     Namen, `meldung_serien_ohne_farbe()` vergleicht **beide Richtungen**
+     (Serie ohne Farbe = Vorlage geändert; Schlüssel ohne Serie = Tippfehler
+     im Code) und schreibt in `LAST_BUILD_ERRORS`.
+
+  **Prüfsteine:** `test_stammdaten.py` Schritte 8 und 9, `test_honorarsatz.py`
+  Schritt 5 (inkl. Syntaxbaum-Prüfung, dass der Renderpfad die Meldung
+  überhaupt aufruft — `_pptx_bauen` ist eine Closure und nicht importierbar),
+  `test_farben.py` Schritt 5 (hält `VERGLEICH_FARBEN` gegen die **echten**
+  Serien der cVV-Vorlage, wie Schritt 1 am Artefakt). **Gegenprobe des
+  Gesamtstands:** mit zurückgesetztem Code sind alle drei rot. Die Tests
+  **überspringen** zwar bei fehlendem Paket, **scheitern** aber, wenn eine
+  der neuen Funktionen fehlt — ein Rückbau bliebe sonst grün.
+
+  **Beweis:** 39/39 Suiten grün, `pyflakes` null. Broschüren gegen den Stand
+  **vor** Etappe 1 verglichen: inhaltsgleich. `ui_dump` alle drei Ansichten
+  identisch. Im gesunden Zustand meldet nichts davon etwas — der Export läuft
+  weiter mit leerem `LAST_BUILD_ERRORS`.
+
+- **Offen / für Philip:**
+  - **Sichtprüfung in der Live-App**, dann Push. Noch nicht committet.
+  - **Etappe 3/4:** Zusammenlegung zu einer Mappe mit Rückfallebene, danach
+    die alten Dateien entfernen.
+  - **Etappe 5:** Umbenennungs-Prüfstein (Folientitel, Chart-Seriennamen).
+    Was kein Test je beheben kann: Die statischen Folientitel in sechs
+    Vorlagen und die eingebrannten Chart-Seriennamen müssen bei einer
+    Umbenennung **von Hand in PowerPoint** nachgezogen werden.
+  - Weiter offen seit 17.09.: Sicherheitsbefunde mit ISB/DSB (Historie,
+    Repo privat), siehe Kasten oben. Marktfolien der Themen (Stand Dezember
+    2023) warten auf Daten aus dem Haus.
 
 **Sitzung 21.09.2026 (Nachtrag abends) — cVV F19: x-Achse endet am aktuellen Monat:**
 

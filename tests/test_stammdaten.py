@@ -41,7 +41,11 @@ Geprueft wird:
   6. Namen <-> Code: jeder Strategiename, den der Code hart fuehrt, existiert
      im Mapping. Das faengt eine Umbenennung, die sonst still bliebe.
   7. Positions-Unabhaengigkeit: eine eingefuegte Spalte darf nichts aendern.
-  8. Gegenproben — jeder der Schritte 2, 6 und der Spaltenzugriff werden
+  8. Eine Strategie ohne CSV wird beim Namen genannt statt lautlos aus dem
+     Auswahlfeld zu fallen.
+  9. honorarsatz(): ein FEHLENDER Satz ist nicht dasselbe wie eingetragene
+     0 % — sonst gibt es entweder Falschmeldungen oder stille Bruttozahlen.
+ 10. Gegenproben — jeder der Schritte 2, 6 und der Spaltenzugriff werden
      absichtlich verletzt und muessen anschlagen.
 
     python tests/test_stammdaten.py
@@ -343,10 +347,109 @@ def _pruefe_positionsunabhaengig(namen):
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# 8. Gegenproben — misst der Test wirklich?
+# 8. Eine Strategie ohne CSV wird benannt
+# ─────────────────────────────────────────────────────────────────────────
+def _pruefe_ohne_csv(namen):
+    print("\n8. Eine Strategie ohne CSV wird benannt, nicht verschluckt")
+    try:
+        from modules import shared
+    except ImportError as ex:          # streamlit/pandas fehlt -> ueberspringen
+        print(f"   UEBERSPRUNGEN — {ex}")
+        return 0
+    if not hasattr(shared, "strategien_ohne_csv"):
+        # KEIN Ueberspringen: die Funktion ist unsere eigene. Waere sie weg,
+        # verschwaenden Strategien wieder lautlos aus der Auswahl.
+        print("   FEHLER — shared.strategien_ohne_csv fehlt (zurueckgebaut?)")
+        return 1
+    strategien_ohne_csv = shared.strategien_ohne_csv
+    build_name_lookups = shared.build_name_lookups
+
+    alle = set(_werte(namen, stamm.SP_CSV_NAME))
+    fehler = 0
+
+    offen = strategien_ohne_csv(namen, alle)
+    if offen:
+        fehler += len(offen)
+        print(f"   FEHLER — ohne CSV: {offen}")
+    else:
+        print(f"   OK — alle {len(namen)} Zeilen haben eine CSV")
+
+    # Gegenprobe: eine CSV wegnehmen. Die Strategie muss beim NAMEN genannt
+    # werden — und weiterhin aus der Auswahl fallen, denn ohne Daten ist sie
+    # nicht rechenbar. Gemeldet werden soll sie, nicht angeboten.
+    sp_a = stamm.spalte(namen, stamm.SP_ANZEIGE)
+    sp_b = stamm.spalte(namen, stamm.SP_CSV_NAME)
+    opfer_csv = sorted(alle)[0]
+    erwartet = str(namen.loc[namen[sp_b].astype(str) == opfer_csv, sp_a].iloc[0])
+    rest = alle - {opfer_csv}
+
+    gemeldet = strategien_ohne_csv(namen, rest)
+    if list(gemeldet) != [erwartet]:
+        fehler += 1
+        print(f"   FEHLER — erwartet ['{erwartet}'], gemeldet {gemeldet}")
+    else:
+        print(f"   OK — Gegenprobe: '{erwartet}' wird beim Namen genannt")
+
+    dn, _, _ = build_name_lookups(namen, rest)
+    if erwartet in dn:
+        fehler += 1
+        print("   FEHLER — Strategie ohne Daten steht trotzdem in der Auswahl")
+    else:
+        print("   OK — und faellt weiterhin aus der Auswahl (Filter bleibt)")
+    return fehler
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 9. honorarsatz(): fehlend ist nicht dasselbe wie 0 %
+# ─────────────────────────────────────────────────────────────────────────
+def _pruefe_honorarsatz(honorar):
+    print("\n9. honorarsatz(): ein fehlender Satz ist nicht 0 %")
+    fehler = 0
+    sp_i = stamm.spalte(honorar, stamm.SP_INHABER, stamm.DATEI_HONORAR)
+    sp_s = stamm.spalte(honorar, stamm.SP_SATZ, stamm.DATEI_HONORAR)
+    inhaber = str(honorar[sp_i].iloc[0])
+
+    satz, gefunden = stamm.honorarsatz(honorar, inhaber)
+    if not gefunden or satz <= 0:
+        fehler += 1
+        print(f"   FEHLER — '{inhaber}': {satz!r}, gefunden={gefunden}")
+    else:
+        print(f"   OK — '{inhaber}': {satz * 100:.4f} % p.a., gefunden=True")
+
+    satz, gefunden = stamm.honorarsatz(honorar, "Diesen Namen gibt es nicht")
+    if gefunden or satz != 0.0:
+        fehler += 1
+        print(f"   FEHLER — unbekannter Name liefert {satz!r}/{gefunden}")
+    else:
+        print("   OK — unbekannter Name: 0.0 und gefunden=False")
+
+    # Der feine, aber entscheidende Unterschied (Audit 14.08.2026): Ein
+    # EINGETRAGENER Satz von 0 % ist eine Angabe, kein Ausfall. Wer beides
+    # gleich behandelt, erzeugt entweder Falschmeldungen oder verschluckt
+    # den echten Fall.
+    null = honorar.copy()
+    null.loc[null.index[0], sp_s] = 0.0
+    satz, gefunden = stamm.honorarsatz(null, inhaber)
+    if satz != 0.0 or not gefunden:
+        fehler += 1
+        print(f"   FEHLER — eingetragene 0 %: {satz!r}/{gefunden}")
+    else:
+        print("   OK — eingetragene 0 % gilt als gefunden (keine Falschmeldung)")
+
+    satz, gefunden = stamm.honorarsatz(None, inhaber)
+    if gefunden or satz != 0.0:
+        fehler += 1
+        print(f"   FEHLER — ohne Mapping: {satz!r}/{gefunden}")
+    else:
+        print("   OK — ohne Mapping: 0.0 und gefunden=False")
+    return fehler
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 10. Gegenproben — misst der Test wirklich?
 # ─────────────────────────────────────────────────────────────────────────
 def _gegenproben(namen):
-    print("\n8. Gegenproben: absichtlich verletzen, muss anschlagen")
+    print("\n10. Gegenproben: absichtlich verletzen, muss anschlagen")
     fehler = 0
 
     # (a) Ein Leerzeichen am Rand muss Schritt 2 melden.
@@ -407,6 +510,8 @@ def main():
               + _pruefe_anlagekriterien(namen)
               + _pruefe_code_schluessel(namen)
               + _pruefe_positionsunabhaengig(namen)
+              + _pruefe_ohne_csv(namen)
+              + _pruefe_honorarsatz(honorar)
               + _gegenproben(namen))
 
     print()

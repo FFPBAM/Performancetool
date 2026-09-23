@@ -593,15 +593,23 @@ def set_series_line_colors(chart_shape, farben_nach_name: dict,
     farben (Blau/Orange/Grau/Gelb), nicht das Corporate Design. Farben werden
     deshalb explizit als srgbClr gesetzt.
 
-    Serien, deren Name nicht im Dict steht, bleiben unangetastet.
-    Returns: Anzahl gefärbter Serien.
+    Serien, deren Name nicht im Dict steht, bleiben unangetastet — sie
+    behalten die Office-Standardfarbe. Das war bis 23.09.2026 ein STILLER
+    Ausfall: Wird eine Serie in der Vorlage umbenannt oder ein Schlüssel im
+    Dict falsch geschrieben, fällt die Linie auf Blau/Orange zurück und
+    niemand erfährt es. Deshalb liefert die Funktion jetzt auch die Namen,
+    die sie angetroffen hat; der Aufrufer vergleicht sie mit dem Dict.
+
+    Returns: ``(anzahl_gefärbt, angetroffene_serien_namen)``.
     """
     from lxml import etree
     root = chart_shape.chart._chartSpace
     n = 0
+    gesehen = []
     for ser in root.findall(".//" + _cq("ser")):
         tx_v = ser.find(".//" + _cq("tx") + "//" + _cq("v"))
         name = tx_v.text.strip() if (tx_v is not None and tx_v.text) else None
+        gesehen.append(name)
         farbe = farben_nach_name.get(name)
         if not farbe:
             continue
@@ -624,4 +632,4 @@ def set_series_line_colors(chart_shape, farben_nach_name: dict,
         clr.set("val", farbe)
         ln.insert(0, fill)
         n += 1
-    return n
+    return n, gesehen

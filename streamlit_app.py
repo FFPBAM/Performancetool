@@ -32,7 +32,7 @@ from modules.shared import (
     # (to_decimal_interval wird seitdem nur noch innerhalb von shared.py
     # gebraucht und ist deshalb hier nicht mehr importiert.)
     load_all_csvs, build_portfolio_timeseries,
-    strategien_ohne_honorarsatz,
+    strategien_ohne_honorarsatz, strategien_ohne_csv,
 )
 # Performance-Berechnungs-Funktionen (Single Source of Truth — siehe modules/analytics.py)
 #
@@ -483,7 +483,7 @@ if st.session_state.get("adv_perf") and st.session_state.get("perf_tag"):
     date_tag = st.session_state["perf_tag"]
 
 perf_daten_fehler = None
-data = {}; dn_ordered = []; d2c = {}; d2b = {}
+data = {}; dn_ordered = []; d2c = {}; d2b = {}; _ohne_csv = []
 files = load_all_csvs(DATA_FOLDER, date_tag, EXCLUDE_SUBSTRINGS)
 if not files:
     perf_daten_fehler = f"Keine Dateien für Tag {date_tag}."
@@ -492,6 +492,13 @@ else:
     dn_ordered, d2c, d2b = build_name_lookups(name_mapping, set(data.keys()))
     if not dn_ordered:
         perf_daten_fehler = "Keine Portfolios zugeordnet."
+    # STRATEGIE OHNE DATEN (23.09.2026): build_name_lookups filtert die
+    # Auswahl ueber die vorhandenen CSV-Namen. Eine Mapping-Zeile, deren
+    # CSV-Portfolioname nicht passt — Tippfehler, Leerzeichen am Rand,
+    # Umbenennung — fiel bis hierher LAUTLOS aus dem Auswahlfeld. Der
+    # Filter bleibt (ohne Daten waere die Strategie nicht rechenbar), aber
+    # er sagt jetzt Bescheid.
+    _ohne_csv = strategien_ohne_csv(name_mapping, set(data.keys()))
 
 if perf_daten_fehler is None:
     # Daten an den Portfolioanalyse-Bereich weitergeben (PowerPoint-Export:
@@ -868,6 +875,17 @@ if ansicht == _VIEW_PERF:
             "vorbelegt — alle Zahlen unten sind damit **brutto**, obwohl sie "
             "als „nach Kosten“ beschriftet sind. Bitte den Satz von Hand "
             "eintragen oder das Mapping ergänzen.")
+
+    # STRATEGIE OHNE DATEN (23.09.2026) — Hinweis, kein Fehler: Die App
+    # rechnet richtig, aber eine Zeile des Mappings kommt nirgends an.
+    if _ohne_csv:
+        st.warning(
+            "**Ohne Daten und deshalb nicht in der Auswahl: "
+            + ", ".join(_ohne_csv) + ".** Zu diesen Zeilen des "
+            "Namens-Mappings liegt keine CSV im Datenordner. Entweder fehlt "
+            "die Lieferung, oder der CSV-Portfolioname in der Spalte "
+            "„Honorarsatz Mapping“ weicht vom Namen in der Datei ab. "
+            "Bisher verschwanden solche Zeilen kommentarlos.")
 
     _pp_abweichungen = []
     if sd > mind or ed < maxd:

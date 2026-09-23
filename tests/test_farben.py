@@ -9,6 +9,7 @@ die Palette nach dem Sortieren der Reihe nach vergeben wurde.
   2. `klassifiziere_gattung` und `gattung_farbe` an den echten Werten
   3. DIE ZUSAGE: gleiche Kategorie, gleiche Farbe - egal in welcher Ordnung
   4. Region, Segment und Waehrung bleiben bei der Palette
+  5. Vergleichs-Chart: VERGLEICH_FARBEN gegen die echten Serien der Vorlage
 
 SCHRITT 1 IST DER WICHTIGSTE. Die Palette ist nicht erfunden, sie steht in
 den PowerPoint-Vorlagen. Ein Test, der nur die Konstante gegen sich selbst
@@ -330,11 +331,91 @@ def schritt4_andere_dimensionen():
     return f
 
 
+def schritt5_vergleichschart_serien():
+    """Die Farbtabelle des Vergleichs-Charts gegen die ECHTEN Serien-Namen.
+
+    Die Schluessel von VERGLEICH_FARBEN sind keine Strategienamen, sondern die
+    Serien-Namen, die IN DER VORLAGE im Chart-Cache stehen. Passen sie nicht
+    mehr zusammen, faerbt der Export die Linie einfach nicht — sie bleibt in
+    Office-Blau, und bis zum 23.09.2026 erfuhr das niemand.
+
+    Wie Schritt 1 haengt dieser Schritt am ARTEFAKT: Er oeffnet die Vorlage
+    und liest die Serien, statt die Konstante gegen sich selbst zu pruefen.
+    """
+    print("Schritt 5 — Vergleichs-Chart: Farbtabelle gegen die Vorlage")
+    try:
+        from pptx import Presentation
+        from modules import pptx_export as _pe
+    except Exception as ex:            # python-pptx fehlt -> ueberspringen
+        print(f"    UEBERSPRUNGEN — {type(ex).__name__}: {ex}")
+        return 0
+    if not hasattr(_pe, "meldung_serien_ohne_farbe"):
+        print("    FEHLER — meldung_serien_ohne_farbe fehlt (zurueckgebaut?) — "
+              "ungefaerbte Linien blieben wieder unbemerkt")
+        return 1
+    VERGLEICH_FARBEN = _pe.VERGLEICH_FARBEN
+    meldung_serien_ohne_farbe = _pe.meldung_serien_ohne_farbe
+
+    pfad_vorlage = os.path.join(VORLAGEN, "Vorlage_cVV_Infoboard.pptx")
+    if not os.path.exists(pfad_vorlage):
+        print(f"    UEBERSPRUNGEN — {pfad_vorlage} fehlt")
+        return 0
+
+    serien = None
+    for folie in Presentation(pfad_vorlage).slides:
+        for shape in folie.shapes:
+            if shape.name != "Diagramm" or not getattr(shape, "has_chart", False):
+                continue
+            try:
+                namen = [s.name for s in shape.chart.plots[0].series]
+            except Exception:
+                continue
+            if len(namen) >= len(VERGLEICH_FARBEN):
+                serien = namen
+                break
+        if serien:
+            break
+
+    if serien is None:
+        print("    FEHLER — kein Vergleichs-Chart in der cVV-Vorlage gefunden")
+        return 1
+
+    f = 0
+    meldung = meldung_serien_ohne_farbe(serien, VERGLEICH_FARBEN, 19)
+    if meldung:
+        f += 1
+        print(f"    FEHLER — {meldung}")
+    else:
+        print(f"    OK — {len(serien)} Serien, alle in VERGLEICH_FARBEN: "
+              f"{', '.join(serien)}")
+
+    # Gegenprobe 1: eine Serie in der Vorlage umbenannt (nur hier im
+    # Speicher) — die Meldung muss sie beim Namen nennen.
+    verfaelscht = ["Konservativ NEU"] + list(serien[1:])
+    m = meldung_serien_ohne_farbe(verfaelscht, VERGLEICH_FARBEN, 19)
+    if "Konservativ NEU" not in m:
+        f += 1
+        print(f"    FEHLER — umbenannte Serie bleibt unbemerkt: {m!r}")
+    else:
+        print("    OK — Gegenprobe: umbenannte Serie wird gemeldet")
+
+    # Gegenprobe 2: ein Schluessel, den das Chart nicht kennt (Tippfehler im
+    # Code) — die andere Richtung.
+    m = meldung_serien_ohne_farbe(serien, dict(VERGLEICH_FARBEN, Phantom="FFFFFF"), 19)
+    if "Phantom" not in m:
+        f += 1
+        print(f"    FEHLER — ueberzaehliger Schluessel bleibt unbemerkt: {m!r}")
+    else:
+        print("    OK — Gegenprobe: Schluessel ohne Serie wird gemeldet")
+    return f
+
+
 def main():
     print("Pruefstein: feste Assetklassen-Farben\n")
     fehler = 0
     for schritt in (schritt1_vorlagen, schritt2_klassifizierung,
-                    schritt3_zusage, schritt4_andere_dimensionen):
+                    schritt3_zusage, schritt4_andere_dimensionen,
+                    schritt5_vergleichschart_serien):
         fehler += schritt()
         print()
     if fehler:

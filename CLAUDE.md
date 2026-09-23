@@ -531,6 +531,33 @@ ist seit 12.08.2026 per Test darauf festgenagelt, dass sie nur dort steht
 (`tests/test_kosten_mathematik.py`) — eine zweite Kopie fällt nicht auf,
 solange die Formeln gleich sind, und genau das ist die Gefahr.
 
+**Mapping-Spalten nur NAMENTLICH lesen** (23.09.2026). Die Spaltennamen der
+Mapping-Dateien stehen in `modules/stammdaten.py`; gelesen wird ueber
+`stammdaten.spalte(df, stammdaten.SP_...)`, das bei fehlender Spalte **wirft**
+und dabei Datei und Spalte beim Namen nennt. Vorher griffen drei Module
+positionell zu (`columns[0]/[1]/[3]`) — das haelt nur, solange niemand eine
+Spalte einfuegt oder loescht. Belegt am Artefakt: mit dem alten Code und einer
+zusaetzlichen Spalte an Position 2 wird der Benchmark-Text der Fussnote zu
+„konservativ" (dem Inhalt der Duration-Spalte), auf allen 19 Strategien, ohne
+jede Fehlermeldung. Pruefstein `tests/test_stammdaten.py`, Schritt 7.
+
+**Kein stiller Ausfall mehr in den drei Mapping-Pfaden** (23.09.2026).
+Wer eine Entscheidung trifft, die man pruefen koennen muss, gibt ihr einen
+Namen — diese drei gibt es jetzt, und sie gehoeren zusammen benutzt:
+`stammdaten.honorarsatz()` (liefert `(satz, gefunden)`; ein EINGETRAGENES 0 %
+ist etwas anderes als eine fehlende Zeile), `shared.strategien_ohne_csv()`
+und `pptx_export.meldung_serien_ohne_farbe()`. Sie schreiben in die Kanaele,
+die es schon gab (`df.attrs`, `pptx_diag`, `LAST_BUILD_ERRORS`) — kein
+vierter Meldeweg. Und: ein Pruefstein darf bei fehlendem PAKET ueberspringen,
+bei einer fehlenden EIGENEN Funktion muss er rot werden, sonst bleibt ein
+Rueckbau gruen.
+
+**Und Spalte B heisst nicht, was sie ist:** „Honorarsatz Mapping" enthaelt den
+**CSV-Portfolionamen**. Der ist auch NICHT das Dateinamen-Praefix — zwei
+Strategien tragen einen Schraegstrich („ETF Muster 100/100 offensiv"), der im
+Dateinamen zu `_` wird. Wer Strategien gegen Dateinamen abgleicht, hat zwei
+falsche Treffer und merkt es nicht; die CSV muss geoeffnet werden.
+
 ---
 
 ## Testen
@@ -540,6 +567,7 @@ python tests/test_bedienung.py               # + streamlit (AppTest)
 python tests/test_streamlit_api.py           # ohne jedes Paket
 python tests/test_keine_piktogramme.py       # ohne jedes Paket
 python tests/test_anlagekriterien.py         # pandas + streamlit
+python tests/test_stammdaten.py              # Schritte 1-3+6 nur pandas
 python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
 python tests/test_kosten_mathematik.py       # Schritt 1 ohne jedes Paket

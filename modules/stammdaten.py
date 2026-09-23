@@ -24,6 +24,8 @@ ZUM LESEN DER DATEI selbst sagt dieses Modul (Stand Etappe 1) noch nichts —
 das Laden bleibt vorerst in ``shared.py`` bzw. ``anlagekriterien.py``.
 """
 
+import pandas as pd
+
 DATEI_STRATEGIEN = "Mapping_Namen.xlsx"
 DATEI_HONORAR = "Mapping_Honorarsatz.xlsx"
 
@@ -104,3 +106,37 @@ def fehlende_spalten(df, pflicht, datei=DATEI_STRATEGIEN):
     nicht beim ersten Treffer aufhören soll."""
     return [w for w in pflicht if finde_spalte(df, w) is None]
 
+
+def honorarsatz(mapping, csv_name):
+    """Nettosatz p.a. (dezimal) zu einem CSV-Portfolionamen.
+
+    Returns: ``(satz, gefunden)``.
+
+    ``gefunden=False`` heisst: Es gibt KEINE Zeile im Mapping. Der Satz ist
+    dann ``0.0`` und damit **geraten** — die Aufrufstelle muss das melden,
+    sonst laufen Bruttozahlen unter der Beschriftung "nach Kosten" (Audit
+    14.08.2026). Ein GEFUNDENER Satz von 0,0 ist etwas anderes und liefert
+    ``gefunden=True``.
+
+    Die MwSt bleibt aussen vor: Der Performance-Pfad legt den Nettosatz in
+    die Zeitreihe, der Broschüren-Pfad multipliziert selbst. Wer hier
+    multiplizierte, hätte den Faktor zweimal drin.
+
+    EINE Funktion für BEIDE Pfade (23.09.2026): Bis dahin stand die Suche
+    zweimal im Repo — in ``shared.build_portfolio_timeseries`` sorgfältig
+    mit Merkfeld, im Broschüren-Pfad als ``except Exception: fee_dec = 0.0``.
+    Dieselbe fehlende Zeile wurde im Tool gemeldet und in der Kundenbroschüre
+    verschluckt. Genau davor warnt die Regel "Loader oder Mathematik nie
+    duplizieren".
+    """
+    if mapping is None or not csv_name:
+        return 0.0, False
+    if not {SP_INHABER, SP_SATZ} <= set(getattr(mapping, "columns", [])):
+        return 0.0, False
+    treffer = mapping.loc[mapping[SP_INHABER] == csv_name, SP_SATZ]
+    if not len(treffer):
+        return 0.0, False
+    wert = pd.to_numeric(treffer.iloc[0], errors="coerce")
+    if pd.isna(wert):
+        return 0.0, False
+    return float(wert), True
