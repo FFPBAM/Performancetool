@@ -70,6 +70,7 @@ try:
     from modules.pptx_slides import (                              # noqa: E402
         SHAPE_WE_FUSSNOTE, SHAPE_WE_QUELLE,
         WE_DISCLAIMER_REPLACEMENTS, WE_FUSSNOTE_ZEILE_MAX, WE_QUELLE_TOP_CM,
+        WE_TABELLE_KOSTENREGEL, WE_TABELLE_KOSTENREGEL_NEU,
         WE_FOOTNOTE_STAR1_NEW, WE_FOOTNOTE_STAR1_PREFIX,
         WE_FOOTNOTE_STAR2_NEW, WE_FOOTNOTE_STAR2_PREFIX,
     )
@@ -260,6 +261,60 @@ def _vorlagen_absatzlaenge(prefix):
     return laengste
 
 
+def _pruefe_tabellensatz():
+    """Passt der Ersatz auf der Tabellen-Folie in seine Box?
+
+    Diese Folien haben kein Shape "Quelle", also auch keine Nachbarschaft,
+    die man messen koennte — hier zaehlt allein die Boxhoehe. Der Ersatz ist
+    mit 255 Zeichen laenger als der Vorlagentext (211); genau die
+    Konstellation, gegen die diese Suite gebaut wurde. Nachgemessen statt
+    behauptet: Die urspruengliche Fassung liess den Zusatz "(keine
+    halbjaehrliche Beruecksichtigung)" weg und begruendete das mit dem
+    Umbruch — die Messung hat das widerlegt.
+    """
+    if importlib.util.find_spec("pptx") is None:
+        print("   WE_TABELLE_KOSTENREGEL_NEU     UEBERSPRUNGEN (python-pptx)")
+        return 0
+    from pptx import Presentation
+
+    fehler = 0
+    engste = None
+    for datei in VORLAGEN:
+        pfad = os.path.join(WURZEL, "Vorlage", datei)
+        if not os.path.exists(pfad):
+            continue
+        for folie in Presentation(pfad).slides:
+            for shape in folie.shapes:
+                if not getattr(shape, "has_text_frame", False):
+                    continue
+                if WE_TABELLE_KOSTENREGEL not in shape.text_frame.text:
+                    continue
+                breite = _cm(shape.width)
+                hoehe = _cm(shape.height)
+                # Zeichen je Zeile skalieren mit der Breite: 149 Zeichen
+                # passen in 15,60 cm (WE_FUSSNOTE_ZEILE_MAX).
+                je_zeile = max(1, int(WE_FUSSNOTE_ZEILE_MAX * breite / 15.60))
+                neu_text = shape.text_frame.text.replace(
+                    WE_TABELLE_KOSTENREGEL, WE_TABELLE_KOSTENREGEL_NEU)
+                zeilen = sum(max(1, math.ceil(len(p) / je_zeile))
+                             for p in neu_text.split("\n"))
+                gebraucht = zeilen * ZEILENHOEHE_CM
+                if engste is None or breite < engste[0]:
+                    engste = (breite, hoehe, je_zeile, zeilen, gebraucht, datei)
+    if engste is None:
+        print("   WE_TABELLE_KOSTENREGEL_NEU     FEHLER — kein Vorlagen-Absatz "
+              "enthaelt den Satz; die Ersetzung liefe ins Leere")
+        return 1
+    breite, hoehe, je_zeile, zeilen, gebraucht, datei = engste
+    ok = gebraucht <= hoehe
+    fehler += 0 if ok else 1
+    print(f"   WE_TABELLE_KOSTENREGEL_NEU  {len(WE_TABELLE_KOSTENREGEL_NEU):4d} "
+          f"Zeichen  {'OK' if ok else 'PASST NICHT'}")
+    print(f"        engste Box {datei} {breite:.2f}x{hoehe:.2f} cm, "
+          f"~{je_zeile} Zeichen/Zeile -> {zeilen} Zeilen = {gebraucht:.2f} cm")
+    return fehler
+
+
 def _pruefe_zeilenlaengen():
     """Passt jeder Ersatztext dorthin, wo er landet?
 
@@ -281,6 +336,8 @@ def _pruefe_zeilenlaengen():
         fehler += 0 if ok else 1
         print(f"   {name:30s} {len(text):4d} / {WE_FUSSNOTE_ZEILE_MAX}  "
               f"{'OK' if ok else 'ZU LANG'}")
+
+    fehler += _pruefe_tabellensatz()
 
     hat_pptx = importlib.util.find_spec("pptx") is not None
     for i, (prefix, neu) in enumerate(WE_DISCLAIMER_REPLACEMENTS):
@@ -537,6 +594,91 @@ def _pruefe_disclaimer_gleich(ausgabe):
     return len(gesehen) - 1
 
 
+# ───────────────────────────── Schritt 5 ──────────────────────────────────
+
+# Was in keiner fertigen Broschuere mehr stehen darf. Das erste Muster ist
+# eine Sachaussage ueber Kosten, die seit Juli 2026 falsch ist; die uebrigen
+# sind Schreibweisen, die Philip am 23.09.2026 fuer alle Familien
+# angeglichen hat. "VV Honorar" steht mit auf der Liste, obwohl niemand
+# danach gefragt hat: Es kam nur in den beiden ersetzten Saetzen vor und
+# verschwindet mit ihnen — wer den Satz spaeter aendert, soll es merken.
+ALTLASTEN = [
+    ("erfolgt vor Kosten", "alte Kostenregel"),
+    ("Performance Angaben", "Deppenleerzeichen"),
+    ("Gesamtkosten- und Gebühren", "Ergaenzungsstrich ins Leere"),
+    ("VV Honorar", "fehlender Bindestrich"),
+]
+
+
+def _altlasten_im_dokument(pfad):
+    """Alle Altlasten-Treffer einer Broschuere, als (Folie, Muster).
+
+    Liest ueber `pptx_slides._textrahmen` — also DIESELBE Traversierung, die
+    auch `wortlaut_angleichen` benutzt, samt Gruppen und Tabellenzellen. Mit
+    einer eigenen Schleife haette der Pruefstein einen anderen blinden Fleck
+    als der Durchgang und koennte dessen Luecke nicht finden. Genau daran ist
+    die Sache heute schon zweimal vorbeigelaufen.
+    """
+    from pptx import Presentation
+    from modules.pptx_slides import _textrahmen
+    treffer = []
+    for nr, folie in enumerate(Presentation(pfad).slides, start=1):
+        for rahmen in _textrahmen(folie.shapes):
+            text = rahmen.text
+            for muster, _grund in ALTLASTEN:
+                if muster in text:
+                    treffer.append((nr, muster))
+    return treffer
+
+
+def _pruefe_altlasten(ausgabe):
+    """Ueber ALLE Folien, nicht nur ueber die Wertentwicklungs-Folie.
+
+    Genau daran ist es zweimal gescheitert: Die Pruefsteine sahen nur die
+    Folien mit einem Shape "Quelle". Die Tabellen-Folie hat keines — dort
+    stand die alte Kostenregel mitten im Absatz und ueberlebte jede
+    Korrektur. Eine Broschuere sagte auf der einen Folie "nach Kosten" und
+    auf der anderen "vor Kosten".
+
+    Deshalb schaut dieser Schritt in JEDES Textfeld JEDER Folie.
+    """
+    print("\n5. Keine Altlast auf irgendeiner Folie")
+    if importlib.util.find_spec("pptx") is None:
+        print("   UEBERSPRUNGEN — python-pptx nicht installiert")
+        return 0
+    import glob
+
+    dateien = sorted(glob.glob(os.path.join(ausgabe, "*.pptx")))
+    if not dateien:
+        print("   UEBERSPRUNGEN — keine gebauten Broschueren gefunden")
+        return 0
+
+    grund = dict(ALTLASTEN)
+    fehler = 0
+    for pfad in dateien:
+        for nr, muster in _altlasten_im_dokument(pfad):
+            fehler += 1
+            print(f"   FEHLER — {os.path.basename(pfad)} F{nr}: "
+                  f"{muster!r} — {grund[muster]}")
+    if not fehler:
+        print(f"   OK — {len(dateien)} Broschueren, keines der "
+              f"{len(ALTLASTEN)} Muster kommt noch vor")
+
+    # Gegenprobe: Die Suche muss einen eingebauten Verstoss auch finden.
+    # Dafuer reicht der Vorlagentext selbst — er traegt sie alle noch.
+    vorlage = os.path.join(WURZEL, "Vorlage", "Vorlage_cVV_Infoboard.pptx")
+    if os.path.exists(vorlage):
+        in_vorlage = {m for _nr, m in _altlasten_im_dokument(vorlage)}
+        if len(in_vorlage) < 3:
+            fehler += 1
+            print(f"   FEHLER — die Suche findet in der UNveraenderten Vorlage "
+                  f"nur {len(in_vorlage)} Muster; sie misst nichts")
+        else:
+            print(f"   OK — Gegenprobe: in der unveraenderten Vorlage findet "
+                  f"sie {len(in_vorlage)} der {len(ALTLASTEN)} Muster")
+    return fehler
+
+
 def main():
     ausgabe = (sys.argv[1] if len(sys.argv) > 1
                else tempfile.mkdtemp(prefix="ffpb_quelle_"))
@@ -544,15 +686,16 @@ def main():
 
     fehler = (_pruefe_vorlagen() + _pruefe_zeilenlaengen()
               + _pruefe_artefakt(ausgabe)
-              + _pruefe_disclaimer_gleich(ausgabe))
+              + _pruefe_disclaimer_gleich(ausgabe)
+              + _pruefe_altlasten(ausgabe))
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
         return 1
     print("BESTANDEN — die Quellenangabe steht auf jeder Wertentwicklungs-Folie")
     print("            unter dem Disclaimer, jeder Ersatztext passt dorthin,")
-    print("            wo er landet, und der Disclaimer sagt in jeder Familie")
-    print("            dasselbe.")
+    print("            wo er landet, der Disclaimer sagt in jeder Familie")
+    print("            dasselbe, und keine Folie traegt noch eine Altlast.")
     return 0
 
 

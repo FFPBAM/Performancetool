@@ -69,6 +69,7 @@ try:
         fill_wertentwicklung_slide, fill_zusammenstellung_slide,
         fill_rollierend_slide, fill_einzeltitel_themen_slide,
         fill_uebersicht_slide, fill_anlagekriterien_slide,
+        wortlaut_angleichen,
     )
 except ImportError:
     from pptx_slides import (
@@ -77,6 +78,7 @@ except ImportError:
         fill_wertentwicklung_slide, fill_zusammenstellung_slide,
         fill_rollierend_slide, fill_einzeltitel_themen_slide,
         fill_uebersicht_slide, fill_anlagekriterien_slide,
+        wortlaut_angleichen,
     )
 
 # Stammdaten und ihre Auswertung. BEWUSST die UI-freien Module, nicht
@@ -1197,6 +1199,30 @@ def generate_portfolioanalyse_pptx(
     except Exception as _ex:
         # Chart-Kosmetik darf den Export nie abbrechen.
         LAST_BUILD_ERRORS.append(f"Chart-Nachbearbeitung übersprungen: {_ex}")
+
+    # WORTLAUT ANGLEICHEN (NEU 23.09.2026, Entscheidung Philip). Drei
+    # Korrekturen über ALLE Folien: die alte Kostenregel auf der
+    # Tabellen-Folie (sie steht mitten im Absatz, die Absatz-Anker oben
+    # erreichen sie nicht), „Performance Angaben“ → „Performance-Angaben“ und
+    # „Gesamtkosten- und Gebühren“ → „Gesamtkosten und Gebühren“.
+    #
+    # ZULETZT, nach allen Fill-Operationen: So kann keine spätere Operation
+    # die alte Formulierung wieder einsetzen — der Durchgang ist die letzte
+    # Instanz, die den Text sieht.
+    #
+    # Hier stand zuerst, die Reihenfolge sei ZWINGEND, weil der Durchgang
+    # sonst die Absatz-Anker von WE_DISCLAIMER_REPLACEMENTS zerstöre. Das ist
+    # über alle acht Vorlagen nachgemessen und WIDERLEGT: Die Anker enden auf
+    # „Ausweis" bzw. lauten „Kosten berechnet."; dieser Durchgang fasst
+    # „Performance Angaben", „Gesamtkosten-" und den Tabellensatz an und
+    # berührt keinen Absatz-ANFANG. Die Zahl der anker-treffenden Absätze ist
+    # vor und nach dem Durchgang gleich.
+    try:
+        wortlaut_angleichen(prs)
+    except Exception as _ex:
+        # Das ist keine Kosmetik — es geht um eine Sachaussage über Kosten in
+        # einem Kundendokument. Deshalb melden statt schlucken.
+        _record_build_error("Wortlaut-Angleichung", _ex)
 
     # Speichern
     buf = io.BytesIO()

@@ -56,12 +56,15 @@ Juli 2026 — Wertentwicklungs-Folie (alte cVV-Folie) als neue Slide 8:
     dynamische ***-Benchmark-Fußnote.
 """
 
+import re
+
 import pandas as pd
 from typing import Optional
 from copy import deepcopy
 
 from pptx.util import Pt, Emu, Cm
 from pptx.oxml.ns import qn
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 # Generische PPTX-Helpers (Shape-Lookup, Text, Tabellen)
 try:
@@ -203,7 +206,7 @@ Position 2 einen Stern, kein Leerzeichen)."""
 WE_DISCLAIMER_REPLACEMENTS = [
     # (Absatz-Präfix in der Vorlage, neuer Absatz-Text)
     ("Der unterjährige Performance Ausweis",
-     "Sämtliche Performance Angaben wurden nach Kosten berechnet; der jährliche "
+     "Sämtliche Performance-Angaben wurden nach Kosten berechnet; der jährliche "
      "Honorarsatz wird als äquivalente tägliche Belastung taggenau abgezogen "),
     ("Kosten berechnet.",
      "(keine halbjährliche Berücksichtigung). Berücksichtigt sind VV-Honorar, "
@@ -231,7 +234,7 @@ WE_DISCLAIMER_REPLACEMENTS = [
     # den gebauten Broschüren. Er ist mit 644 Zeichen 7 kürzer als der
     # Vorlagentext, der Block wächst also nicht.
     ("Der unterjährige Performance-Ausweis",
-     "Sämtliche Performance Angaben wurden nach Kosten berechnet; der "
+     "Sämtliche Performance-Angaben wurden nach Kosten berechnet; der "
      "jährliche Honorarsatz wird als äquivalente tägliche Belastung taggenau "
      "abgezogen (keine halbjährliche Berücksichtigung). Berücksichtigt sind "
      "VV-Honorar, fremde Spesen und evtl. Produktkosten. Die Inflation kann "
@@ -239,7 +242,7 @@ WE_DISCLAIMER_REPLACEMENTS = [
      "Anlagevermögens haben. So kann insbesondere bei risikofreien Anlagen "
      "ein Wertverlust dadurch eintreten, dass die negative Auswirkung der "
      "Inflation die nominale Rendite übersteigt. Auch eine geringe "
-     "Anlagedauer und die Gesamtkosten- und Gebühren können negativ das "
+     "Anlagedauer und die Gesamtkosten und Gebühren können negativ das "
      "Risiko-Rendite-Verhältnis beeinflussen."),
 ]
 """12.08.2026 GEKÜRZT — die zweite Zeile hatte 189 Zeichen bei 149 Zeichen
@@ -253,6 +256,130 @@ abgezogen"; "Sowohl … als auch … wurden berücksichtigt" → "Berücksichtig
 …"). Der Schluss "Auswirkun-" MUSS stehen bleiben: Der Folgeabsatz der Vorlage
 beginnt mit "gen auf den Wert …"."""
 
+WE_TABELLE_KOSTENREGEL = (
+    "Der unterjährige Performance-Ausweis erfolgt vor Kosten. Die weiteren "
+    "Performance Angaben wurden nach Kosten berechnet. Sowohl das VV Honorar "
+    "als auch fremde Spesen und evtl. Produktkosten wurden berücksichtigt.")
+"""Die ZWEITE Stelle mit der alten Kostenregel (23.09.2026).
+
+Sie steht nicht auf der Wertentwicklungs-Folie, sondern auf der
+Tabellen-Folie — cVV F17, ESG F24, ETF F20, Thema F13 und die beiden
+strategie-spezifischen Thema-Vorlagen —, und zwar MITTEN im Absatz
+„* Die aufgeführten Zahlen …". Die Anker in WE_DISCLAIMER_REPLACEMENTS sind
+Absatz-Präfixe und greifen dort deshalb nie; die Folien tragen zudem kein
+Shape „Quelle" und fielen aus jedem Prüfstein heraus.
+
+Ergebnis war: Dieselbe Broschüre sagte auf der einen Folie „nach Kosten"
+und auf der anderen „vor Kosten". Gefunden erst, nachdem die comdirect-
+Fußnote gerichtet war — deshalb steht die Prüfung jetzt über ALLE Folien
+(tests/test_quelle_position.py, Schritt 5).
+
+In allen sechs Vorlagen zeichengleich derselbe Satz, jeweils in EINEM Run."""
+
+WE_TABELLE_KOSTENREGEL_NEU = (
+    "Sämtliche Performance-Angaben wurden nach Kosten berechnet; der "
+    "jährliche Honorarsatz wird als äquivalente tägliche Belastung taggenau "
+    "abgezogen (keine halbjährliche Berücksichtigung). Berücksichtigt sind "
+    "VV-Honorar, fremde Spesen und evtl. Produktkosten.")
+"""Der Ersatz — 255 Zeichen gegen 211.
+
+Er ist WORTGLEICH der erste Teil des großen Disclaimers
+(WE_DISCLAIMER_REPLACEMENTS), einschließlich des Zusatzes „(keine
+halbjährliche Berücksichtigung)". Damit sagen beide Fußnoten derselben
+Broschüre dasselbe über die Kostenberechnung — und genau diese Ungleichheit
+war der Anlass der ganzen Änderung.
+
+KORREKTUR 23.09.2026: Hier stand zuerst die kürzere Fassung ohne den Zusatz,
+begründet damit, dass +44 Zeichen den Absatz umbrechen ließen. **Nachgemessen
+trägt das nicht.** Die schmalste betroffene Box (Vorlage_Thema F13) ist
+10,45 cm breit und 3,57 cm hoch bei 6 pt — das sind rund 100 Zeichen je
+Zeile und Platz für etwa 13 Zeilen. Der Absatz braucht davon fünf. Die
+Weglassung wäre also eine INHALTLICHE Entscheidung gewesen, hergeleitet aus
+einem Layout-Argument, das die Messung widerlegt. Prüfstein:
+tests/test_quelle_position.py, Schritt 2."""
+
+WE_WORTLAUT = [
+    # Reihenfolge zählt: erst der ganze Satz, dann die Einzelwörter. Sonst
+    # verändert die zweite Regel den Satz und die erste findet ihn nicht mehr.
+    (re.compile(re.escape(WE_TABELLE_KOSTENREGEL)), WE_TABELLE_KOSTENREGEL_NEU),
+    # „Performance Angaben" ist ein Deppenleerzeichen; comdirect schrieb es
+    # vorher richtig. „Gesamtkosten- und Gebühren" hat einen Ergänzungsstrich,
+    # der ins Leere läuft — es folgt kein gemeinsames Grundwort. Auch hier
+    # war comdirect die einzige Vorlage, die es richtig schrieb. Beide auf
+    # Ansage Philip am 23.09.2026 für alle Familien angeglichen.
+    #
+    # BEIDE mit Wortgrenze: Ohne sie würde „Gesamtkosten- und
+    # Gebührenbelastung" zu „Gesamtkosten und Gebührenbelastung" — dort ist
+    # der Ergänzungsstrich RICHTIG, weil ein gemeinsames Grundwort folgt.
+    # Heute kommt das nicht vor; der Durchgang läuft aber über jede Folie,
+    # auch über Text, den der Fachbereich über die Stammdaten pflegt.
+    (re.compile(r"Performance Angaben(?![a-zäöüßA-ZÄÖÜ])"), "Performance-Angaben"),
+    (re.compile(r"Gesamtkosten- und Gebühren(?![a-zäöüßA-ZÄÖÜ])"),
+     "Gesamtkosten und Gebühren"),
+]
+"""Wortlaut-Korrekturen, die auf JEDER Folie gelten — nicht nur in der
+Fußnote der Wertentwicklungs-Folie. Angewendet von `wortlaut_angleichen`."""
+
+
+def _textrahmen(shapes):
+    """Jeder Textrahmen unterhalb von `shapes` — auch in Gruppen und in
+    Tabellenzellen.
+
+    Die flache Schleife über `slide.shapes` war der blinde Fleck, an dem die
+    Sache zweimal vorbeigelaufen ist (23.09.2026): Erst sah der Prüfstein nur
+    Folien mit einem Shape „Quelle", dann sah der Durchgang nur die oberste
+    Ebene. Heute liegt nichts Betroffenes in einer Gruppe oder Tabelle — aber
+    „heute nicht" ist kein Grund, wieder zu wenig zu sehen.
+    """
+    for shape in shapes:
+        if getattr(shape, "shape_type", None) == MSO_SHAPE_TYPE.GROUP:
+            for rahmen in _textrahmen(shape.shapes):
+                yield rahmen
+            continue
+        if getattr(shape, "has_text_frame", False):
+            yield shape.text_frame
+        if getattr(shape, "has_table", False):
+            for zeile in shape.table.rows:
+                for zelle in zeile.cells:
+                    yield zelle.text_frame
+
+
+def wortlaut_angleichen(prs):
+    """Zieht die Wortlaut-Korrekturen über die ganze Präsentation.
+
+    LÄUFT ZULETZT, nach allen Fill-Operationen und vor dem Speichern. Grund:
+    So kann keine spätere Operation die alte Formulierung wieder einsetzen —
+    der Durchgang ist die letzte Instanz, die den Text sieht.
+
+    NACHGEMESSEN (23.09.2026), weil hier zuerst etwas Falsches stand: Die
+    Reihenfolge ist NICHT zwingend. Hier stand „liefe er vorher, griffe keine
+    einzige Ersetzung mehr" — das ist widerlegt. Die Anker in
+    WE_DISCLAIMER_REPLACEMENTS enden auf „Ausweis" bzw. lauten
+    „Kosten berechnet."; dieser Durchgang fasst „Performance Angaben",
+    „Gesamtkosten-" und den Tabellensatz an und berührt damit keinen
+    Absatz-ANFANG. Über alle acht Vorlagen gemessen: die Zahl der
+    anker-treffenden Absätze ist vor und nach dem Durchgang gleich.
+
+    Arbeitet RUN-WEISE und rührt nichts an, was nicht passt. Belegt: Alle
+    drei Muster liegen in jeder Vorlage innerhalb EINES Runs, die
+    Formatierung bleibt also erhalten.
+
+    Returns: Anzahl der geänderten Runs.
+    """
+    geaendert = 0
+    for folie in prs.slides:
+        for rahmen in _textrahmen(folie.shapes):
+            for absatz in rahmen.paragraphs:
+                for run in absatz.runs:
+                    neu = run.text
+                    for muster, ersatz in WE_WORTLAUT:
+                        neu = muster.sub(ersatz, neu)
+                    if neu != run.text:
+                        run.text = neu
+                        geaendert += 1
+    return geaendert
+
+
 WE_DISCLAIMER_FLIESSTEXT = ("Der unterjährige Performance-Ausweis",)
 """Anker, deren Vorlagen-Absatz NICHT von Hand umbrochen ist.
 
@@ -262,7 +389,7 @@ stattdessen der Vorlagentext selbst — der Ersatz darf nicht länger sein,
 sonst wächst der Block nach unten und schiebt die Quellenangabe weg.
 Gemessen in tests/test_quelle_position.py, Schritt 2."""
 
-WE_DISCLAIMER_ANFANG = "Sämtliche Performance Angaben"
+WE_DISCLAIMER_ANFANG = "Sämtliche Performance-Angaben"
 """Womit der Disclaimer nach der Ersetzung in JEDER Vorlage beginnt.
 
 Der Marker gehört dem Code, nicht dem Test: Schritt 4 in

@@ -275,19 +275,69 @@ positionellem (Etappe 1 von 5):**
   comdirect genau die drei Wertentwicklungs-Folien, dort genau der
   Disclaimer-Absatz. 39/39 Suiten grün, `pyflakes` null, `ui_dump` identisch.
 
-  **Offen, gehört dazu — am Artefakt nachgemessen:** Dieselbe alte
-  Kostenregel steht noch auf einer ZWEITEN Folie, und zwar in **jeder
-  Familie außer comdirect**: in den gebauten Broschüren cVV F17, ESG F24,
-  ETF F20, Thema F12 und in allen SCHWEIZ-/Thema-Varianten. Der Satz lautet
-  dort kürzer („… erfolgt vor Kosten." ohne den 30.06.-Zusatz) und steht
-  **mitten** im Absatz „* Die aufgeführten Zahlen …" — die Anker sind
-  Absatz-Präfixe und greifen deshalb nie. Diese Folien tragen auch kein Shape
-  „Quelle" und fallen aus `_we_folien()` heraus, der neue Schritt 4 sieht sie
-  also nicht. **Ergebnis: comdirect ist jetzt in sich stimmig, die übrigen
-  fünf Familien sind es noch nicht** — sie sagen auf der
-  Wertentwicklungs-Folie „nach Kosten" und auf der Tabellen-Folie „vor
-  Kosten". **Von Philip zu entscheiden**, ob diese zweite Stelle ebenfalls
-  angeglichen wird; es wäre eine Wortlautänderung in fünf Familien.
+  **Nachtrag am selben Tag — die zweite Stelle ist auch angeglichen**
+  (Ansage Philip: „mach beides"). Dieselbe alte Kostenregel stand in **sechs
+  Vorlagen** auf der **Tabellen-Folie**: cVV F17, ESG F24, ETF F20,
+  Thema F13, Thema_Offensiv F12, Thema_ProDividende F13. Die
+  Standard-Vorlage `Vorlage_FFPB.pptx` trägt den Satz **nicht**. Er steht
+  dort **mitten im Absatz** „* Die aufgeführten Zahlen …"; die Anker sind
+  Absatz-Präfixe und erreichen ihn nie. Die Folien tragen zudem kein Shape
+  „Quelle" und fielen aus jedem Prüfstein heraus.
+
+  **Dazu zwei Wortlaut-Punkte für alle Familien** (Ansage Philip):
+  „Performance Angaben" → „Performance-**A**ngaben" (Deppenleerzeichen) und
+  „Gesamtkosten**-** und Gebühren" → „Gesamtkosten und Gebühren" (der
+  Ergänzungsstrich lief ins Leere, es folgt kein gemeinsames Grundwort). In
+  beiden Fällen war ausgerechnet **comdirect die einzige Vorlage, die es
+  richtig schrieb** — angeglichen wurde also zu comdirect hin, nicht von ihm
+  weg. „VV Honorar" → „VV-Honorar" fiel als Drittes mit weg: Es kam nur in
+  den beiden ersetzten Sätzen vor. Beide Muster mit **Wortgrenze**, damit
+  „Gebührenbelastung" nicht zerlegt wird — dort wäre der Strich richtig.
+
+  **Umsetzung:** neuer Abschlussdurchgang `wortlaut_angleichen(prs)` in
+  `pptx_slides.py`, aufgerufen in `pptx_export.py` **zuletzt**, nach allen
+  Fill-Operationen — so kann keine spätere Operation die alte Formulierung
+  wieder einsetzen. Er arbeitet **run-weise** und liest über `_textrahmen`,
+  also **auch in Gruppen und Tabellenzellen**; der Prüfstein benutzt
+  dieselbe Traversierung, sonst hätte er einen anderen blinden Fleck als der
+  Durchgang. Belegt ist, dass alle drei Muster in jeder Vorlage innerhalb
+  EINES Runs liegen — die Formatierung bleibt erhalten.
+
+  **Neuer Schritt 5 im Prüfstein:** Er sucht vier Altlast-Muster in **jedem
+  Textfeld jeder Folie** — nicht mehr nur auf den Folien mit einem Shape
+  „Quelle". Genau diese Verengung hatte die zweite Stelle zweimal verborgen.
+  Gegenprobe: In der unveränderten Vorlage findet er alle vier. Schritt 2
+  misst zusätzlich, ob der neue Satz in die **engste** betroffene Box passt.
+
+  **Beleg:** 7 gebaute Broschüren, keines der vier Muster kommt noch vor.
+  Der Disclaimer ist in allen Familien wortgleich (19 Folien, 643 Zeichen).
+  Geändert haben sich genau die Wertentwicklungs-, Tabellen- und
+  Impressum-Folien; die Impressum-Folie (cVV F36, FFPB F25) **nur** um den
+  Bindestrich. 39/39 Suiten grün, `pyflakes` null, `ui_dump` identisch.
+
+  **Zwei eigene Fehler, die der Prüf-Agent gefunden hat — beide korrigiert:**
+
+  1. Ich hatte die Reihenfolge des Durchgangs als **zwingend** ausgegeben
+     („liefe er vorher, griffe keine einzige Ersetzung mehr"). Über alle acht
+     Vorlagen nachgemessen: **falsch.** Die Anker enden auf „Ausweis" bzw.
+     lauten „Kosten berechnet."; der Durchgang berührt keinen Absatz-Anfang,
+     die Zahl der anker-treffenden Absätze ist vorher wie nachher gleich. Die
+     Position bleibt richtig, aber aus dem anderen Grund oben. In einem Repo,
+     dessen Kultur „nachmessen statt behaupten" ist, entwertet eine erfundene
+     Bedingung die übrigen Belege.
+  2. Der Ersatzsatz ließ zuerst den Zusatz „(keine halbjährliche
+     Berücksichtigung)" weg, begründet mit dem Umbruch. **Auch das hält der
+     Messung nicht stand:** Die engste Box (Thema F13) ist 10,45 × 3,57 cm
+     bei 6 pt, der Absatz braucht 7 von rund 14 Zeilen (1,77 von 3,57 cm).
+     Der Zusatz ist jetzt drin — der Satz ist damit **wortgleich der erste
+     Teil des großen Disclaimers**, programmatisch geprüft. Beide Fußnoten
+     derselben Broschüre sagen jetzt dasselbe über die Kosten, und genau
+     diese Ungleichheit war der Anlass.
+
+  **Für Philip zum Abnicken:** Die Korrektur „Gesamtkosten- und Gebühren"
+  trifft auch die **Impressum-Folie** (cVV F36, FFPB F25) — dieselbe
+  Falschschreibung, aber es ist ein Rechtstext. Und `Vorlage_FFPB.pptx` wird
+  vom Prüfstein nicht gebaut, diese eine Änderung sieht also kein Test.
 
 - **Offen / für Philip:**
   - **Sichtprüfung in der Live-App.**

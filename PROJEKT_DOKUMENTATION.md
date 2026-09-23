@@ -4773,16 +4773,35 @@ Korrektur am Endprodukt bestätigt.
   davor; bei comdirect ändern sich genau die drei Wertentwicklungs-Folien,
   und dort genau der Disclaimer-Absatz.
 
-  **ABER — das Thema ist damit nicht ganz zu.** Bei der Prüfung am Artefakt
-  gefunden: Dieselbe alte Kostenregel steht in **jeder Familie außer
-  comdirect** noch auf einer ZWEITEN Folie (der Tabellen-Folie: cVV F17,
-  ESG F24, ETF F20, Thema F12, dazu die SCHWEIZ-Varianten). Der Satz lautet
-  dort kürzer („… erfolgt vor Kosten.") und steht MITTEN im Absatz
-  „* Die aufgeführten Zahlen …"; die Anker sind Absatz-Präfixe und greifen
-  deshalb nie. Die Folien haben zudem kein Shape „Quelle" und fallen aus
-  `_we_folien()` heraus — Schritt 4 sieht sie nicht. comdirect ist jetzt in
-  sich stimmig, die übrigen fünf sind es noch nicht. Wortlautänderung in
-  fünf Familien, deshalb Entscheidung Philip.
+  **Die zweite Stelle, am selben Tag nachgezogen.** Bei der Prüfung am
+  Artefakt gefunden: Dieselbe alte Kostenregel stand in **sechs Vorlagen**
+  auf der **Tabellen-Folie** (cVV F17, ESG F24, ETF F20, Thema F13,
+  Thema_Offensiv F12, Thema_ProDividende F13; `Vorlage_FFPB.pptx` trägt sie
+  nicht), dort kürzer („… erfolgt vor Kosten.") und **mitten im Absatz**
+  „* Die aufgeführten Zahlen …". Absatz-Präfixe erreichen sie nicht, und
+  ohne Shape „Quelle" fielen die Folien aus jedem Prüfstein. Auf Ansage
+  Philip angeglichen — zusammen mit zwei Wortlaut-Punkten für alle Familien
+  („Performance Angaben" → „Performance-Angaben", „Gesamtkosten- und
+  Gebühren" → „Gesamtkosten und Gebühren", beide mit Wortgrenze); bei beiden
+  war comdirect die einzige Vorlage, die es richtig schrieb.
+
+  Dafür gibt es jetzt `wortlaut_angleichen(prs)` — ein **Abschluss**durchgang
+  über alle Folien, run-weise, über `_textrahmen` auch in Gruppen und
+  Tabellenzellen, aufgerufen als Letztes vor dem Speichern, damit keine
+  spätere Operation die alte Formulierung wieder einsetzt. **Die Reihenfolge
+  ist NICHT zwingend** — hier stand zuerst das Gegenteil, über alle acht
+  Vorlagen nachgemessen und widerlegt: Der Durchgang berührt keinen
+  Absatz-Anfang, die Anker bleiben unverändert. Schritt 5 des Prüfsteins
+  sucht vier Altlast-Muster in jedem Textfeld jeder Folie, mit Gegenprobe
+  gegen die unveränderte Vorlage; Schritt 2 misst, ob der Ersatz in die
+  engste betroffene Box passt (Thema F13: 7 von ~14 Zeilen).
+
+  Dafür gibt es jetzt `wortlaut_angleichen(prs)` — ein **Abschluss**durchgang
+  über alle Folien, run-weise, aufgerufen als Letztes vor dem Speichern. Die
+  Reihenfolge ist Bedingung: Der Durchgang verändert Absatzanfänge, auf die
+  `WE_DISCLAIMER_REPLACEMENTS` als Präfix zeigt. Schritt 5 des Prüfsteins
+  sucht vier Altlast-Muster in jedem Textfeld jeder Folie, mit Gegenprobe
+  gegen die unveränderte Vorlage.
 
 - **G. Anlagekriterien für die beiden SCHWEIZ-Strategien** *(neu 12.08.2026)*.
   Seit heute sind 17 der 19 Strategien in `Mapping_Anlagekriterien.xlsx`
