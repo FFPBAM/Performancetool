@@ -35,9 +35,9 @@ ZWEI SCHLUESSEL, NICHT EINER — der haeufigste Denkfehler an dieser Datei:
 Geprueft wird:
   1. Struktur beider Dateien: Pflichtspalten unter EXAKTEM Namen, Zeilen da.
   2. Schluessel-Hygiene: A und B eindeutig, ohne Leerzeichen am Rand.
-  3. B <-> Mapping_Honorarsatz["Inhaber"], BEIDSEITIG vollstaendig.
+  3. Neue Datei und Rueckfallebene liefern denselben Frame.
   4. B <-> "Portfolio Name" aus dem CSV-INHALT (Daten/ und Daten_PF/).
-  5. Anlagekriterien-Schluessel sind in A bekannt (SCHWEIZ = bekannte Luecke).
+  5. Anlagekriterien vollstaendig (SCHWEIZ = bekannte Luecke).
   6. Namen <-> Code: jeder Strategiename, den der Code hart fuehrt, existiert
      im Mapping. Das faengt eine Umbenennung, die sonst still bliebe.
   7. Positions-Unabhaengigkeit: eine eingefuegte Spalte darf nichts aendern.
@@ -45,7 +45,9 @@ Geprueft wird:
      Auswahlfeld zu fallen.
   9. honorarsatz(): ein FEHLENDER Satz ist nicht dasselbe wie eingetragene
      0 % — sonst gibt es entweder Falschmeldungen oder stille Bruttozahlen.
- 10. Gegenproben — jeder der Schritte 2, 6 und der Spaltenzugriff werden
+ 10. Nur modules/stammdaten.py liest eine Mapping-Datei (Syntaxbaum).
+ 11. Kein positioneller Spaltenzugriff, auch nicht ueber ein Alias.
+ 12. Gegenproben — jeder der Schritte 2, 6 und der Spaltenzugriff werden
      absichtlich verletzt und muessen anschlagen.
 
     python tests/test_stammdaten.py
@@ -72,9 +74,10 @@ except ImportError:
 
 from modules import stammdaten as stamm                        # noqa: E402
 
-NAMEN = os.path.join(WURZEL, stamm.DATEI_STRATEGIEN)
-HONORAR = os.path.join(WURZEL, stamm.DATEI_HONORAR)
-KRITERIEN = os.path.join(WURZEL, "Mapping_Anlagekriterien.xlsx")
+NEUE_DATEI = os.path.join(WURZEL, stamm.PFAD)
+ALTE_DATEIEN = [os.path.join(WURZEL, d) for d in
+                (stamm.ALT_STRATEGIEN, stamm.ALT_HONORAR,
+                 stamm.ALT_KRITERIEN)]
 
 # Bekannte Luecke, kein Fehler: die beiden SCHWEIZ-Strategien stehen bewusst
 # nicht in den Anlagekriterien — die Werte muessen aus dem Haus kommen.
@@ -90,30 +93,31 @@ def _werte(df, spalte):
 # ─────────────────────────────────────────────────────────────────────────
 # 1. Struktur
 # ─────────────────────────────────────────────────────────────────────────
-def _pruefe_struktur(namen, honorar):
+def _pruefe_struktur(sd):
     print("1. Struktur: Pflichtspalten unter exaktem Namen")
     fehler = 0
-    for df, pflicht, datei in ((namen, stamm.PFLICHT_STRATEGIEN, stamm.DATEI_STRATEGIEN),
-                               (honorar, stamm.PFLICHT_HONORAR, stamm.DATEI_HONORAR)):
-        fehlt = stamm.fehlende_spalten(df, pflicht, datei)
-        if fehlt:
-            fehler += len(fehlt)
-            for f in fehlt:
-                print(f"   FEHLER — {datei}: Spalte '{f}' fehlt")
-        if len(df) == 0:
+    quelle = ("Mapping_Strategien.xlsx" if os.path.exists(NEUE_DATEI)
+              else "Rueckfallebene aus den drei alten Dateien")
+    for f in stamm.fehlende_spalten(sd, stamm.PFLICHT):
+        fehler += 1
+        print(f"   FEHLER — Pflichtspalte '{f}' fehlt")
+    if len(sd) == 0:
+        fehler += 1
+        print("   FEHLER — keine Datenzeilen")
+    # Die Kriterien-Spalten sind KEINE Pflicht (eine Strategie ohne Kasten ist
+    # ein gueltiger Zustand), muessen aber existieren — sonst faellt der
+    # Kasten ueberall weg, ohne dass es jemand merkt.
+    for s in (stamm.SP_ANZEIGENAME, *stamm.SP_KRITERIEN):
+        if stamm.finde_spalte(sd, s) is None:
             fehler += 1
-            print(f"   FEHLER — {datei}: keine Datenzeilen")
+            print(f"   FEHLER — Kriterien-Spalte '{s}' fehlt")
     if not fehler:
-        print(f"   OK — {stamm.DATEI_STRATEGIEN} {len(namen)} Zeilen, "
-              f"{stamm.DATEI_HONORAR} {len(honorar)} Zeilen")
-    # Tote Spalten NICHT als Fehler, aber benennen: wer hier joint, joint ins
-    # Leere. "Honorarsatz Brutto" ist zusaetzlich veraltet (comdirect).
-    for datei, df in ((stamm.DATEI_STRATEGIEN, namen), (stamm.DATEI_HONORAR, honorar)):
-        tot = [s for s in stamm.TOTE_SPALTEN.get(datei, ())
-               if stamm.finde_spalte(df, s) is not None]
-        if tot:
-            print(f"   Hinweis — {datei}: {', '.join(tot)} "
-                  f"wird von keiner Codezeile gelesen")
+        print(f"   OK — {len(sd)} Zeilen, {len(sd.columns)} Spalten ({quelle})")
+    tot = [s for s in stamm.ENTFALLENE_SPALTEN
+           if stamm.finde_spalte(sd, s) is not None]
+    if tot:
+        print(f"   Hinweis — {', '.join(tot)} steht noch in der Datei, "
+              f"wird aber von keiner Codezeile gelesen")
     return fehler
 
 
@@ -148,22 +152,54 @@ def _pruefe_schluessel_hygiene(namen):
 # ─────────────────────────────────────────────────────────────────────────
 # 3. B <-> Honorarsatz
 # ─────────────────────────────────────────────────────────────────────────
-def _pruefe_honorar_join(namen, honorar):
-    print("\n3. CSV-Portfolioname <-> Mapping_Honorarsatz['Inhaber']")
-    b = {w.strip() for w in _werte(namen, stamm.SP_CSV_NAME)}
-    inhaber = {w.strip() for w in _werte(honorar, stamm.SP_INHABER)}
-    fehler = 0
-    for fehlend in sorted(b - inhaber):
-        fehler += 1
-        # Genau dieser Fall lief bis zum Audit 14.08.2026 still auf 0 %.
-        print(f"   FEHLER — '{fehlend}' hat keine Zeile im Honorarsatz-Mapping")
-    for waise in sorted(inhaber - b):
-        fehler += 1
-        print(f"   FEHLER — '{waise}' steht im Honorarsatz-Mapping, "
-              f"aber in keiner Strategie")
-    if not fehler:
-        print(f"   OK — {len(b)} Namen, beidseitig vollstaendig")
-    return fehler
+def _pruefe_rueckfallebene():
+    """Neue Datei und Rueckfallebene muessen denselben Frame ergeben.
+
+    Der Join "jede Strategie hat einen Honorarsatz" steht hier NICHT mehr: Er
+    kann seit der Zusammenlegung nicht mehr scheitern, weil beides in
+    derselben Zeile steht. Das ist der eigentliche Gewinn dieser Etappe —
+    eine Pruefung entfaellt, weil die Form sie uebernommen hat. Geblieben ist
+    das neue Risiko: dass die beiden Lesewege auseinanderlaufen.
+    """
+    print("\n3. Neue Datei und Rueckfallebene liefern dasselbe")
+    if not os.path.exists(NEUE_DATEI):
+        print("   UEBERSPRUNGEN — Mapping_Strategien.xlsx liegt noch nicht "
+              "im Repo; die App laeuft auf der Rueckfallebene")
+        fehlen = [os.path.basename(d) for d in ALTE_DATEIEN
+                  if not os.path.exists(d)]
+        if fehlen:
+            print(f"   FEHLER — dann muessen die alten Dateien da sein: "
+                  f"{', '.join(fehlen)} fehlt")
+            return 1
+        return 0
+    aus_datei = stamm.lade(NEUE_DATEI)
+    aus_alten = stamm.lade(os.path.join(WURZEL, "_gibt_es_nicht_.xlsx"))
+    if list(aus_datei.columns) != list(aus_alten.columns):
+        print(f"   FEHLER — andere Spalten: {list(aus_datei.columns)} "
+              f"vs. {list(aus_alten.columns)}")
+        return 1
+    if len(aus_datei) != len(aus_alten):
+        print(f"   FEHLER — {len(aus_datei)} Zeilen vs. {len(aus_alten)}")
+        return 1
+    abweichend = 0
+    for s in aus_datei.columns:
+        for i in range(len(aus_datei)):
+            a, b = aus_datei.iloc[i][s], aus_alten.iloc[i][s]
+            if pd.isna(a) and pd.isna(b):
+                continue
+            try:
+                if abs(float(a) - float(b)) < 1e-12:
+                    continue
+            except (TypeError, ValueError):
+                pass
+            if str(a).strip() != str(b).strip():
+                abweichend += 1
+                if abweichend <= 3:
+                    print(f"   FEHLER — Zeile {i}, '{s}': "
+                          f"{str(a)[:40]!r} vs. {str(b)[:40]!r}")
+    if not abweichend:
+        print(f"   OK — {aus_datei.size} Zellen, beide Lesewege gleich")
+    return abweichend
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -228,28 +264,30 @@ def _pruefe_csv_join(namen):
 # ─────────────────────────────────────────────────────────────────────────
 # 5. Anlagekriterien
 # ─────────────────────────────────────────────────────────────────────────
-def _pruefe_anlagekriterien(namen):
-    print("\n5. Anlagekriterien-Schluessel sind im Mapping bekannt")
-    if not os.path.exists(KRITERIEN):
-        print("   UEBERSPRUNGEN — Mapping_Anlagekriterien.xlsx fehlt")
-        return 0
-    krit = pd.read_excel(KRITERIEN)
-    a = {w.strip() for w in _werte(namen, stamm.SP_ANZEIGE)}
-    schluessel = {str(v).strip() for v in krit[stamm.SP_ANZEIGE].tolist()}
+def _pruefe_anlagekriterien(sd):
+    """Welche Strategien haben einen Kriterien-Kasten?
+
+    Ein Schluessel ins Leere ist seit der Zusammenlegung unmoeglich — die
+    Kriterien stehen in derselben Zeile. Geblieben ist die Frage nach der
+    VOLLSTAENDIGKEIT: eine neue Luecke muss auffallen, die bekannte nicht.
+    """
+    print("\n5. Anlagekriterien: erfasst und bekannte Luecke")
+    sp_a = stamm.spalte(sd, stamm.SP_ANZEIGE)
+    sp_n = stamm.spalte(sd, stamm.SP_ANZEIGENAME)
     fehler = 0
-    for waise in sorted(schluessel - a):
-        fehler += 1
-        print(f"   FEHLER — Anlagekriterien kennen '{waise}', "
-              f"das Mapping nicht")
-    offen = sorted(a - schluessel)
-    unerwartet = [s for s in offen if s not in KRITERIEN_NOCH_OFFEN]
-    for s in unerwartet:
+    ohne = sorted(str(r[sp_a]).strip() for _, r in sd.iterrows()
+                  if pd.isna(r[sp_n]) or not str(r[sp_n]).strip())
+    for s in [x for x in ohne if x not in KRITERIEN_NOCH_OFFEN]:
         fehler += 1
         print(f"   FEHLER — '{s}' hat keine Anlagekriterien "
               f"(neue Luecke, nicht die bekannte)")
+    for s in sorted(KRITERIEN_NOCH_OFFEN):
+        if s not in ohne:
+            print(f"   Hinweis — '{s}' hat jetzt Kriterien; die bekannte "
+                  f"Luecke ist geschlossen und kann aus dem Test raus")
     if not fehler:
-        print(f"   OK — {len(schluessel)} erfasst, bekannte Luecke: "
-              f"{', '.join(sorted(KRITERIEN_NOCH_OFFEN))}")
+        print(f"   OK — {len(sd) - len(ohne)} von {len(sd)} erfasst, "
+              f"bekannte Luecke: {', '.join(sorted(KRITERIEN_NOCH_OFFEN))}")
     return fehler
 
 
@@ -446,10 +484,156 @@ def _pruefe_honorarsatz(honorar):
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# 10. Gegenproben — misst der Test wirklich?
+# 10. EIN Lesepfad — maschinell gehalten
+# ─────────────────────────────────────────────────────────────────────────
+def _read_excel_stellen(quelle, name):
+    """Alle Aufrufe von read_excel im Syntaxbaum, als (Zeile, Datei)."""
+    import ast
+    treffer = []
+    for k in ast.walk(ast.parse(quelle, filename=name)):
+        if not isinstance(k, ast.Call):
+            continue
+        f = k.func
+        wie = (f.attr if isinstance(f, ast.Attribute)
+               else f.id if isinstance(f, ast.Name) else None)
+        if wie == "read_excel":
+            treffer.append((k.lineno, name))
+    return treffer
+
+
+def _pruefe_ein_lesepfad():
+    """Nur EIN Modul darf eine Mapping-Datei lesen.
+
+    Die Hausregel lautet "Loader oder Mathematik nie duplizieren". Bis zum
+    23.09.2026 stand sie nur in der Doku — und war zweimal gebrochen: die
+    Honorarsatz-Suche gab es doppelt, die Anlagekriterien hatten einen
+    eigenen Loader. Ein Satz in einer Datei haelt niemanden auf, ein Test
+    schon.
+    """
+    print("\n10. Nur modules/stammdaten.py liest eine Mapping-Datei")
+    ordner = os.path.join(WURZEL, "modules")
+    fehler = 0
+    gefunden = []
+    for datei in sorted(os.listdir(ordner)):
+        if not datei.endswith(".py"):
+            continue
+        quelle = io.open(os.path.join(ordner, datei), encoding="utf-8").read()
+        for zeile, _ in _read_excel_stellen(quelle, datei):
+            gefunden.append((datei, zeile))
+    fremd = [(d, z) for d, z in gefunden if d != "stammdaten.py"]
+    for d, z in fremd:
+        fehler += 1
+        print(f"   FEHLER — {d}:{z} liest selbst eine Excel. Der Lesepfad "
+              f"gehoert in stammdaten.lade().")
+    if not fremd:
+        eigene = len([1 for d, _ in gefunden if d == "stammdaten.py"])
+        print(f"   OK — {eigene} Aufruf(e), alle in stammdaten.py")
+
+    # Gegenprobe: Die Suche muss einen eingebauten Verstoss auch finden.
+    probe = "import pandas as pd\nx = pd.read_excel('irgendwas.xlsx')\n"
+    if len(_read_excel_stellen(probe, "<probe>")) != 1:
+        fehler += 1
+        print("   FEHLER — die Syntaxbaum-Suche findet einen eingebauten "
+              "Verstoss nicht; sie misst nichts")
+    else:
+        print("   OK — Gegenprobe: ein eingebauter Verstoss wird gefunden")
+    return fehler
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 11. Positioneller Spaltenzugriff — maschinell ausgeschlossen
+# ─────────────────────────────────────────────────────────────────────────
+def _positionelle_zugriffe(quelle, name):
+    """Numerischer Zugriff auf eine Spaltenliste, als (Objekt, Zeile).
+
+    Erkennt BEIDE Schreibweisen:
+        df.columns[3]
+        cols = df.columns ... cols[3]
+    Die zweite ist die gefaehrliche: Sie sieht nicht nach Spaltenzugriff aus
+    und ist beim Umbau am 23.09.2026 durchs Raster gefallen.
+    """
+    import ast
+    baum = ast.parse(quelle, filename=name)
+    aliase = {}
+    for k in ast.walk(baum):
+        if (isinstance(k, ast.Assign)
+                and isinstance(k.value, ast.Attribute)
+                and k.value.attr == "columns"):
+            for z in k.targets:
+                if isinstance(z, ast.Name):
+                    aliase[z.id] = k.lineno
+    treffer = []
+    for k in ast.walk(baum):
+        if not isinstance(k, ast.Subscript):
+            continue
+        if not (isinstance(k.slice, ast.Constant)
+                and isinstance(k.slice.value, int)):
+            continue
+        ziel = k.value
+        if isinstance(ziel, ast.Attribute) and ziel.attr == "columns":
+            basis = (ziel.value.id if isinstance(ziel.value, ast.Name)
+                     else "?")
+            treffer.append((f"{basis}.columns", k.lineno))
+        elif isinstance(ziel, ast.Name) and ziel.id in aliase:
+            treffer.append((ziel.id, k.lineno))
+    return treffer
+
+
+# Bewusst erlaubt: eine PowerPoint-Tabelle hat echte Spaltenobjekte, dort ist
+# der Index die natuerliche Adresse. Wer einen Eintrag hinzufuegt, hat sich
+# das ueberlegt — genau das ist der Zweck der Liste.
+POSITIONELL_ERLAUBT = {("test_ytd_kachel.py", "tab.columns")}
+
+
+def _pruefe_kein_positioneller_zugriff():
+    """Spalten werden ueber ihren NAMEN gelesen, nicht ueber ihre Position.
+
+    Am 23.09.2026 zweimal schmerzhaft gelernt: Erst stand der Inhalt der
+    Duration-Spalte in der Benchmark-Fussnote, dann — nach dem Umbau — der
+    HONORARSATZ, weil ``nm_cols = name_mapping.columns`` mit ``nm_cols[3]``
+    beim Umstellen uebersehen wurde. Beide Male war nichts zu sehen ausser
+    einem falschen Text im Kundendokument.
+    """
+    print("\n11. Kein positioneller Spaltenzugriff (auch nicht per Alias)")
+    fehler = 0
+    gefunden = []
+    for ordner in ("modules", "tests"):
+        wurz = os.path.join(WURZEL, ordner)
+        for datei in sorted(os.listdir(wurz)):
+            if not datei.endswith(".py"):
+                continue
+            quelle = io.open(os.path.join(wurz, datei), encoding="utf-8").read()
+            for objekt, zeile in _positionelle_zugriffe(quelle, datei):
+                if (datei, objekt) in POSITIONELL_ERLAUBT:
+                    continue
+                gefunden.append((datei, objekt, zeile))
+    for datei, objekt, zeile in gefunden:
+        fehler += 1
+        print(f"   FEHLER — {datei}:{zeile} greift positionell zu "
+              f"({objekt}[...]). Spalten ueber den NAMEN lesen.")
+    if not gefunden:
+        print(f"   OK — keiner, ausser {len(POSITIONELL_ERLAUBT)} "
+              f"ausdruecklich erlaubten")
+
+    # Gegenprobe: beide Schreibweisen muessen gefunden werden.
+    probe = ("a = df.columns[3]\n"
+             "cols = other.columns\n"
+             "b = cols[0]\n")
+    if len(_positionelle_zugriffe(probe, "<probe>")) != 2:
+        fehler += 1
+        print("   FEHLER — die Suche findet die eingebauten Verstoesse "
+              "nicht; sie misst nichts")
+    else:
+        print("   OK — Gegenprobe: direkter UND per Alias versteckter "
+              "Zugriff werden gefunden")
+    return fehler
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# 12. Gegenproben — misst der Test wirklich?
 # ─────────────────────────────────────────────────────────────────────────
 def _gegenproben(namen):
-    print("\n10. Gegenproben: absichtlich verletzen, muss anschlagen")
+    print("\n12. Gegenproben: absichtlich verletzen, muss anschlagen")
     fehler = 0
 
     # (a) Ein Leerzeichen am Rand muss Schritt 2 melden.
@@ -496,29 +680,33 @@ def _still(funktion, *args):
 
 # ─────────────────────────────────────────────────────────────────────────
 def main():
-    for pfad in (NAMEN, HONORAR):
-        if not os.path.exists(pfad):
-            print(f"FEHLER: {pfad} fehlt")
-            return 1
-    namen = pd.read_excel(NAMEN)
-    honorar = pd.read_excel(HONORAR)
+    # EIN Ladeaufruf — genau der, den auch die App nimmt. Der Test prueft
+    # damit den echten Lesepfad und nicht eine eigene Nachbildung.
+    sd = stamm.lade()
+    if sd is None or sd.empty:
+        print(f"FEHLER: Keine Stammdaten ladbar — weder {stamm.PFAD} noch "
+              f"die drei Vorgaengerdateien.")
+        return 1
+    honorar = stamm.honorar_frame(sd)
 
-    fehler = (_pruefe_struktur(namen, honorar)
-              + _pruefe_schluessel_hygiene(namen)
-              + _pruefe_honorar_join(namen, honorar)
-              + _pruefe_csv_join(namen)
-              + _pruefe_anlagekriterien(namen)
-              + _pruefe_code_schluessel(namen)
-              + _pruefe_positionsunabhaengig(namen)
-              + _pruefe_ohne_csv(namen)
+    fehler = (_pruefe_struktur(sd)
+              + _pruefe_schluessel_hygiene(sd)
+              + _pruefe_rueckfallebene()
+              + _pruefe_csv_join(sd)
+              + _pruefe_anlagekriterien(sd)
+              + _pruefe_code_schluessel(sd)
+              + _pruefe_positionsunabhaengig(sd)
+              + _pruefe_ohne_csv(sd)
               + _pruefe_honorarsatz(honorar)
-              + _gegenproben(namen))
+              + _pruefe_ein_lesepfad()
+              + _pruefe_kein_positioneller_zugriff()
+              + _gegenproben(sd))
 
     print()
     if fehler:
         print(f"FEHLGESCHLAGEN — {fehler} Abweichung(en)")
         return 1
-    print(f"BESTANDEN — {len(namen)} Strategien, Stammdaten konsistent")
+    print(f"BESTANDEN — {len(sd)} Strategien, Stammdaten konsistent")
     return 0
 
 

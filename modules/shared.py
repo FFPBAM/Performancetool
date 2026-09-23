@@ -121,11 +121,14 @@ HEATMAP_SKALA = [
 HEATMAP_GRENZE_ABSOLUT   = 0.03    # ±3 %
 HEATMAP_GRENZE_DIFFERENZ = 0.015   # ±1,5 %
 
-MAPPING_PATH      = "Mapping_Honorarsatz.xlsx"
-NAME_MAPPING_PATH = "Mapping_Namen.xlsx"
+# Seit 23.09.2026 EINE Datei für alles (Mapping_Strategien.xlsx). Die drei
+# Namen bleiben als Konstanten stehen, weil Aufrufer und Prüfsteine sie
+# kennen — sie zeigen jetzt nur alle auf dieselbe Quelle.
+MAPPING_PATH      = _stamm.PFAD
+NAME_MAPPING_PATH = _stamm.PFAD
 # Anlagekriterien: Pfad und Spalten kommen aus dem UI-freien Modul, damit
 # App und Broschüren-Export garantiert dieselben verwenden.
-ANLAGEKRITERIEN_PATH = _kriterien.PFAD
+ANLAGEKRITERIEN_PATH = _stamm.PFAD
 KRITERIEN_SPALTEN = _kriterien.SPALTEN
 KRITERIEN_KEY_SPALTE = _kriterien.KEY_SPALTE
 DATA_FOLDER       = "Daten"
@@ -278,23 +281,33 @@ def detect_newest_date_tag(data_folder: str, exclude_substrings: list = None) ->
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_mapping(mapping_path: str = MAPPING_PATH) -> pd.DataFrame:
-    return pd.read_excel(mapping_path).round(6)
+    """Honorarsätze — eine Projektion der Stammdaten auf zwei Spalten.
+
+    Trägt weiter die Köpfe der alten Datei (``Inhaber`` /
+    ``Honorarsatz Standard``), damit ``build_portfolio_timeseries`` und sechs
+    Prüfsteine unverändert bleiben. Kein zweiter Lesepfad: der Frame kommt
+    aus demselben ``stammdaten.lade()``.
+    """
+    return _stamm.honorar_frame(_stamm.lade(mapping_path)).round(6)
 
 @st.cache_data(show_spinner=False)
 def load_name_mapping(path: str = NAME_MAPPING_PATH) -> pd.DataFrame:
-    return pd.read_excel(path)
+    """Die Stammdaten aller Strategien. Hier NUR der Streamlit-Cache."""
+    return _stamm.lade(path)
 
 
 @st.cache_data(show_spinner=False)
 def load_anlagekriterien(path: str = ANLAGEKRITERIEN_PATH) -> pd.DataFrame:
     """Anlagekriterien je Strategie — hier NUR der Streamlit-Cache.
 
-    Die Logik steht in ``modules/anlagekriterien.py``, weil ``pptx_export.py``
-    sie ebenfalls braucht und bewusst streamlit-frei bleibt (Batch-Fähigkeit,
-    Doku Abschnitt 13). Zwei Loader wären genau die Duplizierung, an der die
+    Die Kriterien stehen seit 23.09.2026 in denselben Zeilen wie der Rest der
+    Stammdaten; geladen wird deshalb dieselbe Datei. Die AUSWERTUNG bleibt in
+    ``modules/anlagekriterien.py``, weil ``pptx_export.py`` sie ebenfalls
+    braucht und bewusst streamlit-frei ist (Batch-Fähigkeit, Doku
+    Abschnitt 13). Zwei Loader wären genau die Duplizierung, an der die
     Codebasis früher krankte.
     """
-    return _kriterien.lade(path)
+    return _stamm.lade(path)
 
 
 _MD_SONDERZEICHEN = ("\\", "*", "_", "`", "[", "]", "#")

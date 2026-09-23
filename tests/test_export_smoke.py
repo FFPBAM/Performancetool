@@ -38,7 +38,7 @@ try:
     from modules.shared import (
         DATA_FOLDER, DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
         detect_newest_date_tag, load_all_csvs, load_mapping,
-        load_name_mapping, build_portfolio_timeseries,
+        load_name_mapping, build_portfolio_timeseries, build_name_lookups,
     )
     from modules.portfolioanalyse import (
         load_pf_csvs, build_pf_data, duration_info_aus_bestand,
@@ -65,8 +65,11 @@ def _daten():
     tag = detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
     pf_data = build_pf_data(load_pf_csvs(DATA_FOLDER_PF, tag))
     nm = load_name_mapping()
-    sp = nm.columns
-    gefiltert = nm[nm[sp[1]].isin(set(pf_data.keys()))]
+    # build_name_lookups statt eigener Nachbau (23.09.2026): Hier stand
+    # `sp = nm.columns` mit sp[0]/sp[1]/sp[3]. Ein Test, der den App-Pfad
+    # NACHBAUT statt ihn aufzurufen, laeuft irgendwann auseinander — und
+    # genau das ist passiert.
+    namen_l, d2c_l, d2b_l = build_name_lookups(nm, set(pf_data.keys()))
     mapping = load_mapping()
     ts = build_portfolio_timeseries(
         load_all_csvs(DATA_FOLDER,
@@ -77,9 +80,9 @@ def _daten():
         "tag": tag,
         "pf_data": pf_data,
         "nm": nm,
-        "namen": gefiltert[sp[0]].tolist(),
-        "d2c": dict(zip(gefiltert[sp[0]], gefiltert[sp[1]])),
-        "d2b": dict(zip(gefiltert[sp[0]], gefiltert[sp[3]])),
+        "namen": namen_l,
+        "d2c": d2c_l,
+        "d2b": d2b_l,
         "mapping": mapping,
         "ts": ts,
     }

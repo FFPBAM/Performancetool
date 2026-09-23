@@ -532,7 +532,7 @@ ist seit 12.08.2026 per Test darauf festgenagelt, dass sie nur dort steht
 solange die Formeln gleich sind, und genau das ist die Gefahr.
 
 **Mapping-Spalten nur NAMENTLICH lesen** (23.09.2026). Die Spaltennamen der
-Mapping-Dateien stehen in `modules/stammdaten.py`; gelesen wird ueber
+Stammdaten stehen in `modules/stammdaten.py`; gelesen wird ueber
 `stammdaten.spalte(df, stammdaten.SP_...)`, das bei fehlender Spalte **wirft**
 und dabei Datei und Spalte beim Namen nennt. Vorher griffen drei Module
 positionell zu (`columns[0]/[1]/[3]`) — das haelt nur, solange niemand eine
@@ -551,6 +551,29 @@ die es schon gab (`df.attrs`, `pptx_diag`, `LAST_BUILD_ERRORS`) — kein
 vierter Meldeweg. Und: ein Pruefstein darf bei fehlendem PAKET ueberspringen,
 bei einer fehlenden EIGENEN Funktion muss er rot werden, sonst bleibt ein
 Rueckbau gruen.
+
+**EIN Lesepfad, und er ist maschinell gehalten** (23.09.2026).
+`stammdaten.lade()` ist das einzige `pd.read_excel` auf eine Mapping-Datei;
+`tests/test_stammdaten.py` Schritt 10 haelt das per Syntaxbaum fest. Liegt
+`Mapping_Strategien.xlsx` nicht, baut dieselbe Funktion den Frame aus den
+drei Vorgaengerdateien (Rueckfallebene) — Schritt 3 misst, dass beide Wege
+dasselbe liefern.
+
+**Und positioneller Spaltenzugriff wird im SYNTAXBAUM gesucht, nicht per
+grep** (23.09.2026, teuer gelernt). Etappe 1 stellte `columns[0]/[1]/[3]` auf
+Namen um — uebersehen wurde die Alias-Form `nm_cols = name_mapping.columns`
+mit `nm_cols[3]`, weil das Suchmuster `name_mapping.columns[` lautete.
+Aufgefallen ist es erst, als die zusammengelegte Datei eine andere
+Spaltenfolge hatte und in der ***-Fussnote der **Honorarsatz** stand. Zwei
+Pruefsteine trugen denselben Fehler. `test_stammdaten.py` Schritt 11 sucht
+jetzt BEIDE Formen ueber `modules/` und `tests/`, mit ausdruecklicher
+Ausnahmeliste und Gegenprobe. **Ein Suchmuster in der Shell ist kein
+Pruefstein.**
+
+**Ein Pruefstein darf den App-Pfad nicht NACHBAUEN, er ruft ihn auf.**
+`test_export_smoke.py` hatte `build_name_lookups` nachgebaut und lief
+deshalb beim Umbau auseinander, ohne anzuschlagen. Jetzt ruft er die echte
+Funktion.
 
 **Und Spalte B heisst nicht, was sie ist:** „Honorarsatz Mapping" enthaelt den
 **CSV-Portfolionamen**. Der ist auch NICHT das Dateinamen-Praefix — zwei

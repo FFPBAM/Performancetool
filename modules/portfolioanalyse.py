@@ -1415,10 +1415,19 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
         # Fallback direkt aus dem Name-Mapping (Spalte D).
         perf_d2b = st.session_state.get("perf_d2b", {})
         if not perf_d2b:
+            # NAMENTLICH (23.09.2026, Nachtrag zu Etappe 1): Hier stand
+            # `nm_cols[0]` / `nm_cols[3]`. Die Alias-Schreibweise
+            # (`nm_cols = name_mapping.columns`) ist beim Umstellen durchs
+            # Raster gefallen — gefunden erst, als die zusammengelegte Datei
+            # eine andere Spaltenfolge hatte und in der ***-Fussnote der
+            # HONORARSATZ stand statt der Benchmark. Ein Pruefstein sucht
+            # dieses Muster jetzt im Syntaxbaum.
             try:
-                nm_cols = name_mapping.columns
-                if len(nm_cols) >= 4:
-                    perf_d2b = dict(zip(name_mapping[nm_cols[0]], name_mapping[nm_cols[3]]))
+                perf_d2b = dict(zip(
+                    name_mapping[_stamm.spalte(name_mapping, _stamm.SP_ANZEIGE)],
+                    name_mapping[_stamm.spalte(name_mapping, _stamm.SP_BENCHMARK)]))
+            except _stamm.StammdatenFehler:
+                raise
             except Exception:
                 perf_d2b = {}
 

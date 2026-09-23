@@ -96,12 +96,13 @@ def _pruefe(shape, name):
 
 def schritt1_namen_eingeordnet():
     print("Schritt 1 — jede Thema-Strategie ist namentlich eingeordnet")
-    import pandas as pd
     from modules.pptx_slides import (clean_strategy_name,
                                      ROLLIEREND_TITEL_EINZEILIG_MAX)
-    nm = pd.read_excel(os.path.join(WURZEL, "Mapping_Namen.xlsx"))
-    sp = nm.columns
-    thema = [clean_strategy_name(str(n)) for n, f in zip(nm[sp[0]], nm[sp[4]])
+    from modules import stammdaten as stamm
+    nm = stamm.lade()
+    thema = [clean_strategy_name(str(n)) for n, f in
+             zip(nm[stamm.spalte(nm, stamm.SP_ANZEIGE)],
+                 nm[stamm.spalte(nm, stamm.SP_FAMILIE)])
              if str(f).strip() == "Thema"]
     f = 0
     for name in thema:

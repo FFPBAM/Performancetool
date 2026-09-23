@@ -126,10 +126,79 @@ positionellem (Etappe 1 von 5):**
   identisch. Im gesunden Zustand meldet nichts davon etwas — der Export läuft
   weiter mit leerem `LAST_BUILD_ERRORS`.
 
+- **Etappe 3 — eine Datei statt drei (Entscheidung Philip: EIN breites
+  Blatt).** `Mapping_Strategien.xlsx`, Blatt „Strategien": 19 Zeilen, 10
+  Spalten, alles nebeneinander. Dazu ein Blatt „Hinweise", das der Code nie
+  liest.
+
+  - **Verlustfrei belegt:** 171 Zellen aus den drei Quellen Wert für Wert
+    gegengeprüft, null Abweichungen. Die **Zeilenreihenfolge** von
+    `Mapping_Namen.xlsx` bleibt erhalten — sie bestimmt die Reihenfolge im
+    Auswahlfeld.
+  - **Entfallen:** `Duration`, `Familie` (Dublette von „Powerpoint Familie"),
+    `Portfolioname`, `Honorarsatz Brutto`. Keine davon wurde gelesen. Die
+    Dublette `Familie` verschwindet damit **durch die Bauform** statt durch
+    einen Test — `test_anlagekriterien.py` Schritt 3 wird mit Etappe 4
+    gegenstandslos.
+  - **Spalte B heißt jetzt `CSV-Portfolioname`** statt „Honorarsatz Mapping".
+    Der alte Kopf log: Dort steht der Schlüssel aus dem Bestandssystem, nicht
+    ein Honorarschlüssel. Die Rückfallebene akzeptiert beide Schreibweisen.
+  - **Rückfallebene:** Fehlt `Mapping_Strategien.xlsx`, baut
+    `stammdaten.lade()` denselben Frame aus den drei alten Dateien. Die App
+    steht im Zeitfenster zwischen Löschen und Hochladen also nicht still, und
+    ein Rückweg bleibt offen. **Beide Wege sind nachgemessen gleich**
+    (190 Zellen).
+  - **Ein Lesepfad:** `stammdaten.lade()` ist das einzige `pd.read_excel` auf
+    eine Mapping-Datei im ganzen Projekt. `anlagekriterien.py` hat seine
+    Datei-Ein-/Ausgabe abgegeben und behält die Auswertung; die drei Namen
+    `load_name_mapping` / `load_mapping` / `load_anlagekriterien` bleiben als
+    **Cache-Fassade** bestehen — deshalb mussten `build_portfolio_timeseries`
+    und sechs Prüfsteine gar nicht angefasst werden.
+
+- **⚠️ Dabei einen eigenen Fehler aus Etappe 1 gefunden — den wichtigsten
+  Fund des Tages.** Der Broschüren-Export zeigte mit der neuen Datei in der
+  ***-Fußnote plötzlich `0.0085` statt der Benchmark: den **Honorarsatz**.
+  Ursache: `modules/portfolioanalyse.py` hatte an einer weiteren Stelle
+  positionellen Zugriff, aber in der **Alias-Schreibweise**
+  (`nm_cols = name_mapping.columns` … `nm_cols[3]`). Mein Etappe-1-Suchmuster
+  hieß `name_mapping.columns[` und hat diese Form nicht erfasst. Zwei
+  Prüfsteine hatten dieselbe Schwäche (`test_export_smoke.py`,
+  `test_titel_umbruch.py`). Alle drei sind umgestellt;
+  `test_export_smoke.py` **ruft jetzt `build_name_lookups` auf, statt den
+  App-Pfad nachzubauen** — genau dieser Nachbau war die Ursache dafür, dass
+  es dem Test nicht auffiel.
+
+  **Die Lehre, als Prüfstein festgehalten** (`test_stammdaten.py`
+  Schritt 11): Ein numerischer Spaltenzugriff wird jetzt im **Syntaxbaum**
+  gesucht, in beiden Schreibweisen, über `modules/` und `tests/`. Eine
+  ausdrückliche Ausnahmeliste enthält genau einen Eintrag (eine
+  PowerPoint-Tabelle, dort ist der Index die natürliche Adresse). Gegenprobe:
+  beide Formen werden in einem eingebauten Verstoß gefunden. **Ein Suchmuster
+  in der Shell ist kein Prüfstein** — das ist die eigentliche Lehre.
+
+- **Prüfsteine:** `test_stammdaten.py` hat jetzt 12 Schritte. Neu: Schritt 3
+  (neue Datei ≡ Rückfallebene, 190 Zellen), Schritt 10 (nur
+  `stammdaten.py` liest eine Excel — Syntaxbaum), Schritt 11 (kein
+  positioneller Zugriff). Entfallen: der Join „jede Strategie hat einen
+  Honorarsatz" — er **kann** nicht mehr scheitern, weil beides in derselben
+  Zeile steht.
+
+- **Beweis:** 39/39 Suiten grün **zweimal** — einmal mit der neuen Datei,
+  einmal auf der Rückfallebene. `pyflakes` null. Broschüren in beiden
+  Zuständen gegen den Stand **vor Etappe 1**: inhaltsgleich. `ui_dump` alle
+  drei Ansichten identisch.
+
+- **Was Philip tun muss:** Die fertige Datei liegt intern bereit. Ansehen,
+  dann im Repo die drei alten Dateien **stehen lassen** und die neue frisch
+  hochladen (nie umbenennen, Transferwissen #23). Bis dahin läuft die App
+  unverändert auf der Rückfallebene. Erst wenn die neue Datei liegt und
+  geprüft ist, fallen die alten drei weg (Etappe 4).
+
 - **Offen / für Philip:**
-  - **Sichtprüfung in der Live-App**, dann Push. Noch nicht committet.
-  - **Etappe 3/4:** Zusammenlegung zu einer Mappe mit Rückfallebene, danach
-    die alten Dateien entfernen.
+  - **Sichtprüfung in der Live-App.**
+  - **Etappe 4:** Wenn die neue Datei liegt und abgenommen ist: die drei
+    alten Dateien und die Rückfallebene entfernen. Eigener Commit, weil das
+    der einzige unumkehrbare Schritt ist.
   - **Etappe 5:** Umbenennungs-Prüfstein (Folientitel, Chart-Seriennamen).
     Was kein Test je beheben kann: Die statischen Folientitel in sechs
     Vorlagen und die eingebrannten Chart-Seriennamen müssen bei einer

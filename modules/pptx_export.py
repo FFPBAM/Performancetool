@@ -79,12 +79,16 @@ except ImportError:
         fill_uebersicht_slide, fill_anlagekriterien_slide,
     )
 
-# Anlagekriterien-Konfiguration. BEWUSST das UI-freie Modul, nicht shared.py:
-# dieser Export laeuft ohne Streamlit (Batch-Faehigkeit, Doku Abschnitt 13).
+# Stammdaten und ihre Auswertung. BEWUSST die UI-freien Module, nicht
+# shared.py: dieser Export laeuft ohne Streamlit (Batch-Faehigkeit, Doku
+# Abschnitt 13). stammdaten.lade() liest die Datei, anlagekriterien wertet
+# die Kriterien-Spalten desselben Frames aus.
 try:
     from modules import anlagekriterien as _anlagekriterien
+    from modules import stammdaten as _stammdaten
 except ImportError:
     import anlagekriterien as _anlagekriterien
+    import stammdaten as _stammdaten
 
 # Kosten-Mathematik. Sie gehoert nach modules/analytics.py und NUR dorthin:
 # derselbe Honorarabzug bestimmt die Zahlen im Tool und in der Broschuere.
@@ -1009,7 +1013,7 @@ def generate_portfolioanalyse_pptx(
     # Themen-Broschüren mit "rollierend" statt "performance").
     # Anlagekriterien EINMAL laden (nicht je Strategie) — die Datei ist klein,
     # aber der Export laeuft ueber bis zu fuenf Strategien.
-    kriterien_cfg = _anlagekriterien.lade()
+    kriterien_cfg = _stammdaten.lade()
 
     for k, (display_name, df, eval_date, _dur) in enumerate(portfolios):
         strategy_name = clean_strategy_name(display_name)

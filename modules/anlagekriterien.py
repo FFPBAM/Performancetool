@@ -2,27 +2,26 @@
 """Anlagekriterien je Strategie — EINE Quelle für Tool UND Broschüre.
 
 Die Kriterien standen bis zum 10.08.2026 nur statisch in den PPTX-Vorlagen,
-je Familie unterschiedlich geschrieben. Jetzt liegen sie in
-``Mapping_Anlagekriterien.xlsx`` und speisen beides:
+je Familie unterschiedlich geschrieben. Seit dem 23.09.2026 stehen sie als
+vier Spalten in ``Mapping_Strategien.xlsx``, in derselben Zeile wie der Rest
+der Stammdaten. Sie speisen beides:
 
     Excel ─┬─► Banner im Streamlit-Tool      (shared.zeige_anlagekriterien)
            └─► Kasten auf der Struktur-Folie (pptx_slides.fill_anlagekriterien_slide)
 
-WARUM DIESES MODUL STREAMLIT-FREI IST:
-    ``pptx_export.py`` hat bewusst KEINE Streamlit-Abhängigkeit — der
-    Broschüren-Export soll auch aus einem Batch-Skript heraus laufen können
-    (Abschnitt 13 der Projektdoku). Läge das Laden nur in ``shared.py``
-    (dort mit ``@st.cache_data``), zöge der Export Streamlit herein.
-    Deshalb steht die reine Logik hier; ``shared.py`` legt für die App nur
-    den Cache darum. Kopiert wird nichts — genau daran krankte die Codebasis
-    früher (zwei Loader, elf Mathe-Kopien).
+DIESES MODUL LIEST KEINE DATEI MEHR (23.09.2026):
+    Das Laden liegt in ``modules/stammdaten.py`` — dort steht das einzige
+    ``pd.read_excel`` auf eine Mapping-Datei im ganzen Projekt, und ein
+    Prüfstein hält das per Syntaxbaum fest. Hier bleibt die AUSWERTUNG:
+    welche Spalten gedruckt werden und wie eine Zeile zu Paaren wird. Die
+    Funktionen nehmen den Frame als Argument und sind damit rein.
+
+    Streamlit-frei bleibt es aus dem alten Grund: ``pptx_export.py`` soll
+    ohne Streamlit aus einem Batch-Skript laufen können (Abschnitt 13 der
+    Projektdoku).
 """
 
-import os
-
 import pandas as pd
-
-PFAD = "Mapping_Anlagekriterien.xlsx"
 
 KEY_SPALTE = "Strategie auswählen"     # wie in Mapping_Namen.xlsx
 ANZEIGE_SPALTE = "Anzeigename"         # Kopfzeile des Kastens in der Broschüre
@@ -32,20 +31,6 @@ ANZEIGE_SPALTE = "Anzeigename"         # Kopfzeile des Kastens in der Broschüre
 # keine zweite Liste, die auseinanderlaufen kann.
 SPALTEN = ("Anlageregion", "Aktienanteil",
            "Anleihenanteil / Liquidität", "Fremdwährungen")
-
-
-def leer() -> pd.DataFrame:
-    """Leerer, aber strukturell gültiger DataFrame."""
-    return pd.DataFrame(columns=[KEY_SPALTE, ANZEIGE_SPALTE, *SPALTEN])
-
-
-def lade(pfad: str = PFAD) -> pd.DataFrame:
-    """Liest die Konfiguration. Fehlt die Datei, kommt ein LEERER DataFrame
-    zurück statt einer Exception: Banner und Kasten entfallen dann still,
-    App und Export laufen weiter."""
-    if not os.path.exists(pfad):
-        return leer()
-    return pd.read_excel(pfad)
 
 
 def _zeile(strategie, kriterien):
