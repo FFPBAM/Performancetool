@@ -562,6 +562,37 @@ keine der drei Vorgaengerdateien zurueckkommt: Eine Mapping-Datei, die
 niemand liest, sieht aus wie eine Quelle und wird irgendwann ins Leere
 gepflegt.
 
+**Eine Pruefung, die nur einen Teil sieht, ist keine Pruefung**
+(23.09.2026, zweimal am selben Tag gelernt). Die Fussnoten-Pruefsteine sahen
+nur Folien mit einem Shape "Quelle" — auf der Tabellen-Folie stand deshalb
+vierzehn Monate lang die alte Kostenregel, und dieselbe Broschuere sagte auf
+der einen Folie "nach Kosten" und auf der anderen "vor Kosten". Dieselbe
+Klasse: `test_export_smoke.py` baute die Standard-Vorlage nie, weil sie keine
+Familie hat. Beim naechsten Pruefstein zuerst fragen: WAS sieht er nicht?
+Und: Durchgang und Pruefstein muessen ueber DIESELBE Traversierung laufen
+(`pptx_slides._textrahmen`, inkl. Gruppen und Tabellenzellen) — zwei
+Sichtweisen sind zwei blinde Flecken.
+
+**Ein Pruefstein prueft, was am Ende DASTEHT, nicht dass etwas LIEF**
+(23.09.2026). Der alte Test belegte, dass eine Ersetzung ausgefuehrt wurde.
+Der neue fuegt den Disclaimer jeder Folie zu einem Fliesstext zusammen und
+verlangt, dass alle Familien wortgleich dasselbe sagen. Nur der zweite haette
+den Fehler gefunden.
+
+**Begruendungen nachmessen, auch die eigenen** (23.09.2026, dreimal an einem
+Tag noetig gewesen). Nacheinander standen hier: der Durchgang MUESSE zuletzt
+laufen, sonst greife keine Ersetzung mehr (widerlegt an acht Vorlagen — er
+beruehrt keinen Absatzanfang); ein Zusatz haette den Absatz umbrechen lassen
+(widerlegt an der Boxgroesse — 7 von 14 Zeilen belegt); und die
+Standard-Vorlage werde "von keinem Pruefstein gebaut" (widerlegt —
+test_wertentwicklung_platzhalter.py baut sie seit dem 24.08.2026, nur eben
+im Speicher und nur auf die Wertentwicklungs-Folien hin).
+
+Jedes Mal klang es plausibel, jedes Mal fand es erst der Pruef-Agent. Eine
+erfundene Bedingung entwertet die echten Belege daneben. **Wer "muss" oder
+"kein" schreibt, hat es gemessen — oder schreibt "damit" und nennt den
+Umfang.**
+
 **Und was ins oeffentliche Repo gehoert, ist eng gefasst** (23.09.2026).
 `Start.txt` lag jahrelang im Repo und nannte einen lokalen Arbeitspfad, die
 Repo-Adresse und Betriebsschritte der Cloud-Oberflaeche. Sie liegt jetzt
@@ -601,6 +632,9 @@ python tests/test_streamlit_api.py           # ohne jedes Paket
 python tests/test_keine_piktogramme.py       # ohne jedes Paket
 python tests/test_anlagekriterien.py         # pandas + streamlit
 python tests/test_stammdaten.py              # Schritte 1-3+6 nur pandas
+#   test_export_smoke.py (Teil 1b) und test_quelle_position.py bauen seit
+#   23.09.2026 auch die Standard-Familie (Vorlage_FFPB.pptx) — sie hat keine
+#   Familie und kam in beiden vorher nicht vor.
 python tests/test_app_titel.py               # Schritt 1+2 ohne jedes Paket
 python tests/test_legende_musterdepot.py     # Schritt 1 ohne jedes Paket
 python tests/test_kosten_mathematik.py       # Schritt 1 ohne jedes Paket

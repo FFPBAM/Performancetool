@@ -1,5 +1,12 @@
 """End-to-End-Test: erzeugt fuer jede Familie eine echte Broschuere.
 
+Seit 23.09.2026 auch fuer die STANDARD-Familie (Vorlage_FFPB.pptx, Teil 1b).
+Sie hat keine Familie im Mapping und kam deshalb in Teil 1 nie vor. Gebaut
+wurde sie bis dahin nur von test_wertentwicklung_platzhalter.py (seit
+24.08.2026, Schritt 2/3) — dort aber nur im Speicher und nur auf die
+Wertentwicklungs-Folien hin. Als fertige DATEI, auf Folienzahl und
+Build-Meldungen geprueft, sah sie kein Test.
+
 Bildet nach, was render_portfolioanalyse beim Klick auf "PowerPoint
 erstellen" tut — ohne Oberflaeche. Geprueft wird je Datei:
   - der Export laeuft ohne Exception durch
@@ -47,7 +54,8 @@ try:
         historie_beschneiden,
     )
     from modules import pptx_export
-    from modules.pptx_export import generate_portfolioanalyse_pptx
+    from modules.pptx_export import (generate_portfolioanalyse_pptx,
+                                     DEFAULT_TEMPLATE_CONFIG)
     from modules import pdf_export
 except ImportError as ex:
     print(f"UEBERSPRUNGEN — Abhaengigkeit fehlt: {ex}")
@@ -120,13 +128,21 @@ def _perf_inputs(portfolios, d, familie=""):
     return raus
 
 
-def _bauen(portfolios, familie, d, ausgabe, dateiname):
+def _bauen(portfolios, familie, d, ausgabe, dateiname, standard=False):
     # Strategie-basierte Vorlagenauflösung wie im Produktionsweg (NEU
     # 17.09.2026): Die Leitstrategie (portfolios[0][0]) wählt die Vorlage —
     # für Thema-Strategien mit eigenen Anfangsfolien und für SCHWEIZ (F2/F3
     # entfernt). Für alle anderen fällt _vorlage_fuer_strategie auf die Familie
     # zurück, das Ergebnis ist identisch zu vorher.
-    tpl, cfg = _vorlage_fuer_strategie(d["nm"], portfolios[0][0])
+    #
+    # standard=True erzwingt den Weg OHNE Vorlage und Config — also
+    # Vorlage_FFPB.pptx mit DEFAULT_TEMPLATE_CONFIG (NEU 23.09.2026, siehe
+    # Teil 1b). Über eine Strategie ist dieser Weg nicht erreichbar: Alle 19
+    # tragen eine Familie, keine fällt auf den Standard zurück.
+    if standard:
+        tpl, cfg = None, None
+    else:
+        tpl, cfg = _vorlage_fuer_strategie(d["nm"], portfolios[0][0])
     daten = generate_portfolioanalyse_pptx(
         portfolios, 0.0, performance_inputs=_perf_inputs(portfolios, d, familie),
         template_path=tpl, template_config=cfg)
@@ -193,6 +209,41 @@ def main():
             print(f"{familie:28s} {'-':>6s} {'-':>5s} {'-':>6s}  "
                   f"FEHLER: {type(ex).__name__}: {ex}")
             traceback.print_exc()
+
+    # ── Teil 1b: Standard-Familie (Vorlage_FFPB.pptx) ──────────────────
+    # AUFGENOMMEN 23.09.2026. Sie hat keine Familie, also kam Teil 1 nie an ihr
+    # vorbei. test_wertentwicklung_platzhalter.py baut sie zwar seit dem
+    # 24.08.2026 (Schritt 2/3, Familie ""), aber nur im Speicher und nur auf
+    # die Wertentwicklungs-Folien hin — als fertige DATEI, auf Folienzahl und
+    # Build-Meldungen geprueft, sah sie kein Test. Aufgefallen ist die Lücke,
+    # als die Wortlaut-Angleichung ihre Impressum-Folie veränderte.
+    #
+    # Sie ist kein totes Gleis: Über `_vorlage_fuer_strategie` landet dort
+    # jede Strategie ohne Familie und jede Familie ohne eigene Vorlage.
+    if d["namen"]:
+        strategie = d["namen"][0]
+        try:
+            portfolios = [_portfolio(strategie, d)]
+            ziel, groesse, meldungen = _bauen(portfolios, "Standard", d,
+                                              ausgabe, "Standard.pptx",
+                                              standard=True)
+            n = len(Presentation(ziel).slides)
+            soll = (DEFAULT_TEMPLATE_CONFIG["erwartete_folien"]
+                    - len(DEFAULT_TEMPLATE_CONFIG.get("entfernen") or []))
+            ok = n == soll and not meldungen
+            fehler += 0 if ok else 1
+            print(f"{'Standard (FFPB)':28s} {n:6d} {soll:5d} "
+                  f"{groesse/1048576:6.2f}  {'OK' if ok else 'ABWEICHUNG'}")
+            for m in meldungen:
+                print(f"    ! {m[:96]}")
+        except Exception as ex:
+            fehler += 1
+            print(f"{'Standard (FFPB)':28s} {'-':>6s} {'-':>5s} {'-':>6s}  "
+                  f"FEHLER: {type(ex).__name__}: {ex}")
+            traceback.print_exc()
+    else:
+        print(f"{'Standard (FFPB)':28s} {'-':>6s} {'-':>5s} {'-':>6s}  "
+              f"UEBERSPRUNGEN (keine Strategie in den Daten)")
 
     # ── Teil 2: Thema mit mehreren Strategien (Dupliziermodus) ──────────
     # Der einzige Pfad, auf dem _vervielfaeltige_block laeuft. Waere

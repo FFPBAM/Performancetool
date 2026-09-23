@@ -3,6 +3,9 @@
 **Letzte Sitzung:** 23.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
 unerheblich) · **Alle 39 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
+**Die Stammdaten stehen seit heute in EINER Datei** (`Mapping_Strategien.xlsx`),
+die drei Vorgänger sind entfernt · **Die Kostenregel ist in allen Broschüren
+einheitlich** ·
 **Stand 21.09. nach Sichtprüfung durch Philip gepusht, alte Daten 260916
 entfernt** (siehe Sitzung 21.09.) ·
 **PDF-Dienst als freundliche Fassung zurückgeholt und gepusht (`2b579db`);
@@ -336,8 +339,31 @@ positionellem (Etappe 1 von 5):**
 
   **Für Philip zum Abnicken:** Die Korrektur „Gesamtkosten- und Gebühren"
   trifft auch die **Impressum-Folie** (cVV F36, FFPB F25) — dieselbe
-  Falschschreibung, aber es ist ein Rechtstext. Und `Vorlage_FFPB.pptx` wird
-  vom Prüfstein nicht gebaut, diese eine Änderung sieht also kein Test.
+  Falschschreibung, aber es ist ein Rechtstext.
+
+- **Standard-Familie in zwei Prüfsteine aufgenommen** (Ansage Philip, zum
+  Schluss). `Vorlage_FFPB.pptx` hat keine Familie im Mapping und kam deshalb
+  in `test_export_smoke.py` nie vor. Sie ist kein totes Gleis: Über
+  `_vorlage_fuer_strategie` landet dort jede Strategie ohne Familie und jede
+  Familie ohne eigene Vorlage. Aufgefallen ist die Lücke, als die
+  Wortlaut-Angleichung ihre Impressum-Folie veränderte.
+
+  **Genau gesagt** (der Prüf-Agent hat mich hier korrigiert): „von keinem
+  Prüfstein gebaut" war **falsch**. `test_wertentwicklung_platzhalter.py`
+  baut sie seit dem 24.08.2026 (Schritt 2/3, Familie `""`) — aber nur im
+  Speicher und nur auf die Wertentwicklungs-Folien hin. Als fertige **Datei**,
+  auf Folienzahl und Build-Meldungen geprüft, sah sie kein Test.
+
+  Neuer **Teil 1b** in `test_export_smoke.py`, erreichbar nur über
+  `standard=True` (über eine Strategie geht es nicht — alle 19 tragen eine
+  Familie, nachgemessen). Gebaut: 24 Folien (26 der Vorlage minus die zwei
+  entfernten), keine Build-Meldung.
+
+  **Und `test_quelle_position.py` baut sie jetzt selbst** (Schritt 3). Erst
+  hatte ich behauptet, Schritt 5 erfasse sie „damit" — das galt nur, wenn
+  beide Tests zufällig in denselben Ordner schreiben. Eine Abdeckung, die von
+  der Aufrufreihenfolge abhängt, ist keine. Jetzt: 8 Broschüren, 21 Folien
+  wortgleich, die Impressum-Folie der Standard-Broschüre nachgeprüft.
 
 - **Offen / für Philip:**
   - **Sichtprüfung in der Live-App.**

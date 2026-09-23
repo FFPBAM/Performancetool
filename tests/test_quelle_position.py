@@ -452,9 +452,10 @@ def _pruefe_artefakt(ausgabe):
 
     fehler = geprueft = 0
 
-    def _lauf(portfolios, familie, dateiname, etikett):
+    def _lauf(portfolios, familie, dateiname, etikett, standard=False):
         nonlocal fehler, geprueft
-        ziel, _gr, meldungen = _bauen(portfolios, familie, d, ausgabe, dateiname)
+        ziel, _gr, meldungen = _bauen(portfolios, familie, d, ausgabe, dateiname,
+                                      standard=standard)
         for m in meldungen:
             print(f"   ! BUILD-FEHLER {etikett}: {m[:90]}")
             fehler += 1
@@ -483,6 +484,14 @@ def _pruefe_artefakt(ausgabe):
         else:
             portfolios = [_portfolio(strategie, d)]
         _lauf(portfolios, familie, f"{familie}.pptx", familie)
+
+    # Standard-Vorlage (NEU 23.09.2026): Sie hat keine Familie und kam in der
+    # Schleife oben nie vor. Ohne sie sehen die Schritte 4 und 5 sie nur dann,
+    # wenn zufaellig test_export_smoke.py in denselben Ordner geschrieben hat
+    # — eine Abdeckung, die von der Aufrufreihenfolge abhaengt, ist keine.
+    if d["namen"]:
+        _lauf([_portfolio(d["namen"][0], d)], "Standard", "Standard.pptx",
+              "Standard", standard=True)
 
     for etikett, namen in THEMA_ZUSATZ:
         fehlend = [n for n in namen if n not in d["d2c"]]
