@@ -188,17 +188,68 @@ positionellem (Etappe 1 von 5):**
   Zuständen gegen den Stand **vor Etappe 1**: inhaltsgleich. `ui_dump` alle
   drei Ansichten identisch.
 
-- **Was Philip tun muss:** Die fertige Datei liegt intern bereit. Ansehen,
-  dann im Repo die drei alten Dateien **stehen lassen** und die neue frisch
-  hochladen (nie umbenennen, Transferwissen #23). Bis dahin läuft die App
-  unverändert auf der Rückfallebene. Erst wenn die neue Datei liegt und
-  geprüft ist, fallen die alten drei weg (Etappe 4).
+- **Erledigt am selben Tag:** Philip hat entschieden, dass ich die Datei
+  selbst aufnehme. Sie liegt im Repo, die alten drei sind weg (Etappe 4).
+
+- **Etappe 4 — die Vorgänger sind weg, und das Repo ist aufgeräumt.**
+  `Mapping_Strategien.xlsx` wurde in einem eigenen Commit aufgenommen
+  (Rückweg: ein Löschvorgang), danach fielen die drei alten Dateien und die
+  Rückfallebene. Ab jetzt gibt es genau **eine** Stammdaten-Datei.
+
+  - `stammdaten.lade()` liest nur noch diese eine Datei. Fehlt sie, kommt ein
+    leerer Frame statt einer Exception — die Oberfläche meldet dann „Keine
+    Portfolios zugeordnet", statt beim Start abzustürzen. Eine fehlende Datei
+    ist ein Betriebsproblem, kein Programmfehler.
+  - **`test_stammdaten.py` Schritt 3 umgewidmet:** Er prüfte die
+    Rückfallebene, jetzt hält er fest, dass es genau eine Stammdaten-Datei
+    gibt und **keine der drei Vorgänger zurückkommt**. Eine Mapping-Datei,
+    die niemand liest, ist keine harmlose Altlast — sie sieht aus wie eine
+    Quelle, und jemand pflegt sie ins Leere.
+  - **`test_anlagekriterien.py`** liest jetzt über `stammdaten.lade()`. Zwei
+    Schritte sind **ersatzlos entfallen**: „jede Strategie ist im
+    Namens-Mapping bekannt" und „Spalte `Familie` deckt sich mit dem
+    Mapping". Beide können nicht mehr scheitern — dieselbe Zeile, keine
+    Dublette. Das ist der sauberste Beleg dafür, dass die Zusammenlegung
+    etwas gebracht hat: Prüfungen, die die Bauform überflüssig macht.
+
+- **Repo-Hygiene (Auftrag Philip: „das Verbesserungs-Repo soll sauber und
+  gepflegt sein"):**
+  - **`Start.txt` aus dem Repo entfernt** und intern abgelegt. Sie nannte
+    einen lokalen Arbeitspfad, die Repo-Adresse und Betriebsschritte der
+    Cloud-Oberfläche — genau die Betriebsdetails, die laut dem Kasten oben
+    nicht in eine Datei des öffentlichen Repos gehören. Inhaltlich
+    unverändert, nur der Ablageort ist jetzt der richtige.
+  - **Zwei leere Platzhalter** `Daten/test.md` und `Daten_PF/test.md`
+    (je 2 Byte) entfernt. Beide Ordner enthalten je 19 CSV-Dateien und
+    bleiben damit ohnehin versioniert.
+  - **Dateistruktur-Schaubild in `PROJEKT_DOKUMENTATION.md` §2 nachgezogen.**
+    Es kannte noch sechs Vorlagen statt acht, eine einzige Testdatei statt
+    39 und die drei Mapping-Excels. **§6.3** beschreibt jetzt die eine Datei
+    mit allen zehn Spalten.
+  - Geprüft: keine unversionierten Reste im Arbeitsverzeichnis,
+    `.gitignore` deckt `secrets.toml`, `__pycache__`, `.venv` und
+    Office-Sperrdateien ab.
+  - **`FFPB_Architektur_Ueberblick.pdf` aus dem Repo entfernt.** Stand
+    28.07.2026 und damit veraltet (weniger Module und Vorlagen, als es heute
+    gibt). Eine veraltete Architekturzeichnung einer produktiv genutzten
+    Bankanwendung nützt im öffentlichen Repo niemandem. Die Datei liegt
+    unverändert intern; wer sie nachzieht, kann sie dort ersetzen.
+  - **`.devcontainer/devcontainer.json` korrigiert.** Sie öffnete
+    `README.md` und startete `macrobond_upload.py` — Reste einer
+    Streamlit-Vorlage aus einem **anderen** Vorhaben. Keine der beiden
+    Dateien gibt es hier; ein Codespace wäre also gescheitert. Startet
+    jetzt `streamlit_app.py`.
+
+- **Beweis:** 39/39 Suiten grün, `pyflakes` null. Broschüren gegen den Stand
+  **vor Etappe 1**: inhaltsgleich. `ui_dump` alle drei Ansichten identisch.
+
+- **Anleitung mitgezogen** (stehende Regel ab heute): Die interne
+  Pflege-Anleitung und ihre Schaubilder sind auf die eine Datei umgestellt.
+  Dabei fiel auf, dass die Meldung *im Tool* noch die alte Spaltenbezeichnung
+  nannte — korrigiert.
 
 - **Offen / für Philip:**
   - **Sichtprüfung in der Live-App.**
-  - **Etappe 4:** Wenn die neue Datei liegt und abgenommen ist: die drei
-    alten Dateien und die Rückfallebene entfernen. Eigener Commit, weil das
-    der einzige unumkehrbare Schritt ist.
   - **Etappe 5:** Umbenennungs-Prüfstein (Folientitel, Chart-Seriennamen).
     Was kein Test je beheben kann: Die statischen Folientitel in sechs
     Vorlagen und die eingebrannten Chart-Seriennamen müssen bei einer

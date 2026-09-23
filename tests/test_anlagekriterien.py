@@ -1,4 +1,4 @@
-"""Prueft die Anlagekriterien-Konfiguration (Mapping_Anlagekriterien.xlsx).
+"""Prueft die Anlagekriterien in den Stammdaten (Mapping_Strategien.xlsx).
 
 HINTERGRUND (10.08.2026):
     Der Anlagekriterien-Kasten stand bisher NUR statisch in den PPTX-Vorlagen
@@ -20,13 +20,9 @@ ERWEITERT (12.08.2026):
 
 Geprueft wird:
   1. Die Excel existiert und hat die erwarteten Spalten.
-  2. Jede Strategie ist im Namens-Mapping bekannt (kein Schluessel ins Leere).
-  3. Die Spalte 'Familie' stimmt mit Mapping_Namen.xlsx ueberein — sie ist
-     bewusst doppelt gefuehrt (Lesbarkeit in Excel) und wird hier festgenagelt,
-     damit sie nicht auseinanderlaeuft.
-  4. Umfang: 17 der 19 Strategien sind erfasst (14 mit Kasten + 3 aus Thema).
-     Die zwei SCHWEIZ-Strategien fehlen noch — bekannte Luecke, kein Fehler.
-  4b. Welche VORLAGE einen Kriterien-Kasten hat. Das ist die Stelle, an der
+  2. Umfang: 17 der 19 Strategien haben Kriterien (14 mit Kasten + 3 aus
+     Thema). Die zwei SCHWEIZ-Strategien fehlen noch — bekannte Luecke.
+  3. Welche VORLAGE einen Kriterien-Kasten hat. Das ist die Stelle, an der
      entschieden wird, ob ein Excel-Eintrag in einer Kundenbroschuere landet —
      bekaeme Vorlage_Thema.pptx eine Tabelle, stuenden die Thema-Kriterien
      PLOETZLICH gedruckt da, ohne Code-Aenderung.
@@ -49,8 +45,9 @@ sys.path.insert(0, WURZEL)
 
 import pandas as pd                                            # noqa: E402
 
-EXCEL = os.path.join(WURZEL, "Mapping_Anlagekriterien.xlsx")
-NAMEN = os.path.join(WURZEL, "Mapping_Namen.xlsx")
+from modules import stammdaten as stamm                        # noqa: E402
+
+EXCEL = os.path.join(WURZEL, stamm.PFAD)
 
 KEY = "Strategie auswählen"
 KRITERIEN = ["Anlageregion", "Aktienanteil",
@@ -107,7 +104,7 @@ VORLAGEN_OHNE_KASTEN = ["Vorlage_Thema.pptx", "Vorlage_FFPB.pptx",
 def _pruefe_struktur(df):
     print("1. Aufbau der Excel")
     fehler = 0
-    soll = [KEY, "Familie", "Anzeigename"] + KRITERIEN
+    soll = [KEY, "Anzeigename"] + KRITERIEN
     fehlend = [s for s in soll if s not in df.columns]
     if fehlend:
         print(f"   FEHLER — Spalten fehlen: {fehlend}")
@@ -117,38 +114,8 @@ def _pruefe_struktur(df):
     return fehler
 
 
-def _pruefe_schluessel(df, namen):
-    print("\n2. Jede Strategie ist im Namens-Mapping bekannt")
-    fehler = 0
-    bekannt = set(namen[KEY].astype(str).str.strip())
-    for s in df[KEY].astype(str).str.strip():
-        if s not in bekannt:
-            print(f"   FEHLER — '{s}' steht nicht in Mapping_Namen.xlsx")
-            fehler += 1
-    if not fehler:
-        print(f"   OK — alle {len(df)} Schluessel gefunden")
-    return fehler
-
-
-def _pruefe_familie(df, namen):
-    print("\n3. Spalte 'Familie' deckt sich mit Mapping_Namen.xlsx")
-    fehler = 0
-    soll = dict(zip(namen[KEY].astype(str).str.strip(),
-                    namen["Powerpoint Familie"].astype(str).str.strip()))
-    for _, z in df.iterrows():
-        s = str(z[KEY]).strip()
-        ist = str(z["Familie"]).strip()
-        if soll.get(s, "") != ist:
-            print(f"   FEHLER — {s}: Excel sagt '{ist}', "
-                  f"Mapping sagt '{soll.get(s, '')}'")
-            fehler += 1
-    if not fehler:
-        print("   OK — keine Abweichung")
-    return fehler
-
-
 def _pruefe_umfang(df):
-    print("\n4. Umfang der Excel (17 von 19 Strategien)")
+    print("\n2. Umfang (17 von 19 Strategien haben Kriterien)")
     fehler = 0
     ist = list(df[KEY].astype(str).str.strip())
     fehlend = [s for s in MIT_EINTRAG if s not in ist]
@@ -186,7 +153,7 @@ def _pruefe_vorlagen_kasten():
     STEHEN — ohne dass jemand den Code angefasst hat. Dieser Schritt schlaegt
     dann an.
     """
-    print("\n4b. Welche Vorlage hat ueberhaupt einen Kriterien-Kasten?")
+    print("\n3. Welche Vorlage hat ueberhaupt einen Kriterien-Kasten?")
     try:
         from pptx import Presentation
         from modules.pptx_slides import finde_anlagekriterien_tabelle
@@ -224,7 +191,7 @@ def _pruefe_vorlagen_kasten():
 
 
 def _pruefe_vollstaendig(df):
-    print("\n5. Kein Feld leer")
+    print("\n4. Kein Feld leer")
     fehler = 0
     for _, z in df.iterrows():
         for sp in ["Anzeigename"] + KRITERIEN:
@@ -238,7 +205,7 @@ def _pruefe_vollstaendig(df):
 
 
 def _pruefe_schreibweise(df):
-    print("\n6. Einheitliche Schreibweise")
+    print("\n5. Einheitliche Schreibweise")
     fehler = 0
     for _, z in df.iterrows():
         for sp in KRITERIEN:
@@ -266,7 +233,7 @@ def _pruefe_schreibweise(df):
 
 
 def _pruefe_zugriff(df):
-    print("\n7. anlagekriterien_fuer() liefert die richtige Reihenfolge")
+    print("\n6. anlagekriterien_fuer() liefert die richtige Reihenfolge")
     try:
         from modules.shared import anlagekriterien_fuer
     except ImportError as ex:
@@ -314,7 +281,7 @@ def _pruefe_bauweise(df):
     Mode ein greller weisser Kasten. Dieser Schritt haelt fest, dass wir da
     nicht zurueckfallen: kein eigenes CSS, keine festen Farben.
     """
-    print("\n8. Bauweise: native Streamlit-Bausteine, kein eigenes CSS")
+    print("\n7. Bauweise: native Streamlit-Bausteine, kein eigenes CSS")
     import inspect
     fehler = 0
     try:
@@ -389,7 +356,7 @@ def _view_pf_beschriftung():
 
 def _pruefe_in_der_app(df):
     """End-to-End: die App hochfahren und den Banner im Markup suchen."""
-    print("\n9. Banner erscheint in der laufenden App (AppTest)")
+    print("\n8. Banner erscheint in der laufenden App (AppTest)")
     try:
         from streamlit.testing.v1 import AppTest
     except ImportError as ex:
@@ -480,7 +447,7 @@ def _pruefe_thema_in_der_app(df):
     Der Test waehlt deshalb ausdruecklich eine Thema-Strategie aus und liest
     ihre Werte am gerenderten Markup nach.
     """
-    print("\n9b. Banner fuer eine THEMA-Strategie (neu seit 12.08.2026)")
+    print("\n8b. Banner fuer eine THEMA-Strategie (neu seit 12.08.2026)")
     try:
         from streamlit.testing.v1 import AppTest
         from modules.shared import anlagekriterien_fuer
@@ -550,7 +517,7 @@ def _pruefe_broschueren(df, ordner):
 
         python tests/test_anlagekriterien.py C:\\pfad\\zur\\ausgabe
     """
-    print(f"\n10. Kasten in den erzeugten Broschueren ({ordner})")
+    print(f"\n9. Kasten in den erzeugten Broschueren ({ordner})")
     try:
         import glob
         from pptx import Presentation
@@ -628,22 +595,30 @@ def main():
     if not os.path.exists(EXCEL):
         print(f"FEHLER: {EXCEL} fehlt")
         return 1
-    df = pd.read_excel(EXCEL)
-    namen = pd.read_excel(NAMEN)
+    # Seit 23.09.2026 stehen die Kriterien in derselben Zeile wie der Rest
+    # der Stammdaten. Zwei Schritte sind damit ersatzlos entfallen: "jede
+    # Strategie ist im Namens-Mapping bekannt" (kann nicht mehr scheitern)
+    # und "Spalte Familie deckt sich mit dem Mapping" (die Dublette gibt es
+    # nicht mehr). Eine Pruefung, die durch die BAUFORM ueberfluessig wird,
+    # ist besser als eine, die gruen bleibt.
+    df = stamm.lade()
+    # Die Schritte, die Vollstaendigkeit und Schreibweise pruefen, gelten nur
+    # fuer Zeilen MIT Kriterien — die beiden SCHWEIZ-Strategien sind bewusst
+    # leer.
+    erfasst = df[df["Anzeigename"].notna()
+                 & (df["Anzeigename"].astype(str).str.strip() != "")]
 
     fehler = (_pruefe_struktur(df)
-              + _pruefe_schluessel(df, namen)
-              + _pruefe_familie(df, namen)
-              + _pruefe_umfang(df)
+              + _pruefe_umfang(erfasst)
               + _pruefe_vorlagen_kasten()
-              + _pruefe_vollstaendig(df)
-              + _pruefe_schreibweise(df)
+              + _pruefe_vollstaendig(erfasst)
+              + _pruefe_schreibweise(erfasst)
               + _pruefe_zugriff(df)
               + _pruefe_bauweise(df)
               + _pruefe_in_der_app(df)
               + _pruefe_thema_in_der_app(df))
 
-    # Schritt 10 nur, wenn ein Export-Ordner uebergeben wurde (wie
+    # Schritt 9 nur, wenn ein Export-Ordner uebergeben wurde (wie
     # test_trennstriche.py). Ohne Ordner bleibt der Test schnell.
     if len(sys.argv) > 1:
         fehler += _pruefe_broschueren(df, sys.argv[1])

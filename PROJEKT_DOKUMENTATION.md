@@ -3842,39 +3842,44 @@ Listeneintrag — der alte Tab-Bug von #18 kann nicht zurückkehren).
 Repository Root/
 ├── streamlit_app.py                 ← Navigation (segmented_control), Keep-Alive,
 │                                      zentrale Datenbereitstellung, Performance-Ansicht inline
-├── modules/
-│   ├── __init__.py
-│   ├── shared.py                    ← Konstanten, Login, Formatierung, CSV-Loader
+├── modules/                         (22 Module)
+│   ├── shared.py                    ← Konstanten, Login, Formatierung, CSV-Loader,
+│   │                                   Cache-Fassaden um stammdaten.lade()
+│   ├── stammdaten.py                ← NEU 23.09.2026: die Stammdaten-Datei und die
+│   │                                   Spaltennamen. EINZIGES pd.read_excel im Projekt
+│   ├── anlagekriterien.py           ← wertet die vier Kriterien-Spalten aus (UI-frei,
+│   │                                   liest seit 23.09.2026 keine Datei mehr)
 │   ├── analytics.py                 ← Berechnungs-Single-Source-of-Truth (inkl. has_benchmark)
+│   ├── bestandsanalytik.py          ← Mathematik auf dem Bestand (UI-frei)
 │   ├── portfolioanalyse.py          ← Portfolioanalyse-Ansicht + PPTX-Export-Integration
+│   ├── strategievergleich.py        ← dritte Ansicht (Risiko-Rendite, Exposure, Drilldown)
+│   ├── risiko_ansicht.py            ← Risiko-Kennzahlen der Performance-Ansicht
+│   ├── vorlagen_config.py           ← Folien-/Familien-Konfiguration, OHNE Importe
 │   ├── pptx_helpers.py              ← generische Shape/Table/Slide-Manipulation
-│   ├── pptx_charts.py               ← Chart-XML inkl. replace_chart_data_safe (4 Bugs)
-│   ├── chart_dynamik.py             ← Chart-Nachbearbeitung (Achsen, holeSize,
-│   │                                   Ring-Labels außen) — nachbearbeiten(prs), TW #26
-│   ├── pptx_slides.py               ← Folien-Befüllung (Domain-Logik) + generische
-│   │                                   Tabellen-Helfer (TW #27)
+│   ├── pptx_charts.py               ← Chart-XML inkl. replace_chart_data_safe
+│   ├── chart_dynamik.py             ← Chart-Nachbearbeitung (Achsen, holeSize, Ring-Labels)
+│   ├── pptx_slides.py               ← Folien-Befüllung (Domain-Logik) + Tabellen-Helfer
 │   ├── pptx_export.py               ← Broschüren-Orchestrierung
-│   ├── download_helfer.py           ← clientseitiger Blob-Download (TW #25)
+│   ├── pdf_export.py                ← PDF-Quelle (welche Folien entfallen, Seitenzahlen)
+│   ├── pdf_briefkasten.py           ← PDF-Dienst, HMAC-signiert, Rückfall auf PowerPoint
+│   ├── download_helfer.py           ← clientseitiger Download (st.iframe)
 │   ├── formats.py                   ← Format-Helfer + Textkonstanten der Broschüre
-│   └── portfolio_builder.py         ← deaktiviert seit Juni 2026 (bewusst aufgehoben)
-├── tests/
-│   └── test_benchmark_erkennung.py  ← NEU 07.08.2026, läuft ohne pytest/Streamlit
-├── Vorlage/                         ← 6 Familien-Vorlagen (FFPB, Thema, ESG, ETF,
-│                                      comdirect, cVV_Infoboard)
-├── fonts/                           ← Segoe-UI-Dateien für den PDF-Export
-├── .streamlit/config.toml           ← toolbarMode = "minimal"  (Punkt im Ordnernamen ist
-│                                      zwingend, siehe unten!)
-├── .gitignore                       ← NEU 07.08.2026 — schließt secrets.toml aus
-├── Mapping_Honorarsatz.xlsx         ← Inhaber + Honorarsatz Standard (Dezimal)
-├── Mapping_Namen.xlsx               ← A=Anzeigename, B=CSV-Key, C=Duration(alt), D=Benchmark,
-│                                      + Spalte "Powerpoint Familie" (NEU Juli 2026)
-├── FFPB_Architektur_Ueberblick.pdf  ← Architektur-Grafik (Stand 28.07.2026)
+│   ├── farben.py                    ← feste Assetklassen-Farben
+│   ├── auswahl.py                   ← Klick-Auswahl in Charts
+│   └── portfolio_builder.py         ← liegt im Repo, wird NICHT importiert
+├── tests/                           (39 Prüfsteine + ui_dump.py, laufen ohne pytest)
+├── Vorlage/                         ← 8 Vorlagen: FFPB, Thema, Thema_Offensiv,
+│                                      Thema_ProDividende, cVV_Infoboard, ESG, ETF, comdirect
+├── .streamlit/config.toml           ← Theme (Fuggerblau) + toolbarMode; der Punkt im
+│                                      Ordnernamen ist zwingend, siehe Transferwissen #23
+├── .gitignore                       ← schließt secrets.toml, __pycache__, .venv aus
+├── Mapping_Strategien.xlsx          ← ALLE Stammdaten, Blatt „Strategien" (19 × 10)
+│                                      + Blatt „Hinweise" (wird nie gelesen)
+├── Daten/                           ← Performance-CSVs (19)
+├── Daten_PF/                        ← Portfolioanalyse-CSVs (19)
+├── CLAUDE.md · STATUS.md · PROJEKT_DOKUMENTATION.md
 ├── Fuerst_Fugger_Bank_Logo_2-ZL-RGB.jpg
-├── Daten/                           ← Performance-CSVs
-├── Daten_PF/                        ← Portfolioanalyse-CSVs (Spalten inkl. Duration, Rendite;
-│                                      Spalte "Währung" angekündigt, siehe Backlog)
-├── Zieldaten/                       ← Anlageuniversum für Builder (deaktiviert)
-└── requirements.txt                 ← streamlit gepinnt, Rest Mindestversionen
+└── requirements.txt
 ```
 
 ⚠️ **`.streamlit` MUSS den Punkt haben.** Bis 07.08.2026 hieß der Ordner im Repo
@@ -4036,10 +4041,45 @@ Spalten berechnet (Variante B: normiert auf die Gewichtssumme der Anleihen).
 **Geplant:** Spalte "Währung" (für die Themen-Einzeltitel-Folie; Philip
 liefert per Push nach — der Code füllt sie dann automatisch).
 
-### 6.3 Mapping-Dateien
+### 6.3 Stammdaten — eine Datei (NEU 23.09.2026)
 
-**`Mapping_Honorarsatz.xlsx`:** Inhaber + Honorarsatz Standard (Dezimal)  
-**`Mapping_Namen.xlsx`:** A=Anzeigename, B=CSV-Key, C=Duration (Altbestand, unbenutzt), D=Benchmark-Zusammensetzung, **Spalte "Powerpoint Familie"** (NEU Juli 2026): steuert die PPTX-Vorlage. Werte: `Thema` / `CVV` / `ETF` / `ESG` / leer (= Standard). Erkennung ist tolerant gegen Schreibweise/Whitespace (`_finde_familie_spalte`, case-insensitive Wert-Mapping auf kanonische Schlüssel).
+**`Mapping_Strategien.xlsx`, Blatt „Strategien"** — eine Zeile je Strategie,
+zehn Spalten. Ersetzt seit dem 23.09.2026 die drei Vorgängerdateien
+`Mapping_Namen.xlsx`, `Mapping_Honorarsatz.xlsx` und
+`Mapping_Anlagekriterien.xlsx` (Etappen 3+4).
+
+| Spalte | Bedeutung |
+|---|---|
+| `Strategie auswählen` | Anzeigename; Auswahlfeld und Schlüssel vieler Code-Konstanten |
+| `CSV-Portfolioname` | Schlüssel aus dem Bestandssystem. Steht wortgleich in der CSV-Spalte `Portfolio Name` und ist der Schlüssel von `HISTORIE_AB`. Hieß bis 23.09.2026 irreführend „Honorarsatz Mapping" |
+| `Powerpoint Familie` | steuert Vorlage und Config: `Thema` / `CVV` / `ESG` / `ETF` / `comdirect` / leer (= Standard) |
+| `Honorarsatz Standard` | Nettosatz p. a.; dezimal gespeichert (0,0155), als Prozent angezeigt |
+| `Anzeigename` | Kopfzeile des Anlagekriterien-Kastens |
+| `Anlageregion`, `Aktienanteil`, `Anleihenanteil / Liquidität`, `Fremdwährungen` | die vier Anlagekriterien; **die Spaltenköpfe SIND der gedruckte Text** |
+| `Benchmark` | Freitext für die Sternchen-Fußnote der Wertentwicklungs-Folie; steht bewusst zuletzt, weil lang |
+
+Zweites Blatt **„Hinweise"** — Erläuterungen für den Pflegenden, wird vom
+Code nie gelesen.
+
+**Gelesen wird ausschließlich über `modules/stammdaten.py`:** `lade()` ist das
+einzige `pd.read_excel` auf eine Mapping-Datei im Projekt, der Spaltenzugriff
+läuft **namentlich** über `spalte()` (wirft bei fehlender Spalte und nennt
+Datei und Spalte). `shared.load_name_mapping` / `load_mapping` /
+`load_anlagekriterien` sind nur noch Cache-Fassaden darum; `honorar_frame()`
+projiziert auf die alten Köpfe `Inhaber` / `Honorarsatz Standard`, damit
+`build_portfolio_timeseries` und sechs Prüfsteine unberührt bleiben.
+
+**Entfallen**, weil von keiner Codezeile gelesen: `Duration`, `Familie`
+(Dublette von „Powerpoint Familie"), `Portfolioname`, `Honorarsatz Brutto`
+(zusätzlich veraltet). Die Familien-Erkennung bleibt tolerant gegen
+Schreibweise und Whitespace (`_finde_familie_spalte`, jetzt an
+`stammdaten.finde_spalte` delegiert).
+
+**Prüfstein:** `tests/test_stammdaten.py` (12 Schritte) — Struktur,
+Schlüssel-Hygiene, genau eine Stammdaten-Datei, Abgleich gegen den
+CSV-Inhalt, Vollständigkeit der Kriterien, Namen gegen die Code-Konstanten,
+Positions-Unabhängigkeit, ein Lesepfad (Syntaxbaum), kein positioneller
+Spaltenzugriff (Syntaxbaum), dazu Gegenproben.
 
 ---
 

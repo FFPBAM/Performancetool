@@ -17,11 +17,11 @@ Strategie, zehn Spalten, alles nebeneinander. Der Zugriff läuft über
 `spalte()`; fehlt eine Spalte, WIRFT das und nennt Datei und Spalte beim
 Namen.
 
-RÜCKFALLEBENE:
-    Liegt die neue Datei (noch) nicht, baut `lade()` denselben Frame aus den
-    drei alten Dateien zusammen. So steht die App im Zeitfenster zwischen
-    Löschen und Hochladen nicht still, und ein Rückweg bleibt offen. Der
-    Prüfstein hält beide Wege gegeneinander.
+VORGESCHICHTE:
+    Zwischen dem Aufnehmen der neuen Datei und dem Entfernen der alten gab
+    es eine Rückfallebene, die den Frame aus den drei Vorgängerdateien baute.
+    Sie ist mit Etappe 4 entfallen, nachdem beide Wege nachweislich dasselbe
+    lieferten und die alten Dateien aus dem Repo verschwunden sind.
 
 WARUM DIESES MODUL STREAMLIT-FREI IST:
     Dasselbe Argument wie zuvor bei ``modules/anlagekriterien.py``: der
@@ -42,15 +42,11 @@ import pandas as pd
 PFAD = "Mapping_Strategien.xlsx"
 BLATT = "Strategien"
 
-# Die drei Vorgängerdateien. Sie werden nur noch von der Rückfallebene
-# gelesen und verschwinden, sobald die neue Datei überall liegt.
-ALT_STRATEGIEN = "Mapping_Namen.xlsx"
-ALT_HONORAR = "Mapping_Honorarsatz.xlsx"
-ALT_KRITERIEN = "Mapping_Anlagekriterien.xlsx"
-
 # Für Fehlermeldungen: der Name der Datei, die der Leser vor sich hat.
+# Beide Namen zeigen auf dieselbe Datei; sie bleiben, weil Aufrufer und
+# Prüfsteine sie kennen.
 DATEI_STRATEGIEN = PFAD
-DATEI_HONORAR = ALT_HONORAR
+DATEI_HONORAR = PFAD
 
 # ── Die Spalten von Mapping_Strategien.xlsx ─────────────────────────────
 SP_ANZEIGE = "Strategie auswählen"       # Anzeigename, Auswahlfeld + Code
@@ -63,9 +59,8 @@ SP_BENCHMARK = "Benchmark"               # Freitext für die ***-Fußnote (F8)
 # ACHTUNG zu SP_CSV_NAME: Der Wert kommt aus dem Bestandssystem und ist NICHT
 # frei wählbar. Er steht wortgleich in der CSV-Spalte „Portfolio Name" und
 # ist der Schlüssel von HISTORIE_AB. Bis zum 23.09.2026 hieß die Spalte
-# „Honorarsatz Mapping" — ein irreführender Kopf, den die Rückfallebene
-# weiterhin akzeptiert.
-SP_CSV_NAME_ALT = "Honorarsatz Mapping"
+# „Honorarsatz Mapping" — ein irreführender Kopf, denn ein Honorarschlüssel
+# stand dort nie.
 
 # Die vier Kriterien in der Reihenfolge der Vorlagen-Tabelle. Die
 # Spaltennamen SIND die gedruckten Beschriftungen — keine zweite Liste, die
@@ -151,74 +146,20 @@ def leer():
 def lade(pfad=PFAD):
     """Die Stammdaten aller Strategien, eine Zeile je Strategie.
 
-    Liegt ``Mapping_Strategien.xlsx``, wird sie gelesen. Sonst wird derselbe
-    Frame aus den drei Vorgängerdateien gebaut (Rückfallebene, siehe
-    Modul-Docstring). Fehlt auch davon alles, kommt ein leerer Frame — dann
-    meldet die Oberfläche „Keine Portfolios zugeordnet", statt beim Start
-    abzustürzen.
+    Fehlt die Datei, kommt ein LEERER Frame statt einer Exception: Die
+    Oberfläche meldet dann „Keine Portfolios zugeordnet", statt beim Start
+    abzustürzen. Das ist Absicht — eine fehlende Datei ist ein Betriebs-
+    problem, kein Programmfehler, und ein Absturz hilft dabei niemandem.
 
-    Das ist das EINZIGE ``pd.read_excel`` auf eine Mapping-Datei im Projekt.
+    Das ist das EINZIGE ``pd.read_excel`` auf eine Mapping-Datei im Projekt;
+    ``tests/test_stammdaten.py`` Schritt 10 hält das per Syntaxbaum fest.
     """
-    if os.path.exists(pfad):
-        df = pd.read_excel(pfad, sheet_name=BLATT)
-    else:
-        df = _aus_vorgaengerdateien()
+    if not os.path.exists(pfad):
+        return leer()
+    df = pd.read_excel(pfad, sheet_name=BLATT)
     if df is None or getattr(df, "empty", True):
         return leer()
-    # Der alte, irreführende Spaltenkopf wird weiter angenommen.
-    alt = finde_spalte(df, SP_CSV_NAME_ALT)
-    if alt is not None and finde_spalte(df, SP_CSV_NAME) is None:
-        df = df.rename(columns={alt: SP_CSV_NAME})
     return df
-
-
-def _aus_vorgaengerdateien():
-    """Baut den breiten Frame aus den drei alten Dateien.
-
-    Die ZEILENREIHENFOLGE von ``Mapping_Namen.xlsx`` bleibt erhalten — sie
-    bestimmt die Reihenfolge im Auswahlfeld der App.
-    """
-    if not os.path.exists(ALT_STRATEGIEN):
-        return None
-    namen = pd.read_excel(ALT_STRATEGIEN)
-
-    saetze = {}
-    if os.path.exists(ALT_HONORAR):
-        hon = pd.read_excel(ALT_HONORAR)
-        if {SP_INHABER, SP_SATZ} <= set(hon.columns):
-            saetze = dict(zip(hon[SP_INHABER].astype(str).str.strip(),
-                              hon[SP_SATZ]))
-
-    kriterien = {}
-    if os.path.exists(ALT_KRITERIEN):
-        kri = pd.read_excel(ALT_KRITERIEN)
-        if SP_ANZEIGE in kri.columns:
-            kriterien = {str(r[SP_ANZEIGE]).strip(): r
-                         for _, r in kri.iterrows()}
-
-    sp_anzeige = spalte(namen, SP_ANZEIGE, ALT_STRATEGIEN)
-    sp_csv = finde_spalte(namen, SP_CSV_NAME) or spalte(
-        namen, SP_CSV_NAME_ALT, ALT_STRATEGIEN)
-    sp_fam = spalte(namen, SP_FAMILIE, ALT_STRATEGIEN)
-    sp_bench = spalte(namen, SP_BENCHMARK, ALT_STRATEGIEN)
-
-    zeilen = []
-    for _, n in namen.iterrows():
-        anzeige = str(n[sp_anzeige]).strip()
-        csv_name = str(n[sp_csv]).strip()
-        k = kriterien.get(anzeige)
-        zeile = {
-            SP_ANZEIGE: anzeige,
-            SP_CSV_NAME: csv_name,
-            SP_FAMILIE: n[sp_fam],
-            SP_SATZ: saetze.get(csv_name),
-            SP_ANZEIGENAME: (k[SP_ANZEIGENAME] if k is not None else None),
-            SP_BENCHMARK: n[sp_bench],
-        }
-        for s in SP_KRITERIEN:
-            zeile[s] = (k[s] if (k is not None and s in k.index) else None)
-        zeilen.append(zeile)
-    return pd.DataFrame(zeilen, columns=list(ALLE_SPALTEN))
 
 
 def honorar_frame(df):

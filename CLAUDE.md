@@ -554,10 +554,20 @@ Rueckbau gruen.
 
 **EIN Lesepfad, und er ist maschinell gehalten** (23.09.2026).
 `stammdaten.lade()` ist das einzige `pd.read_excel` auf eine Mapping-Datei;
-`tests/test_stammdaten.py` Schritt 10 haelt das per Syntaxbaum fest. Liegt
-`Mapping_Strategien.xlsx` nicht, baut dieselbe Funktion den Frame aus den
-drei Vorgaengerdateien (Rueckfallebene) — Schritt 3 misst, dass beide Wege
-dasselbe liefern.
+`tests/test_stammdaten.py` Schritt 10 haelt das per Syntaxbaum fest. Fehlt
+`Mapping_Strategien.xlsx`, kommt ein LEERER Frame statt einer Exception — die
+Oberflaeche meldet „Keine Portfolios zugeordnet", statt beim Start
+abzustuerzen. Schritt 3 haelt fest, dass es genau diese eine Datei gibt und
+keine der drei Vorgaengerdateien zurueckkommt: Eine Mapping-Datei, die
+niemand liest, sieht aus wie eine Quelle und wird irgendwann ins Leere
+gepflegt.
+
+**Und was ins oeffentliche Repo gehoert, ist eng gefasst** (23.09.2026).
+`Start.txt` lag jahrelang im Repo und nannte einen lokalen Arbeitspfad, die
+Repo-Adresse und Betriebsschritte der Cloud-Oberflaeche. Sie liegt jetzt
+intern. Faustregel bleibt der Kasten in STATUS.md: keine Betriebsdetails in
+Dateien, die ins oeffentliche Repo gehen — auch nicht in einer Hilfsdatei,
+die "nur" den Einstieg erklaert.
 
 **Und positioneller Spaltenzugriff wird im SYNTAXBAUM gesucht, nicht per
 grep** (23.09.2026, teuer gelernt). Etappe 1 stellte `columns[0]/[1]/[3]` auf

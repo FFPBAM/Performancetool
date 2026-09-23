@@ -35,7 +35,7 @@ ZWEI SCHLUESSEL, NICHT EINER — der haeufigste Denkfehler an dieser Datei:
 Geprueft wird:
   1. Struktur beider Dateien: Pflichtspalten unter EXAKTEM Namen, Zeilen da.
   2. Schluessel-Hygiene: A und B eindeutig, ohne Leerzeichen am Rand.
-  3. Neue Datei und Rueckfallebene liefern denselben Frame.
+  3. Es gibt genau EINE Stammdaten-Datei; die drei Vorgaenger sind weg.
   4. B <-> "Portfolio Name" aus dem CSV-INHALT (Daten/ und Daten_PF/).
   5. Anlagekriterien vollstaendig (SCHWEIZ = bekannte Luecke).
   6. Namen <-> Code: jeder Strategiename, den der Code hart fuehrt, existiert
@@ -74,10 +74,13 @@ except ImportError:
 
 from modules import stammdaten as stamm                        # noqa: E402
 
-NEUE_DATEI = os.path.join(WURZEL, stamm.PFAD)
-ALTE_DATEIEN = [os.path.join(WURZEL, d) for d in
-                (stamm.ALT_STRATEGIEN, stamm.ALT_HONORAR,
-                 stamm.ALT_KRITERIEN)]
+DATEI = os.path.join(WURZEL, stamm.PFAD)
+
+# Die drei Vorgaengerdateien. Sie sind mit Etappe 4 entfernt worden und
+# duerfen nicht zurueckkommen: Eine Mapping-Datei, die niemand liest, laedt
+# dazu ein, sie zu pflegen und sich zu wundern, warum nichts passiert.
+VORGAENGER = ("Mapping_Namen.xlsx", "Mapping_Honorarsatz.xlsx",
+              "Mapping_Anlagekriterien.xlsx")
 
 # Bekannte Luecke, kein Fehler: die beiden SCHWEIZ-Strategien stehen bewusst
 # nicht in den Anlagekriterien — die Werte muessen aus dem Haus kommen.
@@ -96,8 +99,6 @@ def _werte(df, spalte):
 def _pruefe_struktur(sd):
     print("1. Struktur: Pflichtspalten unter exaktem Namen")
     fehler = 0
-    quelle = ("Mapping_Strategien.xlsx" if os.path.exists(NEUE_DATEI)
-              else "Rueckfallebene aus den drei alten Dateien")
     for f in stamm.fehlende_spalten(sd, stamm.PFLICHT):
         fehler += 1
         print(f"   FEHLER — Pflichtspalte '{f}' fehlt")
@@ -112,7 +113,8 @@ def _pruefe_struktur(sd):
             fehler += 1
             print(f"   FEHLER — Kriterien-Spalte '{s}' fehlt")
     if not fehler:
-        print(f"   OK — {len(sd)} Zeilen, {len(sd.columns)} Spalten ({quelle})")
+        print(f"   OK — {len(sd)} Zeilen, {len(sd.columns)} Spalten "
+              f"aus {stamm.PFAD}")
     tot = [s for s in stamm.ENTFALLENE_SPALTEN
            if stamm.finde_spalte(sd, s) is not None]
     if tot:
@@ -152,54 +154,34 @@ def _pruefe_schluessel_hygiene(namen):
 # ─────────────────────────────────────────────────────────────────────────
 # 3. B <-> Honorarsatz
 # ─────────────────────────────────────────────────────────────────────────
-def _pruefe_rueckfallebene():
-    """Neue Datei und Rueckfallebene muessen denselben Frame ergeben.
+def _pruefe_vorgaenger_weg():
+    """Eine Datei, und nur diese eine.
 
-    Der Join "jede Strategie hat einen Honorarsatz" steht hier NICHT mehr: Er
-    kann seit der Zusammenlegung nicht mehr scheitern, weil beides in
-    derselben Zeile steht. Das ist der eigentliche Gewinn dieser Etappe —
-    eine Pruefung entfaellt, weil die Form sie uebernommen hat. Geblieben ist
-    das neue Risiko: dass die beiden Lesewege auseinanderlaufen.
+    Bis zur Zusammenlegung standen die Stammdaten in drei Dateien. Ab
+    Etappe 4 gibt es nur noch eine; die alten sind aus dem Repo entfernt.
+    Dieser Schritt haelt beides fest — dass die neue da ist und dass keine
+    der alten zurueckkommt. Eine Datei, die niemand liest, ist keine
+    harmlose Altlast: Sie sieht aus wie eine Quelle.
     """
-    print("\n3. Neue Datei und Rueckfallebene liefern dasselbe")
-    if not os.path.exists(NEUE_DATEI):
-        print("   UEBERSPRUNGEN — Mapping_Strategien.xlsx liegt noch nicht "
-              "im Repo; die App laeuft auf der Rueckfallebene")
-        fehlen = [os.path.basename(d) for d in ALTE_DATEIEN
-                  if not os.path.exists(d)]
-        if fehlen:
-            print(f"   FEHLER — dann muessen die alten Dateien da sein: "
-                  f"{', '.join(fehlen)} fehlt")
-            return 1
-        return 0
-    aus_datei = stamm.lade(NEUE_DATEI)
-    aus_alten = stamm.lade(os.path.join(WURZEL, "_gibt_es_nicht_.xlsx"))
-    if list(aus_datei.columns) != list(aus_alten.columns):
-        print(f"   FEHLER — andere Spalten: {list(aus_datei.columns)} "
-              f"vs. {list(aus_alten.columns)}")
-        return 1
-    if len(aus_datei) != len(aus_alten):
-        print(f"   FEHLER — {len(aus_datei)} Zeilen vs. {len(aus_alten)}")
-        return 1
-    abweichend = 0
-    for s in aus_datei.columns:
-        for i in range(len(aus_datei)):
-            a, b = aus_datei.iloc[i][s], aus_alten.iloc[i][s]
-            if pd.isna(a) and pd.isna(b):
-                continue
-            try:
-                if abs(float(a) - float(b)) < 1e-12:
-                    continue
-            except (TypeError, ValueError):
-                pass
-            if str(a).strip() != str(b).strip():
-                abweichend += 1
-                if abweichend <= 3:
-                    print(f"   FEHLER — Zeile {i}, '{s}': "
-                          f"{str(a)[:40]!r} vs. {str(b)[:40]!r}")
-    if not abweichend:
-        print(f"   OK — {aus_datei.size} Zellen, beide Lesewege gleich")
-    return abweichend
+    print("\n3. Eine Stammdaten-Datei, und die Vorgaenger sind weg")
+    fehler = 0
+    if not os.path.exists(DATEI):
+        fehler += 1
+        print(f"   FEHLER — {stamm.PFAD} fehlt. Ohne sie hat die App keine "
+              f"Stammdaten; eine Rueckfallebene gibt es seit Etappe 4 nicht "
+              f"mehr.")
+    else:
+        print(f"   OK — {stamm.PFAD} vorhanden, Blatt '{stamm.BLATT}'")
+    zurueck = [d for d in VORGAENGER if os.path.exists(os.path.join(WURZEL, d))]
+    for d in zurueck:
+        fehler += 1
+        print(f"   FEHLER — {d} liegt wieder im Repo. Sie wird von keiner "
+              f"Codezeile gelesen und gehoert entfernt, sonst pflegt sie "
+              f"jemand ins Leere.")
+    if not zurueck:
+        print(f"   OK — keine der {len(VORGAENGER)} Vorgaengerdateien "
+              f"liegt noch im Repo")
+    return fehler
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -691,7 +673,7 @@ def main():
 
     fehler = (_pruefe_struktur(sd)
               + _pruefe_schluessel_hygiene(sd)
-              + _pruefe_rueckfallebene()
+              + _pruefe_vorgaenger_weg()
               + _pruefe_csv_join(sd)
               + _pruefe_anlagekriterien(sd)
               + _pruefe_code_schluessel(sd)
