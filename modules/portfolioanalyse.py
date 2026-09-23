@@ -33,6 +33,7 @@ from modules.bestandsanalytik import (calc_liquidity, gewichte_je_kategorie,
 # importfreien Modul — der Strategievergleich braucht dieselbe (24.08.2026).
 from modules.auswahl import gewaehlter_balkenname
 from modules.farben import gattung_farbe
+from modules import stammdaten as _stamm
 # historie_beschneiden liegt seit 14.08.2026 in analytics.py (Berechnungsregel,
 # von Broschuere UND Heatmap gebraucht). Der Re-Export haelt Alt-Importe heil.
 from modules.analytics import historie_beschneiden   # noqa: F401
@@ -930,15 +931,12 @@ def _familien_portfolios(strategien, display_names_pf, display_to_csv_pf,
 def _finde_familie_spalte(name_mapping):
     """Findet die 'Powerpoint Familie'-Spalte tolerant (egal ob 'PowerPoint
     Familie', Extra-/fehlende Leerzeichen, Groß-/Kleinschreibung, Umbrüche).
-    Returns den echten Spaltennamen oder None."""
-    def _norm(s):
-        # alle Whitespaces (auch Umbrüche/doppelte) zu einem Space, klein
-        return " ".join(str(s).split()).strip().lower()
-    ziel = _norm(SPALTE_PP_FAMILIE)  # "powerpoint familie"
-    for col in name_mapping.columns:
-        if _norm(col) == ziel:
-            return col
-    return None
+    Returns den echten Spaltennamen oder None.
+
+    Die Suche selbst stand bis 23.09.2026 hier ein ZWEITES Mal im Repo; sie
+    liegt jetzt in ``stammdaten.finde_spalte``. Der Name bleibt, weil ihn
+    Aufrufer und Prüfsteine kennen."""
+    return _stamm.finde_spalte(name_mapping, SPALTE_PP_FAMILIE)
 
 
 def _familie_fuer_strategie(name_mapping, display_name):
@@ -950,7 +948,7 @@ def _familie_fuer_strategie(name_mapping, display_name):
         spalte = _finde_familie_spalte(name_mapping)
         if spalte is None:
             return ""
-        col_display = name_mapping.columns[0]
+        col_display = _stamm.spalte(name_mapping, _stamm.SP_ANZEIGE)
         treffer = name_mapping.loc[
             name_mapping[col_display].astype(str).str.strip() == str(display_name).strip(),
             spalte]
@@ -968,6 +966,11 @@ def _familie_fuer_strategie(name_mapping, display_name):
             if wert.lower() == kanon.lower():
                 return kanon
         return wert  # unbekannte Familie (z.B. CVV ohne Vorlage) unverändert
+    except _stamm.StammdatenFehler:
+        # Eine FEHLENDE SPALTE ist kein Fall für den stillen Rückfall auf ""
+        # (23.09.2026): Sie hätte hier jede Strategie familienlos gemacht und
+        # damit still die Standard-Vorlage gezogen. Durchreichen.
+        raise
     except Exception:
         return ""
 
@@ -1264,7 +1267,8 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
 
     # Name-Mapping
     available_pf_names = set(pf_data.keys())
-    col_display = name_mapping.columns[0]; col_csv_key = name_mapping.columns[1]
+    col_display = _stamm.spalte(name_mapping, _stamm.SP_ANZEIGE)
+    col_csv_key = _stamm.spalte(name_mapping, _stamm.SP_CSV_NAME)
     filtered = name_mapping[name_mapping[col_csv_key].isin(available_pf_names)].copy()
     if filtered.empty:
         display_names_pf = sorted(list(available_pf_names))
@@ -1424,8 +1428,9 @@ def render_portfolioanalyse(name_mapping: pd.DataFrame, anlagevolumen: float = 0
             fee_dec = 0.0
             if mapping_pf is not None and csv_n is not None:
                 try:
-                    fee_dec = float(mapping_pf.loc[mapping_pf["Inhaber"] == csv_n,
-                                                  "Honorarsatz Standard"].values[0]) * mwst_faktor_pf
+                    fee_dec = float(mapping_pf.loc[
+                        mapping_pf[_stamm.SP_INHABER] == csv_n,
+                        _stamm.SP_SATZ].values[0]) * mwst_faktor_pf
                 except Exception:
                     fee_dec = 0.0
 

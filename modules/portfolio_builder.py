@@ -18,6 +18,7 @@ from modules.shared import (
     fmt_date_de, fmt_pct_de, fmt_eur_de,
     detect_newest_date_tag,
 )
+from modules import stammdaten as _stamm
 from modules.portfolioanalyse import (
     build_allocation, build_ring_chart,
     build_grouped_title_table, build_top5_bar_chart, get_top_holdings,
@@ -267,8 +268,8 @@ def render_portfolio_builder(name_mapping, anlagevolumen=0.0):
     pf_files = load_pf_csvs(DATA_FOLDER_PF, auto_tag_pf)
     pf_data = build_pf_data(pf_files) if pf_files else {}
 
-    col_display_nm = name_mapping.columns[0]
-    col_csv_key_nm = name_mapping.columns[1]
+    col_display_nm = _stamm.spalte(name_mapping, _stamm.SP_ANZEIGE)
+    col_csv_key_nm = _stamm.spalte(name_mapping, _stamm.SP_CSV_NAME)
     available_mp = set(pf_data.keys())
     filtered_mp = name_mapping[name_mapping[col_csv_key_nm].isin(available_mp)]
     mp_names = ["-- Kein Musterportfolio --"] + filtered_mp[col_display_nm].tolist()

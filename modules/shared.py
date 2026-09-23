@@ -15,6 +15,7 @@ from PIL import Image as PILImage
 
 from modules import anlagekriterien as _kriterien
 from modules import formats as _formats
+from modules import stammdaten as _stamm
 
 
 # ---------------------------------------------------------------------------
@@ -381,9 +382,11 @@ def build_name_lookups(name_mapping: pd.DataFrame, available_csv_names: set):
     """Baut Lookup-Dicts aus dem Name-Mapping.
     Returns: (display_names_ordered, display_to_csv, display_to_benchmark)
     """
-    col_display = name_mapping.columns[0]
-    col_csv_key = name_mapping.columns[1]
-    col_bench   = name_mapping.columns[3]
+    # NAMENTLICH statt columns[0]/[1]/[3] (23.09.2026): Die Positionen
+    # hielten nur, solange niemand eine Spalte einfuegte oder loeschte.
+    col_display = _stamm.spalte(name_mapping, _stamm.SP_ANZEIGE)
+    col_csv_key = _stamm.spalte(name_mapping, _stamm.SP_CSV_NAME)
+    col_bench   = _stamm.spalte(name_mapping, _stamm.SP_BENCHMARK)
 
     filtered = name_mapping[name_mapping[col_csv_key].isin(available_csv_names)].copy()
     display_names_ordered = filtered[col_display].tolist()
@@ -395,8 +398,8 @@ def build_name_lookups(name_mapping: pd.DataFrame, available_csv_names: set):
 
 def csv_name_to_display(csv_name: str, name_mapping: pd.DataFrame) -> str:
     """Wandelt einen CSV-Portfolio-Namen in den Anzeigenamen um."""
-    col_display = name_mapping.columns[0]
-    col_csv_key = name_mapping.columns[1]
+    col_display = _stamm.spalte(name_mapping, _stamm.SP_ANZEIGE)
+    col_csv_key = _stamm.spalte(name_mapping, _stamm.SP_CSV_NAME)
     match = name_mapping.loc[name_mapping[col_csv_key] == csv_name, col_display]
     if not match.empty:
         return match.iloc[0]
@@ -513,8 +516,8 @@ def build_portfolio_timeseries(files, mapping):
         # und loest deshalb keine Meldung aus.
         fd = 0.0
         honorar_gefunden = False
-        if {"Inhaber", "Honorarsatz Standard"} <= set(mapping.columns):
-            treffer = mapping.loc[mapping["Inhaber"] == pn, "Honorarsatz Standard"]
+        if {_stamm.SP_INHABER, _stamm.SP_SATZ} <= set(mapping.columns):
+            treffer = mapping.loc[mapping[_stamm.SP_INHABER] == pn, _stamm.SP_SATZ]
             if len(treffer):
                 wert = pd.to_numeric(treffer.iloc[0], errors="coerce")
                 if pd.notna(wert):
