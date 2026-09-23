@@ -169,14 +169,24 @@ def schritt5_broschuere_meldet_den_ausfall():
         print("    OK — kein Ausfall, keine Meldung")
 
     m = meldung_ohne_honorarsatz(["cVV ausgewogen"])
-    fehlt = [w for w in ("cVV ausgewogen", "BRUTTO", "nach Kosten")
-             if w not in m]
+    fehlt = [w for w in ("cVV ausgewogen", "BRUTTO", "nach Kosten",
+                         "eine Zeile zu dieser Strategie") if w not in m]
     if fehlt:
         f += 1
         print(f"    FEHLER — der Meldung fehlt: {fehlt} -> {m!r}")
     else:
         print("    OK — die Meldung nennt die Strategie und sagt, dass die "
               "Zahlen brutto sind")
+
+    # Mehrzahl: beim Vorfuehren am 23.09.2026 stand bei zwei Betroffenen
+    # "fehlt eine Zeile zu dieser Strategie". Eine Meldung, die falsch
+    # formuliert ist, wird ueberlesen.
+    m2 = meldung_ohne_honorarsatz(["cVV ausgewogen", "ESG offensiv"])
+    if "diesen Strategien" not in m2 or "dieser Strategie" in m2:
+        f += 1
+        print(f"    FEHLER — Mehrzahl nicht beruecksichtigt: {m2!r}")
+    else:
+        print("    OK — bei mehreren Betroffenen steht die Mehrzahl da")
 
     # Verdrahtung: ruft der Renderpfad das ueberhaupt auf?
     import ast

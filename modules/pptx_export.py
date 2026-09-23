@@ -508,12 +508,18 @@ def meldung_serien_ohne_farbe(serien_namen, farben_nach_name, pos):
     unbenutzt = [k for k in farben_nach_name if k not in serien_namen]
     if not (ohne_farbe or unbenutzt):
         return ""
-    return (f"Folie {pos}: Vergleichs-Chart — "
-            + (f"ohne Farbe: {', '.join(ohne_farbe)}. " if ohne_farbe else "")
-            + (f"die Farbtabelle kennt {', '.join(unbenutzt)}, das Chart "
-               f"nicht. " if unbenutzt else "")
-            + "Die betroffenen Linien behalten die Office-Standardfarbe. "
-              "Vor dem Versand prüfen.")
+    # Die beiden Haelften als Satzteile sammeln und mit Semikolon verbinden.
+    # Vorher standen sie als eigene Saetze hintereinander, und die zweite
+    # begann dann klein ("… Konservativ NEU. die Farbtabelle kennt …").
+    teile = []
+    if ohne_farbe:
+        teile.append(f"Serien ohne Farbe: {', '.join(ohne_farbe)}")
+    if unbenutzt:
+        teile.append(f"die Farbtabelle kennt {', '.join(unbenutzt)}, "
+                     f"das Chart nicht")
+    return (f"Folie {pos}: Vergleichs-Chart — " + "; ".join(teile) + ". "
+            "Die betroffenen Linien behalten die Office-Standardfarbe. "
+            "Vor dem Versand prüfen.")
 
 
 def _record_build_error(context: str, exc: Exception):

@@ -998,11 +998,17 @@ def meldung_ohne_honorarsatz(namen):
     """
     if not namen:
         return ""
-    return (f"Kein Honorarsatz hinterlegt für {' und '.join(namen)}. "
-            f"Im Honorarsatz-Mapping fehlt eine Zeile zu dieser Strategie — "
+    # Ein- und Mehrzahl auseinanderhalten: Bei zwei Betroffenen stand hier
+    # "fehlt eine Zeile zu dieser Strategie" — beim Vorfuehren aufgefallen.
+    wer = (namen[0] if len(namen) == 1
+           else ", ".join(namen[:-1]) + " und " + namen[-1])
+    fehlt = ("Im Honorarsatz-Mapping fehlt eine Zeile zu dieser Strategie"
+             if len(namen) == 1 else
+             "Im Honorarsatz-Mapping fehlen Zeilen zu diesen Strategien")
+    return (f"Kein Honorarsatz hinterlegt für {wer}. {fehlt} — "
             f"die Broschüre rechnet mit 0 % und weist damit BRUTTO-Zahlen "
             f"aus, obwohl sie als „nach Kosten“ beschriftet sind. "
-            f"Vor dem Versand pruefen.")
+            f"Vor dem Versand prüfen.")
 
 
 def _pfad_aufloesen(dateiname):
