@@ -70,8 +70,15 @@ Autor-Metadaten bereinigt.
   **Gegen den alten Export-Code ist Schritt 6 rot**, genau mit den zehn
   Abweichungen der Tabelle oben (nachgemessen); alle fünf Gegenproben schlagen an.
 
-- **Beweis:** alle Suiten grün, `pyflakes` null, `ui_dump` in allen drei
+- **Beweis:** 40/40 Suiten grün, `pyflakes` null, `ui_dump` in allen drei
   Ansichten zeichengleich (die Oberfläche ist nicht betroffen).
+  `test_ring_geometrie.py` zusätzlich mit Ausgabeordner (Schritte 4, 6–8 an
+  gebauten Broschüren) grün — die Familien-Erkennung über den Titel trägt.
+- **Nebenbefund, nicht von heute:** `test_portfolioanalyse.py` überspringt
+  Schritt 2 („'Muster defensiv cVV' nicht gefunden“) und Schritt 3 („keine
+  Dateien zum Stichtag“) — auf dem Stand vor dieser Sitzung genauso
+  (nachgemessen). Vermutlich hängt der Test an einem festen Datenstand; die
+  Suite bleibt dadurch grün, prüft diese beiden Schritte aber nicht. Offen.
 
 - **Interne Pflege-Anleitung nachgezogen** (Abschnitt „Eine Strategie
   umbenennen“): Spalte `Anzeigename` für den gedruckten Namen, Wertentwicklungs-
