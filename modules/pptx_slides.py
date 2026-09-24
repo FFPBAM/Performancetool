@@ -147,6 +147,34 @@ siehe remove_legend_entry."""
 WE_TITLE_FORMAT = "Anlagestrategie {name} | Wertentwicklung"
 """Titel-Muster der Wertentwicklungs-Folie (wie in der alten cVV-Broschüre)."""
 
+TITEL_PRAEFIX = "Anlagestrategie "
+"""Anfang des Struktur-Folientitels in den Infoboard-Vorlagen (cVV, ESG,
+ETF, comdirect): "Anlagestrategie ESG Defensiv Plus"."""
+
+
+def strategiename_aus_titel(slide) -> Optional[str]:
+    """Strategiename aus dem Titel einer Struktur-Folie, sonst None.
+
+    NEU 24.09.2026 (Etappe 5): In den Infoboard-Vorlagen steht der Name fest
+    im Titel der Struktur-Folie ("Anlagestrategie ESG Defensiv Plus"), die
+    Wertentwicklungs-Folie direkt dahinter bekam ihn dagegen aus dem Mapping
+    ("ESG defensiv+"). Dieselbe Strategie hieß so auf zwei Folien
+    hintereinander verschieden — in cVV, ESG, ETF und comdirect. Jetzt
+    übernimmt die Wertentwicklungs-Folie den Namen von hier (Entscheidung
+    Philip); eine Umbenennung geschieht an EINER Stelle, in der Vorlage.
+
+    None, wenn es keinen Titel gibt oder er nicht mit TITEL_PRAEFIX beginnt —
+    der Aufrufer bleibt dann beim Namen aus dem Mapping.
+    """
+    title = (find_shape_by_name(slide, SHAPE_TITLE)
+             or find_shape_by_name(slide, SHAPE_TITLE_ALT))
+    if title is None or not title.has_text_frame:
+        return None
+    text = " ".join(title.text_frame.text.split())
+    if not text.startswith(TITEL_PRAEFIX):
+        return None
+    return text[len(TITEL_PRAEFIX):].strip() or None
+
 WE_SERIES_PORTFOLIO = "Musterdepot"
 WE_SERIES_BENCHMARK = "Benchmark"
 """Series-Namen im Balken-Chart der Wertentwicklungs-Folie.

@@ -622,6 +622,15 @@ Strategien tragen einen Schraegstrich („ETF Muster 100/100 offensiv"), der im
 Dateinamen zu `_` wird. Wer Strategien gegen Dateinamen abgleicht, hat zwei
 falsche Treffer und merkt es nicht; die CSV muss geoeffnet werden.
 
+**Der gedruckte Strategiename hat EINE Quelle je Broschuere: den Titel der
+Struktur-Folie in der Vorlage** (24.09.2026, Etappe 5). Die
+Wertentwicklungs-Folie uebernimmt ihn (`strategiename_aus_titel`), statt ihn
+aus dem Mapping-Namen zu bilden — vorher stand „ESG Defensiv Plus“ direkt
+neben „ESG defensiv+“. Kasten (`Anzeigename`), Spaltenkoepfe der
+Uebersichtstabellen, Serien der cVV-Vergleichsgrafik und `_STRATEGIE_FAMILIE`
+muessen dazu passen; `tests/test_namen_folien.py` haelt alles gegeneinander
+und traegt im Kopf das Kochrezept fuer eine Umbenennung.
+
 ---
 
 ## Testen
@@ -632,6 +641,7 @@ python tests/test_streamlit_api.py           # ohne jedes Paket
 python tests/test_keine_piktogramme.py       # ohne jedes Paket
 python tests/test_anlagekriterien.py         # pandas + streamlit
 python tests/test_stammdaten.py              # Schritte 1-3+6 nur pandas
+python tests/test_namen_folien.py            # 1-5 pandas + pptx, 6 baut Broschueren
 #   test_export_smoke.py (Teil 1b) und test_quelle_position.py bauen seit
 #   23.09.2026 auch die Standard-Familie (Vorlage_FFPB.pptx) — sie hat keine
 #   Familie und kam in beiden vorher nicht vor.

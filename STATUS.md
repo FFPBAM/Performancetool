@@ -1,9 +1,11 @@
 ﻿# STATUS — FFPB Performancetool
 
-**Letzte Sitzung:** 23.09.2026 · **Branch:** `verbesserungen` ·
+**Letzte Sitzung:** 24.09.2026 · **Branch:** `verbesserungen` ·
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
-unerheblich) · **Alle 39 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
-**Die Stammdaten stehen seit heute in EINER Datei** (`Mapping_Strategien.xlsx`),
+unerheblich) · **Alle 40 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
+**Etappe 5 erledigt: jede Strategie trägt auf allen Folien denselben Namen**
+(neue Suite `test_namen_folien.py`) ·
+**Die Stammdaten stehen seit 23.09. in EINER Datei** (`Mapping_Strategien.xlsx`),
 die drei Vorgänger sind entfernt · **Die Kostenregel ist in allen Broschüren
 einheitlich** ·
 **Stand 21.09. nach Sichtprüfung durch Philip gepusht, alte Daten 260916
@@ -25,6 +27,60 @@ Autor-Metadaten bereinigt.
 > ausbuchstabiert. Grundsatz für alles, was hierher kommt: **keine
 > Betriebsdetails** (Rechnernamen, Pfade, Konten, Repo-Namen, Fristen,
 > Gateway-Interna) in Dateien, die ins öffentliche Repo gehen.
+
+**Sitzung 24.09.2026 — Etappe 5: Strategienamen auf den Folien:**
+
+- **Befund beim Nachmessen (acht Broschüren gebaut):** Es knirschte nicht erst
+  bei einer Umbenennung, sondern schon heute. Die Wertentwicklungs-Folie
+  bekam ihren Titel aus dem **Mapping**, die Struktur-Folie direkt davor trägt
+  ihn fest aus der **Vorlage**. Dieselbe Strategie hieß so auf zwei Folien
+  hintereinander verschieden, in vier Familien:
+
+  | Broschüre | Struktur-Folie | Wertentwicklungs-Folie (bisher) |
+  |---|---|---|
+  | cVV F11/12 | Defensiv Plus | Defensiv plus |
+  | ESG F16–23 | ESG Defensiv, ESG Defensiv Plus, … | ESG defensiv, ESG defensiv+, … |
+  | ETF F16–19 | ESG-ETF Ausgewogen / Wachstum | ETF ausgewogen / ETF Wachstum |
+  | comdirect F6–11 | Portfolioverwaltung 30/70/100 | Comdirect 30/70/100 |
+
+  Bei comdirect kam ein dritter Name dazu: „Anlagekriterien | **FFPB
+  Strategie 30**“ im Kasten. Thema und Standard waren nicht betroffen.
+
+- **Entscheidungen Philip:** (1) Die Wertentwicklungs-Folie übernimmt den
+  Namen von der Struktur-Folie. (2) comdirect heißt überall
+  **„Portfolioverwaltung 30/70/100“**.
+
+- **Umgesetzt:**
+  - `pptx_slides.strategiename_aus_titel()` liest den Namen aus „Anlagestrategie
+    <Name>“; `pptx_export` gibt ihn an `fill_wertentwicklung_slide` weiter,
+    sobald die Strategie eine Struktur-Folie aus der Vorlage hat (feste
+    Blöcke). Sonst bleibt es beim bereinigten Mapping-Namen.
+  - `Mapping_Strategien.xlsx`, Spalte `Anzeigename`: „FFPB Strategie 30/70/100“
+    → „Portfolioverwaltung 30/70/100“. Direkt im Blatt-XML ersetzt, **nur
+    `xl/worksheets/sheet1.xml` geändert**, genau drei Zellen (nachgemessen).
+  - `chart_dynamik._STRATEGIE_FAMILIE`: die toten Einträge „comdirect 30/70/100“
+    entfernt. Die Suche ist als `_familie_aus_text()` herausgelöst, damit der
+    Prüfstein sie aufruft statt nachzubauen.
+
+- **Neuer Prüfstein `tests/test_namen_folien.py` (40. Suite)**, sieben
+  Schritte: Struktur-Titel mit „Anlagestrategie “, Kasten ↔ Titel,
+  Spaltenköpfe der Übersichtstabellen, Serien der cVV-Vergleichsgrafik,
+  Titel → Familie (inkl. toter Einträge), gebaute Broschüren, Gegenproben.
+  Im Kopf der Datei steht das **Kochrezept für eine Umbenennung**.
+  **Gegen den alten Export-Code ist Schritt 6 rot**, genau mit den zehn
+  Abweichungen der Tabelle oben (nachgemessen); alle fünf Gegenproben schlagen an.
+
+- **Beweis:** alle Suiten grün, `pyflakes` null, `ui_dump` in allen drei
+  Ansichten zeichengleich (die Oberfläche ist nicht betroffen).
+
+- **Interne Pflege-Anleitung nachgezogen** (Abschnitt „Eine Strategie
+  umbenennen“): Spalte `Anzeigename` für den gedruckten Namen, Wertentwicklungs-
+  Folie folgt der Struktur-Folie, Spaltenköpfe der Übersichtstabellen, und
+  das Prüfprogramm nennt jede vergessene Stelle.
+
+- **Für Philip zum Sichten:** comdirect-Broschüre F6–F11 (Titel und Kasten
+  jetzt überall „Portfolioverwaltung …“), ESG F18/F19 („ESG Defensiv Plus“ auf
+  beiden Folien), ETF F16/F17 („ESG-ETF Ausgewogen“).
 
 **Sitzung 23.09.2026 — Stammdaten: namentlicher Spaltenzugriff statt
 positionellem (Etappe 1 von 5):**
@@ -368,10 +424,11 @@ positionellem (Etappe 1 von 5):**
 
 - **Offen / für Philip:**
   - *(erledigt 24.09.)* **Sichtprüfung in der Live-App:** läuft, von Philip bestätigt.
-  - **Etappe 5:** Umbenennungs-Prüfstein (Folientitel, Chart-Seriennamen).
-    Was kein Test je beheben kann: Die statischen Folientitel in sechs
-    Vorlagen und die eingebrannten Chart-Seriennamen müssen bei einer
-    Umbenennung **von Hand in PowerPoint** nachgezogen werden.
+  - *(erledigt 24.09., siehe oben)* **Etappe 5:** Umbenennungs-Prüfstein
+    (Folientitel, Chart-Seriennamen). Bleibt so: Die Titel der
+    Struktur-Folien, die Spaltenköpfe der Übersichtstabellen und die
+    Seriennamen der cVV-Vergleichsgrafik werden bei einer Umbenennung **von
+    Hand in PowerPoint** nachgezogen — der Prüfstein nennt jede Stelle.
   - Weiter offen seit 17.09.: Sicherheitsbefunde mit ISB/DSB (Historie,
     Repo privat), siehe Kasten oben. Marktfolien der Themen (Stand Dezember
     2023) warten auf Daten aus dem Haus.

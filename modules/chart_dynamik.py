@@ -609,13 +609,13 @@ _STRATEGIE_FAMILIE = {
     "ausgewogen": "CVV", "dynamic": "CVV",
     # ETF
     "etf ausgewogen": "ETF", "etf wachstum": "ETF",
-    # comdirect (Titel: "Anlagestrategie Portfolioverwaltung 30/70/100" auf den
-    # Struktur-Folien bzw. "Comdirect 30/70/100 | Wertentwicklung"). Beide Formen
-    # hinterlegt, damit die Familie sicher erkannt wird.
+    # comdirect ("Anlagestrategie Portfolioverwaltung 30/70/100"). Die Form
+    # "Comdirect 30" stand bis 24.09.2026 auf den Wertentwicklungs-Folien und
+    # ist mit Etappe 5 entfallen: Diese Folien uebernehmen jetzt den Titel der
+    # Struktur-Folie. tests/test_namen_folien.py haelt diese Tabelle gegen die
+    # Titel der gebauten Broschueren.
     "portfolioverwaltung 30": "comdirect", "portfolioverwaltung 70": "comdirect",
     "portfolioverwaltung 100": "comdirect",
-    "comdirect 30": "comdirect", "comdirect 70": "comdirect",
-    "comdirect 100": "comdirect",
 }
 
 
@@ -635,10 +635,20 @@ def _familie_aus_prs(prs):
                 t = shape.text_frame.text.strip().lower()
                 if "anlagestrategie" in t or "portfoliozusammenstellung" in t:
                     hay.append(t)
-    text = " ".join(hay)
+    return _familie_aus_text(" ".join(hay))
+
+
+def _familie_aus_text(text, tabelle=None):
+    """Familie zum längsten Strategienamen, der in ``text`` vorkommt, sonst
+    None. Aus _familie_aus_prs herausgelöst (24.09.2026), damit
+    tests/test_namen_folien.py dieselbe Suche gegen die Folientitel halten
+    kann, ohne sie nachzubauen. ``tabelle`` nur für Gegenproben."""
+    text = (text or "").lower()
     if not text:
         return None
-    for strat, fam in sorted(_STRATEGIE_FAMILIE.items(),
+    if tabelle is None:
+        tabelle = _STRATEGIE_FAMILIE
+    for strat, fam in sorted(tabelle.items(),
                              key=lambda kv: -len(kv[0])):
         if re.search(r"\b" + re.escape(strat) + r"\b", text):
             return fam

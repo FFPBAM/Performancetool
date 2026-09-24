@@ -69,7 +69,7 @@ try:
         fill_wertentwicklung_slide, fill_zusammenstellung_slide,
         fill_rollierend_slide, fill_einzeltitel_themen_slide,
         fill_uebersicht_slide, fill_anlagekriterien_slide,
-        wortlaut_angleichen,
+        wortlaut_angleichen, strategiename_aus_titel,
     )
 except ImportError:
     from pptx_slides import (
@@ -78,7 +78,7 @@ except ImportError:
         fill_wertentwicklung_slide, fill_zusammenstellung_slide,
         fill_rollierend_slide, fill_einzeltitel_themen_slide,
         fill_uebersicht_slide, fill_anlagekriterien_slide,
-        wortlaut_angleichen,
+        wortlaut_angleichen, strategiename_aus_titel,
     )
 
 # Stammdaten und ihre Auswertung. BEWUSST die UI-freien Module, nicht
@@ -1045,6 +1045,18 @@ def generate_portfolioanalyse_pptx(
                      for offset, rolle in enumerate(reihenfolge)]
         rollen = {rolle for _i, rolle in ziele}
 
+        # Name im Titel der Wertentwicklungs-Folie (NEU 24.09.2026, Etappe 5):
+        # Hat die Strategie eine Struktur-Folie aus der Vorlage (feste Bloecke:
+        # cVV, ESG, ETF, comdirect), gilt DEREN Titelname — sonst hiess
+        # dieselbe Strategie auf zwei Folien hintereinander verschieden
+        # ("ESG Defensiv Plus" / "ESG defensiv+"). Ohne Struktur-Folie (Thema,
+        # Standard) bleibt es beim bereinigten Mapping-Namen.
+        titel_name = strategy_name
+        if feste_bloecke and "anlagevorschlag" in feste_bloecke[k]:
+            titel_name = (strategiename_aus_titel(
+                prs.slides[feste_bloecke[k]["anlagevorschlag"] - 1])
+                or strategy_name)
+
         perf_data = _build_perf_data(performance_inputs, k, display_name,
                                      melden="performance" in rollen)
         we_data = _build_we_data(performance_inputs, k, display_name,
@@ -1068,7 +1080,7 @@ def generate_portfolioanalyse_pptx(
                     _anlagekriterien.fuer(display_name, kriterien_cfg),
                     _anlagekriterien.anzeigename(display_name, kriterien_cfg))
             elif rolle == "wertentwicklung":
-                fill_wertentwicklung_slide(prs, idx, strategy_name,
+                fill_wertentwicklung_slide(prs, idx, titel_name,
                                             we_data=we_data, stand_date_str=stand)
             elif rolle == "performance":
                 fill_performance_slide(prs, idx, strategy_name,

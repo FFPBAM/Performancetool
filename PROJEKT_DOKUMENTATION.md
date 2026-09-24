@@ -53,6 +53,7 @@
 | 17.09. | **Thema**: strategie-spezifische Anfangsfolien (Offensiv, Pro Dividende, SCHWEIZ ohne F2/F3). **PDF erstellen**: vorbereitete PowerPoint, dann **PDF-Dienst** als freundliche Fassung (`modules/pdf_briefkasten.py`, HMAC-signiert, Rückfall auf PowerPoint), in der Cloud live (#73). Vorlagen von Server-Verknüpfungen und personenbezogenen Metadaten bereinigt (auch in eingebetteten Excel-Objekten). Sicherheitsprüfung des öffentlichen Repos, Bericht nur intern |
 | 18.09. | Sollwerte auf Datenstand 260916; Download-Baustein auf `st.iframe` umgestellt (im Firmennetz bestätigt); Titelumbruch der rollierenden Folie (`test_titel_umbruch.py`); drei falsche Inhaltsverzeichnis-Einträge (ESG, comdirect) korrigiert (`test_inhaltsverzeichnis.py`) |
 | 21.09. | **Statische Themen-Folien 1:1 an die Original-Broschüren vom 14.09.** angeglichen (Bank-Folie 2025, Steuer-Folie, Offensiv mit 20 Folien und eigener Config); Stimmigkeitsprüfung über alle Familien (Balkenkopf 2025, ESG-Impressum als Datumsfeld); `update_stand_datum` setzt alle Datumsfelder; `test_thema_statische_folien.py` (38. Suite). Sollwerte auf 260918, alte Daten 260916 entfernt |
+| 23.–24.09. | **Stammdaten in einer Datei** `Mapping_Strategien.xlsx`, Spaltenzugriff nur namentlich (`test_stammdaten.py`, 39. Suite); comdirect-Disclaimer gleichgeschaltet. **Etappe 5:** Wertentwicklungs-Folie übernimmt den Namen der Struktur-Folie, comdirect heißt überall „Portfolioverwaltung“, Umbenennungen werden gemeldet (`test_namen_folien.py`, 40. Suite) |
 
 ---
 
@@ -1978,7 +1979,7 @@ unten — Entzerrung in 2D.
 | CVV | 7, 9, 11, 13, 15 | Konservativ, Defensiv, Defensiv Plus, Ausgewogen, Dynamic |
 | ESG | 16, 18, 20, 22 | ESG Defensiv, Defensiv Plus, Ausgewogen, Offensiv |
 | ETF | 16, 18 | ESG-ETF Ausgewogen, Wachstum |
-| comdirect | 6, 8, 10 | FFPB Strategie 30 / 70 / 100 |
+| comdirect | 6, 8, 10 | Portfolioverwaltung 30 / 70 / 100 (bis 24.09.2026 „FFPB Strategie …“) |
 | **Thema** | — | **kein Kasten** (Rolle `einzeltitel_themen`) |
 
 Zusammen **14 Strategien**.
@@ -4957,6 +4958,23 @@ SCHWEIZ-Strategien (11.08.) und `fmt_date_de` (12.08.).
 ---
 
 ## 16. Changelog
+
+### 24.09.2026 – Etappe 5: Strategienamen auf den Folien
+
+- **Befund:** Die Wertentwicklungs-Folie bekam ihren Titel aus dem Mapping,
+  die Struktur-Folie davor trägt ihn fest aus der Vorlage. In cVV, ESG, ETF und
+  comdirect hieß dieselbe Strategie so auf zwei Folien hintereinander
+  verschieden („ESG Defensiv Plus“ / „ESG defensiv+“, „Portfolioverwaltung 30“ /
+  „Comdirect 30“, dazu im comdirect-Kasten „FFPB Strategie 30“).
+- **Entscheidung Philip:** Die Wertentwicklungs-Folie übernimmt den Namen der
+  Struktur-Folie (`pptx_slides.strategiename_aus_titel`); comdirect heißt überall
+  „Portfolioverwaltung 30/70/100“ (Spalte `Anzeigename`, nur `sheet1.xml`
+  geändert). Tote Einträge „comdirect 30/70/100“ aus `_STRATEGIE_FAMILIE`
+  entfernt, Suche als `chart_dynamik._familie_aus_text` herausgelöst.
+- **Prüfstein** `tests/test_namen_folien.py` (40. Suite): Titel, Kasten,
+  Übersichtstabelle, cVV-Vergleichsgrafik, Titel → Familie und die gebauten
+  Broschüren; im Dateikopf das Kochrezept für eine Umbenennung. Gegen den alten
+  Code rot (zehn Abweichungen).
 
 ### 21.09.2026 (Nachtrag) – cVV F19: Datumsachse am letzten Datenmonat verankert
 
