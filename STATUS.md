@@ -96,8 +96,8 @@ Autor-Metadaten bereinigt.
 
 - **Von Philip gesichtet und abgenommen (24.09.2026):** comdirect F6–F11
   (überall „Portfolioverwaltung …“), ESG F18/F19 („ESG Defensiv Plus“), ETF
-  F16/F17 („ESG-ETF Ausgewogen“). Gepusht nach Sicherheitsprüfung, Sichtungs-
-  ordner auf H: wieder gelöscht, DRACOON-Ablage per `--ff-only` nachgezogen.
+  F16/F17 („ESG-ETF Ausgewogen“). Gepusht nach Sicherheitsprüfung, interner
+  Sichtungsordner wieder gelöscht, interne Ablage per `--ff-only` nachgezogen.
   Seine Bemerkung: Die drei comdirect-Namen sind **niemandem aufgefallen**,
   auch ihm nicht — man liest die Zahl, nicht das Wort davor. Genau dafür ist
   der Prüfstein da.
