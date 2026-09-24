@@ -4,7 +4,8 @@
 **ist die laufende App** (`main` nicht nachgezogen, für den Betrieb
 unerheblich) · **Alle 40 Suiten grün** (Datenstand 18.09.2026), `pyflakes` bei null ·
 **Etappe 5 erledigt: jede Strategie trägt auf allen Folien denselben Namen**
-(neue Suite `test_namen_folien.py`) ·
+(neue Suite `test_namen_folien.py`), **von Philip gesichtet und gepusht**
+(`d693291`, `539f987`, `b35152d`), DRACOON-Ablage nachgezogen ·
 **Die Stammdaten stehen seit 23.09. in EINER Datei** (`Mapping_Strategien.xlsx`),
 die drei Vorgänger sind entfernt · **Die Kostenregel ist in allen Broschüren
 einheitlich** ·
@@ -93,9 +94,26 @@ Autor-Metadaten bereinigt.
   Folie folgt der Struktur-Folie, Spaltenköpfe der Übersichtstabellen, und
   das Prüfprogramm nennt jede vergessene Stelle.
 
-- **Für Philip zum Sichten:** comdirect-Broschüre F6–F11 (Titel und Kasten
-  jetzt überall „Portfolioverwaltung …“), ESG F18/F19 („ESG Defensiv Plus“ auf
-  beiden Folien), ETF F16/F17 („ESG-ETF Ausgewogen“).
+- **Von Philip gesichtet und abgenommen (24.09.2026):** comdirect F6–F11
+  (überall „Portfolioverwaltung …“), ESG F18/F19 („ESG Defensiv Plus“), ETF
+  F16/F17 („ESG-ETF Ausgewogen“). Gepusht nach Sicherheitsprüfung, Sichtungs-
+  ordner auf H: wieder gelöscht, DRACOON-Ablage per `--ff-only` nachgezogen.
+  Seine Bemerkung: Die drei comdirect-Namen sind **niemandem aufgefallen**,
+  auch ihm nicht — man liest die Zahl, nicht das Wort davor. Genau dafür ist
+  der Prüfstein da.
+- **Wissensbasis ergänzt:** `pitfalls_and_fixes.md` P42 (fester Datenstand im
+  Test), P43 (Name aus zwei Quellen), P44 (Excel chirurgisch ändern);
+  `excel_als_konfiguration.md` §10 (Schlüssel ≠ gedruckter Name).
+
+**Nächster Schritt (Stand 24.09.2026):**
+1. Marktfolien der Themen (Stand Dezember 2023) aktualisieren, sobald das
+   Haus neue Daten liefert.
+2. Weiter offen seit 17.09.: Sicherheitsbefunde mit ISB/DSB (Historie,
+   Repo privat), siehe Kasten oben.
+3. Jährlich ab Frühjahr 2027: Bank-Folie in allen Vorlagen (siehe „Offene
+   Punkte“).
+4. Beim nächsten Datentausch: nach dem Suitenlauf die Protokolle nach
+   „UEBERSPRUNGEN“ durchsehen (siehe Nebenbefund oben).
 
 **Sitzung 23.09.2026 — Stammdaten: namentlicher Spaltenzugriff statt
 positionellem (Etappe 1 von 5):**
@@ -533,7 +551,7 @@ positionellem (Etappe 1 von 5):**
     Commit-Nachrichten, wie schon über 100-mal zuvor. Das gehört zur offenen
     Historien-Bereinigung (ISB/DSB).
 
-**Nächster Schritt (Stand 21.09.2026):**
+**Nächster Schritt (Stand 21.09.2026, überholt — aktuell siehe Sitzung 24.09.):**
 1. Stichprobe in der Live-App durch Philip (Offensiv 20 Folien mit
    eigenem Cover, Pro mit Steuer-Folie, ESG-Impressum ohne 31.07.2024).
 2. Marktfolien der Themen (Stand Dezember 2023) aktualisieren, sobald das

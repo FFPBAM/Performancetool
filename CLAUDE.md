@@ -163,6 +163,13 @@ prüfte statt gegen eine Schwelle (#47).
   `_symbole(modul, namen, pakete)` in `tests/test_strategievergleich.py` —
   erst die Pakete prüfen (ggf. überspringen), dann die Namen holen (fehlt
   einer: FEHLER mit Namensnennung).
+  **Dasselbe gilt für Daten** (24.09.2026): Ist `Daten_PF/` gefüllt, fehlt
+  aber die erwartete Datei, ist das ein FEHLER, kein Überspringen. Nie einen
+  Stichtag als Konstante in einen Test schreiben — `test_portfolioanalyse.py`
+  trug „260721“ und prüfte nach dem Datentausch am 17.09. eine Woche lang
+  zwei Schritte nicht, bei grüner Suite. Stichtag über
+  `detect_newest_date_tag` wie die App. **Nach jedem Suitenlauf die
+  Protokolle nach „UEBERSPRUNGEN“ durchsehen** und jeden Grund einordnen.
 - **Wer ein Risiko prüft und nichts findet, hat zwei mögliche Ergebnisse**
   (#64, 18.08.2026): Das Risiko besteht nicht — oder **der Test erreicht es
   nicht**. Beim Chart oben wurde A gewählt, ohne B auszuschließen, und das
