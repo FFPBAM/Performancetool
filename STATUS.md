@@ -337,9 +337,10 @@ positionellem (Etappe 1 von 5):**
      derselben Broschüre sagen jetzt dasselbe über die Kosten, und genau
      diese Ungleichheit war der Anlass.
 
-  **Für Philip zum Abnicken:** Die Korrektur „Gesamtkosten- und Gebühren"
-  trifft auch die **Impressum-Folie** (cVV F36, FFPB F25) — dieselbe
-  Falschschreibung, aber es ist ein Rechtstext.
+  **Von Philip abgenommen (24.09.2026):** Die Korrektur „Gesamtkosten- und
+  Gebühren" → „Gesamtkosten und Gebühren" gilt auch auf der
+  **Impressum-Folie** (cVV F36, FFPB F25), obwohl es ein Rechtstext ist.
+  Bleibt so, nicht zurücknehmen.
 
 - **Standard-Familie in zwei Prüfsteine aufgenommen** (Ansage Philip, zum
   Schluss). `Vorlage_FFPB.pptx` hat keine Familie im Mapping und kam deshalb
@@ -366,7 +367,7 @@ positionellem (Etappe 1 von 5):**
   wortgleich, die Impressum-Folie der Standard-Broschüre nachgeprüft.
 
 - **Offen / für Philip:**
-  - **Sichtprüfung in der Live-App.**
+  - *(erledigt 24.09.)* **Sichtprüfung in der Live-App:** läuft, von Philip bestätigt.
   - **Etappe 5:** Umbenennungs-Prüfstein (Folientitel, Chart-Seriennamen).
     Was kein Test je beheben kann: Die statischen Folientitel in sechs
     Vorlagen und die eingebrannten Chart-Seriennamen müssen bei einer
