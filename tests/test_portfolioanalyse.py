@@ -39,9 +39,15 @@ except ImportError as ex:
 
 TOLERANZ = 1e-12
 
-# Stichtag der aktuellen Lieferung. Bewusst als Konstante und nicht aus dem
-# Dateinamen geraten: Wer die Daten austauscht, sieht hier, was zu pflegen ist.
-STICHTAG_MUSTER = "260721"
+# Stichtag der Lieferung: derselbe, den die App nimmt (juengster Tag in
+# Daten_PF/). Bis zum 24.09.2026 stand hier die Konstante "260721" — mit dem
+# Datenwechsel am 17.09.2026 fand Schritt 2 und 3 keine Datei mehr und stieg
+# eine Woche lang STILL aus, die Suite blieb gruen. Eine Konstante, die man
+# beim Datentausch pflegen muss, wird beim Datentausch vergessen.
+def _stichtag_muster():
+    from modules.shared import (DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS,
+                                detect_newest_date_tag)
+    return detect_newest_date_tag(DATA_FOLDER_PF, EXCLUDE_SUBSTRINGS)
 
 
 def _pf_dateien(muster="*"):
@@ -119,11 +125,18 @@ def schritt2_faelligkeiten_werte():
     print("Schritt 2 — Faelligkeiten-Tabelle gegen die Rohdaten")
     from modules.portfolioanalyse import build_faelligkeiten_tabelle
 
-    treffer = [p for p in _pf_dateien(STICHTAG_MUSTER)
+    if not _pf_dateien():
+        print("    UEBERSPRUNGEN — keine Dateien in Daten_PF/")
+        return 0
+    tag = _stichtag_muster()
+    treffer = [p for p in _pf_dateien(tag)
                if _name(p) == "Muster defensiv cVV"]
     if not treffer:
-        print("    UEBERSPRUNGEN — 'Muster defensiv cVV' nicht gefunden")
-        return 0
+        # KEIN Ueberspringen: Daten sind da, nur die erwartete Datei nicht.
+        # Genau hier hat der Schritt vorher eine Woche lang nichts geprueft.
+        print(f"    FEHLER — 'Muster defensiv cVV' zum Stichtag {tag} "
+              f"nicht in Daten_PF/")
+        return 1
     df = _lade(treffer[0])
     stichtag = df["Auswertungsdatum"].dropna().max()
 
@@ -179,10 +192,15 @@ def schritt3_zusage_gewichte():
     print("Schritt 3 — Balkensumme + ohne Faelligkeit == Gewicht Anleihen")
     from modules.portfolioanalyse import build_faelligkeiten_tabelle, get_bond_summary
 
-    dateien = _pf_dateien(STICHTAG_MUSTER)
-    if not dateien:
-        print("    UEBERSPRUNGEN — keine Dateien zum Stichtag")
+    if not _pf_dateien():
+        print("    UEBERSPRUNGEN — keine Dateien in Daten_PF/")
         return 0
+    tag = _stichtag_muster()
+    dateien = _pf_dateien(tag)
+    if not dateien:
+        print(f"    FEHLER — Daten_PF/ enthaelt Dateien, aber keine zum "
+              f"Stichtag {tag}")
+        return 1
 
     fehler = 0
     mit_luecke = 0

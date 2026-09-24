@@ -74,11 +74,19 @@ Autor-Metadaten bereinigt.
   Ansichten zeichengleich (die Oberfläche ist nicht betroffen).
   `test_ring_geometrie.py` zusätzlich mit Ausgabeordner (Schritte 4, 6–8 an
   gebauten Broschüren) grün — die Familien-Erkennung über den Titel trägt.
-- **Nebenbefund, nicht von heute:** `test_portfolioanalyse.py` überspringt
-  Schritt 2 („'Muster defensiv cVV' nicht gefunden“) und Schritt 3 („keine
-  Dateien zum Stichtag“) — auf dem Stand vor dieser Sitzung genauso
-  (nachgemessen). Vermutlich hängt der Test an einem festen Datenstand; die
-  Suite bleibt dadurch grün, prüft diese beiden Schritte aber nicht. Offen.
+- **Nebenbefund, behoben am selben Tag:** `test_portfolioanalyse.py`
+  übersprang Schritt 2 (Fälligkeiten-Tabelle) und Schritt 3 (Balkensumme +
+  ohne Fälligkeit = Gewicht Anleihen) **seit dem Datenwechsel am 17.09.2026
+  still** — die Suite blieb grün, prüfte die beiden Schritte aber eine Woche
+  lang nicht. Ursache: fester Stichtag `STICHTAG_MUSTER = "260721"`, gedacht
+  als „wer die Daten tauscht, sieht hier, was zu pflegen ist“ — beim Tausch
+  vergessen. Jetzt nimmt der Test den Stichtag wie die App
+  (`shared.detect_newest_date_tag`), und **fehlen Dateien zum Stichtag,
+  obwohl `Daten_PF/` gefüllt ist, ist das ein FEHLER statt ein
+  Überspringen**. Beide Schritte laufen wieder und sind grün (14 Strategien
+  mit Anleihen, 6 mit Titeln ohne feste Fälligkeit). Gegenprobe mit dem
+  alten Stichtag: beide rot. Sonst trägt kein Test einen festen Datenstand
+  (nachgesucht).
 
 - **Interne Pflege-Anleitung nachgezogen** (Abschnitt „Eine Strategie
   umbenennen“): Spalte `Anzeigename` für den gedruckten Namen, Wertentwicklungs-
