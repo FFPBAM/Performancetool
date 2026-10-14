@@ -1,0 +1,21 @@
+Auswertungsdatum;Wertpapier;WKN;Gewicht;Währung;Performancebeitrag;WP-Performance;Fälligkeit;Kupon;Duration;Rendite;Segment;Region;Gattung;Marktrisikowert;Portfolio Name
+12.10.2026;3M Co.;851745;3,713%;USD;0,273%;6,895%;-;0%;-;-;Prod. Gew. & Industrie;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Airbus SE;938914;5,018%;EUR;-0,136%;-3,220%;-;0%;-;-;Prod. Gew. & Industrie;Europa ohne Deutschland;Aktien;5;Comdirect 100
+12.10.2026;Alphabet Inc. A;A14Y6F;4,403%;USD;1,662%;18,827%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Apple Inc.;865985;3,199%;USD;0,440%;15,202%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Berkshire Hathaway Inc. B;A0YJQ2;6,226%;USD;0,528%;8,445%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Global Active ESG Equity ETF (Invesco);A2PHJT;10,078%;USD;0,805%;8,003%;-;0%;-;-;Index;Global;Aktien;4;Comdirect 100
+12.10.2026;Intuitive Surgical Inc.;888024;2,912%;USD;-0,782%;-20,482%;-;0%;-;-;Prod. Gew. & Industrie;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Meta Platforms Inc. A;A1JWVX;4,890%;USD;0,827%;18,765%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Microsoft Corp.;870747;5,568%;USD;0,948%;18,382%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Münchener Rückvers.-Ges. AG;843002;5,692%;EUR;-0,109%;-1,839%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Deutschland;Aktien;5;Comdirect 100
+12.10.2026;NVIDIA Corp.;918422;5,154%;USD;1,666%;27,969%;-;0%;-;-;Informationstechnologie;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Philip Morris Internat. Inc.;A0NDBJ;4,294%;USD;1,584%;34,989%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Rheinmetall AG;703000;1,215%;EUR;-0,765%;-37,591%;-;0%;-;-;Prod. Gew. & Industrie;Deutschland;Aktien;5;Comdirect 100
+12.10.2026;Shell PLC;A3C99G;5,406%;GBP;1,850%;47,136%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Europa ohne Deutschland;Aktien;5;Comdirect 100
+12.10.2026;Stoxx Europe Select Dividend 30 ETF (Amundi);LYX0Y9;9,171%;EUR;-0,411%;-4,105%;-;0%;-;-;Index;Europa;Aktien;4;Comdirect 100
+12.10.2026;VISA Inc.;A0NC7B;2,974%;USD;0,477%;17,379%;-;0%;-;-;Banken,Versicherer,Finanzdienstl.;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Walmart Inc.;860853;4,628%;USD;0,599%;7,543%;-;0%;-;-;Handel,Konsum;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;Waste Management Inc.;893579;3,802%;USD;0,090%;2,065%;-;0%;-;-;Versorger;Nordamerika;Aktien;5;Comdirect 100
+12.10.2026;XETRA Gold;A0S9GB;7,515%;EUR;-0,031%;-0,291%;-;0%;-;-;Eisen,Stahl,Rohstoffe;Sonstige Regionen;Edelmetalle;5;Comdirect 100
+;;;;;;;;;;;;;;;
